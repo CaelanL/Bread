@@ -332,7 +332,7 @@ export default function StudySessionScreen() {
     return (
       <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
         <View style={styles.cardsArea}>
-          <VerseCard chunk={item} difficulty={difficulty ?? 'easy'} verseLabel={verseLabel} />
+          <VerseCard chunk={item} difficulty={difficulty ?? 'easy'} verseLabel={verseLabel} revealed={isCompleted} />
 
           {isCompleted && result && (
             <ResultCard

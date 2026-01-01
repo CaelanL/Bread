@@ -6,12 +6,17 @@ import type { SavedVerse } from '@/lib/storage';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
+export interface DisplayWord {
+  text: string;        // The actual word (including any leading superscript)
+  isBlank: boolean;    // Whether it should be hidden initially
+}
+
 export interface Chunk {
   id: string; // Stable ID for FlatList keys
   verseNum: number;
   verseNumEnd?: number; // For multi-verse chunks
   text: string; // Original text (for evaluation)
-  displayText: string; // May have blanks for medium mode
+  displayWords: DisplayWord[]; // Structured for word-by-word rendering
 }
 
 export interface AlignmentWord {
@@ -86,34 +91,33 @@ function seededRandom(seed: number): () => number {
 }
 
 /**
- * Apply difficulty masking to text.
- * - easy: show full text
+ * Apply difficulty masking to text, returning structured DisplayWord array.
+ * - easy: all words visible (isBlank = false)
  * - medium: blank exactly 50% of words (alternating, seeded offset)
- * - hard: show nothing
+ * - hard: all words blanked (isBlank = true)
  *
  * @param text - The annotated text to mask
  * @param difficulty - easy | medium | hard
  * @param seed - Numeric seed for deterministic offset (0 or 1)
  */
-export function applyDifficulty(text: string, difficulty: Difficulty, seed: number = 0): string {
-  if (difficulty === 'easy') return text;
-  if (difficulty === 'hard') return '';
+export function applyDifficulty(text: string, difficulty: Difficulty, seed: number = 0): DisplayWord[] {
+  const words = text.split(' ');
+
+  if (difficulty === 'easy') {
+    return words.map(word => ({ text: word, isBlank: false }));
+  }
+
+  if (difficulty === 'hard') {
+    return words.map(word => ({ text: word, isBlank: true }));
+  }
 
   // Medium: blank every other word, offset determined by seed
   const offset = seed % 2; // 0 or 1
-  const words = text.split(' ');
 
-  return words.map((word, i) => {
-    // Blank if index matches offset pattern (alternating)
-    if (i % 2 === offset) {
-      // Replace letters with underscores, keep trailing punctuation
-      const letters = word.replace(/[^a-zA-Z]/g, '');
-      const trailingPunct = word.match(/[^a-zA-Z]+$/)?.[0] || '';
-      return '_'.repeat(letters.length) + trailingPunct;
-    }
-
-    return word;
-  }).join(' ');
+  return words.map((word, i) => ({
+    text: word,
+    isBlank: i % 2 === offset,
+  }));
 }
 
 // ============================================================================
@@ -159,7 +163,7 @@ export function parseVerseIntoChunks(
       id: chunkId,
       verseNum: verse.verseStart,
       text: text,
-      displayText: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
+      displayWords: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
     }];
   }
 
@@ -172,7 +176,7 @@ export function parseVerseIntoChunks(
       verseNum: verse.verseStart,
       verseNumEnd: verse.verseEnd,
       text: text,
-      displayText: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
+      displayWords: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
     }];
   }
 
@@ -203,7 +207,7 @@ export function parseVerseIntoChunks(
       verseNum: startVerse,
       verseNumEnd: endVerse !== startVerse ? endVerse : undefined,
       text: combinedText,
-      displayText: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
+      displayWords: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
     });
   }
 
