@@ -2,9 +2,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AlignmentWord } from '@/lib/study-chunks';
-import React from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, withDelay, withTiming } from 'react-native-reanimated';
+import { AlignmentHelpModal } from './AlignmentHelpModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.30;
@@ -134,6 +135,7 @@ export function ResultCard({ score, alignment, transcription }: ResultCardProps)
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const [showHelp, setShowHelp] = useState(false);
 
   const status = getStatus(score);
   const statusConfig = STATUS_CONFIG[status];
@@ -160,10 +162,15 @@ export function ResultCard({ score, alignment, transcription }: ResultCardProps)
               {statusConfig.label}
             </Text>
           </View>
-          <View style={[styles.scoreBadge, { backgroundColor: `${statusColors.text}20` }]}>
-            <Text style={[styles.scoreBadgeText, { color: statusColors.text }]}>
-              {score}% match
-            </Text>
+          <View style={styles.headerRight}>
+            <Pressable onPress={() => setShowHelp(true)} hitSlop={8}>
+              <IconSymbol name="questionmark.circle" size={18} color={statusColors.text} />
+            </Pressable>
+            <View style={[styles.scoreBadge, { backgroundColor: `${statusColors.text}20` }]}>
+              <Text style={[styles.scoreBadgeText, { color: statusColors.text }]}>
+                {score}% match
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -178,6 +185,8 @@ export function ResultCard({ score, alignment, transcription }: ResultCardProps)
           ) : null}
         </ScrollView>
       </View>
+
+      <AlignmentHelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
     </Animated.View>
   );
 }
@@ -201,6 +210,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   statusLabel: {
     fontSize: 14,
