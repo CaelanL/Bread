@@ -59,7 +59,7 @@ interface UseStudySessionReturn {
   done: () => void;
 
   // Recording result handler
-  processRecording: (uri: string, durationSeconds: number) => Promise<{
+  processRecording: (uri: string, durationMs: number) => Promise<{
     score: number;
     alignment: AlignmentWord[];
     allDone: boolean;
@@ -123,16 +123,15 @@ export function useStudySession({
   }, [chunkResults]);
 
   // Process a recording and update state
-  const processRecording = useCallback(async (uri: string, durationSeconds: number) => {
+  const processRecording = useCallback(async (uri: string, durationMs: number) => {
     const currentChunk = chunks[currentIndex];
     const actualText = currentChunk.text;
 
     // Track recording duration
-    const durationMs = Math.round(durationSeconds * 1000);
     setTotalRecordingDurationMs((prev) => prev + durationMs);
 
     // Process recording: transcribe + clean in one call (or two for longer recordings)
-    const { cleanedTranscription } = await processRecordingApi(uri, durationSeconds, actualText);
+    const { cleanedTranscription } = await processRecordingApi(uri, durationMs, actualText);
 
     // Align locally (no API call needed)
     const alignment = alignTranscription(actualText, cleanedTranscription);
@@ -172,6 +171,7 @@ export function useStudySession({
 
         // Log session attempt for analytics (fire-and-forget, don't block UI)
         const sessionDurationMs = totalRecordingDurationMs + durationMs;
+        const wordCount = verse.text ? verse.text.split(/\s+/).filter(Boolean).length : undefined;
         logSessionAttempt({
           book: verse.book,
           chapter: verse.chapter,
@@ -182,6 +182,7 @@ export function useStudySession({
           chunkSize,
           accuracy: finalScoreValue,
           recordingDurationMs: sessionDurationMs,
+          wordCount,
         }).catch(e => console.error('[STUDY] Failed to log attempt:', e));
       }
 

@@ -209,7 +209,7 @@ export default function StudySessionScreen() {
 
       // Get duration before stopping
       const status = await recordingRef.current.getStatusAsync();
-      const durationSeconds = Math.ceil((status.durationMillis ?? 0) / 1000);
+      const durationMs = status.durationMillis ?? 0;
 
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
@@ -221,8 +221,8 @@ export default function StudySessionScreen() {
 
       setRecordingState('idle');
 
-      // Process recording through session hook (with duration for usage metering)
-      await session.processRecording(uri, durationSeconds);
+      // Process recording through session hook (with duration in ms)
+      await session.processRecording(uri, durationMs);
 
       // Hide bar after processing
       hideRecordingBar(() => setTranscribing(false));
@@ -383,6 +383,11 @@ export default function StudySessionScreen() {
         leftButton={{
           icon: 'xmark',
           onPress: () => {
+            // If all chunks completed, just go back without warning
+            if (session.allChunksCompleted) {
+              router.back();
+              return;
+            }
             Alert.alert('End Session?', 'Your progress will not be saved.', [
               { text: 'Cancel', style: 'cancel' },
               { text: 'End', style: 'destructive', onPress: () => router.back() },

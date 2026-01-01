@@ -1,10 +1,10 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
-import Animated, { withDelay, withTiming, Easing } from 'react-native-reanimated';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AlignmentWord } from '@/lib/study-chunks';
+import React from 'react';
+import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, withDelay, withTiming } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.30;
@@ -29,15 +29,15 @@ const STATUS_CONFIG = {
     color: '#f59e0b',
   },
   retry: {
-    icon: 'arrow.clockwise' as const,
-    label: 'Try again',
+    icon: 'xmark' as const,
+    label: 'Keep Practicing',
     color: '#ef4444',
   },
 };
 
 function getStatus(score: number): ResultStatus {
   if (score >= 90) return 'success';
-  if (score >= 70) return 'partial';
+  if (score >= 65) return 'partial';
   return 'retry';
 }
 
