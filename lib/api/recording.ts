@@ -12,13 +12,13 @@ export interface ProcessRecordingResult {
  * Sends audio directly to the edge function as multipart/form-data.
  *
  * @param audioUri - Local URI of the audio file
- * @param durationSeconds - Duration of the audio in seconds
+ * @param durationMs - Duration of the audio in milliseconds
  * @param actualVerse - The actual verse text (for GPT cleaning context)
  * @returns Transcription results with raw and cleaned versions
  */
 export async function processRecording(
   audioUri: string,
-  durationSeconds: number,
+  durationMs: number,
   actualVerse: string
 ): Promise<ProcessRecordingResult> {
   const token = await getAuthToken();
@@ -45,7 +45,7 @@ export async function processRecording(
     name: "recording.m4a",
   } as unknown as Blob);
 
-  formData.append("durationSeconds", durationSeconds.toString());
+  formData.append("durationMs", durationMs.toString());
   formData.append("actualVerse", actualVerse);
 
   const response = await fetch(`${baseUrl}/functions/v1/process-recording`, {

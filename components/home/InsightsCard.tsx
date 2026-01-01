@@ -1,10 +1,11 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useCountUp } from '@/hooks/use-count-up';
 import { useStreak } from '@/hooks/use-streak';
 import { useInsightsStats } from '@/lib/store';
 import { useRouter } from 'expo-router';
-import { useImperativeHandle, forwardRef } from 'react';
+import { forwardRef, useImperativeHandle } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export interface InsightsCardRef {
@@ -18,7 +19,8 @@ export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_,
   const router = useRouter();
 
   const stats = useInsightsStats();
-  const { streak, refresh: refreshStreak } = useStreak();
+  const { streak: rawStreak, refresh: refreshStreak } = useStreak();
+  const streak = useCountUp(rawStreak);
 
   useImperativeHandle(ref, () => ({
     refresh: refreshStreak,

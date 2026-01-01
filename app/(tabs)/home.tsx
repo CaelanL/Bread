@@ -12,12 +12,14 @@ import { useAppStore, useCollections, useVerses } from '@/lib/store';
 import { BlurView } from 'expo-blur';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 

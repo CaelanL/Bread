@@ -19,7 +19,9 @@ export interface VOTM {
  * Get the current month's Verse of the Month
  */
 export async function getCurrentVOTM(): Promise<VOTM | null> {
-  const yearMonth = new Date().toISOString().slice(0, 7); // "2025-01"
+  // Use local timezone, not UTC
+  const now = new Date();
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
   const { data, error } = await supabase
     .from('verse_of_month')

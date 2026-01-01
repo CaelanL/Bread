@@ -55,37 +55,38 @@ serve(async (req) => {
   }
 
   let audioBlob: Blob;
-  let durationSeconds: number;
+  let durationMs: number;
   let actualVerse: string;
 
   try {
     // Parse multipart form data
     const formData = await req.formData();
     const audioFile = formData.get("audio");
-    const durationStr = formData.get("durationSeconds");
+    const durationStr = formData.get("durationMs");
     const verseStr = formData.get("actualVerse");
 
     if (!audioFile || !(audioFile instanceof File)) {
       return badRequest("Missing audio file");
     }
     if (!durationStr || typeof durationStr !== "string") {
-      return badRequest("Missing durationSeconds");
+      return badRequest("Missing durationMs");
     }
     if (!verseStr || typeof verseStr !== "string") {
       return badRequest("Missing actualVerse");
     }
 
     audioBlob = audioFile;
-    durationSeconds = parseFloat(durationStr);
+    durationMs = parseFloat(durationStr);
     actualVerse = verseStr;
 
-    if (isNaN(durationSeconds) || durationSeconds <= 0) {
-      return badRequest("Invalid durationSeconds");
+    if (isNaN(durationMs) || durationMs <= 0) {
+      return badRequest("Invalid durationMs");
     }
 
     // Quota check removed - usage is still recorded for analytics
     // Rate limiting can be re-enabled server-side without app update
-    console.log(`[PROCESS] User: ${user.id.slice(0, 8)}..., Duration: ${durationSeconds}s, Size: ${(audioBlob.size / 1024).toFixed(1)}KB`);
+    const durationSeconds = durationMs / 1000;
+    console.log(`[PROCESS] User: ${user.id.slice(0, 8)}..., Duration: ${durationSeconds.toFixed(2)}s, Size: ${(audioBlob.size / 1024).toFixed(1)}KB`);
 
     const transcribeStart = Date.now();
     const transcriptionResult = await transcribeWithSoniox(audioBlob, actualVerse);
