@@ -4,8 +4,8 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
-import { useSettings } from '@/lib/settings';
 import { type BibleVersion } from '@/lib/storage';
+import { useAppStore } from '@/lib/store';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -23,10 +23,10 @@ export default function AddVerseScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const { settings } = useSettings();
+  const bibleVersion = useAppStore((state) => state.bibleVersion);
 
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(settings.bibleVersion);
+  const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(bibleVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
 
   const handleBookPress = (book: string) => {

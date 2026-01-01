@@ -7,10 +7,15 @@
  */
 
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/api/client';
 import { ensureAuth } from '@/lib/api';
 import type { Collection, SavedVerse, BibleVersion, Difficulty } from '@/lib/storage';
 import { MASTERED_COLLECTION_ID } from '@/lib/storage';
+import type { ColorMode } from '@/lib/settings';
+
+const COLOR_MODE_KEY = 'app_color_mode';
+const BIBLE_VERSION_KEY = 'app_bible_version';
 
 // ============ CONSTANTS ============
 
@@ -47,6 +52,10 @@ interface AppState {
   verses: SavedVerse[];
   masteredVerses: SavedVerse[];
 
+  // Settings
+  colorMode: ColorMode;
+  bibleVersion: BibleVersion;
+
   // Loading states
   hydrated: boolean;
   collectionsLoading: boolean;
@@ -63,6 +72,10 @@ interface AppState {
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
+
+  // Actions - Settings
+  setColorMode: (mode: ColorMode) => Promise<void>;
+  setBibleVersion: (version: BibleVersion) => Promise<void>;
 
   // Actions - Collections
   addCollection: (name: string) => Promise<Collection>;
@@ -98,6 +111,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   collections: [],
   verses: [],
   masteredVerses: [],
+  colorMode: 'system',
+  bibleVersion: 'ESV',
   hydrated: false,
   collectionsLoading: true,
   versesLoading: true,
@@ -233,6 +248,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   hydrate: async () => {
     console.log('[STORE] Hydrating...');
+
+    // Load settings from AsyncStorage (doesn't require auth)
+    try {
+      const [savedColorMode, savedBibleVersion] = await Promise.all([
+        AsyncStorage.getItem(COLOR_MODE_KEY),
+        AsyncStorage.getItem(BIBLE_VERSION_KEY),
+      ]);
+
+      const updates: Partial<AppState> = {};
+      if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
+        updates.colorMode = savedColorMode as ColorMode;
+      }
+      if (savedBibleVersion && ['ESV', 'NLT'].includes(savedBibleVersion)) {
+        updates.bibleVersion = savedBibleVersion as BibleVersion;
+      }
+      if (Object.keys(updates).length > 0) {
+        set(updates);
+      }
+    } catch (e) {
+      console.error('[STORE] Failed to load settings:', e);
+    }
+
     const [collectionsOk, versesOk, masteredOk] = await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),
@@ -258,6 +295,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  // ============ SETTINGS ACTIONS ============
+
+  setColorMode: async (mode: ColorMode) => {
+    set({ colorMode: mode });
+    try {
+      await AsyncStorage.setItem(COLOR_MODE_KEY, mode);
+    } catch (e) {
+      console.error('[STORE] Failed to save colorMode:', e);
+    }
+  },
+
+  setBibleVersion: async (version: BibleVersion) => {
+    set({ bibleVersion: version });
+    try {
+      await AsyncStorage.setItem(BIBLE_VERSION_KEY, version);
+    } catch (e) {
+      console.error('[STORE] Failed to save bibleVersion:', e);
+    }
   },
 
   // ============ COLLECTION ACTIONS ============
@@ -657,6 +714,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       collections: [],
       verses: [],
       masteredVerses: [],
+      // Note: colorMode is NOT cleared - it persists across logout
       hydrated: false,
       collectionsLoading: true,
       versesLoading: true,

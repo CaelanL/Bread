@@ -6,7 +6,6 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getCurrentVOTM, getVOTMMasteryCount, hasUserMasteredVOTM, type VOTM } from '@/lib/api/votm';
 import { getVerseText } from '@/lib/api/bible';
-import { useSettings } from '@/lib/settings';
 import { formatVerseReference } from '@/lib/storage';
 import { useAppStore, useCollections, useVerses } from '@/lib/store';
 import { BlurView } from 'expo-blur';
@@ -78,9 +77,8 @@ export default function HomeScreen() {
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
-  // Get user's default Bible version from settings
-  const { settings } = useSettings();
-  const defaultVersion = settings.bibleVersion;
+  // Get user's default Bible version from store
+  const defaultVersion = useAppStore((state) => state.bibleVersion);
 
   // Store data
   const collections = useCollections();

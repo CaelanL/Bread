@@ -5,7 +5,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { normalizeBookName, getVerseCount } from '@/lib/bible';
 import { type BibleVersion } from '@/lib/storage';
 import { useAppStore } from '@/lib/store';
-import { useSettings } from '@/lib/settings';
 import { fetchVerse, fetchChapter } from '@/lib/api';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState, useCallback, useEffect } from 'react';
@@ -40,14 +39,14 @@ export default function VerseSelectScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const { settings } = useSettings();
+  const bibleVersion = useAppStore((state) => state.bibleVersion);
 
   const bookName = normalizeBookName(decodeURIComponent(book ?? ''));
   const chapterNum = parseInt(chapter ?? '1', 10);
   const verseCount = getVerseCount(bookName, chapterNum);
 
-  // Translation from URL param (passed from book selection), fallback to settings
-  const initialVersion = (version === 'ESV' || version === 'NLT') ? version : settings.bibleVersion;
+  // Translation from URL param (passed from book selection), fallback to store
+  const initialVersion = (version === 'ESV' || version === 'NLT') ? version : bibleVersion;
   const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(initialVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
 

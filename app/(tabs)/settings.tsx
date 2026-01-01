@@ -10,8 +10,9 @@ import {
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useSettings, BIBLE_VERSIONS, type BibleVersion } from '@/lib/settings';
+import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion } from '@/lib/settings';
 import { useAuth } from '@/lib/auth';
+import { useAppStore } from '@/lib/store';
 
 interface SettingsSectionProps {
   title: string;
@@ -127,11 +128,60 @@ function VersionPicker({ value, onChange }: VersionPickerProps) {
   );
 }
 
+interface ColorModePickerProps {
+  value: ColorMode;
+  onChange: (value: ColorMode) => void;
+}
+
+function ColorModePicker({ value, onChange }: ColorModePickerProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  return (
+    <View style={styles.picker}>
+      {COLOR_MODES.map((mode) => {
+        const isSelected = value === mode.value;
+        return (
+          <Pressable
+            key={mode.value}
+            style={[
+              styles.pickerOption,
+              {
+                backgroundColor: isSelected
+                  ? isDark
+                    ? '#0a84ff'
+                    : '#007aff'
+                  : isDark
+                  ? '#3a3a3c'
+                  : '#e5e5ea',
+              },
+            ]}
+            onPress={() => onChange(mode.value)}
+          >
+            <Text
+              style={[
+                styles.pickerOptionText,
+                { color: isSelected ? '#fff' : isDark ? '#fff' : '#000' },
+              ]}
+            >
+              {mode.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const { settings, loading, setBibleVersion } = useSettings();
+  const hydrated = useAppStore((state) => state.hydrated);
+  const colorMode = useAppStore((state) => state.colorMode);
+  const setColorMode = useAppStore((state) => state.setColorMode);
+  const bibleVersion = useAppStore((state) => state.bibleVersion);
+  const setBibleVersion = useAppStore((state) => state.setBibleVersion);
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
 
@@ -142,10 +192,10 @@ export default function SettingsScreen() {
   };
 
   const selectedVersion = BIBLE_VERSIONS.find(
-    (v) => v.value === settings.bibleVersion
+    (v) => v.value === bibleVersion
   );
 
-  if (loading) {
+  if (!hydrated) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.tint} />
@@ -169,8 +219,22 @@ export default function SettingsScreen() {
             description={`${selectedVersion?.full} • Used when adding new verses`}
           >
             <VersionPicker
-              value={settings.bibleVersion}
+              value={bibleVersion}
               onChange={setBibleVersion}
+            />
+          </SettingsRow>
+        </SettingsSection>
+
+        {/* Appearance */}
+        <SettingsSection title="APPEARANCE">
+          <SettingsRow
+            icon="moon.fill"
+            label="Theme"
+            description="Choose light, dark, or follow system"
+          >
+            <ColorModePicker
+              value={colorMode}
+              onChange={setColorMode}
             />
           </SettingsRow>
         </SettingsSection>
