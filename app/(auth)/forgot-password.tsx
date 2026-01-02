@@ -1,15 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   Pressable,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
@@ -25,6 +24,9 @@ export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+
+  const emailRef = useRef<TextInput>(null);
 
   const buttonBg = colors.primary;
   const inputBg = colors.input;
@@ -61,10 +63,10 @@ export default function ForgotPasswordScreen() {
               <Text style={{ fontWeight: '600', color: colors.text }}>{email}</Text>
             </Text>
             <Pressable
-              style={[styles.button, { backgroundColor: buttonBg }]}
+              style={[styles.button, { backgroundColor: buttonBg, paddingHorizontal: 32 }]}
               onPress={() => router.back()}
             >
-              <Text style={styles.buttonText}>Back to Sign In</Text>
+              <Text style={[styles.buttonText, { fontSize: 16 }]}>Back to Sign In</Text>
             </Pressable>
           </View>
         </View>
@@ -73,14 +75,18 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      contentContainerStyle={styles.scrollContent}
+      bottomOffset={20}
     >
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <Pressable
+            style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+            onPress={() => router.back()}
+          >
             <IconSymbol name="chevron.left" size={24} color={colors.text} />
           </Pressable>
           <Text style={[styles.title, { color: colors.text }]}>Reset Password</Text>
@@ -91,22 +97,40 @@ export default function ForgotPasswordScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-          <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-            <IconSymbol name="envelope.fill" size={18} color={colors.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              emailFocused && { borderColor: colors.primary },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => emailRef.current?.focus()}
+          >
+            <IconSymbol name="envelope.fill" size={18} color={emailFocused ? colors.primary : colors.icon} />
             <TextInput
+              ref={emailRef}
               style={[styles.input, { color: colors.text }]}
               placeholder="Email"
               placeholderTextColor={colors.icon}
               value={email}
               onChangeText={setEmail}
+              onFocus={() => setEmailFocused(true)}
+              onBlur={() => setEmailFocused(false)}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
+              returnKeyType="done"
+              onSubmitEditing={handleResetPassword}
             />
           </View>
 
           <Pressable
-            style={[styles.button, { backgroundColor: buttonBg, opacity: loading ? 0.7 : 1 }]}
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: buttonBg },
+              loading && { opacity: 0.7 },
+              pressed && !loading && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+            ]}
             onPress={handleResetPassword}
             disabled={loading}
           >
@@ -123,18 +147,24 @@ export default function ForgotPasswordScreen() {
           <Text style={[styles.footerText, { color: colors.icon }]}>
             Remember your password?{' '}
           </Text>
-          <Pressable onPress={() => router.back()}>
+          <Pressable
+            style={({ pressed }) => pressed && { opacity: 0.7 }}
+            onPress={() => router.back()}
+          >
             <Text style={[styles.link, { color: buttonBg }]}>Sign in</Text>
           </Pressable>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,

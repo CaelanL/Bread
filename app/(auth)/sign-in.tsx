@@ -1,15 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   Pressable,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
@@ -19,13 +18,17 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 export default function SignInScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
   const { signIn } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const buttonBg = colors.primary;
   const inputBg = colors.input;
@@ -47,9 +50,10 @@ export default function SignInScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      contentContainerStyle={styles.scrollContent}
+      bottomOffset={20}
     >
       <View style={styles.content}>
         {/* Header */}
@@ -63,32 +67,58 @@ export default function SignInScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-          <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-            <IconSymbol name="envelope.fill" size={18} color={colors.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              emailFocused && { borderColor: colors.primary },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => emailRef.current?.focus()}
+          >
+            <IconSymbol name="envelope.fill" size={18} color={emailFocused ? colors.primary : colors.icon} />
             <TextInput
+              ref={emailRef}
               style={[styles.input, { color: colors.text }]}
               placeholder="Email"
               placeholderTextColor={colors.icon}
               value={email}
               onChangeText={setEmail}
+              onFocus={() => setEmailFocused(true)}
+              onBlur={() => setEmailFocused(false)}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
             />
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-            <IconSymbol name="lock.fill" size={18} color={colors.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              passwordFocused && { borderColor: colors.primary },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => passwordRef.current?.focus()}
+          >
+            <IconSymbol name="lock.fill" size={18} color={passwordFocused ? colors.primary : colors.icon} />
             <TextInput
+              ref={passwordRef}
               style={[styles.input, { color: colors.text }]}
               placeholder="Password"
               placeholderTextColor={colors.icon}
               value={password}
               onChangeText={setPassword}
+              onFocus={() => setPasswordFocused(true)}
+              onBlur={() => setPasswordFocused(false)}
               secureTextEntry={!showPassword}
               autoComplete="password"
+              returnKeyType="done"
+              onSubmitEditing={handleSignIn}
             />
-            <Pressable onPress={() => setShowPassword(!showPassword)}>
+            <Pressable hitSlop={12} onPress={() => setShowPassword(!showPassword)}>
               <IconSymbol
                 name={showPassword ? 'eye.slash.fill' : 'eye.fill'}
                 size={18}
@@ -98,7 +128,12 @@ export default function SignInScreen() {
           </View>
 
           <Pressable
-            style={[styles.button, { backgroundColor: buttonBg, opacity: loading ? 0.7 : 1 }]}
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: buttonBg },
+              loading && { opacity: 0.7 },
+              pressed && !loading && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+            ]}
             onPress={handleSignIn}
             disabled={loading}
           >
@@ -110,7 +145,10 @@ export default function SignInScreen() {
           </Pressable>
 
           {/* Forgot Password */}
-          <Pressable onPress={() => router.push('/(auth)/forgot-password')}>
+          <Pressable
+            style={({ pressed }) => pressed && { opacity: 0.7 }}
+            onPress={() => router.push('/(auth)/forgot-password')}
+          >
             <Text style={[styles.link, { color: buttonBg }]}>Forgot password?</Text>
           </Pressable>
         </View>
@@ -120,18 +158,24 @@ export default function SignInScreen() {
           <Text style={[styles.footerText, { color: colors.icon }]}>
             Don't have an account?{' '}
           </Text>
-          <Pressable onPress={() => router.push('/(auth)/sign-up')}>
+          <Pressable
+            style={({ pressed }) => pressed && { opacity: 0.7 }}
+            onPress={() => router.push('/(auth)/sign-up')}
+          >
             <Text style={[styles.link, { color: buttonBg }]}>Sign up</Text>
           </Pressable>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,

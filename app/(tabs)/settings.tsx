@@ -138,6 +138,7 @@ export default function SettingsScreen() {
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
   const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
+  const [copyrightVisible, setCopyrightVisible] = React.useState(false);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -232,6 +233,15 @@ export default function SettingsScreen() {
         {/* About */}
         <SettingsSection title="ABOUT">
           <SettingsRow icon="info.circle.fill" label="Version" description="1.0.0" />
+          <Pressable onPress={() => setCopyrightVisible(true)}>
+            <SettingsRow
+              icon="doc.text.fill"
+              label="Copyrights"
+              description="Bible translation notices"
+            >
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
         </SettingsSection>
       </ScrollView>
 
@@ -267,6 +277,34 @@ export default function SettingsScreen() {
                   </Pressable>
                 );
               })}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Copyright Modal */}
+      <Modal visible={copyrightVisible} transparent animationType="fade">
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setCopyrightVisible(false)}
+        >
+          <View
+            style={[styles.copyrightModal, { backgroundColor: colors.cardAlt }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <ScrollView style={styles.copyrightScroll} showsVerticalScrollIndicator={false}>
+              <View style={styles.copyrightItem}>
+                <Text style={[styles.copyrightVersion, { color: colors.text }]}>ESV</Text>
+                <Text style={[styles.copyrightText, { color: colors.icon }]}>
+                  Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.
+                </Text>
+              </View>
+              <View style={[styles.copyrightItem, styles.copyrightItemLast]}>
+                <Text style={[styles.copyrightVersion, { color: colors.text }]}>NLT</Text>
+                <Text style={[styles.copyrightText, { color: colors.icon }]}>
+                  Scripture quotations are taken from the Holy Bible, New Living Translation, copyright © 1996, 2004, 2015 by Tyndale House Foundation. Used by permission of Tyndale House Publishers, Carol Stream, Illinois 60188. All rights reserved.
+                </Text>
+              </View>
             </ScrollView>
           </View>
         </Pressable>
@@ -399,5 +437,29 @@ const styles = StyleSheet.create({
   modalOptionDesc: {
     fontSize: 13,
     marginTop: 2,
+  },
+  copyrightModal: {
+    width: '85%',
+    maxHeight: '70%',
+    borderRadius: 16,
+    padding: 16,
+  },
+  copyrightScroll: {
+    flexGrow: 0,
+  },
+  copyrightItem: {
+    marginBottom: 16,
+  },
+  copyrightItemLast: {
+    marginBottom: 0,
+  },
+  copyrightVersion: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  copyrightText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

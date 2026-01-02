@@ -1,16 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   Pressable,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Alert,
-  ScrollView,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
@@ -29,6 +27,13 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmFocused, setConfirmFocused] = useState(false);
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
 
   const buttonBg = colors.primary;
   const inputBg = colors.input;
@@ -66,107 +71,153 @@ export default function SignUpScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      contentContainerStyle={styles.scrollContent}
+      bottomOffset={20}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.content}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Pressable style={styles.backButton} onPress={() => router.back()}>
-              <IconSymbol name="chevron.left" size={24} color={colors.text} />
-            </Pressable>
-            <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
-            <Text style={[styles.subtitle, { color: colors.icon }]}>
-              Sign up to start memorizing
-            </Text>
-          </View>
-
-          {/* Form */}
-          <View style={styles.form}>
-            <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-              <IconSymbol name="envelope.fill" size={18} color={colors.icon} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Email"
-                placeholderTextColor={colors.icon}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
-              />
-            </View>
-
-            <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-              <IconSymbol name="lock.fill" size={18} color={colors.icon} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Password"
-                placeholderTextColor={colors.icon}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoComplete="new-password"
-              />
-              <Pressable onPress={() => setShowPassword(!showPassword)}>
-                <IconSymbol
-                  name={showPassword ? 'eye.slash.fill' : 'eye.fill'}
-                  size={18}
-                  color={colors.icon}
-                />
-              </Pressable>
-            </View>
-
-            <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-              <IconSymbol name="lock.fill" size={18} color={colors.icon} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Confirm Password"
-                placeholderTextColor={colors.icon}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-                autoComplete="new-password"
-              />
-              <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                <IconSymbol
-                  name={showConfirmPassword ? 'eye.slash.fill' : 'eye.fill'}
-                  size={18}
-                  color={colors.icon}
-                />
-              </Pressable>
-            </View>
-
-            <Pressable
-              style={[styles.button, { backgroundColor: buttonBg, opacity: loading ? 0.7 : 1 }]}
-              onPress={handleSignUp}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <Text style={styles.buttonText}>Sign Up</Text>
-              )}
-            </Pressable>
-          </View>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={[styles.footerText, { color: colors.icon }]}>
-              Already have an account?{' '}
-            </Text>
-            <Pressable onPress={() => router.back()}>
-              <Text style={[styles.link, { color: buttonBg }]}>Sign in</Text>
-            </Pressable>
-          </View>
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable
+            style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+            onPress={() => router.back()}
+          >
+            <IconSymbol name="chevron.left" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
+          <Text style={[styles.subtitle, { color: colors.icon }]}>
+            Sign up to start memorizing
+          </Text>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+        {/* Form */}
+        <View style={styles.form}>
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              emailFocused && { borderColor: colors.primary },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => emailRef.current?.focus()}
+          >
+            <IconSymbol name="envelope.fill" size={18} color={emailFocused ? colors.primary : colors.icon} />
+            <TextInput
+              ref={emailRef}
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Email"
+              placeholderTextColor={colors.icon}
+              value={email}
+              onChangeText={setEmail}
+              onFocus={() => setEmailFocused(true)}
+              onBlur={() => setEmailFocused(false)}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
+          </View>
+
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              passwordFocused && { borderColor: colors.primary },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => passwordRef.current?.focus()}
+          >
+            <IconSymbol name="lock.fill" size={18} color={passwordFocused ? colors.primary : colors.icon} />
+            <TextInput
+              ref={passwordRef}
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Password"
+              placeholderTextColor={colors.icon}
+              value={password}
+              onChangeText={setPassword}
+              onFocus={() => setPasswordFocused(true)}
+              onBlur={() => setPasswordFocused(false)}
+              secureTextEntry={!showPassword}
+              autoComplete="new-password"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmRef.current?.focus()}
+            />
+            <Pressable hitSlop={12} onPress={() => setShowPassword(!showPassword)}>
+              <IconSymbol
+                name={showPassword ? 'eye.slash.fill' : 'eye.fill'}
+                size={18}
+                color={colors.icon}
+              />
+            </Pressable>
+          </View>
+
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              confirmFocused && { borderColor: colors.primary },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => confirmRef.current?.focus()}
+          >
+            <IconSymbol name="lock.fill" size={18} color={confirmFocused ? colors.primary : colors.icon} />
+            <TextInput
+              ref={confirmRef}
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Confirm Password"
+              placeholderTextColor={colors.icon}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              onFocus={() => setConfirmFocused(true)}
+              onBlur={() => setConfirmFocused(false)}
+              secureTextEntry={!showConfirmPassword}
+              autoComplete="new-password"
+              returnKeyType="done"
+              onSubmitEditing={handleSignUp}
+            />
+            <Pressable hitSlop={12} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+              <IconSymbol
+                name={showConfirmPassword ? 'eye.slash.fill' : 'eye.fill'}
+                size={18}
+                color={colors.icon}
+              />
+            </Pressable>
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: buttonBg },
+              loading && { opacity: 0.7 },
+              pressed && !loading && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+            ]}
+            onPress={handleSignUp}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.buttonText}>Sign Up</Text>
+            )}
+          </Pressable>
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: colors.icon }]}>
+            Already have an account?{' '}
+          </Text>
+          <Pressable
+            style={({ pressed }) => pressed && { opacity: 0.7 }}
+            onPress={() => router.back()}
+          >
+            <Text style={[styles.link, { color: buttonBg }]}>Sign in</Text>
+          </Pressable>
+        </View>
+      </View>
+    </KeyboardAwareScrollView>
   );
 }
 

@@ -108,9 +108,9 @@ export default function CollectionScreen() {
           collection?.isVirtual
             ? undefined
             : {
-                label: 'Add',
                 icon: 'plus',
                 onPress: handleAddVerse,
+                variant: 'icon',
               }
         }
       />

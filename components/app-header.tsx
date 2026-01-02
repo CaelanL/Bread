@@ -5,10 +5,10 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface RightButtonProps {
-  label: string;
+  label?: string;
   icon?: string;
   onPress: () => void;
-  variant?: 'filled' | 'text';
+  variant?: 'filled' | 'text' | 'icon';
 }
 
 interface LeftButtonProps {
@@ -56,6 +56,15 @@ export function AppHeader({ title, showBack = true, leftButton, rightButton }: A
 
     const { label, icon, onPress, variant = 'filled' } = rightButton;
     const isFilled = variant === 'filled';
+    const isIconOnly = variant === 'icon';
+
+    if (isIconOnly && icon) {
+      return (
+        <Pressable style={styles.iconButton} onPress={onPress}>
+          <IconSymbol name={icon as any} size={28} color={primaryColor} />
+        </Pressable>
+      );
+    }
 
     return (
       <Pressable
@@ -72,14 +81,16 @@ export function AppHeader({ title, showBack = true, leftButton, rightButton }: A
             color={isFilled ? colors.white : primaryColor}
           />
         )}
-        <Text
-          style={[
-            styles.rightButtonText,
-            { color: isFilled ? colors.white : primaryColor },
-          ]}
-        >
-          {label}
-        </Text>
+        {label && (
+          <Text
+            style={[
+              styles.rightButtonText,
+              { color: isFilled ? colors.white : primaryColor },
+            ]}
+          >
+            {label}
+          </Text>
+        )}
       </Pressable>
     );
   };
@@ -149,5 +160,8 @@ const styles = StyleSheet.create({
   },
   rightPlaceholder: {
     width: 60,
+  },
+  iconButton: {
+    padding: 4,
   },
 });
