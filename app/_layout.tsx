@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors } from '@/constants/theme';
 import { migrateLocalDataToServer } from '@/lib/sync';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
@@ -61,11 +62,13 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated]);
 
+  const colors = Colors[colorScheme ?? 'light'];
+
   // Show loading spinner while checking auth
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colorScheme === 'dark' ? '#000' : '#fff' }}>
-        <ActivityIndicator size="large" color={colorScheme === 'dark' ? '#3b82f6' : '#0a7ea4'} />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }

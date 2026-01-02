@@ -44,8 +44,10 @@ function SkeletonCard({ isDark }: { isDark: boolean }) {
     return () => pulse.stop();
   }, [pulseAnim]);
 
-  const bgColor = isDark ? '#1e1e1e' : '#f5f5f5';
-  const shimmerColor = isDark ? '#333' : '#e5e5e5';
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
+  const bgColor = colors.cardAlt;
+  const shimmerColor = colors.border;
 
   return (
     <View style={[styles.skeletonCard, { backgroundColor: bgColor }]}>
@@ -225,8 +227,8 @@ export default function HomeScreen() {
     }
   };
 
-  const accentColor = isDark ? '#60a5fa' : colors.tint;
-  const badgeBg = isDark ? 'rgba(96,165,250,0.15)' : 'rgba(10,126,164,0.1)';
+  const accentColor = colors.tint;
+  const badgeBg = colors.primaryLight;
 
   // Format reference for modals
   const reference = votm
@@ -264,7 +266,7 @@ export default function HomeScreen() {
             onAddPress={handleAddPress}
           />
         ) : (
-          <View style={[styles.emptyCard, { backgroundColor: isDark ? '#1e1e1e' : '#f5f5f5' }]}>
+          <View style={[styles.emptyCard, { backgroundColor: colors.cardAlt }]}>
             <Text style={[styles.emptyText, { color: colors.icon }]}>
               No verse of the month yet.
             </Text>
@@ -286,7 +288,7 @@ export default function HomeScreen() {
         onRequestClose={() => setExpanded(false)}
       >
         <BlurView intensity={isDark ? 40 : 80} tint={isDark ? 'dark' : 'light'} style={styles.blurOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: isDark ? '#1c1c1e' : '#ffffff' }]}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
@@ -318,7 +320,7 @@ export default function HomeScreen() {
         onRequestClose={() => setCollectionPickerVisible(false)}
       >
         <BlurView intensity={isDark ? 40 : 80} tint={isDark ? 'dark' : 'light'} style={styles.blurOverlay}>
-          <View style={[styles.pickerCard, { backgroundColor: isDark ? '#1c1c1e' : '#ffffff' }]}>
+          <View style={[styles.pickerCard, { backgroundColor: colors.card }]}>
             {/* Header */}
             <View style={styles.pickerHeader}>
               <Text style={[styles.pickerTitle, { color: colors.text }]}>
@@ -383,7 +385,7 @@ export default function HomeScreen() {
               disabled={selectedCollections.length === 0 || adding}
             >
               {adding ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={colors.white} />
               ) : (
                 <Text style={styles.addButtonText}>
                   Add to {selectedCollections.length} Collection{selectedCollections.length !== 1 ? 's' : ''}
@@ -543,7 +545,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addButtonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 16,
     fontWeight: '600',
   },

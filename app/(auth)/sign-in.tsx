@@ -27,9 +27,9 @@ export default function SignInScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const buttonBg = isDark ? '#3b82f6' : '#0a7ea4';
-  const inputBg = isDark ? '#1c1c1e' : '#f5f5f5';
-  const borderColor = isDark ? '#333' : '#e0e0e0';
+  const buttonBg = colors.primary;
+  const inputBg = colors.input;
+  const borderColor = colors.border;
 
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) {
@@ -54,7 +54,7 @@ export default function SignInScreen() {
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={[styles.logoContainer, { backgroundColor: isDark ? 'rgba(96,165,250,0.15)' : 'rgba(10,126,164,0.1)' }]}>
+          <View style={[styles.logoContainer, { backgroundColor: colors.primaryLight }]}>
             <IconSymbol name="book.fill" size={40} color={buttonBg} />
           </View>
           <Text style={[styles.title, { color: colors.text }]}>Bible Memory</Text>
@@ -103,7 +103,7 @@ export default function SignInScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.buttonText}>Sign In</Text>
             )}
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 17,
     fontWeight: '600',
   },

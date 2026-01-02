@@ -84,7 +84,7 @@ export default function LibraryScreen() {
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 
-  const primaryColor = isDark ? '#60a5fa' : '#0a7ea4';
+  const primaryColor = colors.primary;
 
   const renderEmptyHint = () => (
     <Animated.View
@@ -105,7 +105,7 @@ export default function LibraryScreen() {
           style={[styles.addButton, { backgroundColor: primaryColor }]}
           onPress={() => setModalVisible(true)}
         >
-          <IconSymbol name="plus" size={18} color="#fff" />
+          <IconSymbol name="plus" size={18} color={colors.white} />
           <Text style={styles.addButtonText}>New</Text>
         </Pressable>
       </View>
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   addButtonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 15,
     fontWeight: '600',
   },

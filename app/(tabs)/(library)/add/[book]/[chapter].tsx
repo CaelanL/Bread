@@ -331,8 +331,8 @@ export default function VerseSelectScreen() {
       : `Add Verses ${min}-${max}`
     : '';
 
-  const highlightBg = isDark ? 'rgba(96, 165, 250, 0.35)' : 'rgba(10, 126, 164, 0.25)';
-  const buttonBg = isDark ? '#3b82f6' : '#0a7ea4';
+  const highlightBg = isDark ? 'rgba(96, 165, 250, 0.35)' : 'rgba(10, 126, 164, 0.25)'; // Keep for highlight selection
+  const buttonBg = colors.primary;
 
   const handleVersionSelect = (ver: BibleVersion) => {
     Haptics.selectionAsync();
@@ -362,21 +362,21 @@ export default function VerseSelectScreen() {
           style={styles.modalOverlay}
           onPress={() => setVersionPickerVisible(false)}
         >
-          <View style={[styles.pickerContainer, { backgroundColor: isDark ? '#2c2c2e' : '#fff' }]}>
+          <View style={[styles.pickerContainer, { backgroundColor: colors.card }]}>
             <Text style={[styles.pickerTitle, { color: colors.text }]}>Translation</Text>
             {(['ESV', 'NLT'] as BibleVersion[]).map((ver) => (
               <Pressable
                 key={ver}
                 style={[
                   styles.pickerOption,
-                  selectedVersion === ver && { backgroundColor: isDark ? '#0a84ff' : '#007aff' },
+                  selectedVersion === ver && { backgroundColor: colors.primary },
                 ]}
                 onPress={() => handleVersionSelect(ver)}
               >
                 <Text
                   style={[
                     styles.pickerOptionText,
-                    { color: selectedVersion === ver ? '#fff' : colors.text },
+                    { color: selectedVersion === ver ? colors.white : colors.text },
                   ]}
                 >
                   {ver}
@@ -423,7 +423,7 @@ export default function VerseSelectScreen() {
       {/* Error State */}
       {!loading && !isOffline && error && (
         <View style={styles.centerContainer}>
-          <IconSymbol name="exclamationmark.triangle.fill" size={48} color="#ef4444" />
+          <IconSymbol name="exclamationmark.triangle.fill" size={48} color={colors.error} />
           <Text style={[styles.statusTitle, { color: colors.text }]}>Failed to Load</Text>
           <Text style={[styles.statusText, { color: colors.icon }]}>{error}</Text>
           <Pressable
@@ -479,7 +479,7 @@ export default function VerseSelectScreen() {
                     ]}
                   >
                     <Text style={[styles.verseText, { color: colors.text }]}>
-                      <Text style={[styles.verseNumber, { color: isDark ? '#60a5fa' : colors.tint }]}>
+                      <Text style={[styles.verseNumber, { color: colors.tint }]}>
                         {verseNum}
                       </Text>
                       {'  '}
@@ -507,7 +507,7 @@ export default function VerseSelectScreen() {
             disabled={isSaving}
           >
             {isSaving ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.addButtonText}>{buttonText}</Text>
             )}
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   retryButtonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 16,
     fontWeight: '600',
   },
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addButtonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 17,
     fontWeight: '600',
   },

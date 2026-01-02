@@ -70,7 +70,7 @@ export function PopoverMenu({
     }).start(() => onClose());
   };
 
-  const menuBg = isDark ? '#2c2c2e' : '#ffffff';
+  const menuBg = isDark ? colors.cardAlt : colors.card;
   const separatorColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
 
   return (
@@ -110,13 +110,13 @@ export function PopoverMenu({
                   <IconSymbol
                     name={item.icon as any}
                     size={18}
-                    color={item.destructive ? '#ef4444' : colors.text}
+                    color={item.destructive ? colors.error : colors.text}
                   />
                 )}
                 <Text
                   style={[
                     styles.menuItemText,
-                    { color: item.destructive ? '#ef4444' : colors.text },
+                    { color: item.destructive ? colors.error : colors.text },
                   ]}
                 >
                   {item.label}

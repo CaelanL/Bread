@@ -38,9 +38,9 @@ export function SwipeableVerseCard({
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
-  const cardBg = isDark ? '#1c1c1e' : '#ffffff';
-  const borderColor = isDark ? 'rgba(96,165,250,0.3)' : 'rgba(10,126,164,0.25)';
-  const primaryColor = isDark ? '#60a5fa' : '#0a7ea4';
+  const cardBg = colors.card;
+  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Keep for subtle accent border
+  const primaryColor = colors.tint;
 
   // Text loading state (for verses without cached text)
   const [text, setText] = useState<string>(verse.text || '');
@@ -144,7 +144,7 @@ export function SwipeableVerseCard({
       {/* Delete button (behind card) */}
       <Animated.View style={[styles.deleteButtonContainer, deleteButtonStyle]}>
         <Pressable style={styles.deleteButton} onPress={handleDelete}>
-          <IconSymbol name="trash.fill" size={20} color="#fff" />
+          <IconSymbol name="trash.fill" size={20} color={colors.white} />
           <Text style={styles.deleteText}>Delete</Text>
         </Pressable>
       </Animated.View>
@@ -166,7 +166,7 @@ export function SwipeableVerseCard({
               <View
                 style={[
                   styles.iconContainer,
-                  { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
+                  { backgroundColor: colors.primaryLight },
                 ]}
               >
                 <IconSymbol name="book.fill" size={20} color={colors.icon} />
@@ -186,7 +186,7 @@ export function SwipeableVerseCard({
                     <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
                   )}
                   {highestDifficulty === 'hard' && (
-                    <IconSymbol name="checkmark" size={12} color="#22c55e" />
+                    <IconSymbol name="checkmark" size={12} color={colors.success} />
                   )}
                 </View>
                 {loading ? (
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     width: DELETE_BUTTON_WIDTH,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#ef4444',
+    backgroundColor: '#ef4444', // Keep error red hardcoded for delete action
     borderRadius: 16,
   },
   deleteButton: {
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 12,
     fontWeight: '600',
   },

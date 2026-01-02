@@ -2,7 +2,7 @@
 // Types
 // ============================================================================
 
-export type BibleVersion = 'ESV' | 'NLT';
+export type BibleVersion = 'ESV' | 'NLT' | 'KJV';
 export type ColorMode = 'light' | 'dark' | 'system';
 
 // ============================================================================
@@ -12,6 +12,7 @@ export type ColorMode = 'light' | 'dark' | 'system';
 export const BIBLE_VERSIONS: { value: BibleVersion; label: string; full: string }[] = [
   { value: 'ESV', label: 'ESV', full: 'English Standard Version' },
   { value: 'NLT', label: 'NLT', full: 'New Living Translation' },
+  { value: 'KJV', label: 'KJV', full: 'King James Version' },
 ];
 
 // ============================================================================

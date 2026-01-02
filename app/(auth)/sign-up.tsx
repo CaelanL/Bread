@@ -30,9 +30,9 @@ export default function SignUpScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const buttonBg = isDark ? '#3b82f6' : '#0a7ea4';
-  const inputBg = isDark ? '#1c1c1e' : '#f5f5f5';
-  const borderColor = isDark ? '#333' : '#e0e0e0';
+  const buttonBg = colors.primary;
+  const inputBg = colors.input;
+  const borderColor = colors.border;
 
   const handleSignUp = async () => {
     if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
@@ -148,7 +148,7 @@ export default function SignUpScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.white} />
               ) : (
                 <Text style={styles.buttonText}>Sign Up</Text>
               )}
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 17,
     fontWeight: '600',
   },

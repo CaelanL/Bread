@@ -63,10 +63,10 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
     onClose();
   };
 
-  const cardBg = isDark ? '#1c1c1e' : '#ffffff';
-  const inputBg = isDark ? '#2c2c2e' : '#f5f5f5';
-  const borderColor = isDark ? '#3a3a3c' : '#e0e0e0';
-  const primaryColor = isDark ? '#60a5fa' : '#0a7ea4';
+  const cardBg = colors.card;
+  const inputBg = colors.input;
+  const borderColor = colors.border;
+  const primaryColor = colors.primary;
 
   return (
     <Modal
@@ -139,7 +139,7 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
               onPress={handleSubmit}
               disabled={!name.trim()}
             >
-              <Text style={[styles.buttonText, { color: '#fff' }]}>Create Collection</Text>
+              <Text style={[styles.buttonText, { color: colors.white }]}>Create Collection</Text>
             </Pressable>
           </View>
         </Animated.View>

@@ -24,11 +24,9 @@ export async function processRecording(
   const token = await getAuthToken();
   const baseUrl = getSupabaseUrl();
 
-  // Fetch audio blob to get size/type for logging
-  console.log(`[Recording] Fetching audio from: ${audioUri}`);
+  // Fetch audio blob
   const audioResponse = await fetch(audioUri);
   const audioBlob = await audioResponse.blob();
-  console.log(`[Recording] Audio size: ${(audioBlob.size / 1024).toFixed(1)}KB, Type: ${audioBlob.type}`);
 
   // Validate blob has content
   if (audioBlob.size === 0) {

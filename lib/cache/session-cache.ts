@@ -158,8 +158,6 @@ export function setSavedVerseInSession(
  * Clear all session cache
  */
 export function clearSessionCache(): void {
-  const stats = getSessionCacheStats();
-  console.log(`[BIBLE] Clearing session cache: ${stats.chapters} chapters, ${stats.verses} verses, ${stats.savedVerses} saved verses`);
   chapterCache.clear();
   verseCache.clear();
   savedVerseCache.clear();

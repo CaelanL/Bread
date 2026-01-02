@@ -38,9 +38,9 @@ export function SwipeableCollectionCard({
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
-  const cardBg = isDark ? '#1c1c1e' : '#ffffff';
-  const borderColor = isDark ? 'rgba(96,165,250,0.3)' : 'rgba(10,126,164,0.25)';
-  const primaryColor = isDark ? '#60a5fa' : '#0a7ea4';
+  const cardBg = colors.card;
+  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
+  const primaryColor = colors.primary;
 
   const translateX = useSharedValue(0);
   const debouncedPress = useDebouncedPress(onPress);
@@ -99,7 +99,7 @@ export function SwipeableCollectionCard({
       {canDelete && (
         <Animated.View style={[styles.deleteButtonContainer, deleteButtonStyle]}>
           <Pressable style={styles.deleteButton} onPress={handleDelete}>
-            <IconSymbol name="trash.fill" size={20} color="#fff" />
+            <IconSymbol name="trash.fill" size={20} color={colors.white} />
             <Text style={styles.deleteText}>Delete</Text>
           </Pressable>
         </Animated.View>

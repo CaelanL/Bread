@@ -72,11 +72,11 @@ export function VerseCard({ chunk, difficulty, verseLabel, revealed = false }: V
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
-  const cardBg = isDark ? '#1c1c1e' : '#ffffff';
-  const badgeBg = isDark ? 'rgba(96,165,250,0.15)' : 'rgba(10,126,164,0.1)';
-  const accentColor = isDark ? '#60a5fa' : colors.tint;
-  const borderColor = isDark ? 'rgba(96,165,250,0.3)' : 'rgba(10,126,164,0.25)';
-  const underlineColor = isDark ? '#666' : '#999';
+  const cardBg = colors.card;
+  const badgeBg = colors.primaryLight;
+  const accentColor = colors.primary;
+  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
+  const underlineColor = isDark ? '#666' : '#999'; // Keep underline colors as-is
 
   return (
     <Animated.View

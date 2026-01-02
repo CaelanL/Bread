@@ -97,9 +97,9 @@ export default function StudySetupScreen() {
     ]);
   };
 
-  const buttonBg = isDark ? '#3b82f6' : '#0a7ea4';
-  const accentColor = isDark ? '#60a5fa' : colors.tint;
-  const badgeBg = isDark ? 'rgba(96,165,250,0.15)' : 'rgba(10,126,164,0.1)';
+  const buttonBg = colors.primary;
+  const accentColor = colors.tint;
+  const badgeBg = colors.primaryLight;
 
   // Build annotated text with superscript verse numbers (same as VerseCard)
   const getAnnotatedText = () => {
@@ -156,7 +156,7 @@ export default function StudySetupScreen() {
 
       <View style={styles.content}>
         {/* Verse Preview */}
-        <View style={[styles.previewCard, { backgroundColor: isDark ? '#1e1e1e' : '#f5f5f5' }]}>
+        <View style={[styles.previewCard, { backgroundColor: colors.cardAlt }]}>
           <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
             <IconSymbol name="book.fill" size={14} color={accentColor} />
             <Text style={[styles.referenceBadgeText, { color: accentColor }]}>
@@ -186,7 +186,7 @@ export default function StudySetupScreen() {
           onRequestClose={() => setExpanded(false)}
         >
           <BlurView intensity={isDark ? 40 : 80} tint={isDark ? 'dark' : 'light'} style={styles.blurOverlay}>
-            <View style={[styles.modalCard, { backgroundColor: isDark ? '#1c1c1e' : '#ffffff' }]}>
+            <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={[styles.referenceBadge, { backgroundColor: badgeBg, marginBottom: 0 }]}>
@@ -213,7 +213,7 @@ export default function StudySetupScreen() {
         {/* Difficulty Selection */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Difficulty</Text>
-          <View style={[styles.segmentedControl, { backgroundColor: isDark ? '#1e1e1e' : '#e5e5e5' }]}>
+          <View style={[styles.segmentedControl, { backgroundColor: colors.cardAlt }]}>
             {(['easy', 'medium', 'hard'] as Difficulty[]).map((level) => (
               <Pressable
                 key={level}
@@ -227,7 +227,7 @@ export default function StudySetupScreen() {
                   <Text
                     style={[
                       styles.segmentText,
-                      { color: difficulty === level ? '#fff' : colors.text },
+                      { color: difficulty === level ? colors.white : colors.text },
                     ]}
                   >
                     {level.charAt(0).toUpperCase() + level.slice(1)}
@@ -239,13 +239,13 @@ export default function StudySetupScreen() {
                     <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
                   )}
                   {level === 'hard' && (
-                    <IconSymbol name="checkmark" size={12} color="#22c55e" />
+                    <IconSymbol name="checkmark" size={12} color={colors.success} />
                   )}
                 </View>
                 <Text
                   style={[
                     styles.segmentSubtext,
-                    { color: difficulty === level ? 'rgba(255,255,255,0.7)' : colors.icon },
+                    { color: difficulty === level ? 'rgba(255,255,255,0.7)' : colors.icon }, // Keep rgba for text on colored bg
                   ]}
                 >
                   {level === 'easy' && 'All words'}
@@ -274,9 +274,9 @@ export default function StudySetupScreen() {
                       styles.progressValue,
                       {
                         color: progress.completed
-                          ? '#22c55e'
+                          ? colors.success
                           : hasScore
-                          ? '#f59e0b'
+                          ? colors.warning
                           : colors.icon,
                       },
                     ]}
@@ -301,13 +301,13 @@ export default function StudySetupScreen() {
               setOpen={setDropdownOpen}
               setValue={setChunkSize}
               setItems={setDropdownItems}
-              style={[styles.dropdown, { backgroundColor: isDark ? '#1e1e1e' : '#e5e5e5', borderWidth: 0 }]}
-              dropDownContainerStyle={[styles.dropdownContainer, { backgroundColor: isDark ? '#1e1e1e' : '#e5e5e5', borderWidth: 0 }]}
+              style={[styles.dropdown, { backgroundColor: colors.cardAlt, borderWidth: 0 }]}
+              dropDownContainerStyle={[styles.dropdownContainer, { backgroundColor: colors.cardAlt, borderWidth: 0 }]}
               textStyle={{ color: colors.text, fontSize: 16, fontWeight: '600' }}
               arrowIconStyle={{ tintColor: colors.icon } as any}
               tickIconStyle={{ tintColor: colors.text } as any}
               listItemLabelStyle={{ color: colors.text }}
-              selectedItemContainerStyle={{ backgroundColor: isDark ? '#2e2e2e' : '#d5d5d5' }}
+              selectedItemContainerStyle={{ backgroundColor: colors.border }}
               containerStyle={{ width: 60 }}
               showTickIcon={false}
             />
@@ -317,10 +317,10 @@ export default function StudySetupScreen() {
         {/* Start Button */}
         <View style={styles.bottomSection}>
           <Pressable
-            style={[styles.startButton, { backgroundColor: buttonBg }]}
+            style={[styles.startButton, { backgroundColor: colors.primary }]}
             onPress={handleStartSession}
           >
-            <Text style={styles.startButtonText}>Start Session</Text>
+            <IconSymbol name="play.fill" size={24} color={colors.white} />
           </Pressable>
         </View>
       </View>
@@ -483,13 +483,11 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   startButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
-  },
-  startButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
 });

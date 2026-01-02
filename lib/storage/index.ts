@@ -21,7 +21,7 @@ export interface VerseProgress {
   hard: DifficultyProgress;
 }
 
-export type BibleVersion = 'ESV' | 'NLT';
+export type BibleVersion = 'ESV' | 'NLT' | 'KJV';
 
 export interface SavedVerse {
   id: string;

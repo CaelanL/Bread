@@ -5,6 +5,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
 import { type BibleVersion } from '@/lib/storage';
+import { BIBLE_VERSIONS } from '@/lib/settings';
 import { useAppStore } from '@/lib/store';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -68,12 +69,12 @@ export default function AddVerseScreen() {
       <View key={book}>
         {isNewTestament && (
           <View style={[styles.testamentDivider, { borderBottomColor: colors.icon }]}>
-            <Text style={[styles.testamentLabel, { color: colors.icon }]}>New Testament</Text>
+            <Text style={[styles.testamentLabel, { color: colors.primary }]}>New Testament</Text>
           </View>
         )}
         {index === 0 && (
           <View style={[styles.testamentDivider, { borderBottomColor: colors.icon }]}>
-            <Text style={[styles.testamentLabel, { color: colors.icon }]}>Old Testament</Text>
+            <Text style={[styles.testamentLabel, { color: colors.primary }]}>Old Testament</Text>
           </View>
         )}
         <Pressable
@@ -120,35 +121,37 @@ export default function AddVerseScreen() {
           style={styles.modalOverlay}
           onPress={() => setVersionPickerVisible(false)}
         >
-          <View style={[styles.pickerContainer, { backgroundColor: isDark ? '#2c2c2e' : '#fff' }]}>
+          <View style={[styles.pickerContainer, { backgroundColor: colors.cardAlt }]}>
             <Text style={[styles.pickerTitle, { color: colors.text }]}>Translation</Text>
-            {(['ESV', 'NLT'] as BibleVersion[]).map((version) => (
-              <Pressable
-                key={version}
-                style={[
-                  styles.pickerOption,
-                  selectedVersion === version && { backgroundColor: isDark ? '#0a84ff' : '#007aff' },
-                ]}
-                onPress={() => handleVersionSelect(version)}
-              >
-                <Text
+            <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
+              {BIBLE_VERSIONS.map((version) => (
+                <Pressable
+                  key={version.value}
                   style={[
-                    styles.pickerOptionText,
-                    { color: selectedVersion === version ? '#fff' : colors.text },
+                    styles.pickerOption,
+                    selectedVersion === version.value && { backgroundColor: colors.primary },
                   ]}
+                  onPress={() => handleVersionSelect(version.value)}
                 >
-                  {version}
-                </Text>
-                <Text
-                  style={[
-                    styles.pickerOptionSubtext,
-                    { color: selectedVersion === version ? 'rgba(255,255,255,0.7)' : colors.icon },
-                  ]}
-                >
-                  {version === 'ESV' ? 'English Standard Version' : 'New Living Translation'}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    style={[
+                      styles.pickerOptionText,
+                      { color: selectedVersion === version.value ? colors.white : colors.text },
+                    ]}
+                  >
+                    {version.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.pickerOptionSubtext,
+                      { color: selectedVersion === version.value ? 'rgba(255,255,255,0.7)' : colors.icon },
+                    ]}
+                  >
+                    {version.full}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -167,13 +170,14 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.4)', // Keep hardcoded for overlay
     justifyContent: 'center',
     alignItems: 'center',
   },
   pickerContainer: {
     width: '80%',
     maxWidth: 300,
+    maxHeight: '60%',
     borderRadius: 14,
     padding: 16,
     shadowColor: '#000',
@@ -181,6 +185,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
+  },
+  pickerScroll: {
+    flexGrow: 0,
   },
   pickerTitle: {
     fontSize: 17,

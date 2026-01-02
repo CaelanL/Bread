@@ -76,7 +76,6 @@ export async function fetchVerse(
       version
     );
     if (cached) {
-      console.log(`[BIBLE] Session cache hit: ${reference} (${version})`);
       return {
         reference,
         version,
@@ -170,7 +169,6 @@ export async function fetchChapter(
   // Check session cache first
   const cached = getChapterFromSession(book, chapter, version);
   if (cached) {
-    console.log(`[BIBLE] Session cache hit: ${book} ${chapter} (${version})`);
     return {
       reference: `${book} ${chapter}`,
       version,

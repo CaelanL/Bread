@@ -27,7 +27,7 @@ export function AppHeader({ title, showBack = true, leftButton, rightButton }: A
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const primaryColor = isDark ? '#60a5fa' : '#0a7ea4';
+  const primaryColor = colors.primary;
 
   const handleBack = () => {
     router.back();
@@ -69,13 +69,13 @@ export function AppHeader({ title, showBack = true, leftButton, rightButton }: A
           <IconSymbol
             name={icon as any}
             size={18}
-            color={isFilled ? '#fff' : primaryColor}
+            color={isFilled ? colors.white : primaryColor}
           />
         )}
         <Text
           style={[
             styles.rightButtonText,
-            { color: isFilled ? '#fff' : primaryColor },
+            { color: isFilled ? colors.white : primaryColor },
           ]}
         >
           {label}

@@ -247,8 +247,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   hydrate: async () => {
-    console.log('[STORE] Hydrating...');
-
     // Load settings from AsyncStorage (doesn't require auth)
     try {
       const [savedColorMode, savedBibleVersion] = await Promise.all([
@@ -278,9 +276,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Only mark as hydrated if all fetches succeeded
     if (collectionsOk && versesOk && masteredOk) {
       set({ hydrated: true, error: null });
-      console.log('[STORE] Hydrated successfully');
-    } else {
-      console.log('[STORE] Hydration failed - data may be stale');
     }
   },
 

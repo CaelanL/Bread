@@ -6,6 +6,9 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
@@ -30,8 +33,8 @@ function SettingsSection({ title, children }: SettingsSectionProps) {
         style={[
           styles.sectionContent,
           {
-            backgroundColor: colorScheme === 'dark' ? '#1c1c1e' : '#fff',
-            borderColor: colorScheme === 'dark' ? '#38383a' : '#e5e5e5',
+            backgroundColor: colors.card,
+            borderColor: colors.borderLight,
           },
         ]}
       >
@@ -57,14 +60,14 @@ function SettingsRow({ icon, label, description, children }: SettingsRowProps) {
     <View
       style={[
         styles.row,
-        { borderBottomColor: isDark ? '#38383a' : '#e5e5e5' },
+        { borderBottomColor: colors.borderLight },
       ]}
     >
       <View style={styles.rowLeft}>
         <View
           style={[
             styles.iconContainer,
-            { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' },
+            { backgroundColor: colors.cardAlt },
           ]}
         >
           <IconSymbol name={icon as any} size={20} color={colors.tint} />
@@ -83,51 +86,6 @@ function SettingsRow({ icon, label, description, children }: SettingsRowProps) {
   );
 }
 
-interface VersionPickerProps {
-  value: BibleVersion;
-  onChange: (value: BibleVersion) => void;
-}
-
-function VersionPicker({ value, onChange }: VersionPickerProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  return (
-    <View style={styles.picker}>
-      {BIBLE_VERSIONS.map((version) => {
-        const isSelected = value === version.value;
-        return (
-          <Pressable
-            key={version.value}
-            style={[
-              styles.pickerOption,
-              {
-                backgroundColor: isSelected
-                  ? isDark
-                    ? '#0a84ff'
-                    : '#007aff'
-                  : isDark
-                  ? '#3a3a3c'
-                  : '#e5e5ea',
-              },
-            ]}
-            onPress={() => onChange(version.value)}
-          >
-            <Text
-              style={[
-                styles.pickerOptionText,
-                { color: isSelected ? '#fff' : isDark ? '#fff' : '#000' },
-              ]}
-            >
-              {version.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 interface ColorModePickerProps {
   value: ColorMode;
   onChange: (value: ColorMode) => void;
@@ -135,6 +93,7 @@ interface ColorModePickerProps {
 
 function ColorModePicker({ value, onChange }: ColorModePickerProps) {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
   return (
@@ -147,13 +106,7 @@ function ColorModePicker({ value, onChange }: ColorModePickerProps) {
             style={[
               styles.pickerOption,
               {
-                backgroundColor: isSelected
-                  ? isDark
-                    ? '#0a84ff'
-                    : '#007aff'
-                  : isDark
-                  ? '#3a3a3c'
-                  : '#e5e5ea',
+                backgroundColor: isSelected ? colors.primary : colors.cardAlt,
               },
             ]}
             onPress={() => onChange(mode.value)}
@@ -161,7 +114,7 @@ function ColorModePicker({ value, onChange }: ColorModePickerProps) {
             <Text
               style={[
                 styles.pickerOptionText,
-                { color: isSelected ? '#fff' : isDark ? '#fff' : '#000' },
+                { color: isSelected ? colors.white : isDark ? colors.white : colors.text },
               ]}
             >
               {mode.label}
@@ -184,6 +137,7 @@ export default function SettingsScreen() {
   const setBibleVersion = useAppStore((state) => state.setBibleVersion);
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
+  const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -213,16 +167,20 @@ export default function SettingsScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Bible Settings */}
         <SettingsSection title="BIBLE">
-          <SettingsRow
-            icon="book.fill"
-            label="Default Translation"
-            description={`${selectedVersion?.full} • Used when adding new verses`}
-          >
-            <VersionPicker
-              value={bibleVersion}
-              onChange={setBibleVersion}
-            />
-          </SettingsRow>
+          <Pressable onPress={() => setVersionPickerVisible(true)}>
+            <SettingsRow
+              icon="book.fill"
+              label="Default Translation"
+              description="Used when adding new verses"
+            >
+              <View style={styles.dropdownTrigger}>
+                <Text style={[styles.dropdownValue, { color: colors.text }]}>
+                  {selectedVersion?.label}
+                </Text>
+                <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+              </View>
+            </SettingsRow>
+          </Pressable>
         </SettingsSection>
 
         {/* Appearance */}
@@ -257,16 +215,16 @@ export default function SettingsScreen() {
                 <View
                   style={[
                     styles.iconContainer,
-                    { backgroundColor: isDark ? '#2c2c2e' : '#f2f2f7' },
+                    { backgroundColor: colors.cardAlt },
                   ]}
                 >
-                  <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#ef4444" />
+                  <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={colors.error} />
                 </View>
                 <View style={styles.labelContainer}>
-                  <Text style={[styles.label, { color: '#ef4444' }]}>Sign Out</Text>
+                  <Text style={[styles.label, { color: colors.error }]}>Sign Out</Text>
                 </View>
               </View>
-              {signingOut && <ActivityIndicator size="small" color="#ef4444" />}
+              {signingOut && <ActivityIndicator size="small" color={colors.error} />}
             </View>
           </Pressable>
         </SettingsSection>
@@ -276,6 +234,43 @@ export default function SettingsScreen() {
           <SettingsRow icon="info.circle.fill" label="Version" description="1.0.0" />
         </SettingsSection>
       </ScrollView>
+
+      {/* Version Picker Modal */}
+      <Modal visible={versionPickerVisible} transparent animationType="fade">
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setVersionPickerVisible(false)}
+        >
+          <View style={[styles.modalContainer, { backgroundColor: colors.cardAlt }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Translation</Text>
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {BIBLE_VERSIONS.map((version) => {
+                const isSelected = bibleVersion === version.value;
+                return (
+                  <Pressable
+                    key={version.value}
+                    style={[
+                      styles.modalOption,
+                      isSelected && { backgroundColor: colors.primary },
+                    ]}
+                    onPress={() => {
+                      setBibleVersion(version.value);
+                      setVersionPickerVisible(false);
+                    }}
+                  >
+                    <Text style={[styles.modalOptionLabel, { color: isSelected ? colors.white : colors.text }]}>
+                      {version.label}
+                    </Text>
+                    <Text style={[styles.modalOptionDesc, { color: isSelected ? 'rgba(255,255,255,0.7)' : colors.icon }]}>
+                      {version.full}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -361,5 +356,48 @@ const styles = StyleSheet.create({
   pickerOptionText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dropdownValue: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '80%',
+    maxHeight: '60%',
+    borderRadius: 16,
+    padding: 16,
+  },
+  modalScroll: {
+    flexGrow: 0,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalOption: {
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  modalOptionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOptionDesc: {
+    fontSize: 13,
+    marginTop: 2,
   },
 });

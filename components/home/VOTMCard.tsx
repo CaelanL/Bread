@@ -1,9 +1,9 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { formatVerseReference } from '@/lib/storage';
 import type { VOTM } from '@/lib/api/votm';
-import { Pressable, StyleSheet, Text, View, ActivityIndicator, ImageBackground } from 'react-native';
+import { formatVerseReference } from '@/lib/storage';
+import { ActivityIndicator, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface VOTMCardProps {
   votm: VOTM;
@@ -35,13 +35,13 @@ export function VOTMCard({
   const hasImage = !!votm.imageUrl;
 
   // Colors change when we have a background image
-  const accentColor = hasImage ? '#ffffff' : (isDark ? '#60a5fa' : colors.tint);
-  const textColor = hasImage ? '#ffffff' : colors.text;
+  const accentColor = hasImage ? colors.white : colors.primary;
+  const textColor = hasImage ? colors.white : colors.text;
   const subtextColor = hasImage ? 'rgba(255,255,255,0.7)' : colors.icon;
   const badgeBg = hasImage
     ? 'rgba(255,255,255,0.2)'
-    : (isDark ? 'rgba(96,165,250,0.15)' : 'rgba(10,126,164,0.1)');
-  const cardBg = isDark ? '#1e1e1e' : '#f5f5f5';
+    : colors.primaryLight;
+  const cardBg = colors.cardAlt;
 
   // Format reference for display
   const reference = formatVerseReference({
@@ -104,8 +104,8 @@ export function VOTMCard({
           {/* User Status */}
           {userMastered ? (
             <View style={[styles.statusBadge, { backgroundColor: hasImage ? 'rgba(34,197,94,0.3)' : 'rgba(34,197,94,0.15)' }]}>
-              <IconSymbol name="checkmark.circle.fill" size={14} color="#22c55e" />
-              <Text style={[styles.statusText, { color: '#22c55e' }]}>
+              <IconSymbol name="checkmark.circle.fill" size={14} color={colors.success} />
+              <Text style={[styles.statusText, { color: colors.success }]}>
                 Mastered
               </Text>
             </View>
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.16)',
   },
   content: {
     padding: 16,

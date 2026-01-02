@@ -26,9 +26,9 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const buttonBg = isDark ? '#3b82f6' : '#0a7ea4';
-  const inputBg = isDark ? '#1c1c1e' : '#f5f5f5';
-  const borderColor = isDark ? '#333' : '#e0e0e0';
+  const buttonBg = colors.primary;
+  const inputBg = colors.input;
+  const borderColor = colors.border;
 
   const handleResetPassword = async () => {
     if (!email.trim()) {
@@ -52,8 +52,8 @@ export default function ForgotPasswordScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.content}>
           <View style={styles.successContainer}>
-            <View style={[styles.successIcon, { backgroundColor: isDark ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.1)' }]}>
-              <IconSymbol name="checkmark.circle.fill" size={48} color="#22c55e" />
+            <View style={[styles.successIcon, { backgroundColor: 'rgba(34,197,94,0.1)' }]}>
+              <IconSymbol name="checkmark.circle.fill" size={48} color={colors.success} />
             </View>
             <Text style={[styles.successTitle, { color: colors.text }]}>Check Your Email</Text>
             <Text style={[styles.successText, { color: colors.icon }]}>
@@ -111,7 +111,7 @@ export default function ForgotPasswordScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.buttonText}>Send Reset Link</Text>
             )}
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 17,
     fontWeight: '600',
   },

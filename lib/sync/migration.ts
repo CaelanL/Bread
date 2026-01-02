@@ -35,11 +35,8 @@ async function markMigrationComplete(): Promise<void> {
 export async function migrateLocalDataToServer(): Promise<void> {
   const isComplete = await isMigrationComplete();
   if (isComplete) {
-    console.log('[MIGRATION] Already complete, skipping');
     return;
   }
-
-  console.log('[MIGRATION] Starting migration...');
 
   try {
     // 0. Get current user ID
@@ -47,7 +44,6 @@ export async function migrateLocalDataToServer(): Promise<void> {
 
     // 1. Get all local collections
     const collections = await getCollections();
-    console.log(`[MIGRATION] Found ${collections.length} collections`);
 
     // 2. Create a map of client_id -> server_id for collections
     const collectionIdMap = new Map<string, string>();
@@ -90,15 +86,12 @@ export async function migrateLocalDataToServer(): Promise<void> {
       collectionIdMap.set(collection.id, data.id);
     }
 
-    console.log(`[MIGRATION] Synced ${collectionIdMap.size} collections`);
-
     // 4. Ensure default collection exists
     const defaultServerId = await syncEnsureDefaultCollection();
     collectionIdMap.set('my-verses', defaultServerId);
 
     // 5. Get all local verses
     const verses = await getSavedVerses();
-    console.log(`[MIGRATION] Found ${verses.length} verses`);
 
     // 6. Sync verses to server
     let syncedVerses = 0;
@@ -146,11 +139,8 @@ export async function migrateLocalDataToServer(): Promise<void> {
       syncedVerses++;
     }
 
-    console.log(`[MIGRATION] Synced ${syncedVerses} verses`);
-
     // 7. Mark migration complete
     await markMigrationComplete();
-    console.log('[MIGRATION] Complete!');
   } catch (e) {
     console.error('[MIGRATION] Migration failed:', e);
     throw e;
