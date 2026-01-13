@@ -58,7 +58,7 @@ export default function CollectionScreen() {
     await deleteVerse(verseId, id);
   };
 
-  const primaryColor = isDark ? '#60a5fa' : '#0a7ea4';
+  const primaryColor = colors.primary;
 
   // Sort verses by createdAt descending
   const sortedVerses = [...verses].sort((a, b) => b.createdAt - a.createdAt);
@@ -68,8 +68,8 @@ export default function CollectionScreen() {
     if (isMasteredCollection) {
       return (
         <View style={styles.emptyState}>
-          <View style={[styles.emptyIcon, { backgroundColor: '#22c55e20' }]}>
-            <IconSymbol name="checkmark.circle.fill" size={40} color="#22c55e" />
+          <View style={[styles.emptyIcon, { backgroundColor: 'rgba(34,197,94,0.12)' }]}>
+            <IconSymbol name="checkmark.circle.fill" size={40} color={colors.success} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>No mastered verses yet</Text>
           <Text style={[styles.emptySubtitle, { color: colors.icon }]}>
@@ -82,7 +82,7 @@ export default function CollectionScreen() {
     // Regular collection empty state
     return (
       <View style={styles.emptyState}>
-        <View style={[styles.emptyIcon, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+        <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
           <IconSymbol name="book.closed" size={40} color={colors.icon} />
         </View>
         <Text style={[styles.emptyTitle, { color: colors.text }]}>No verses yet</Text>
@@ -93,7 +93,7 @@ export default function CollectionScreen() {
           style={[styles.emptyButton, { backgroundColor: primaryColor }]}
           onPress={handleAddVerse}
         >
-          <IconSymbol name="plus" size={18} color="#fff" />
+          <IconSymbol name="plus" size={18} color={colors.white} />
           <Text style={styles.emptyButtonText}>Add Verse</Text>
         </Pressable>
       </View>
@@ -108,9 +108,9 @@ export default function CollectionScreen() {
           collection?.isVirtual
             ? undefined
             : {
-                label: 'Add',
                 icon: 'plus',
                 onPress: handleAddVerse,
+                variant: 'icon',
               }
         }
       />
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   emptyButtonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 16,
     fontWeight: '600',
   },

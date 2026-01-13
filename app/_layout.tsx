@@ -2,13 +2,17 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack, router, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import 'react-native-reanimated';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors } from '@/constants/theme';
 import { migrateLocalDataToServer } from '@/lib/sync';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { NetworkProvider } from '@/lib/network';
+import { NoInternetOverlay } from '@/components/ui/NoInternetOverlay';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
 
@@ -61,11 +65,13 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated]);
 
+  const colors = Colors[colorScheme ?? 'light'];
+
   // Show loading spinner while checking auth
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colorScheme === 'dark' ? '#000' : '#fff' }}>
-        <ActivityIndicator size="large" color={colorScheme === 'dark' ? '#3b82f6' : '#0a7ea4'} />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -86,9 +92,14 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
+      <NetworkProvider>
+        <KeyboardProvider>
+          <AuthProvider>
+            <RootLayoutNav />
+            <NoInternetOverlay />
+          </AuthProvider>
+        </KeyboardProvider>
+      </NetworkProvider>
     </GestureHandlerRootView>
   );
 }

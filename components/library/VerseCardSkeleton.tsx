@@ -1,5 +1,6 @@
 import { View, StyleSheet } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors } from '@/constants/theme';
 import { Skeleton } from '@/components/ui/Skeleton';
 
 interface VerseCardSkeletonProps {
@@ -8,9 +9,10 @@ interface VerseCardSkeletonProps {
 
 export function VerseCardSkeleton({ count = 3 }: VerseCardSkeletonProps) {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const cardBg = isDark ? '#1c1c1e' : '#ffffff';
-  const borderColor = isDark ? 'rgba(96,165,250,0.3)' : 'rgba(10,126,164,0.25)';
+  const cardBg = colors.card;
+  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
 
   return (
     <>

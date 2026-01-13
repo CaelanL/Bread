@@ -256,7 +256,7 @@ export default function StudySessionScreen() {
     itemVisiblePercentThreshold: 50,
   };
 
-  const buttonBg = isDark ? '#3b82f6' : '#0a7ea4';
+  const buttonBg = colors.primary;
 
   // Loading state
   if (session.loading) {
@@ -286,8 +286,8 @@ export default function StudySessionScreen() {
           <View style={styles.resultsContent}>
             <Text style={[styles.resultsTitle, { color: colors.text }]}>Session Complete</Text>
 
-            <View style={[styles.scoreCircle, { borderColor: passed ? '#22c55e' : '#ef4444' }]}>
-              <Text style={[styles.scoreText, { color: passed ? '#22c55e' : '#ef4444' }]}>
+            <View style={[styles.scoreCircle, { borderColor: passed ? colors.success : colors.error }]}>
+              <Text style={[styles.scoreText, { color: passed ? colors.success : colors.error }]}>
                 {session.finalScore}%
               </Text>
             </View>
@@ -298,7 +298,7 @@ export default function StudySessionScreen() {
 
             <View style={styles.resultsButtons}>
               <Pressable
-                style={[styles.resultsButton, { backgroundColor: isDark ? '#374151' : '#e5e5e5' }]}
+                style={[styles.resultsButton, { backgroundColor: colors.cardAlt }]}
                 onPress={session.viewResults}
               >
                 <Text style={[styles.resultsButtonText, { color: colors.text }]}>View Results</Text>
@@ -308,7 +308,7 @@ export default function StudySessionScreen() {
                 style={[styles.resultsButton, { backgroundColor: buttonBg }]}
                 onPress={session.done}
               >
-                <Text style={[styles.resultsButtonText, { color: '#fff' }]}>Done</Text>
+                <Text style={[styles.resultsButtonText, { color: colors.white }]}>Done</Text>
               </Pressable>
             </View>
           </View>
@@ -352,7 +352,7 @@ export default function StudySessionScreen() {
                 style={[styles.micButton, { backgroundColor: buttonBg }]}
                 onPress={handleMicPress}
               >
-                <IconSymbol name="mic.fill" size={32} color="#fff" />
+                <IconSymbol name="mic.fill" size={32} color={colors.white} />
               </Pressable>
             )}
 
@@ -367,7 +367,7 @@ export default function StudySessionScreen() {
                 <Text style={styles.nextButtonText}>
                   {session.allChunksCompleted ? 'See Results' : 'Next'}
                 </Text>
-                <IconSymbol name="arrow.right" size={20} color="#fff" />
+                <IconSymbol name="arrow.right" size={20} color={colors.white} />
               </Pressable>
             )}
         </View>
@@ -397,7 +397,7 @@ export default function StudySessionScreen() {
       />
 
       {/* Progress Bar */}
-      <View style={[styles.progressContainer, { backgroundColor: isDark ? '#1e1e1e' : '#e5e5e5' }]}>
+      <View style={[styles.progressContainer, { backgroundColor: colors.cardAlt }]}>
         {session.chunks.map((_, index) => (
           <View
             key={index}
@@ -405,7 +405,7 @@ export default function StudySessionScreen() {
               styles.progressSegment,
               {
                 backgroundColor: session.completedChunks.has(index)
-                  ? '#22c55e'
+                  ? colors.success
                   : index === session.currentIndex
                   ? buttonBg
                   : 'transparent',
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   nextButtonText: {
-    color: '#fff',
+    color: '#fff', // Always white on colored button
     fontSize: 17,
     fontWeight: '600',
   },

@@ -30,7 +30,6 @@ export async function getCurrentVOTM(): Promise<VOTM | null> {
     .single();
 
   if (error || !data) {
-    console.log('[VOTM] No verse of month found for', yearMonth);
     return null;
   }
 

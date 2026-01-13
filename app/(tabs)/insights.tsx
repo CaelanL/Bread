@@ -20,8 +20,7 @@ interface StatCardProps {
 function StatCard({ value, label, icon, iconBgColor, iconColor, onInfoPress }: StatCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
-  const cardBg = isDark ? '#1e1e1e' : '#f5f5f5';
+  const cardBg = colors.cardAlt;
 
   return (
     <View style={[styles.statCard, { backgroundColor: cardBg }]}>
@@ -134,7 +133,7 @@ export default function InsightsScreen() {
   const streakBg = streak > 0 ? 'rgba(249,115,22,0.15)' : 'rgba(96,165,250,0.15)';
   const streakMessage = streak > 0 ? 'Keep it going!' : 'Start practicing to build your streak!';
 
-  const cardBg = isDark ? '#1e1e1e' : '#f5f5f5';
+  const cardBg = colors.cardAlt;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -203,11 +202,11 @@ export default function InsightsScreen() {
                   style={[
                     styles.bookItem,
                     index < topBooks.length - 1 && styles.bookItemBorder,
-                    { borderBottomColor: isDark ? '#333' : '#e5e5e5' },
+                    { borderBottomColor: colors.border },
                   ]}
                 >
                   <View style={styles.bookInfo}>
-                    <View style={[styles.bookIcon, { backgroundColor: isDark ? '#333' : '#e5e5e5' }]}>
+                    <View style={[styles.bookIcon, { backgroundColor: colors.border }]}>
                       <IconSymbol name="book.fill" size={18} color={colors.icon} />
                     </View>
                     <Text style={[styles.bookName, { color: colors.text }]}>{book.name}</Text>
@@ -239,7 +238,7 @@ export default function InsightsScreen() {
           onPress={() => setShowTimeStudiedInfo(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: isDark ? '#2a2a2a' : '#fff' }]}
+            style={[styles.modalContent, { backgroundColor: colors.card }]}
             onStartShouldSetResponder={() => true}
           >
             <Pressable style={styles.modalClose} onPress={() => setShowTimeStudiedInfo(false)} hitSlop={8}>
@@ -265,7 +264,7 @@ export default function InsightsScreen() {
           onPress={() => setShowAvgTimeInfo(false)}
         >
           <View
-            style={[styles.modalContent, { backgroundColor: isDark ? '#2a2a2a' : '#fff' }]}
+            style={[styles.modalContent, { backgroundColor: colors.card }]}
             onStartShouldSetResponder={() => true}
           >
             <Pressable style={styles.modalClose} onPress={() => setShowAvgTimeInfo(false)} hitSlop={8}>

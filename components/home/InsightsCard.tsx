@@ -26,11 +26,11 @@ export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_,
     refresh: refreshStreak,
   }));
   const streakIcon = streak > 0 ? 'flame.fill' : 'snowflake';
-  const streakColor = streak > 0 ? '#f97316' : '#60a5fa';
+  const streakColor = streak > 0 ? '#f97316' : '#60a5fa'; // Keep streak colors domain-specific
   const streakBg = streak > 0 ? 'rgba(249,115,22,0.15)' : 'rgba(96,165,250,0.15)';
 
-  const cardBg = isDark ? '#1e1e1e' : '#f5f5f5';
-  const borderColor = isDark ? '#333' : '#e5e5e5';
+  const cardBg = colors.card;
+  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
 
   return (
     <Pressable

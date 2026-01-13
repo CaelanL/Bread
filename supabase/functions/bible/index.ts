@@ -22,6 +22,7 @@ import {
 // Adapters
 import { esvAdapter } from "./adapters/esv.ts";
 import { nltAdapter } from "./adapters/nlt.ts";
+import { kjvAdapter } from "./adapters/kjv.ts";
 import { BibleAdapter } from "./adapters/types.ts";
 
 // Shared modules
@@ -42,7 +43,7 @@ import { getExpectedVerseCount } from "./verse-counts.ts";
 const adapters: Record<string, BibleAdapter> = {
   ESV: esvAdapter,
   NLT: nltAdapter,
-  KJV: nltAdapter,
+  KJV: kjvAdapter,
   NTV: nltAdapter,
   NLTUK: nltAdapter,
 };

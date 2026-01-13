@@ -84,7 +84,7 @@ export default function LibraryScreen() {
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 
-  const primaryColor = isDark ? '#60a5fa' : '#0a7ea4';
+  const primaryColor = colors.primary;
 
   const renderEmptyHint = () => (
     <Animated.View
@@ -102,11 +102,10 @@ export default function LibraryScreen() {
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Library</Text>
         <Pressable
-          style={[styles.addButton, { backgroundColor: primaryColor }]}
+          style={styles.addButton}
           onPress={() => setModalVisible(true)}
         >
-          <IconSymbol name="plus" size={18} color="#fff" />
-          <Text style={styles.addButtonText}>New</Text>
+          <IconSymbol name="plus" size={28} color={primaryColor} />
         </Pressable>
       </View>
 
@@ -161,17 +160,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
+    padding: 4,
   },
   scrollView: {
     flex: 1,

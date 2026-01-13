@@ -131,8 +131,8 @@ export function AlignmentHelpModal({ visible, onClose }: AlignmentHelpModalProps
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
-  const modalBg = isDark ? '#1c1c1e' : '#ffffff';
-  const exampleBg = isDark ? '#2c2c2e' : '#f5f5f5';
+  const modalBg = colors.card;
+  const exampleBg = colors.input;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
