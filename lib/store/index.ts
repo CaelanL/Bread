@@ -17,6 +17,23 @@ import type { ColorMode } from '@/lib/settings';
 const COLOR_MODE_KEY = 'app_color_mode';
 const BIBLE_VERSION_KEY = 'app_bible_version';
 
+// ============ HELPERS ============
+
+/**
+ * Check if two month strings are consecutive (e.g., "2025-01" -> "2025-02")
+ */
+function isConsecutiveMonth(prev: string, current: string): boolean {
+  const [prevYear, prevMonth] = prev.split('-').map(Number);
+  const [currYear, currMonth] = current.split('-').map(Number);
+
+  if (prevMonth === 12) {
+    // December -> January of next year
+    return currYear === prevYear + 1 && currMonth === 1;
+  }
+  // Same year, next month
+  return currYear === prevYear && currMonth === prevMonth + 1;
+}
+
 // ============ CONSTANTS ============
 
 const DEFAULT_COLLECTION_ID = 'my-verses';
@@ -25,6 +42,7 @@ const DEFAULT_PROGRESS = {
   easy: { bestAccuracy: null, completed: false },
   medium: { bestAccuracy: null, completed: false },
   hard: { bestAccuracy: null, completed: false },
+  engraved: { completed: false, months: [] },
 };
 
 const DEFAULT_COLLECTION: Collection = {
@@ -646,35 +664,70 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!verse) return;
 
     const currentBest = verse.progress[difficulty]?.bestAccuracy;
+    const isNewBest = currentBest === null || accuracy > currentBest;
 
-    // Only update if this is a new best score
-    if (currentBest === null || accuracy > currentBest) {
-      const newProgress = {
-        ...verse.progress,
-        [difficulty]: {
-          bestAccuracy: accuracy,
-          completed: accuracy >= 90,
-        },
+    // Check if we need to update engraved progress (hard mode 90%+)
+    const shouldUpdateEngraved = difficulty === 'hard' && accuracy >= 90;
+
+    if (!isNewBest && !shouldUpdateEngraved) return;
+
+    let newProgress = { ...verse.progress };
+
+    // Update difficulty best score if new best
+    if (isNewBest) {
+      newProgress[difficulty] = {
+        bestAccuracy: accuracy,
+        completed: accuracy >= 90,
       };
+    }
 
-      // Update on server
-      const { error } = await supabase
-        .from('user_verses')
-        .update({ progress: newProgress })
-        .eq('client_id', id);
+    // Update engraved progress if hard mode 90%+
+    if (shouldUpdateEngraved) {
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const engraved = newProgress.engraved || { completed: false, months: [] };
+      const months = [...engraved.months];
+      const lastMonth = months[months.length - 1];
 
-      if (error) {
-        console.error('[STORE] Failed to update progress:', error);
-        return;
+      if (engraved.completed) {
+        // Already engraved, no need to update
+      } else if (!lastMonth) {
+        // First entry
+        months.push(currentMonth);
+      } else if (lastMonth === currentMonth) {
+        // Already logged this month, do nothing
+      } else if (isConsecutiveMonth(lastMonth, currentMonth)) {
+        // Consecutive month, add to streak
+        months.push(currentMonth);
+      } else {
+        // Streak broken, reset
+        months.length = 0;
+        months.push(currentMonth);
       }
 
-      // Update in store
-      set((state) => ({
-        verses: state.verses.map((v) =>
-          v.id === id ? { ...v, progress: newProgress } : v
-        ),
-      }));
+      newProgress.engraved = {
+        completed: months.length >= 4,
+        months: months.slice(0, 4), // Cap at 4
+      };
     }
+
+    // Update on server
+    const { error } = await supabase
+      .from('user_verses')
+      .update({ progress: newProgress })
+      .eq('client_id', id);
+
+    if (error) {
+      console.error('[STORE] Failed to update progress:', error);
+      return;
+    }
+
+    // Update in store
+    set((state) => ({
+      verses: state.verses.map((v) =>
+        v.id === id ? { ...v, progress: newProgress } : v
+      ),
+    }));
   },
 
   resetVerseProgress: async (id: string) => {
@@ -682,6 +735,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       easy: { bestAccuracy: null, completed: false },
       medium: { bestAccuracy: null, completed: false },
       hard: { bestAccuracy: null, completed: false },
+      engraved: { completed: false, months: [] },
     };
 
     // Update on server

@@ -1,19 +1,20 @@
-import { useEffect, useState } from 'react';
+import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
-import { formatVerseReference, type SavedVerse, type Difficulty } from '@/lib/storage';
 import { getVerseText } from '@/lib/api/bible';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { formatVerseReference, type Difficulty, type SavedVerse } from '@/lib/storage';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   FadeInDown,
-  useSharedValue,
+  runOnJS,
   useAnimatedStyle,
+  useSharedValue,
   withSpring,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
 
 const DELETE_BUTTON_WIDTH = 80;
@@ -156,12 +157,18 @@ export function SwipeableVerseCard({
             style={[
               styles.card,
               {
-                backgroundColor: cardBg,
+                backgroundColor: verse.progress.engraved?.completed
+                  ? colors.cardAlt
+                  : cardBg,
                 borderColor,
               },
             ]}
             onPress={handlePress}
           >
+            {/* Gold glow overlay when engraved */}
+            {verse.progress.engraved?.completed && (
+              <View style={styles.engravedGlow} />
+            )}
             <View style={styles.cardContent}>
               <View
                 style={[
@@ -173,21 +180,21 @@ export function SwipeableVerseCard({
               </View>
               <View style={styles.cardText}>
                 <View style={styles.referenceRow}>
-                  <Text style={[styles.verseReference, { color: primaryColor }]}>
+                  <Text style={[styles.verseReference, { color: verse.progress.engraved?.completed ? primaryColor : colors.text }]}>
                     {formatVerseReference(verse)}
-                    <Text style={[styles.versionBadge, { color: colors.icon }]}>
+                    <Text style={[styles.versionBadge, { color: verse.progress.engraved?.completed ? colors.tint : colors.icon }]}>
                       {' '}• {verse.version}
                     </Text>
                   </Text>
-                  {highestDifficulty === 'easy' && (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#eab308' }]} />
-                  )}
-                  {highestDifficulty === 'medium' && (
+                  {verse.progress.engraved?.completed ? (
+                    <EngravedIcon size={14} color={colors.tint} />
+                  ) : highestDifficulty === 'easy' ? (
+                    <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
+                  ) : highestDifficulty === 'medium' ? (
                     <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
-                  )}
-                  {highestDifficulty === 'hard' && (
+                  ) : highestDifficulty === 'hard' ? (
                     <IconSymbol name="checkmark" size={12} color={colors.success} />
-                  )}
+                  ) : null}
                 </View>
                 {loading ? (
                   <ActivityIndicator size="small" color={colors.icon} style={styles.loader} />
@@ -243,6 +250,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
+    overflow: 'hidden',
+  },
+  engravedGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
   },
   cardContent: {
     flexDirection: 'row',

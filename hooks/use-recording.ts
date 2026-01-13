@@ -112,6 +112,12 @@ export function useRecording({ onRecordingComplete }: UseRecordingOptions): UseR
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
+      // Clean up any existing recording first
+      if (recordingRef.current) {
+        await recordingRef.current.stopAndUnloadAsync().catch(() => {});
+        recordingRef.current = null;
+      }
+
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         Alert.alert('Permission required', 'Please allow microphone access to record.');

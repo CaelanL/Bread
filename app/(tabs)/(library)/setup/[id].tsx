@@ -1,25 +1,26 @@
 import { AppHeader } from '@/components/app-header';
+import { ProgressCard } from '@/components/study/ProgressCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { formatVerseReference, type SavedVerse } from '@/lib/storage';
-import { toSuperscript, getVerseText as extractVerseText } from '@/lib/study-chunks';
 import { getVerseText as fetchVerseText } from '@/lib/api/bible';
-import { useVerse, useAppStore } from '@/lib/store';
+import { formatVerseReference } from '@/lib/storage';
+import { useAppStore, useVerse } from '@/lib/store';
+import { getVerseText as extractVerseText, toSuperscript } from '@/lib/study-chunks';
+import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  Alert,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import DropDownPicker from 'react-native-dropdown-picker';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -219,7 +220,7 @@ export default function StudySetupScreen() {
                 key={level}
                 style={[
                   styles.segment,
-                  difficulty === level && { backgroundColor: buttonBg },
+                  difficulty === level && { backgroundColor: 'rgba(176, 141, 87, 0.9)' },
                 ]}
                 onPress={() => setDifficulty(level)}
               >
@@ -233,10 +234,10 @@ export default function StudySetupScreen() {
                     {level.charAt(0).toUpperCase() + level.slice(1)}
                   </Text>
                   {level === 'easy' && (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#eab308' }]} />
+                    <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
                   )}
                   {level === 'medium' && (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
+                    <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8'}]} />
                   )}
                   {level === 'hard' && (
                     <IconSymbol name="checkmark" size={12} color={colors.success} />
@@ -257,42 +258,12 @@ export default function StudySetupScreen() {
           </View>
         </View>
 
-        {/* Progress Stats */}
-        <View style={styles.progressSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Progress</Text>
-          <View style={styles.progressRow}>
-            {(['easy', 'medium', 'hard'] as Difficulty[]).map((level) => {
-              const progress = verse.progress[level];
-              const hasScore = progress.bestAccuracy !== null;
-              return (
-                <View key={level} style={styles.progressItem}>
-                  <Text style={[styles.progressLabel, { color: colors.icon }]}>
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.progressValue,
-                      {
-                        color: progress.completed
-                          ? colors.success
-                          : hasScore
-                          ? colors.warning
-                          : colors.icon,
-                      },
-                    ]}
-                  >
-                    {hasScore ? `${progress.bestAccuracy}%` : '--'}
-                    {progress.completed && ' ✓'}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+        {/* Progress Card */}
+        <ProgressCard progress={verse.progress} />
 
         {/* Chunk Size Selection - only show if multiple verses */}
         {totalVerses > 1 && (
-          <View style={[styles.chunkRow, { zIndex: 1000 }]}>
+          <View style={styles.chunkRow}>
             <Text style={[styles.chunkLabel, { color: colors.text }]}>Verses per chunk</Text>
             <DropDownPicker
               open={dropdownOpen}
@@ -302,13 +273,13 @@ export default function StudySetupScreen() {
               setValue={setChunkSize}
               setItems={setDropdownItems}
               style={[styles.dropdown, { backgroundColor: colors.cardAlt, borderWidth: 0 }]}
-              dropDownContainerStyle={[styles.dropdownContainer, { backgroundColor: colors.cardAlt, borderWidth: 0 }]}
+              dropDownContainerStyle={[styles.dropdownContainer, { backgroundColor: colors.cardAlt, borderWidth: 0, maxHeight: 140 }]}
               textStyle={{ color: colors.text, fontSize: 16, fontWeight: '600' }}
               arrowIconStyle={{ tintColor: colors.icon } as any}
               tickIconStyle={{ tintColor: colors.text } as any}
               listItemLabelStyle={{ color: colors.text }}
               selectedItemContainerStyle={{ backgroundColor: colors.border }}
-              containerStyle={{ width: 60 }}
+              containerStyle={{ width: 78, zIndex: 1000 }}
               showTickIcon={false}
             />
           </View>
@@ -317,7 +288,7 @@ export default function StudySetupScreen() {
         {/* Start Button */}
         <View style={styles.bottomSection}>
           <Pressable
-            style={[styles.startButton, { backgroundColor: colors.primary }]}
+            style={[styles.startButton, { backgroundColor: 'rgba(176, 141, 87, 0.9)' }]}
             onPress={handleStartSession}
           >
             <IconSymbol name="play.fill" size={24} color={colors.white} />
@@ -441,29 +412,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
-  progressSection: {
-    marginBottom: 24,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 12,
-  },
-  progressItem: {
-    alignItems: 'center',
-  },
-  progressLabel: {
-    fontSize: 13,
-    marginBottom: 4,
-  },
-  progressValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   chunkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginTop: 12,
     marginBottom: 24,
   },
   chunkLabel: {
@@ -472,7 +425,7 @@ const styles = StyleSheet.create({
   },
   dropdown: {
     borderRadius: 10,
-    minHeight: 44,
+    minHeight: 34,
   },
   dropdownContainer: {
     borderRadius: 10,

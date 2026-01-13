@@ -15,10 +15,16 @@ export interface DifficultyProgress {
   completed: boolean; // true if bestAccuracy >= 90
 }
 
+export interface EngravedProgress {
+  completed: boolean; // true when 4 consecutive months achieved
+  months: string[]; // Array of "YYYY-MM" strings, up to 4 consecutive
+}
+
 export interface VerseProgress {
   easy: DifficultyProgress;
   medium: DifficultyProgress;
   hard: DifficultyProgress;
+  engraved?: EngravedProgress; // Optional for backwards compatibility
 }
 
 export type BibleVersion = 'ESV' | 'NLT' | 'KJV';
@@ -56,6 +62,7 @@ const DEFAULT_PROGRESS: VerseProgress = {
   easy: { bestAccuracy: null, completed: false },
   medium: { bestAccuracy: null, completed: false },
   hard: { bestAccuracy: null, completed: false },
+  engraved: { completed: false, months: [] },
 };
 
 const DEFAULT_COLLECTION: Collection = {
