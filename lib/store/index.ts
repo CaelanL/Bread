@@ -10,6 +10,8 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/api/client';
 import { ensureAuth } from '@/lib/api';
+import { getVerseText } from '@/lib/api/bible';
+import { showErrorToast } from '@/lib/toast';
 import type { Collection, SavedVerse, BibleVersion, Difficulty } from '@/lib/storage';
 import { MASTERED_COLLECTION_ID } from '@/lib/storage';
 import type { ColorMode } from '@/lib/settings';
@@ -276,7 +278,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
         updates.colorMode = savedColorMode as ColorMode;
       }
-      if (savedBibleVersion && ['ESV', 'NLT'].includes(savedBibleVersion)) {
+      if (savedBibleVersion && ['ESV', 'NLT', 'NIV', 'NKJV', 'CSB', 'KJV'].includes(savedBibleVersion)) {
         updates.bibleVersion = savedBibleVersion as BibleVersion;
       }
       if (Object.keys(updates).length > 0) {
@@ -291,9 +293,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchVerses(),
       get().fetchMasteredVerses(),
     ]);
-    // Only mark as hydrated if all fetches succeeded
-    if (collectionsOk && versesOk && masteredOk) {
-      set({ hydrated: true, error: null });
+
+    // Always mark as hydrated so UI can render (partial data is better than nothing)
+    set({ hydrated: true });
+
+    // Show toast if any fetch failed
+    if (!collectionsOk || !versesOk || !masteredOk) {
+      showErrorToast('Some data failed to load. Pull to refresh.');
+    } else {
+      set({ error: null });
+
+      // Prefetch verse text in background (non-blocking)
+      // This populates the session cache so cards render instantly
+      const verses = get().verses;
+      if (verses.length > 0) {
+        Promise.all(verses.map((v) => getVerseText(v).catch(() => {}))).then(
+          () => console.log(`[STORE] Prefetched text for ${verses.length} verses`)
+        );
+      }
     }
   },
 
@@ -574,11 +591,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       progress,
     };
 
-    // Refresh verses and mastered verses to get latest state
-    await Promise.all([
-      get().fetchVerses(),
-      get().fetchMasteredVerses(),
-    ]);
+    // Optimistic update - add to local state
+    set((state) => ({
+      verses: [resultVerse, ...state.verses],
+    }));
 
     return resultVerse;
   },
@@ -588,74 +604,83 @@ export const useAppStore = create<AppState>((set, get) => ({
     const verse = get().verses.find((v) => v.id === id);
     const isMastered = verse?.progress?.hard?.completed === true;
 
-    // Get server IDs for verse and collection
-    const { data: verseData } = await supabase
-      .from('user_verses')
-      .select('id')
-      .eq('client_id', id)
-      .single();
+    // Save for rollback
+    const previousVerses = get().verses;
 
-    const { data: collectionData } = await supabase
-      .from('user_collections')
-      .select('id')
-      .eq('client_id', collectionId)
-      .single();
+    // Optimistic update - remove from local state immediately
+    set((state) => ({
+      verses: state.verses.filter((v) => !(v.id === id && v.collectionId === collectionId)),
+      // Don't remove from masteredVerses - mastery is permanent
+    }));
 
-    if (!verseData || !collectionData) {
-      console.error('[STORE] Verse or collection not found');
-      return { wasMastered: isMastered };
-    }
+    try {
+      // Get server IDs for verse and collection
+      const { data: verseData } = await supabase
+        .from('user_verses')
+        .select('id')
+        .eq('client_id', id)
+        .single();
 
-    // Remove from junction table (remove from this collection)
-    const { error: junctionError } = await supabase
-      .from('verse_collections')
-      .delete()
-      .eq('verse_id', verseData.id)
-      .eq('collection_id', collectionData.id);
+      const { data: collectionData } = await supabase
+        .from('user_collections')
+        .select('id')
+        .eq('client_id', collectionId)
+        .single();
 
-    if (junctionError) {
-      console.error('[STORE] Failed to remove verse from collection:', junctionError);
-      return { wasMastered: isMastered };
-    }
+      if (!verseData || !collectionData) {
+        console.error('[STORE] Verse or collection not found');
+        throw new Error('Verse not found');
+      }
 
-    // Check if verse is still in any other collections
-    const { count } = await supabase
-      .from('verse_collections')
-      .select('*', { count: 'exact', head: true })
-      .eq('verse_id', verseData.id);
+      // Remove from junction table (remove from this collection)
+      const { error: junctionError } = await supabase
+        .from('verse_collections')
+        .delete()
+        .eq('verse_id', verseData.id)
+        .eq('collection_id', collectionData.id);
 
-    if (count === 0) {
-      // No collections left - delete or soft-delete the verse itself
-      if (isMastered) {
-        // Soft delete - keep for Mastered list
-        const { error } = await supabase
-          .from('user_verses')
-          .update({ deleted_at: new Date().toISOString() })
-          .eq('id', verseData.id);
+      if (junctionError) {
+        console.error('[STORE] Failed to remove verse from collection:', junctionError);
+        throw new Error('Failed to delete verse');
+      }
 
-        if (error) {
-          console.error('[STORE] Failed to soft delete verse:', error);
-        }
-      } else {
-        // Hard delete - remove completely
-        const { error } = await supabase
-          .from('user_verses')
-          .delete()
-          .eq('id', verseData.id);
+      // Check if verse is still in any other collections
+      const { count } = await supabase
+        .from('verse_collections')
+        .select('*', { count: 'exact', head: true })
+        .eq('verse_id', verseData.id);
 
-        if (error) {
-          console.error('[STORE] Failed to hard delete verse:', error);
+      if (count === 0) {
+        // No collections left - delete or soft-delete the verse itself
+        if (isMastered) {
+          // Soft delete - keep for Mastered list
+          const { error } = await supabase
+            .from('user_verses')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', verseData.id);
+
+          if (error) {
+            console.error('[STORE] Failed to soft delete verse:', error);
+          }
+        } else {
+          // Hard delete - remove completely
+          const { error } = await supabase
+            .from('user_verses')
+            .delete()
+            .eq('id', verseData.id);
+
+          if (error) {
+            console.error('[STORE] Failed to hard delete verse:', error);
+          }
         }
       }
+
+      return { wasMastered: isMastered };
+    } catch (error) {
+      // Rollback on failure
+      set({ verses: previousVerses });
+      throw error;
     }
-
-    // Refresh verses and mastered verses
-    await Promise.all([
-      get().fetchVerses(),
-      get().fetchMasteredVerses(),
-    ]);
-
-    return { wasMastered: isMastered };
   },
 
   updateVerseProgress: async (id: string, difficulty: Difficulty, accuracy: number) => {
@@ -719,15 +744,31 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (error) {
       console.error('[STORE] Failed to update progress:', error);
-      return;
+      throw new Error('Failed to save progress');
     }
 
-    // Update in store
-    set((state) => ({
-      verses: state.verses.map((v) =>
+    // Check if verse just became mastered
+    const justBecameMastered = newProgress.hard?.completed && !verse.progress.hard?.completed;
+
+    // Update in store (both verses and masteredVerses if needed)
+    set((state) => {
+      const updatedVerses = state.verses.map((v) =>
         v.id === id ? { ...v, progress: newProgress } : v
-      ),
-    }));
+      );
+
+      let updatedMastered = state.masteredVerses;
+      if (justBecameMastered) {
+        // Add to mastered list with MASTERED_COLLECTION_ID
+        const masteredVerse: SavedVerse = {
+          ...verse,
+          progress: newProgress,
+          collectionId: MASTERED_COLLECTION_ID,
+        };
+        updatedMastered = [masteredVerse, ...state.masteredVerses];
+      }
+
+      return { verses: updatedVerses, masteredVerses: updatedMastered };
+    });
   },
 
   resetVerseProgress: async (id: string) => {
@@ -738,22 +779,41 @@ export const useAppStore = create<AppState>((set, get) => ({
       engraved: { completed: false, months: [] },
     };
 
-    // Update on server
-    const { error } = await supabase
-      .from('user_verses')
-      .update({ progress: DEFAULT_PROGRESS })
-      .eq('client_id', id);
+    // Check if verse was mastered before reset
+    const verse = get().verses.find((v) => v.id === id);
+    const wasMastered = verse?.progress?.hard?.completed === true;
 
-    if (error) {
-      console.error('[STORE] Failed to reset progress:', error);
-      return;
+    // Save for rollback
+    const previousVerses = get().verses;
+    const previousMastered = get().masteredVerses;
+
+    // Optimistic update
+    set((state) => ({
+      verses: state.verses.map((v) =>
+        v.id === id ? { ...v, progress: DEFAULT_PROGRESS } : v
+      ),
+      // Remove from mastered if it was mastered
+      masteredVerses: wasMastered
+        ? state.masteredVerses.filter((v) => v.id !== id)
+        : state.masteredVerses,
+    }));
+
+    try {
+      // Update on server
+      const { error } = await supabase
+        .from('user_verses')
+        .update({ progress: DEFAULT_PROGRESS })
+        .eq('client_id', id);
+
+      if (error) {
+        console.error('[STORE] Failed to reset progress:', error);
+        throw new Error('Failed to reset progress');
+      }
+    } catch (error) {
+      // Rollback on failure
+      set({ verses: previousVerses, masteredVerses: previousMastered });
+      throw error;
     }
-
-    // Refresh verses and mastered verses to reflect changes
-    await Promise.all([
-      get().fetchVerses(),
-      get().fetchMasteredVerses(),
-    ]);
   },
 
   // ============ RESET ============

@@ -3,7 +3,8 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { VOTM } from '@/lib/api/votm';
 import { formatVerseReference } from '@/lib/storage';
-import { ActivityIndicator, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 
 interface VOTMCardProps {
   votm: VOTM;
@@ -138,15 +139,14 @@ export function VOTMCard({
 
   if (hasImage) {
     return (
-      <Pressable onPress={onPress}>
-        <ImageBackground
+      <Pressable onPress={onPress} style={styles.card}>
+        <Image
           source={{ uri: votm.imageUrl! }}
-          style={styles.card}
-          imageStyle={styles.backgroundImage}
-          resizeMode="cover"
-        >
-          {cardContent}
-        </ImageBackground>
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="disk"
+        />
+        {cardContent}
       </Pressable>
     );
   }
@@ -165,9 +165,6 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
     overflow: 'hidden',
-  },
-  backgroundImage: {
-    borderRadius: 16,
   },
   contentWrapper: {
     position: 'relative',

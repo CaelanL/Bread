@@ -6,11 +6,12 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatVerseReference, type SavedVerse, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { useAppStore, useVersesByCollection, useCollection, useHydrated, useMasteredVerses } from '@/lib/store';
+import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -55,7 +56,12 @@ export default function CollectionScreen() {
 
   const handleDeleteVerse = async (verseId: string) => {
     if (!id) return;
-    await deleteVerse(verseId, id);
+    try {
+      await deleteVerse(verseId, id);
+    } catch (e) {
+      showErrorToast('Failed to delete verse. Please try again.');
+      throw e; // Re-throw so SwipeableVerseCard can handle animation
+    }
   };
 
   const primaryColor = colors.primary;
@@ -115,41 +121,35 @@ export default function CollectionScreen() {
         }
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={!hydrated || sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
-        }
-      >
-        {!hydrated ? (
-          <View style={styles.skeletonContainer}>
-            <VerseCardSkeleton count={3} />
-          </View>
-        ) : sortedVerses.length === 0 ? (
-          renderEmptyState()
-        ) : (
-          sortedVerses.map((v, i) => (
+      {!hydrated ? (
+        <View style={styles.skeletonContainer}>
+          <VerseCardSkeleton count={3} />
+        </View>
+      ) : (
+        <FlatList
+          data={sortedVerses}
+          renderItem={({ item }) => (
             <SwipeableVerseCard
-              key={v.id}
-              verse={v}
-              index={i}
-              onPress={() => handleVersePress(v)}
-              onDelete={() => handleDeleteVerse(v.id)}
+              verse={item}
+              onPress={() => handleVersePress(item)}
+              onDelete={() => handleDeleteVerse(item.id)}
               disableSwipe={isMasteredCollection}
             />
-          ))
-        )}
-      </ScrollView>
+          )}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
+          ListEmptyComponent={renderEmptyState}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+          }
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  scrollView: {
     flex: 1,
   },
   emptyContainer: {

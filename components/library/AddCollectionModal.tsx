@@ -8,6 +8,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -23,7 +24,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 interface AddCollectionModalProps {
   visible: boolean;
   onClose: () => void;
-  onAdd: (name: string) => void;
+  onAdd: (name: string) => Promise<void>;
 }
 
 export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionModalProps) {
@@ -50,11 +51,20 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
     opacity: opacity.value,
   }));
 
-  const handleSubmit = () => {
-    if (name.trim()) {
-      onAdd(name.trim());
-      setName('');
-      onClose();
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (name.trim() && !submitting) {
+      setSubmitting(true);
+      try {
+        await onAdd(name.trim());
+      } catch {
+        // Error toast is shown by caller
+      } finally {
+        setSubmitting(false);
+        setName('');
+        onClose();
+      }
     }
   };
 
@@ -134,12 +144,16 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
               style={[
                 styles.button,
                 styles.submitButton,
-                { backgroundColor: primaryColor, opacity: name.trim() ? 1 : 0.5 },
+                { backgroundColor: primaryColor, opacity: name.trim() && !submitting ? 1 : 0.5 },
               ]}
               onPress={handleSubmit}
-              disabled={!name.trim()}
+              disabled={!name.trim() || submitting}
             >
-              <Text style={[styles.buttonText, { color: colors.white }]}>Create Collection</Text>
+              {submitting ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={[styles.buttonText, { color: colors.white }]}>Create Collection</Text>
+              )}
             </Pressable>
           </View>
         </Animated.View>

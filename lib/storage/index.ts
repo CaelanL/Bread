@@ -27,7 +27,7 @@ export interface VerseProgress {
   engraved?: EngravedProgress; // Optional for backwards compatibility
 }
 
-export type BibleVersion = 'ESV' | 'NLT' | 'KJV';
+export type BibleVersion = 'ESV' | 'NLT' | 'NIV' | 'NKJV' | 'CSB' | 'KJV';
 
 export interface SavedVerse {
   id: string;

@@ -6,6 +6,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useMasteredVerseCount } from '@/lib/store';
+import { showErrorToast } from '@/lib/toast';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -73,11 +74,21 @@ export default function LibraryScreen() {
   };
 
   const handleAddCollection = async (name: string) => {
-    await addCollection(name);
+    try {
+      await addCollection(name);
+    } catch (e) {
+      showErrorToast('Failed to create collection.');
+      throw e; // Re-throw so caller knows it failed
+    }
   };
 
   const handleDeleteCollection = async (id: string) => {
-    await deleteCollection(id);
+    try {
+      await deleteCollection(id);
+    } catch (e) {
+      showErrorToast('Failed to delete collection.');
+      throw e; // Re-throw so SwipeableCollectionCard can handle animation
+    }
   };
 
   const handleCollectionPress = (collection: Collection) => {

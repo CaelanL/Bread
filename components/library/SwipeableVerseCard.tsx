@@ -9,7 +9,6 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  FadeInDown,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -22,15 +21,13 @@ const SWIPE_THRESHOLD = DELETE_BUTTON_WIDTH / 2;
 
 interface SwipeableVerseCardProps {
   verse: SavedVerse;
-  index: number;
   onPress: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
   disableSwipe?: boolean;
 }
 
 export function SwipeableVerseCard({
   verse,
-  index,
   onPress,
   onDelete,
   disableSwipe = false,
@@ -118,11 +115,16 @@ export function SwipeableVerseCard({
       {
         text: buttonText,
         style: 'destructive',
-        onPress: () => {
-          // Animate card out to the left
-          translateX.value = withTiming(-500, { duration: 200 }, () => {
-            runOnJS(onDelete)();
-          });
+        onPress: async () => {
+          try {
+            // Try to delete first
+            await onDelete();
+            // Only animate out on success
+            translateX.value = withTiming(-500, { duration: 200 });
+          } catch {
+            // On error, snap back to closed position
+            translateX.value = withSpring(0, { damping: 20 });
+          }
         },
       },
     ]);
@@ -139,7 +141,6 @@ export function SwipeableVerseCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 60).duration(300)}
       style={styles.container}
     >
       {/* Delete button (behind card) */}

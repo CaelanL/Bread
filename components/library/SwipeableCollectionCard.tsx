@@ -25,7 +25,7 @@ interface SwipeableCollectionCardProps {
   collection: CollectionWithCount;
   index: number;
   onPress: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
 }
 
 export function SwipeableCollectionCard({
@@ -74,11 +74,16 @@ export function SwipeableCollectionCard({
     opacity: Math.min(1, Math.abs(translateX.value) / SWIPE_THRESHOLD),
   }));
 
-  const handleDelete = () => {
-    // Animate card out to the left
-    translateX.value = withTiming(-500, { duration: 200 }, () => {
-      runOnJS(onDelete)();
-    });
+  const handleDelete = async () => {
+    try {
+      // Try to delete first
+      await onDelete();
+      // Only animate out on success
+      translateX.value = withTiming(-500, { duration: 200 });
+    } catch {
+      // On error, snap back to closed position
+      translateX.value = withSpring(0, { damping: 20 });
+    }
   };
 
   const handlePress = () => {

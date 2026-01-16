@@ -13,6 +13,7 @@ import { migrateLocalDataToServer } from '@/lib/sync';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { NetworkProvider } from '@/lib/network';
 import { NoInternetOverlay } from '@/components/ui/NoInternetOverlay';
+import { ErrorToast } from '@/components/ui/ErrorToast';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
 
@@ -97,6 +98,7 @@ export default function RootLayout() {
           <AuthProvider>
             <RootLayoutNav />
             <NoInternetOverlay />
+            <ErrorToast />
           </AuthProvider>
         </KeyboardProvider>
       </NetworkProvider>

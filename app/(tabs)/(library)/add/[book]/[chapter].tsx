@@ -4,7 +4,9 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { normalizeBookName, getVerseCount } from '@/lib/bible';
 import { type BibleVersion } from '@/lib/storage';
+import { BIBLE_VERSIONS } from '@/lib/settings';
 import { useAppStore } from '@/lib/store';
+import { showErrorToast } from '@/lib/toast';
 import { fetchVerse, fetchChapter } from '@/lib/api';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState, useCallback, useEffect } from 'react';
@@ -14,7 +16,6 @@ import {
   Text,
   View,
   Pressable,
-  Alert,
   ActivityIndicator,
   Modal,
   type LayoutRectangle,
@@ -46,7 +47,8 @@ export default function VerseSelectScreen() {
   const verseCount = getVerseCount(bookName, chapterNum);
 
   // Translation from URL param (passed from book selection), fallback to store
-  const initialVersion = (version === 'ESV' || version === 'NLT') ? version : bibleVersion;
+  const validVersions = BIBLE_VERSIONS.map(v => v.value);
+  const initialVersion = (version && validVersions.includes(version as BibleVersion)) ? version as BibleVersion : bibleVersion;
   const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(initialVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
 
@@ -316,7 +318,7 @@ export default function VerseSelectScreen() {
       }
     } catch (error) {
       console.error('Failed to add verses:', error);
-      Alert.alert('Error', `Failed to add verses: ${error}`);
+      showErrorToast('Failed to add verse. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -364,30 +366,30 @@ export default function VerseSelectScreen() {
         >
           <View style={[styles.pickerContainer, { backgroundColor: colors.card }]}>
             <Text style={[styles.pickerTitle, { color: colors.text }]}>Translation</Text>
-            {(['ESV', 'NLT'] as BibleVersion[]).map((ver) => (
+            {BIBLE_VERSIONS.map((ver) => (
               <Pressable
-                key={ver}
+                key={ver.value}
                 style={[
                   styles.pickerOption,
-                  selectedVersion === ver && { backgroundColor: colors.primary },
+                  selectedVersion === ver.value && { backgroundColor: colors.primary },
                 ]}
-                onPress={() => handleVersionSelect(ver)}
+                onPress={() => handleVersionSelect(ver.value)}
               >
                 <Text
                   style={[
                     styles.pickerOptionText,
-                    { color: selectedVersion === ver ? colors.white : colors.text },
+                    { color: selectedVersion === ver.value ? colors.white : colors.text },
                   ]}
                 >
-                  {ver}
+                  {ver.label}
                 </Text>
                 <Text
                   style={[
                     styles.pickerOptionSubtext,
-                    { color: selectedVersion === ver ? 'rgba(255,255,255,0.7)' : colors.icon },
+                    { color: selectedVersion === ver.value ? 'rgba(255,255,255,0.7)' : colors.icon },
                   ]}
                 >
-                  {ver === 'ESV' ? 'English Standard Version' : 'New Living Translation'}
+                  {ver.full}
                 </Text>
               </Pressable>
             ))}

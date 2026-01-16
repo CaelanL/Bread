@@ -20,6 +20,7 @@ import {
   createResultsPageItem,
 } from '@/lib/study-chunks';
 import { processRecording as processRecordingApi, logSessionAttempt } from '@/lib/api';
+import { showErrorToast } from '@/lib/toast';
 import { alignTranscription } from '@/lib/align';
 
 interface ChunkResult {
@@ -167,6 +168,7 @@ export function useStudySession({
           await useAppStore.getState().updateVerseProgress(verseId, difficulty as StorageDifficulty, finalScoreValue);
         } catch (e) {
           console.error('[STUDY] Failed to update progress:', e);
+          showErrorToast('Failed to save your progress.');
         }
 
         // Log session attempt for analytics (fire-and-forget, don't block UI)

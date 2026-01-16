@@ -5,8 +5,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStreak } from '@/hooks/use-streak';
 import { getAvgTimeToMaster, getTotalTimeStudied } from '@/lib/api';
 import { useInsightsStats, useMostMemorizedBooks } from '@/lib/store';
-import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 interface StatCardProps {
   value: number | string;
@@ -122,11 +122,29 @@ export default function InsightsScreen() {
   const [avgTimeToMasterMs, setAvgTimeToMasterMs] = useState<number | null>(null);
   const [showTimeStudiedInfo, setShowTimeStudiedInfo] = useState(false);
   const [showAvgTimeInfo, setShowAvgTimeInfo] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadTimeStats = useCallback(async () => {
+    const [timeStudied, avgTime] = await Promise.all([
+      getTotalTimeStudied(),
+      getAvgTimeToMaster(),
+    ]);
+    setTimeStudiedMs(timeStudied);
+    setAvgTimeToMasterMs(avgTime);
+  }, []);
 
   useEffect(() => {
-    getTotalTimeStudied().then(setTimeStudiedMs);
-    getAvgTimeToMaster().then(setAvgTimeToMasterMs);
-  }, []);
+    loadTimeStats();
+  }, [loadTimeStats]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadTimeStats();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadTimeStats]);
 
   const streakIcon = streak > 0 ? 'flame.fill' : 'snowflake';
   const streakColor = streak > 0 ? '#f97316' : '#60a5fa';
@@ -138,7 +156,13 @@ export default function InsightsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader title="Insights" />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+        }
+      >
         {/* Hero Stats */}
         <View style={styles.statsRow}>
           <StatCard

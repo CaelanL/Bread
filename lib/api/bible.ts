@@ -14,7 +14,7 @@ import type { SavedVerse } from "../storage";
 // Re-export for dev tools
 export { clearSessionCache, getSessionCacheStats };
 
-export type BibleVersion = "ESV" | "NLT";
+export type BibleVersion = "ESV" | "NLT" | "NIV" | "NKJV" | "CSB" | "KJV";
 
 export interface BibleVerse {
   reference: string;
