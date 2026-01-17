@@ -144,9 +144,9 @@ async function evictOldestVerses(
     .order("last_used_at", { ascending: true })
     .limit(count);
 
-  // Exclude current chapter from eviction
+  // Exclude current chapter from eviction (only exclude where BOTH book AND chapter match)
   if (excludeBook && excludeChapter !== undefined) {
-    query = query.not("book", "eq", excludeBook).not("chapter", "eq", excludeChapter);
+    query = query.not("and", `(book.eq.${excludeBook},chapter.eq.${excludeChapter})`);
   }
 
   const { data: toEvict } = await query;

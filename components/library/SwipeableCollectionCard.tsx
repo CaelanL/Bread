@@ -4,7 +4,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { type Collection } from '@/lib/storage';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeInDown,
   useSharedValue,
@@ -74,16 +74,35 @@ export function SwipeableCollectionCard({
     opacity: Math.min(1, Math.abs(translateX.value) / SWIPE_THRESHOLD),
   }));
 
-  const handleDelete = async () => {
-    try {
-      // Try to delete first
-      await onDelete();
-      // Only animate out on success
-      translateX.value = withTiming(-500, { duration: 200 });
-    } catch {
-      // On error, snap back to closed position
-      translateX.value = withSpring(0, { damping: 20 });
-    }
+  const handleDelete = () => {
+    const hasVerses = collection.verseCount > 0;
+
+    const title = `Delete "${collection.name}"?`;
+    const message = hasVerses
+      ? 'Verses not mastered or in another collection will be deleted and lose progress.'
+      : 'This collection will be permanently deleted.';
+
+    Alert.alert(title, message, [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+        onPress: () => {
+          translateX.value = withSpring(0, { damping: 20 });
+        },
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await onDelete();
+            translateX.value = withTiming(-500, { duration: 200 });
+          } catch {
+            translateX.value = withSpring(0, { damping: 20 });
+          }
+        },
+      },
+    ]);
   };
 
   const handlePress = () => {

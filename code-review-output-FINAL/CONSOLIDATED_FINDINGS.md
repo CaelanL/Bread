@@ -12,7 +12,7 @@
 
 These issues were independently identified by all three reviewers. **Fix first.**
 
-### 🔴 1. No List Virtualization / Performance at Scale - addressed!
+### 🔴 1. No List Virtualization / Performance at Scale - ✅ FIXED
 | Reviewer | Finding |
 |----------|---------|
 | Claude Opus | "App will crash with 100+ verses" - ScrollView with .map() |
@@ -25,7 +25,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 
 ---
 
-### 🔴 2. Full Store Refetch After Every Mutation
+### 🔴 2. Full Store Refetch After Every Mutation - ✅ FIXED
 | Reviewer | Finding |
 |----------|---------|
 | Claude Opus | "500ms+ latency per operation, poor UX" |
@@ -35,6 +35,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 **Files:** `lib/store/index.ts` (lines 576-580, 649-650)
 **Severity:** CRITICAL/HIGH (all agree)
 **Fix:** Implement optimistic updates, remove full refetches
+**Resolution:** Implemented optimistic updates for addVerse, deleteVerse, updateVerseProgress, resetVerseProgress with rollback on error
 
 ---
 
@@ -51,7 +52,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 
 ---
 
-### 🔴 4. No Error Boundary
+### 🔴 4. No Error Boundary - ✅ FIXED
 | Reviewer | Finding |
 |----------|---------|
 | Claude Opus | "Unhandled exception = white screen of death" |
@@ -61,6 +62,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 **Files:** `app/_layout.tsx`
 **Severity:** CRITICAL/HIGH (all agree)
 **Fix:** Add React Error Boundary component
+**Resolution:** Created `components/ErrorBoundary.tsx` class component and wrapped app in `_layout.tsx`
 
 ---
 
@@ -77,7 +79,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 
 ---
 
-### 🔴 6. No Retry Logic for API Calls
+### 🔴 6. No Retry Logic for API Calls - ⏭️ NOT NEEDED
 | Reviewer | Finding |
 |----------|---------|
 | Claude Opus | "Single network hiccup = failed operation" |
@@ -87,6 +89,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 **Files:** All API modules
 **Severity:** HIGH (all agree)
 **Fix:** Add exponential backoff retry wrapper
+**Resolution:** Manual retry available via pull-to-refresh on all screens and "Try Again" buttons. Automatic retry adds complexity without significant UX benefit for single-user app.
 
 ---
 
@@ -116,7 +119,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 
 ---
 
-### 🔴 9. Analytics Queries Fetch All Data
+### 🔴 9. Analytics Queries Fetch All Data - ✅ FIXED
 | Reviewer | Finding |
 |----------|---------|
 | Claude Opus | "Downloads all attempts to calculate streak - no LIMIT" |
@@ -126,6 +129,7 @@ These issues were independently identified by all three reviewers. **Fix first.*
 **Files:** `lib/api/analytics.ts` (lines 62-107, 112-129)
 **Severity:** HIGH (all agree)
 **Fix:** Server-side aggregation with SQL
+**Resolution:** Created SQL functions `get_current_streak()` and `get_total_time_studied()` in migration 012. Client now calls RPC instead of fetching all rows. Deleted unused `getTotalPracticeDays()`.
 
 ---
 

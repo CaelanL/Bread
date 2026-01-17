@@ -296,13 +296,31 @@ export default function SettingsScreen() {
               <View style={styles.copyrightItem}>
                 <Text style={[styles.copyrightVersion, { color: colors.text }]}>ESV</Text>
                 <Text style={[styles.copyrightText, { color: colors.icon }]}>
-                  Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.
+                  Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language.
+                </Text>
+              </View>
+              <View style={styles.copyrightItem}>
+                <Text style={[styles.copyrightVersion, { color: colors.text }]}>NLT</Text>
+                <Text style={[styles.copyrightText, { color: colors.icon }]}>
+                  Holy Bible, New Living Translation, Copyright © 2014, Tyndale House Publishers. All rights reserved. tyndale.com
+                </Text>
+              </View>
+              <View style={styles.copyrightItem}>
+                <Text style={[styles.copyrightVersion, { color: colors.text }]}>NIV</Text>
+                <Text style={[styles.copyrightText, { color: colors.icon }]}>
+                  The Holy Bible, New International Version® NIV® Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.® Used by Permission of Biblica, Inc.® All rights reserved worldwide.
+                </Text>
+              </View>
+              <View style={styles.copyrightItem}>
+                <Text style={[styles.copyrightVersion, { color: colors.text }]}>NKJV</Text>
+                <Text style={[styles.copyrightText, { color: colors.icon }]}>
+                  New King James Version®, Copyright © 1982, Thomas Nelson. All rights reserved.
                 </Text>
               </View>
               <View style={[styles.copyrightItem, styles.copyrightItemLast]}>
-                <Text style={[styles.copyrightVersion, { color: colors.text }]}>NLT</Text>
+                <Text style={[styles.copyrightVersion, { color: colors.text }]}>CSB</Text>
                 <Text style={[styles.copyrightText, { color: colors.icon }]}>
-                  Scripture quotations are taken from the Holy Bible, New Living Translation, copyright © 1996, 2004, 2015 by Tyndale House Foundation. Used by permission of Tyndale House Publishers, Carol Stream, Illinois 60188. All rights reserved.
+                  Christian Standard Bible® and CSB® are federally registered trademarks of Holman Bible Publishers. All rights reserved. bhpublishinggroup.com
                 </Text>
               </View>
             </ScrollView>

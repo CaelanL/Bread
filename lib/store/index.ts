@@ -307,9 +307,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // This populates the session cache so cards render instantly
       const verses = get().verses;
       if (verses.length > 0) {
-        Promise.all(verses.map((v) => getVerseText(v).catch(() => {}))).then(
-          () => console.log(`[STORE] Prefetched text for ${verses.length} verses`)
-        );
+        Promise.all(verses.map((v) => getVerseText(v).catch(() => {})));
       }
     }
   },
@@ -398,17 +396,55 @@ export const useAppStore = create<AppState>((set, get) => ({
       throw new Error('Collection not found');
     }
 
-    // Get default collection server ID FIRST (before deleting)
-    const { data: defaultCollection, error: defaultError } = await supabase
-      .from('user_collections')
-      .select('id')
-      .eq('client_id', DEFAULT_COLLECTION_ID)
-      .is('deleted_at', null)
-      .single();
+    // Get all verses in this collection with their details
+    const { data: verseLinks } = await supabase
+      .from('verse_collections')
+      .select(`
+        verse_id,
+        user_verses!inner (
+          id,
+          client_id,
+          progress
+        )
+      `)
+      .eq('collection_id', collection.id);
 
-    if (defaultError || !defaultCollection) {
-      console.error('[STORE] Default collection not found, cannot reassign verses');
-      throw new Error('Cannot delete collection: default collection not found');
+    // Process each verse
+    for (const link of verseLinks || []) {
+      const verse = link.user_verses as any;
+      const verseServerId = verse.id;
+      const isMastered = verse.progress?.hard?.completed === true;
+
+      // Check if verse is in other collections
+      const { count: otherCollectionCount } = await supabase
+        .from('verse_collections')
+        .select('*', { count: 'exact', head: true })
+        .eq('verse_id', verseServerId)
+        .neq('collection_id', collection.id);
+
+      // Remove from this collection's junction
+      await supabase
+        .from('verse_collections')
+        .delete()
+        .eq('verse_id', verseServerId)
+        .eq('collection_id', collection.id);
+
+      // If verse is not in any other collection, handle deletion
+      if ((otherCollectionCount || 0) === 0) {
+        if (isMastered) {
+          // Soft delete - keep for Mastered list
+          await supabase
+            .from('user_verses')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', verseServerId);
+        } else {
+          // Hard delete - remove completely
+          await supabase
+            .from('user_verses')
+            .delete()
+            .eq('id', verseServerId);
+        }
+      }
     }
 
     // Soft-delete the collection
@@ -422,27 +458,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       throw new Error('Failed to delete collection');
     }
 
-    // Move verses to default collection on server
-    const { error: moveError } = await supabase
-      .from('user_verses')
-      .update({ collection_id: defaultCollection.id })
-      .eq('collection_id', collection.id)
-      .is('deleted_at', null);
+    // Update local state - remove collection and its verses
+    const versesInCollection = get().verses.filter((v) => v.collectionId === id);
+    const verseIdsToRemove = new Set(versesInCollection.map((v) => v.id));
 
-    if (moveError) {
-      console.error('[STORE] Failed to move verses to default collection:', moveError);
-      // Collection is already deleted, but verses weren't moved - this is a problem
-      // Refresh to get correct server state
-      get().refresh();
-      throw new Error('Collection deleted but failed to move verses');
-    }
-
-    // Update local state
     set((state) => ({
       collections: state.collections.filter((c) => c.id !== id),
-      verses: state.verses.map((v) =>
-        v.collectionId === id ? { ...v, collectionId: DEFAULT_COLLECTION_ID } : v
-      ),
+      verses: state.verses.filter((v) => v.collectionId !== id),
+      // Keep mastered verses in masteredVerses list (they're soft-deleted)
     }));
   },
 
