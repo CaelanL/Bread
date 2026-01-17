@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import * as Linking from 'expo-linking';
+import { router } from 'expo-router';
 import { supabase } from '@/lib/api/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -12,6 +14,8 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
+  deleteAccount: () => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,6 +24,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Handle deep link URLs (for password reset, OAuth callbacks)
+  const handleDeepLink = async (url: string) => {
+    // URL comes in as: com.biblemem://reset-password#access_token=xxx&refresh_token=xxx&type=recovery
+    // Convert # to ? so we can parse params
+    const parsedUrl = url.replace('#', '?');
+    const { queryParams } = Linking.parse(parsedUrl);
+
+    const accessToken = queryParams?.access_token as string | undefined;
+    const refreshToken = queryParams?.refresh_token as string | undefined;
+    const type = queryParams?.type as string | undefined;
+
+    if (accessToken && refreshToken) {
+      // Set the session from the tokens
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (!error && type === 'recovery') {
+        // Navigate to reset password screen
+        router.replace('/reset-password');
+      }
+    }
+  };
 
   useEffect(() => {
     // Get initial session
@@ -38,7 +67,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Handle deep links
+    // Check if app was opened via deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink(url);
+    });
+
+    // Listen for deep links while app is open
+    const linkingSubscription = Linking.addEventListener('url', (event) => {
+      handleDeepLink(event.url);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      linkingSubscription.remove();
+    };
   }, []);
 
   const signUp = async (email: string, password: string): Promise<{ error: string | null }> => {
@@ -69,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'biblemem://',
+        redirectTo: 'com.biblemem://',
       },
     });
 
@@ -84,13 +127,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string): Promise<{ error: string | null }> => {
+    // Production URL - must match Supabase Redirect URLs whitelist
+    // Note: Password reset links must be opened on device with app installed
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'biblemem://reset-password',
+      redirectTo: 'com.biblemem://reset-password/',
     });
 
     if (error) {
       return { error: error.message };
     }
+    return { error: null };
+  };
+
+  const updatePassword = async (newPassword: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      return { error: error.message };
+    }
+    return { error: null };
+  };
+
+  const deleteAccount = async (): Promise<{ error: string | null }> => {
+    // Call the PostgreSQL function that deletes the user
+    const { error } = await supabase.rpc('delete_own_account');
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    // Sign out after deletion (JWT still valid until expiry)
+    await signOut();
     return { error: null };
   };
 
@@ -104,6 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInWithGoogle,
     signOut,
     resetPassword,
+    updatePassword,
+    deleteAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

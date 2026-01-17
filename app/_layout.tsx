@@ -39,8 +39,9 @@ function RootLayoutNav() {
     if (!navigationState?.key || isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const isResetPassword = segments[0] === 'reset-password';
 
-    if (!isAuthenticated && !inAuthGroup) {
+    if (!isAuthenticated && !inAuthGroup && !isResetPassword) {
       // Not authenticated and not on auth screen - redirect to sign in
       router.replace('/(auth)/sign-in');
     } else if (isAuthenticated && inAuthGroup) {
@@ -81,8 +82,9 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="reset-password" />
         <Stack.Screen name="session" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>

@@ -5,7 +5,7 @@ export default {
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "biblemem",
+    scheme: "com.biblemem",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
@@ -31,6 +31,7 @@ export default {
       favicon: "./assets/images/favicon.png",
     },
     plugins: [
+      "expo-font",
       "expo-router",
       [
         "expo-splash-screen",
@@ -53,6 +54,9 @@ export default {
     extra: {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      eas: {
+        projectId: "7e758050-0746-4516-a231-dbea6ec702c6",
+      },
     },
   },
 };

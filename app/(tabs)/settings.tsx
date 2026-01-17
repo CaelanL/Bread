@@ -9,6 +9,8 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
@@ -135,15 +137,80 @@ export default function SettingsScreen() {
   const setColorMode = useAppStore((state) => state.setColorMode);
   const bibleVersion = useAppStore((state) => state.bibleVersion);
   const setBibleVersion = useAppStore((state) => state.setBibleVersion);
-  const { user, signOut } = useAuth();
+  const { user, signOut, updatePassword, deleteAccount } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
   const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
   const [copyrightVisible, setCopyrightVisible] = React.useState(false);
+
+  // Change Password state
+  const [passwordModalVisible, setPasswordModalVisible] = React.useState(false);
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [passwordLoading, setPasswordLoading] = React.useState(false);
+
+  // Delete Account state
+  const [deleteModalVisible, setDeleteModalVisible] = React.useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = React.useState('');
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
 
   const handleSignOut = async () => {
     setSigningOut(true);
     await signOut();
     setSigningOut(false);
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    setPasswordLoading(true);
+    const { error } = await updatePassword(newPassword);
+    setPasswordLoading(false);
+
+    if (error) {
+      Alert.alert('Error', error);
+    } else {
+      Alert.alert('Success', 'Password updated successfully');
+      setPasswordModalVisible(false);
+      setNewPassword('');
+      setConfirmPassword('');
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account?',
+      'All your data and progress will be permanently deleted. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => setDeleteModalVisible(true),
+        },
+      ]
+    );
+  };
+
+  const handleConfirmDelete = async () => {
+    if (deleteConfirmText !== 'DELETE') return;
+
+    setDeleteLoading(true);
+    const { error } = await deleteAccount();
+    setDeleteLoading(false);
+
+    if (error) {
+      Alert.alert('Error', error);
+      setDeleteModalVisible(false);
+      setDeleteConfirmText('');
+    }
+    // On success, user is signed out and redirected automatically
   };
 
   const selectedVersion = BIBLE_VERSIONS.find(
@@ -189,7 +256,6 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="moon.fill"
             label="Theme"
-            description="Choose light, dark, or follow system"
           >
             <ColorModePicker
               value={colorMode}
@@ -205,6 +271,14 @@ export default function SettingsScreen() {
             label="Email"
             description={user?.email ?? 'Not signed in'}
           />
+          <Pressable onPress={() => setPasswordModalVisible(true)}>
+            <SettingsRow
+              icon="lock.fill"
+              label="Change Password"
+            >
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
           <Pressable onPress={handleSignOut} disabled={signingOut}>
             <View
               style={[
@@ -243,6 +317,13 @@ export default function SettingsScreen() {
             </SettingsRow>
           </Pressable>
         </SettingsSection>
+
+        {/* Delete Account - subtle, at bottom */}
+        <Pressable onPress={handleDeleteAccount} style={styles.deleteAccountRow}>
+          <Text style={[styles.deleteAccountText, { color: colors.error }]}>
+            Delete Account
+          </Text>
+        </Pressable>
       </ScrollView>
 
       {/* Version Picker Modal */}
@@ -324,6 +405,106 @@ export default function SettingsScreen() {
                 </Text>
               </View>
             </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Change Password Modal */}
+      <Modal visible={passwordModalVisible} transparent animationType="fade">
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {
+            setPasswordModalVisible(false);
+            setNewPassword('');
+            setConfirmPassword('');
+          }}
+        >
+          <View
+            style={[styles.modalContainer, { backgroundColor: colors.cardAlt }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Change Password</Text>
+            <View style={styles.passwordForm}>
+              <TextInput
+                style={[styles.passwordInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.borderLight }]}
+                placeholder="New password"
+                placeholderTextColor={colors.icon}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={[styles.passwordInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.borderLight }]}
+                placeholder="Confirm password"
+                placeholderTextColor={colors.icon}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              <Pressable
+                style={[
+                  styles.passwordButton,
+                  { backgroundColor: colors.primary },
+                  passwordLoading && { opacity: 0.7 },
+                ]}
+                onPress={handleChangePassword}
+                disabled={passwordLoading}
+              >
+                {passwordLoading ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.passwordButtonText}>Update Password</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal visible={deleteModalVisible} transparent animationType="fade">
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {
+            setDeleteModalVisible(false);
+            setDeleteConfirmText('');
+          }}
+        >
+          <View
+            style={[styles.modalContainer, { backgroundColor: colors.cardAlt }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Confirm Deletion</Text>
+            <Text style={[styles.deleteWarning, { color: colors.icon }]}>
+              Type DELETE to permanently delete your account
+            </Text>
+            <TextInput
+              style={[styles.deleteInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.borderLight }]}
+              placeholder="Type DELETE"
+              placeholderTextColor={colors.icon}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            <Pressable
+              style={[
+                styles.deleteButton,
+                { backgroundColor: deleteConfirmText === 'DELETE' ? colors.error : colors.borderLight },
+              ]}
+              onPress={handleConfirmDelete}
+              disabled={deleteConfirmText !== 'DELETE' || deleteLoading}
+            >
+              {deleteLoading ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={[styles.deleteButtonText, { color: deleteConfirmText === 'DELETE' ? colors.white : colors.icon }]}>
+                  Delete Account
+                </Text>
+              )}
+            </Pressable>
           </View>
         </Pressable>
       </Modal>
@@ -479,5 +660,57 @@ const styles = StyleSheet.create({
   copyrightText: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  deleteAccountRow: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  deleteAccountText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  passwordForm: {
+    gap: 12,
+  },
+  passwordInput: {
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    fontSize: 16,
+  },
+  passwordButton: {
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  passwordButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deleteWarning: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  deleteInput: {
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  deleteButton: {
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

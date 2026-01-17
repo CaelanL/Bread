@@ -11,7 +11,7 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, authAccent } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -28,7 +28,7 @@ export default function ForgotPasswordScreen() {
 
   const emailRef = useRef<TextInput>(null);
 
-  const buttonBg = colors.primary;
+  const buttonBg = authAccent;
   const inputBg = colors.input;
   const borderColor = colors.border;
 
@@ -101,12 +101,12 @@ export default function ForgotPasswordScreen() {
             style={[
               styles.inputContainer,
               { backgroundColor: inputBg, borderColor },
-              emailFocused && { borderColor: colors.primary },
+              emailFocused && { borderColor: authAccent },
             ]}
             onStartShouldSetResponder={() => true}
             onResponderRelease={() => emailRef.current?.focus()}
           >
-            <IconSymbol name="envelope.fill" size={18} color={emailFocused ? colors.primary : colors.icon} />
+            <IconSymbol name="envelope.fill" size={18} color={emailFocused ? authAccent : colors.icon} />
             <TextInput
               ref={emailRef}
               style={[styles.input, { color: colors.text }]}
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: '#fff', // Always white on colored button
+    color: '#3a3a3a',
     fontSize: 17,
     fontWeight: '600',
   },

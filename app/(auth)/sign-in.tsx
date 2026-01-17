@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useFonts, PlayfairDisplay_400Regular } from '@expo-google-fonts/playfair-display';
 import {
   View,
   Text,
@@ -7,15 +8,19 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, authAccent } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function SignInScreen() {
+  const [fontsLoaded] = useFonts({
+    PlayfairDisplay_400Regular,
+  });
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { signIn } = useAuth();
@@ -30,7 +35,7 @@ export default function SignInScreen() {
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
-  const buttonBg = colors.primary;
+  const buttonBg = authAccent;
   const inputBg = colors.input;
   const borderColor = colors.border;
 
@@ -58,12 +63,17 @@ export default function SignInScreen() {
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={[styles.logoContainer, { backgroundColor: colors.primaryLight }]}>
-            <IconSymbol name="book.fill" size={40} color={buttonBg} />
+          <View style={styles.logoRow}>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require('@/assets/images/logo-bird.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
+            <Text style={[styles.title, { color: authAccent }]}>Bread</Text>
           </View>
-          <Text style={[styles.title, { color: colors.text }]}>Bible Memory</Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>Sign in to your account</Text>
-        </View>
+                  </View>
 
         {/* Form */}
         <View style={styles.form}>
@@ -71,12 +81,12 @@ export default function SignInScreen() {
             style={[
               styles.inputContainer,
               { backgroundColor: inputBg, borderColor },
-              emailFocused && { borderColor: colors.primary },
+              emailFocused && { borderColor: authAccent },
             ]}
             onStartShouldSetResponder={() => true}
             onResponderRelease={() => emailRef.current?.focus()}
           >
-            <IconSymbol name="envelope.fill" size={18} color={emailFocused ? colors.primary : colors.icon} />
+            <IconSymbol name="envelope.fill" size={18} color={emailFocused ? authAccent : colors.icon} />
             <TextInput
               ref={emailRef}
               style={[styles.input, { color: colors.text }]}
@@ -98,12 +108,12 @@ export default function SignInScreen() {
             style={[
               styles.inputContainer,
               { backgroundColor: inputBg, borderColor },
-              passwordFocused && { borderColor: colors.primary },
+              passwordFocused && { borderColor: authAccent },
             ]}
             onStartShouldSetResponder={() => true}
             onResponderRelease={() => passwordRef.current?.focus()}
           >
-            <IconSymbol name="lock.fill" size={18} color={passwordFocused ? colors.primary : colors.icon} />
+            <IconSymbol name="lock.fill" size={18} color={passwordFocused ? authAccent : colors.icon} />
             <TextInput
               ref={passwordRef}
               style={[styles.input, { color: colors.text }]}
@@ -186,21 +196,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    justifyContent: 'center',
+  logoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
+    gap: 8,
     marginBottom: 8,
   },
-  subtitle: {
-    fontSize: 16,
+  logoContainer: {
+    width: 47,
+    height: 51,
+    overflow: 'hidden',
+  },
+  logo: {
+    width: 51,
+    height: 51,
+    marginLeft: -4,
+  },
+  title: {
+    fontSize: 35,
+    fontFamily: 'Avenir Next',
+    fontWeight: '400',
+    letterSpacing: -0.5,
   },
   form: {
     gap: 16,
@@ -225,7 +241,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: '#fff', // Always white on colored button
+    color: '#3a3a3a',
     fontSize: 17,
     fontWeight: '600',
   },

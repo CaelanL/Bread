@@ -5,6 +5,10 @@
 
 import { Platform } from 'react-native';
 
+// Auth/login screen colors
+export const authAccent = '#dbe2d1';  // bird color - for text, borders
+export const authButton = '#3a3a3a';  // dark grey - for buttons
+
 export const Colors = {
   light: {
     // Core

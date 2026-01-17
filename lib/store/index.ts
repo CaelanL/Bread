@@ -6,15 +6,15 @@
  * Components subscribe and auto-update when data changes.
  */
 
-import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '@/lib/api/client';
 import { ensureAuth } from '@/lib/api';
 import { getVerseText } from '@/lib/api/bible';
-import { showErrorToast } from '@/lib/toast';
-import type { Collection, SavedVerse, BibleVersion, Difficulty } from '@/lib/storage';
-import { MASTERED_COLLECTION_ID } from '@/lib/storage';
+import { supabase } from '@/lib/api/client';
 import type { ColorMode } from '@/lib/settings';
+import type { BibleVersion, Collection, Difficulty, SavedVerse } from '@/lib/storage';
+import { MASTERED_COLLECTION_ID } from '@/lib/storage';
+import { showErrorToast } from '@/lib/toast';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { create } from 'zustand';
 
 const COLOR_MODE_KEY = 'app_color_mode';
 const BIBLE_VERSION_KEY = 'app_bible_version';
