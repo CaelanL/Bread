@@ -1,21 +1,17 @@
 import { AppHeader } from '@/components/app-header';
 import { InsightsCard, type InsightsCardRef } from '@/components/home/InsightsCard';
 import { VOTMCard } from '@/components/home/VOTMCard';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { AddToCollectionModal } from '@/components/ui/AddToCollectionModal';
+import { VerseExpandModal } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getCurrentVOTM, getVOTMMasteryCount, hasUserMasteredVOTM, type VOTM } from '@/lib/api/votm';
 import { getVerseText } from '@/lib/api/bible';
-import { formatVerseReference } from '@/lib/storage';
-import { useAppStore, useCollections, useVerses } from '@/lib/store';
+import { useAppStore, useVerses } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
-import { BlurView } from 'expo-blur';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  ActivityIndicator,
   Animated,
-  Modal,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -84,9 +80,7 @@ export default function HomeScreen() {
   const defaultVersion = useAppStore((state) => state.bibleVersion);
 
   // Store data
-  const collections = useCollections();
   const verses = useVerses();
-  const addVerse = useAppStore((s) => s.addVerse);
 
   // VOTM state
   const [votm, setVotm] = useState<VOTM | null>(null);
@@ -99,8 +93,6 @@ export default function HomeScreen() {
   // Modal states
   const [expanded, setExpanded] = useState(false);
   const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
-  const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
-  const [adding, setAdding] = useState(false);
 
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -118,11 +110,6 @@ export default function HomeScreen() {
         v.verseEnd === votm.verseEnd
     );
   }, [votm, verses]);
-
-  // Filter collections for picker (exclude Mastered virtual collection)
-  const pickableCollections = useMemo(() => {
-    return collections.filter((c) => !c.isVirtual);
-  }, [collections]);
 
   // Fetch VOTM data
   const fetchVOTM = async (isRefresh = false) => {
@@ -188,60 +175,14 @@ export default function HomeScreen() {
 
   const handleAddPress = () => {
     if (!votm) return;
-    // Pre-select default collection
-    const defaultColl = collections.find((c) => c.isDefault);
-    if (defaultColl) {
-      setSelectedCollections([defaultColl.id]);
-    }
     setCollectionPickerVisible(true);
   };
 
-  const toggleCollection = (id: string) => {
-    setSelectedCollections((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
-    );
+  const handleAddFromExpand = () => {
+    setExpanded(false);
+    // Small delay to let expand modal close first
+    setTimeout(() => setCollectionPickerVisible(true), 150);
   };
-
-  const handleAddToCollections = async () => {
-    if (!votm || selectedCollections.length === 0) return;
-
-    setAdding(true);
-    try {
-      // Add verse to each selected collection
-      for (const collectionId of selectedCollections) {
-        await addVerse(
-          {
-            book: votm.book,
-            chapter: votm.chapter,
-            verseStart: votm.verseStart,
-            verseEnd: votm.verseEnd,
-          },
-          collectionId,
-          defaultVersion
-        );
-      }
-      setCollectionPickerVisible(false);
-      setSelectedCollections([]);
-    } catch (e) {
-      console.error('[HOME] Failed to add verse:', e);
-      showErrorToast('Failed to add verse. Please try again.');
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const accentColor = colors.tint;
-  const badgeBg = colors.primaryLight;
-
-  // Format reference for modals
-  const reference = votm
-    ? formatVerseReference({
-        book: votm.book,
-        chapter: votm.chapter,
-        verseStart: votm.verseStart,
-        verseEnd: votm.verseEnd,
-      } as any)
-    : '';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -284,120 +225,23 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* Expanded Verse Modal */}
-      <Modal
+      <VerseExpandModal
         visible={expanded}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setExpanded(false)}
-      >
-        <BlurView intensity={isDark ? 40 : 80} tint={isDark ? 'dark' : 'light'} style={styles.blurOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
-                <IconSymbol name="book.fill" size={14} color={accentColor} />
-                <Text style={[styles.referenceText, { color: accentColor }]}>
-                  {reference}
-                </Text>
-              </View>
-              <Pressable onPress={() => setExpanded(false)} hitSlop={8}>
-                <IconSymbol name="xmark.circle.fill" size={28} color={colors.icon} />
-              </Pressable>
-            </View>
-
-            {/* Full scrollable verse text */}
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.modalVerseText, { color: colors.text }]}>
-                {verseText || 'Unable to load verse text'}
-              </Text>
-            </ScrollView>
-          </View>
-        </BlurView>
-      </Modal>
+        verse={votm}
+        verseText={verseText}
+        version={defaultVersion}
+        showAddButton={!userHasVerse}
+        onClose={() => setExpanded(false)}
+        onAddPress={handleAddFromExpand}
+      />
 
       {/* Collection Picker Modal */}
-      <Modal
+      <AddToCollectionModal
         visible={collectionPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCollectionPickerVisible(false)}
-      >
-        <BlurView intensity={isDark ? 40 : 80} tint={isDark ? 'dark' : 'light'} style={styles.blurOverlay}>
-          <View style={[styles.pickerCard, { backgroundColor: colors.card }]}>
-            {/* Header */}
-            <View style={styles.pickerHeader}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>
-                Add to Collection
-              </Text>
-              <Pressable onPress={() => setCollectionPickerVisible(false)} hitSlop={8}>
-                <IconSymbol name="xmark.circle.fill" size={28} color={colors.icon} />
-              </Pressable>
-            </View>
-
-            {/* Verse reference */}
-            <View style={[styles.referenceBadge, { backgroundColor: badgeBg, marginBottom: 16 }]}>
-              <IconSymbol name="book.fill" size={14} color={accentColor} />
-              <Text style={[styles.referenceText, { color: accentColor }]}>
-                {reference}
-              </Text>
-            </View>
-
-            {/* Collection list */}
-            <ScrollView style={styles.collectionList}>
-              {pickableCollections.map((collection) => {
-                const isSelected = selectedCollections.includes(collection.id);
-                return (
-                  <Pressable
-                    key={collection.id}
-                    style={[
-                      styles.collectionItem,
-                      { backgroundColor: isSelected ? badgeBg : 'transparent' },
-                    ]}
-                    onPress={() => toggleCollection(collection.id)}
-                  >
-                    <View style={styles.collectionInfo}>
-                      <IconSymbol
-                        name={collection.icon || 'folder.fill'}
-                        size={20}
-                        color={collection.iconColor || accentColor}
-                      />
-                      <Text style={[styles.collectionName, { color: colors.text }]}>
-                        {collection.name}
-                      </Text>
-                    </View>
-                    <IconSymbol
-                      name={isSelected ? 'checkmark.circle.fill' : 'circle'}
-                      size={24}
-                      color={isSelected ? accentColor : colors.icon}
-                    />
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* Add button */}
-            <Pressable
-              style={[
-                styles.addButton,
-                {
-                  backgroundColor: selectedCollections.length > 0 ? accentColor : colors.icon,
-                  opacity: selectedCollections.length > 0 ? 1 : 0.5,
-                },
-              ]}
-              onPress={handleAddToCollections}
-              disabled={selectedCollections.length === 0 || adding}
-            >
-              {adding ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.addButtonText}>
-                  Add to {selectedCollections.length} Collection{selectedCollections.length !== 1 ? 's' : ''}
-                </Text>
-              )}
-            </Pressable>
-          </View>
-        </BlurView>
-      </Modal>
+        verse={votm}
+        version={defaultVersion}
+        onClose={() => setCollectionPickerVisible(false)}
+      />
     </View>
   );
 }
@@ -457,99 +301,5 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 14,
-  },
-  // Modal styles
-  blurOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    borderRadius: 20,
-    maxHeight: '80%',
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  referenceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  referenceText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  modalScroll: {
-    flexGrow: 0,
-  },
-  modalVerseText: {
-    fontSize: 19,
-    lineHeight: 30,
-  },
-  // Collection picker styles
-  pickerCard: {
-    borderRadius: 20,
-    maxHeight: '70%',
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  pickerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  collectionList: {
-    marginBottom: 16,
-  },
-  collectionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  collectionInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  collectionName: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  addButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#fff', // Always white on colored button
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

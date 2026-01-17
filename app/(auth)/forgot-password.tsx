@@ -10,15 +10,13 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, authAccent } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function ForgotPasswordScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
+  // Auth screens are always dark mode
+  const colors = Colors.dark;
   const { resetPassword } = useAuth();
 
   const [email, setEmail] = useState('');

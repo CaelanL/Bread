@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, authAccent } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -21,8 +20,8 @@ export default function SignInScreen() {
   const [fontsLoaded] = useFonts({
     PlayfairDisplay_400Regular,
   });
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  // Auth screens are always dark mode
+  const colors = Colors.dark;
   const { signIn } = useAuth();
 
   const [email, setEmail] = useState('');

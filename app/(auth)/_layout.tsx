@@ -1,10 +1,9 @@
 import { Stack } from 'expo-router';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 
 export default function AuthLayout() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  // Auth screens are always dark mode
+  const colors = Colors.dark;
 
   return (
     <Stack

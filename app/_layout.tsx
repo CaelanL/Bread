@@ -9,7 +9,6 @@ import { View, ActivityIndicator } from 'react-native';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import { migrateLocalDataToServer } from '@/lib/sync';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { NetworkProvider } from '@/lib/network';
 import { NoInternetOverlay } from '@/components/ui/NoInternetOverlay';
@@ -58,10 +57,6 @@ function RootLayoutNav() {
         console.error('[App] Store hydration error:', e);
       });
 
-      // Run migration
-      migrateLocalDataToServer().catch((e) => {
-        console.error('[App] Migration error:', e);
-      });
     } else {
       // Clear store on logout
       useAppStore.getState().clear();

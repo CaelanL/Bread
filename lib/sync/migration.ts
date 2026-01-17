@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/api/client';
 import { ensureAuth } from '@/lib/api';
-import { getCollections, getSavedVerses } from '@/lib/storage';
+import { getCollections, getSavedVerses, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { syncEnsureDefaultCollection, getServerCollectionId } from './collections';
 
 const MIGRATION_KEY = 'data_synced_to_server';
@@ -42,8 +42,8 @@ export async function migrateLocalDataToServer(): Promise<void> {
     // 0. Get current user ID
     const userId = await getCurrentUserId();
 
-    // 1. Get all local collections
-    const collections = await getCollections();
+    // 1. Get all local collections (excluding virtual mastered collection)
+    const collections = (await getCollections()).filter(c => c.id !== MASTERED_COLLECTION_ID);
 
     // 2. Create a map of client_id -> server_id for collections
     const collectionIdMap = new Map<string, string>();

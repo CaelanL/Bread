@@ -38,14 +38,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (accessToken && refreshToken) {
       // Set the session from the tokens
-      const { error } = await supabase.auth.setSession({
+      const { data, error } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
 
-      if (!error && type === 'recovery') {
-        // Navigate to reset password screen
-        router.replace('/reset-password');
+      if (!error && data.session) {
+        // Update state immediately so it's available when we navigate
+        setSession(data.session);
+        setUser(data.session.user);
+
+        if (type === 'recovery') {
+          // Navigate to reset password screen
+          router.replace('/reset-password');
+        }
       }
     }
   };

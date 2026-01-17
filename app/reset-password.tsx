@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,27 +9,41 @@ import {
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, authAccent } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function ResetPasswordScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const { updatePassword } = useAuth();
+  // Use dark mode to match other auth screens
+  const colors = Colors.dark;
+  const { updatePassword, session } = useAuth();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmFocused, setConfirmFocused] = useState(false);
 
-  const buttonBg = colors.primary;
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
+
+  const buttonBg = authAccent;
   const inputBg = colors.input;
   const borderColor = colors.border;
 
   const handleResetPassword = async () => {
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    // Check if we have a valid session (from the deep link)
+    if (!session) {
+      Alert.alert(
+        'Session Expired',
+        'Your password reset link has expired. Please request a new one.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/forgot-password') }]
+      );
+      return;
+    }
+
+    if (password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters');
       return;
     }
 
@@ -48,19 +62,31 @@ export default function ResetPasswordScreen() {
       Alert.alert('Success', 'Your password has been updated', [
         {
           text: 'OK',
-          onPress: () => router.replace('/(auth)/sign-in'),
+          onPress: () => router.replace('/(tabs)'),
         },
       ]);
     }
   };
 
+  const handleBack = () => {
+    router.replace('/(tabs)');
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
+        {/* Back Button */}
+        <Pressable
+          style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+          onPress={handleBack}
+        >
+          <IconSymbol name="chevron.left" size={24} color={colors.text} />
+        </Pressable>
+
         {/* Header */}
         <View style={styles.header}>
-          <View style={[styles.iconContainer, { backgroundColor: colors.primaryLight }]}>
-            <IconSymbol name="lock.fill" size={32} color={colors.primary} />
+          <View style={[styles.iconContainer, { backgroundColor: 'rgba(212,175,55,0.15)' }]}>
+            <IconSymbol name="lock.fill" size={32} color={authAccent} />
           </View>
           <Text style={[styles.title, { color: colors.text }]}>Set New Password</Text>
           <Text style={[styles.subtitle, { color: colors.icon }]}>
@@ -70,27 +96,51 @@ export default function ResetPasswordScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-          <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-            <IconSymbol name="lock.fill" size={18} color={colors.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              passwordFocused && { borderColor: authAccent },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => passwordRef.current?.focus()}
+          >
+            <IconSymbol name="lock.fill" size={18} color={passwordFocused ? authAccent : colors.icon} />
             <TextInput
+              ref={passwordRef}
               style={[styles.input, { color: colors.text }]}
               placeholder="New password"
               placeholderTextColor={colors.icon}
               value={password}
               onChangeText={setPassword}
+              onFocus={() => setPasswordFocused(true)}
+              onBlur={() => setPasswordFocused(false)}
               secureTextEntry
               autoCapitalize="none"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmRef.current?.focus()}
             />
           </View>
 
-          <View style={[styles.inputContainer, { backgroundColor: inputBg, borderColor }]}>
-            <IconSymbol name="lock.fill" size={18} color={colors.icon} />
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: inputBg, borderColor },
+              confirmFocused && { borderColor: authAccent },
+            ]}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => confirmRef.current?.focus()}
+          >
+            <IconSymbol name="lock.fill" size={18} color={confirmFocused ? authAccent : colors.icon} />
             <TextInput
+              ref={confirmRef}
               style={[styles.input, { color: colors.text }]}
               placeholder="Confirm password"
               placeholderTextColor={colors.icon}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
+              onFocus={() => setConfirmFocused(true)}
+              onBlur={() => setConfirmFocused(false)}
               secureTextEntry
               autoCapitalize="none"
               returnKeyType="done"
@@ -109,7 +159,7 @@ export default function ResetPasswordScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color={colors.white} />
+              <ActivityIndicator color="#3a3a3a" />
             ) : (
               <Text style={styles.buttonText}>Update Password</Text>
             )}
@@ -128,6 +178,12 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     justifyContent: 'center',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 24,
+    zIndex: 1,
   },
   header: {
     alignItems: 'center',
@@ -173,7 +229,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: '#fff',
+    color: '#3a3a3a',
     fontSize: 17,
     fontWeight: '600',
   },

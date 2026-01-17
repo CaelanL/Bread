@@ -10,15 +10,13 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, authAccent } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function SignUpScreen() {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
+  // Auth screens are always dark mode
+  const colors = Colors.dark;
   const { signUp } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -50,8 +48,8 @@ export default function SignUpScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters');
       return;
     }
 

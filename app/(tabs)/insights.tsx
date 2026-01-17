@@ -1,10 +1,14 @@
 import { AppHeader } from '@/components/app-header';
+import { AddToCollectionModal } from '@/components/ui/AddToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { VerseExpandModal, VerseData } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStreak } from '@/hooks/use-streak';
 import { getAvgTimeToMaster, getTotalTimeStudied } from '@/lib/api';
-import { useInsightsStats, useMostMemorizedBooks } from '@/lib/store';
+import { getVerseText } from '@/lib/api/bible';
+import { getPopularRanges, formatRange, PopularRange } from '@/lib/api/popular-verses';
+import { useAppStore, useInsightsStats, useMostMemorizedBooks, useVerses } from '@/lib/store';
 import { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -117,20 +121,31 @@ export default function InsightsScreen() {
 
   const stats = useInsightsStats();
   const topBooks = useMostMemorizedBooks();
+  const verses = useVerses();
+  const defaultVersion = useAppStore((state) => state.bibleVersion);
   const { streak } = useStreak();
   const [timeStudiedMs, setTimeStudiedMs] = useState(0);
   const [avgTimeToMasterMs, setAvgTimeToMasterMs] = useState<number | null>(null);
   const [showTimeStudiedInfo, setShowTimeStudiedInfo] = useState(false);
   const [showAvgTimeInfo, setShowAvgTimeInfo] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [popularRanges, setPopularRanges] = useState<PopularRange[]>([]);
+
+  // Popular verse modal state
+  const [selectedRange, setSelectedRange] = useState<VerseData | null>(null);
+  const [selectedVerseText, setSelectedVerseText] = useState<string | null>(null);
+  const [expandModalVisible, setExpandModalVisible] = useState(false);
+  const [addModalVisible, setAddModalVisible] = useState(false);
 
   const loadTimeStats = useCallback(async () => {
-    const [timeStudied, avgTime] = await Promise.all([
+    const [timeStudied, avgTime, ranges] = await Promise.all([
       getTotalTimeStudied(),
       getAvgTimeToMaster(),
+      getPopularRanges(10),
     ]);
     setTimeStudiedMs(timeStudied);
     setAvgTimeToMasterMs(avgTime);
+    setPopularRanges(ranges);
   }, []);
 
   useEffect(() => {
@@ -145,6 +160,49 @@ export default function InsightsScreen() {
       setRefreshing(false);
     }
   }, [loadTimeStats]);
+
+  // Check if user already has a verse in library
+  const userHasVerse = (verse: VerseData) => {
+    return verses.some(
+      (v) =>
+        v.book === verse.book &&
+        v.chapter === verse.chapter &&
+        v.verseStart === verse.verseStart &&
+        v.verseEnd === verse.verseEnd
+    );
+  };
+
+  const handleRangePress = async (range: PopularRange) => {
+    const verse: VerseData = {
+      book: range.book,
+      chapter: range.chapter,
+      verseStart: range.verseStart,
+      verseEnd: range.verseEnd,
+    };
+    setSelectedRange(verse);
+    setSelectedVerseText(null);
+    setExpandModalVisible(true);
+
+    // Fetch verse text
+    try {
+      const text = await getVerseText({
+        book: range.book,
+        chapter: range.chapter,
+        verseStart: range.verseStart,
+        verseEnd: range.verseEnd,
+        version: defaultVersion,
+      } as any);
+      setSelectedVerseText(text);
+    } catch (e) {
+      console.error('[INSIGHTS] Failed to fetch verse text:', e);
+      setSelectedVerseText('Unable to load verse text');
+    }
+  };
+
+  const handleAddFromExpand = () => {
+    setExpandModalVisible(false);
+    setTimeout(() => setAddModalVisible(true), 150);
+  };
 
   const streakIcon = streak > 0 ? 'flame.fill' : 'snowflake';
   const streakColor = streak > 0 ? '#f97316' : '#60a5fa';
@@ -217,7 +275,7 @@ export default function InsightsScreen() {
 
         {/* Most Memorized Books */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.icon }]}>MOST MEMORIZED BOOKS</Text>
+          <Text style={[styles.sectionTitle, { color: colors.icon }]}>YOUR MOST MEMORIZED BOOKS</Text>
           <View style={[styles.booksList, { backgroundColor: cardBg }]}>
             {topBooks.length > 0 ? (
               topBooks.map((book, index) => (
@@ -248,6 +306,43 @@ export default function InsightsScreen() {
             )}
           </View>
         </View>
+
+        {/* Popular Ranges */}
+        {popularRanges.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol name="person.2" size={14} color={colors.icon} />
+              <Text style={[styles.sectionTitle, { color: colors.icon }]}>POPULAR VERSES</Text>
+            </View>
+            <View style={[styles.booksList, { backgroundColor: cardBg }]}>
+              {popularRanges.map((range, index) => (
+                <Pressable
+                  key={`${range.book}-${range.chapter}-${range.verseStart}-${range.verseEnd}`}
+                  style={({ pressed }) => [
+                    styles.bookItem,
+                    index < popularRanges.length - 1 && styles.bookItemBorder,
+                    { borderBottomColor: colors.border },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  onPress={() => handleRangePress(range)}
+                >
+                  <View style={styles.bookInfo}>
+                    <Text style={[styles.rankNumber, { color: colors.icon }]}>{index + 1}</Text>
+                    <Text style={[styles.bookName, { color: colors.text }]}>
+                      {formatRange(range)}
+                    </Text>
+                  </View>
+                  <View style={styles.rangeRight}>
+                    <Text style={[styles.bookCount, { color: colors.icon }]}>
+                      {range.userCount} {range.userCount === 1 ? 'user' : 'users'}
+                    </Text>
+                    <IconSymbol name="chevron.right" size={14} color={colors.icon} />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Time Studied Info Modal */}
@@ -314,6 +409,25 @@ export default function InsightsScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Verse Expand Modal */}
+      <VerseExpandModal
+        visible={expandModalVisible}
+        verse={selectedRange}
+        verseText={selectedVerseText}
+        version={defaultVersion}
+        showAddButton={selectedRange ? !userHasVerse(selectedRange) : false}
+        onClose={() => setExpandModalVisible(false)}
+        onAddPress={handleAddFromExpand}
+      />
+
+      {/* Add to Collection Modal */}
+      <AddToCollectionModal
+        visible={addModalVisible}
+        verse={selectedRange}
+        version={defaultVersion}
+        onClose={() => setAddModalVisible(false)}
+      />
     </View>
   );
 }
@@ -389,6 +503,11 @@ const styles = StyleSheet.create({
   section: {
     gap: 8,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   sectionTitle: {
     fontSize: 12,
     fontWeight: '600',
@@ -419,12 +538,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  rankNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    width: 24,
+    textAlign: 'center',
+  },
   bookName: {
     fontSize: 16,
     fontWeight: '500',
   },
   bookCount: {
     fontSize: 15,
+  },
+  rangeRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   emptyBooks: {
     padding: 24,
