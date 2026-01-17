@@ -6,7 +6,8 @@ import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { getVerseText } from '@/lib/api/bible';
 import { formatVerseReference, type Difficulty, type SavedVerse } from '@/lib/storage';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -218,7 +219,10 @@ export function SwipeableVerseCard({
                   ) : null}
                 </View>
                 {loading ? (
-                  <ActivityIndicator size="small" color={colors.icon} style={styles.loader} />
+                  <View style={styles.skeletonContainer}>
+                    <Skeleton width="100%" height={15} borderRadius={4} />
+                    <Skeleton width="65%" height={15} borderRadius={4} />
+                  </View>
                 ) : (
                   <Text style={[styles.versePreview, { color: colors.text }]} numberOfLines={2}>
                     {text}
@@ -314,8 +318,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
-  loader: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
+  skeletonContainer: {
+    gap: 6,
+    height: 42, // Match 2 lines of text (lineHeight 21 * 2)
   },
 });
