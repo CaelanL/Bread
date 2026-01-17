@@ -8,6 +8,7 @@ import { getCurrentVOTM, getVOTMMasteryCount, hasUserMasteredVOTM, type VOTM } f
 import { getVerseText } from '@/lib/api/bible';
 import { formatVerseReference } from '@/lib/storage';
 import { useAppStore, useCollections, useVerses } from '@/lib/store';
+import { showErrorToast } from '@/lib/toast';
 import { BlurView } from 'expo-blur';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
@@ -152,6 +153,7 @@ export default function HomeScreen() {
           setVerseText(text);
         } catch (e) {
           console.error('[HOME] Failed to fetch verse text:', e);
+          showErrorToast('Failed to load verse of the month.');
         } finally {
           if (!isRefresh) setTextLoading(false);
         }
@@ -222,6 +224,7 @@ export default function HomeScreen() {
       setSelectedCollections([]);
     } catch (e) {
       console.error('[HOME] Failed to add verse:', e);
+      showErrorToast('Failed to add verse. Please try again.');
     } finally {
       setAdding(false);
     }
@@ -247,7 +250,7 @@ export default function HomeScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.icon} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
         }
       >
         {/* VOTM Section */}

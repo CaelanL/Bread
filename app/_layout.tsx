@@ -13,6 +13,8 @@ import { migrateLocalDataToServer } from '@/lib/sync';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { NetworkProvider } from '@/lib/network';
 import { NoInternetOverlay } from '@/components/ui/NoInternetOverlay';
+import { ErrorToast } from '@/components/ui/ErrorToast';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
 
@@ -91,15 +93,18 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NetworkProvider>
-        <KeyboardProvider>
-          <AuthProvider>
-            <RootLayoutNav />
-            <NoInternetOverlay />
-          </AuthProvider>
-        </KeyboardProvider>
-      </NetworkProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <NetworkProvider>
+          <KeyboardProvider>
+            <AuthProvider>
+              <RootLayoutNav />
+              <NoInternetOverlay />
+              <ErrorToast />
+            </AuthProvider>
+          </KeyboardProvider>
+        </NetworkProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

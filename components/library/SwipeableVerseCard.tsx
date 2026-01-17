@@ -9,7 +9,6 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  FadeInDown,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -22,18 +21,19 @@ const SWIPE_THRESHOLD = DELETE_BUTTON_WIDTH / 2;
 
 interface SwipeableVerseCardProps {
   verse: SavedVerse;
-  index: number;
   onPress: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
   disableSwipe?: boolean;
+  /** Number of collections this verse is in (for accurate delete message) */
+  collectionCount?: number;
 }
 
 export function SwipeableVerseCard({
   verse,
-  index,
   onPress,
   onDelete,
   disableSwipe = false,
+  collectionCount = 1,
 }: SwipeableVerseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -97,14 +97,31 @@ export function SwipeableVerseCard({
   }));
 
   const handleDelete = () => {
-    // Check if verse is mastered
     const isMastered = verse.progress?.hard?.completed === true;
+    const inOtherCollections = collectionCount > 1;
 
-    const title = isMastered ? 'Remove from collection?' : 'Delete verse?';
-    const message = isMastered
-      ? 'This verse will stay in your Mastered list.'
-      : "You'll lose all progress on this verse.";
-    const buttonText = isMastered ? 'Remove' : 'Delete';
+    // Determine alert content based on state
+    let title: string;
+    let message: string;
+    let buttonText: string;
+
+    if (inOtherCollections) {
+      // Verse is in multiple collections - just removing from this one
+      const otherCount = collectionCount - 1;
+      title = 'Remove from collection?';
+      message = `This verse is in ${otherCount} other collection${otherCount > 1 ? 's' : ''}. Progress will be kept.`;
+      buttonText = 'Remove';
+    } else if (isMastered) {
+      // Only in this collection but mastered - will be soft-deleted
+      title = 'Remove from collection?';
+      message = 'This verse will stay in your Mastered list.';
+      buttonText = 'Remove';
+    } else {
+      // Only in this collection and not mastered - will be hard-deleted
+      title = 'Delete verse?';
+      message = "You'll lose all progress on this verse.";
+      buttonText = 'Delete';
+    }
 
     Alert.alert(title, message, [
       {
@@ -118,11 +135,16 @@ export function SwipeableVerseCard({
       {
         text: buttonText,
         style: 'destructive',
-        onPress: () => {
-          // Animate card out to the left
-          translateX.value = withTiming(-500, { duration: 200 }, () => {
-            runOnJS(onDelete)();
-          });
+        onPress: async () => {
+          try {
+            // Try to delete first
+            await onDelete();
+            // Only animate out on success
+            translateX.value = withTiming(-500, { duration: 200 });
+          } catch {
+            // On error, snap back to closed position
+            translateX.value = withSpring(0, { damping: 20 });
+          }
         },
       },
     ]);
@@ -139,7 +161,6 @@ export function SwipeableVerseCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 60).duration(300)}
       style={styles.container}
     >
       {/* Delete button (behind card) */}

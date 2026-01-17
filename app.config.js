@@ -1,6 +1,6 @@
 export default {
   expo: {
-    name: "biblemem",
+    name: "Bread",
     slug: "biblemem",
     version: "1.0.0",
     orientation: "portrait",
@@ -10,6 +10,11 @@ export default {
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
+      bundleIdentifier: "com.caelanliu.biblemem",
+      buildNumber: "1",
+      infoPlist: {
+        NSMicrophoneUsageDescription: "BibleMem needs microphone access to record your verse recitations for accuracy scoring.",
+      },
     },
     android: {
       adaptiveIcon: {

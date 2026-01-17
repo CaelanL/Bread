@@ -2,7 +2,7 @@
 // Types
 // ============================================================================
 
-export type BibleVersion = 'ESV' | 'NLT' | 'KJV';
+export type BibleVersion = 'ESV' | 'NLT' | 'NIV' | 'NKJV' | 'CSB' | 'KJV';
 export type ColorMode = 'light' | 'dark' | 'system';
 
 // ============================================================================
@@ -12,6 +12,9 @@ export type ColorMode = 'light' | 'dark' | 'system';
 export const BIBLE_VERSIONS: { value: BibleVersion; label: string; full: string }[] = [
   { value: 'ESV', label: 'ESV', full: 'English Standard Version' },
   { value: 'NLT', label: 'NLT', full: 'New Living Translation' },
+  { value: 'NIV', label: 'NIV', full: 'New International Version' },
+  { value: 'NKJV', label: 'NKJV', full: 'New King James Version' },
+  { value: 'CSB', label: 'CSB', full: 'Christian Standard Bible' },
   { value: 'KJV', label: 'KJV', full: 'King James Version' },
 ];
 
