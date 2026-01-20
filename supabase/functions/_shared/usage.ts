@@ -106,6 +106,7 @@ async function incrementUsage(
   usageType: UsageType,
   amount: number
 ): Promise<void> {
+  amount = Math.round(amount);
   const admin = getAdminClient();
   const today = new Date().toISOString().split("T")[0];
 

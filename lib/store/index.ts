@@ -288,16 +288,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('[STORE] Failed to load settings:', e);
     }
 
-    const [collectionsOk, versesOk, masteredOk] = await Promise.all([
+    let [collectionsOk, versesOk, masteredOk] = await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),
       get().fetchMasteredVerses(),
     ]);
 
+    // Retry once after short delay if any fetch failed (handles auth propagation race)
+    if (!collectionsOk || !versesOk || !masteredOk) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      [collectionsOk, versesOk, masteredOk] = await Promise.all([
+        collectionsOk ? true : get().fetchCollections(),
+        versesOk ? true : get().fetchVerses(),
+        masteredOk ? true : get().fetchMasteredVerses(),
+      ]);
+    }
+
     // Always mark as hydrated so UI can render (partial data is better than nothing)
     set({ hydrated: true });
 
-    // Show toast if any fetch failed
+    // Show toast only if retry also failed
     if (!collectionsOk || !versesOk || !masteredOk) {
       showErrorToast('Some data failed to load. Pull to refresh.');
     } else {

@@ -2,27 +2,27 @@ import { AppHeader } from '@/components/app-header';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { normalizeBookName, getVerseCount } from '@/lib/bible';
-import { type BibleVersion } from '@/lib/storage';
+import { fetchChapter } from '@/lib/api';
+import { getVerseCount, normalizeBookName } from '@/lib/bible';
 import { BIBLE_VERSIONS } from '@/lib/settings';
+import { type BibleVersion } from '@/lib/storage';
 import { useAppStore } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
-import { fetchVerse, fetchChapter } from '@/lib/api';
+import NetInfo from '@react-native-community/netinfo';
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  Pressable,
-  ActivityIndicator,
-  Modal,
-  type LayoutRectangle,
   type GestureResponderEvent,
+  type LayoutRectangle,
 } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import NetInfo from '@react-native-community/netinfo';
 
 interface VerseLayout {
   verseNum: number;
@@ -467,6 +467,9 @@ export default function VerseSelectScreen() {
             onTouchEnd={handleScrollViewTouchEnd}
           >
             <View style={styles.versesContainer}>
+              <Text style={[styles.hintText, { color: colors.icon }]}>
+                Tap to select, or hold and drag to select multiple
+              </Text>
               {verses.map(([verseNum, text]) => {
                 const num = parseInt(verseNum, 10);
                 const selected = isVerseSelected(num);
@@ -597,6 +600,11 @@ const styles = StyleSheet.create({
   },
   versesContainer: {
     padding: 16,
+  },
+  hintText: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 6,
   },
   verseWrapper: {
     borderRadius: 4,

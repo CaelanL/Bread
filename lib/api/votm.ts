@@ -46,23 +46,22 @@ export async function getCurrentVOTM(): Promise<VOTM | null> {
 
 /**
  * Get count of users who have mastered the VOTM (any Bible version)
+ * Uses SECURITY DEFINER function to bypass RLS and count across all users
  */
 export async function getVOTMMasteryCount(votm: VOTM): Promise<number> {
-  const { count, error } = await supabase
-    .from('user_verses')
-    .select('user_id', { count: 'exact', head: true })
-    .eq('book', votm.book)
-    .eq('chapter', votm.chapter)
-    .eq('verse_start', votm.verseStart)
-    .eq('verse_end', votm.verseEnd)
-    .eq('progress->hard->completed', true);
+  const { data, error } = await supabase.rpc('get_votm_mastery_count', {
+    p_book: votm.book,
+    p_chapter: votm.chapter,
+    p_verse_start: votm.verseStart,
+    p_verse_end: votm.verseEnd,
+  });
 
   if (error) {
     console.error('[VOTM] Failed to get mastery count:', error);
     return 0;
   }
 
-  return count ?? 0;
+  return data ?? 0;
 }
 
 /**

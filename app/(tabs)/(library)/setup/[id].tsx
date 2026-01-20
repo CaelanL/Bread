@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -25,11 +26,22 @@ import DropDownPicker from 'react-native-dropdown-picker';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 
+// Screen height thresholds for verse preview lines
+// Pro Max (956pts) > 920 → 4 lines, 16 Pro (874pts) > 870 → 3 lines, else → 2 lines
+const LARGE_SCREEN_THRESHOLD = 920;
+const MEDIUM_SCREEN_THRESHOLD = 870;
+
 export default function StudySetupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+
+  // Detect screen size and set verse preview lines accordingly
+  const screenHeight = Dimensions.get('window').height;
+  const versePreviewLines = screenHeight > LARGE_SCREEN_THRESHOLD ? 4
+    : screenHeight > MEDIUM_SCREEN_THRESHOLD ? 3
+    : 2;
 
   // Get verse from store (instant, no loading)
   const verse = useVerse(id || '');
@@ -156,28 +168,30 @@ export default function StudySetupScreen() {
       />
 
       <View style={styles.content}>
-        {/* Verse Preview */}
-        <View style={[styles.previewCard, { backgroundColor: colors.cardAlt }]}>
-          <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
-            <IconSymbol name="book.fill" size={14} color={accentColor} />
-            <Text style={[styles.referenceBadgeText, { color: accentColor }]}>
-              {formatVerseReference(verse)}
-            </Text>
+        {/* Top section - fixed content */}
+        <View style={styles.topSection}>
+          {/* Verse Preview */}
+          <View style={[styles.previewCard, { backgroundColor: colors.cardAlt }]}>
+            <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
+              <IconSymbol name="book.fill" size={14} color={accentColor} />
+              <Text style={[styles.referenceBadgeText, { color: accentColor }]}>
+                {formatVerseReference(verse)}
+              </Text>
+            </View>
+            <Pressable
+              style={[styles.expandButton, { backgroundColor: badgeBg }]}
+              onPress={() => setExpanded(true)}
+            >
+              <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color={accentColor} />
+            </Pressable>
+            {textLoading ? (
+              <ActivityIndicator size="small" color={colors.icon} style={styles.textLoader} />
+            ) : (
+              <Text style={[styles.previewText, { color: colors.text }]} numberOfLines={versePreviewLines}>
+                {verseText}
+              </Text>
+            )}
           </View>
-          <Pressable
-            style={[styles.expandButton, { backgroundColor: badgeBg }]}
-            onPress={() => setExpanded(true)}
-          >
-            <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color={accentColor} />
-          </Pressable>
-          {textLoading ? (
-            <ActivityIndicator size="small" color={colors.icon} style={styles.textLoader} />
-          ) : (
-            <Text style={[styles.previewText, { color: colors.text }]} numberOfLines={4}>
-              {verseText}
-            </Text>
-          )}
-        </View>
 
         {/* Expanded Modal */}
         <Modal
@@ -211,81 +225,82 @@ export default function StudySetupScreen() {
           </BlurView>
         </Modal>
 
-        {/* Difficulty Selection */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Difficulty</Text>
-          <View style={[styles.segmentedControl, { backgroundColor: colors.cardAlt }]}>
-            {(['easy', 'medium', 'hard'] as Difficulty[]).map((level) => (
-              <Pressable
-                key={level}
-                style={[
-                  styles.segment,
-                  difficulty === level && { backgroundColor: 'rgba(176, 141, 87, 0.9)' },
-                ]}
-                onPress={() => setDifficulty(level)}
-              >
-                <View style={styles.segmentHeader}>
+          {/* Difficulty Selection */}
+          <View>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Difficulty</Text>
+            <View style={[styles.segmentedControl, { backgroundColor: colors.cardAlt }]}>
+              {(['easy', 'medium', 'hard'] as Difficulty[]).map((level) => (
+                <Pressable
+                  key={level}
+                  style={[
+                    styles.segment,
+                    difficulty === level && { backgroundColor: 'rgba(176, 141, 87, 0.9)' },
+                  ]}
+                  onPress={() => setDifficulty(level)}
+                >
+                  <View style={styles.segmentHeader}>
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        { color: difficulty === level ? colors.white : colors.text },
+                      ]}
+                    >
+                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                    </Text>
+                    {level === 'easy' && (
+                      <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
+                    )}
+                    {level === 'medium' && (
+                      <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8'}]} />
+                    )}
+                    {level === 'hard' && (
+                      <IconSymbol name="checkmark" size={12} color={colors.success} />
+                    )}
+                  </View>
                   <Text
                     style={[
-                      styles.segmentText,
-                      { color: difficulty === level ? colors.white : colors.text },
+                      styles.segmentSubtext,
+                      { color: difficulty === level ? 'rgba(255,255,255,0.7)' : colors.icon },
                     ]}
                   >
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                    {level === 'easy' && 'All words'}
+                    {level === 'medium' && 'Some hidden'}
+                    {level === 'hard' && 'No words'}
                   </Text>
-                  {level === 'easy' && (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
-                  )}
-                  {level === 'medium' && (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8'}]} />
-                  )}
-                  {level === 'hard' && (
-                    <IconSymbol name="checkmark" size={12} color={colors.success} />
-                  )}
-                </View>
-                <Text
-                  style={[
-                    styles.segmentSubtext,
-                    { color: difficulty === level ? 'rgba(255,255,255,0.7)' : colors.icon }, // Keep rgba for text on colored bg
-                  ]}
-                >
-                  {level === 'easy' && 'All words'}
-                  {level === 'medium' && 'Some hidden'}
-                  {level === 'hard' && 'No words'}
-                </Text>
-              </Pressable>
-            ))}
+                </Pressable>
+              ))}
+            </View>
           </View>
+
+          {/* Progress Card */}
+          <ProgressCard progress={verse.progress} />
+
+          {/* Chunk Size Selection - only show if multiple verses */}
+          {totalVerses > 1 && (
+            <View style={styles.chunkRow}>
+              <Text style={[styles.chunkLabel, { color: colors.text }]}>Verses per chunk</Text>
+              <DropDownPicker
+                open={dropdownOpen}
+                value={chunkSize}
+                items={dropdownItems}
+                setOpen={setDropdownOpen}
+                setValue={setChunkSize}
+                setItems={setDropdownItems}
+                style={[styles.dropdown, { backgroundColor: colors.cardAlt, borderWidth: 0 }]}
+                dropDownContainerStyle={[styles.dropdownContainer, { backgroundColor: colors.cardAlt, borderWidth: 0, maxHeight: 140 }]}
+                textStyle={{ color: colors.text, fontSize: 16, fontWeight: '600' }}
+                arrowIconStyle={{ tintColor: colors.icon } as any}
+                tickIconStyle={{ tintColor: colors.text } as any}
+                listItemLabelStyle={{ color: colors.text }}
+                selectedItemContainerStyle={{ backgroundColor: colors.border }}
+                containerStyle={{ width: 78, zIndex: 1000 }}
+                showTickIcon={false}
+              />
+            </View>
+          )}
         </View>
 
-        {/* Progress Card */}
-        <ProgressCard progress={verse.progress} />
-
-        {/* Chunk Size Selection - only show if multiple verses */}
-        {totalVerses > 1 && (
-          <View style={styles.chunkRow}>
-            <Text style={[styles.chunkLabel, { color: colors.text }]}>Verses per chunk</Text>
-            <DropDownPicker
-              open={dropdownOpen}
-              value={chunkSize}
-              items={dropdownItems}
-              setOpen={setDropdownOpen}
-              setValue={setChunkSize}
-              setItems={setDropdownItems}
-              style={[styles.dropdown, { backgroundColor: colors.cardAlt, borderWidth: 0 }]}
-              dropDownContainerStyle={[styles.dropdownContainer, { backgroundColor: colors.cardAlt, borderWidth: 0, maxHeight: 140 }]}
-              textStyle={{ color: colors.text, fontSize: 16, fontWeight: '600' }}
-              arrowIconStyle={{ tintColor: colors.icon } as any}
-              tickIconStyle={{ tintColor: colors.text } as any}
-              listItemLabelStyle={{ color: colors.text }}
-              selectedItemContainerStyle={{ backgroundColor: colors.border }}
-              containerStyle={{ width: 78, zIndex: 1000 }}
-              showTickIcon={false}
-            />
-          </View>
-        )}
-
-        {/* Start Button */}
+        {/* Start Button - flex pushes to bottom */}
         <View style={styles.bottomSection}>
           <Pressable
             style={[styles.startButton, { backgroundColor: 'rgba(176, 141, 87, 0.9)' }]}
@@ -306,6 +321,11 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+    justifyContent: 'space-between',
+  },
+  topSection: {
+    flex: 1,
+    gap: 20,
   },
   centered: {
     justifyContent: 'center',
@@ -314,7 +334,6 @@ const styles = StyleSheet.create({
   previewCard: {
     padding: 16,
     borderRadius: 12,
-    marginBottom: 24,
   },
   referenceBadge: {
     flexDirection: 'row',
@@ -374,9 +393,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 30,
   },
-  section: {
-    marginBottom: 24,
-  },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600',
@@ -416,8 +432,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 12,
-    marginBottom: 24,
   },
   chunkLabel: {
     fontSize: 17,
@@ -431,9 +445,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   bottomSection: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: 20,
+    paddingTop: 20,
+    paddingBottom: 0,
   },
   startButton: {
     width: 64,
