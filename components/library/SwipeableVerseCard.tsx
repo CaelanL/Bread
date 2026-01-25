@@ -52,7 +52,7 @@ export function SwipeableVerseCard({
     if (!verse.text) {
       setLoading(true);
       getVerseText(verse)
-        .then(setText)
+        .then(({ text }) => setText(text))
         .catch(() => setText('Failed to load verse text'))
         .finally(() => setLoading(false));
     }

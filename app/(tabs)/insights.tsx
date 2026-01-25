@@ -185,7 +185,7 @@ export default function InsightsScreen() {
 
     // Fetch verse text
     try {
-      const text = await getVerseText({
+      const { text } = await getVerseText({
         book: range.book,
         chapter: range.chapter,
         verseStart: range.verseStart,

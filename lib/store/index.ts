@@ -317,7 +317,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // This populates the session cache so cards render instantly
       const verses = get().verses;
       if (verses.length > 0) {
-        Promise.all(verses.map((v) => getVerseText(v).catch(() => {})));
+        Promise.all(verses.map((v) => getVerseText(v).catch(() => ({ text: '', verses: {} }))));
       }
     }
   },

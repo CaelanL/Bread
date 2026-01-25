@@ -30,6 +30,7 @@ import {
   getCachedVerse,
   cacheVerse,
   getCachedVerseRange,
+  getCachedVerseRangeKeyed,
   getCachedChapter,
   cacheChapter,
 } from "./cache.ts";
@@ -184,11 +185,22 @@ serve(async (req) => {
       }
 
       if (cachedText) {
+        // Also get keyed data for new clients
+        const cachedVerses = parsed.verseEnd
+          ? await getCachedVerseRangeKeyed(
+              parsed.book,
+              parsed.chapter,
+              parsed.verse,
+              verseEnd,
+              version
+            )
+          : { [parsed.verse.toString()]: cachedText };
         console.log(`[BIBLE] DB cache hit: ${ref} (${version})`);
         return jsonResponse({
           reference: ref,
           version,
           text: cachedText,
+          verses: cachedVerses || {},
           cached: true,
         });
       }
@@ -223,6 +235,7 @@ serve(async (req) => {
           reference: ref,
           version,
           text: combinedText,
+          verses: rangeVerses,
           cached: false,
         });
       }
@@ -243,6 +256,7 @@ serve(async (req) => {
         reference: ref,
         version,
         text: result.text,
+        verses: { [parsed.verse.toString()]: result.text },
         cached: false,
       });
     }

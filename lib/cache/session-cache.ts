@@ -14,6 +14,9 @@ const verseCache = new Map<string, string>();
 // Saved verse range cache: "John:3:16-18:ESV" → "combined text"
 const savedVerseCache = new Map<string, string>();
 
+// Saved verse range cache (keyed): "John:3:16-18:ESV" → { "16": "text", "17": "text", "18": "text" }
+const savedVerseKeyedCache = new Map<string, Record<string, string>>();
+
 /**
  * Generate cache key for chapter
  */
@@ -155,12 +158,42 @@ export function setSavedVerseInSession(
 }
 
 /**
+ * Get cached saved verse as keyed data
+ */
+export function getSavedVerseKeyedFromSession(
+  book: string,
+  chapter: number,
+  verseStart: number,
+  verseEnd: number,
+  version: string
+): Record<string, string> | null {
+  const key = savedVerseKey(book, chapter, verseStart, verseEnd, version);
+  return savedVerseKeyedCache.get(key) || null;
+}
+
+/**
+ * Cache a saved verse's keyed data
+ */
+export function setSavedVerseKeyedInSession(
+  book: string,
+  chapter: number,
+  verseStart: number,
+  verseEnd: number,
+  version: string,
+  verses: Record<string, string>
+): void {
+  const key = savedVerseKey(book, chapter, verseStart, verseEnd, version);
+  savedVerseKeyedCache.set(key, verses);
+}
+
+/**
  * Clear all session cache
  */
 export function clearSessionCache(): void {
   chapterCache.clear();
   verseCache.clear();
   savedVerseCache.clear();
+  savedVerseKeyedCache.clear();
 }
 
 /**
@@ -170,10 +203,12 @@ export function getSessionCacheStats(): {
   chapters: number;
   verses: number;
   savedVerses: number;
+  savedVersesKeyed: number;
 } {
   return {
     chapters: chapterCache.size,
     verses: verseCache.size,
     savedVerses: savedVerseCache.size,
+    savedVersesKeyed: savedVerseKeyedCache.size,
   };
 }

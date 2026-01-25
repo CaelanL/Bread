@@ -36,7 +36,8 @@ export interface SavedVerse {
   chapter: number;
   verseStart: number;
   verseEnd: number;
-  text?: string; // Optional - fetched on demand from verse_cache
+  text?: string; // Optional - combined text fetched on demand
+  verses?: Record<string, string>; // Optional - keyed data for annotated display
   version: BibleVersion;
   createdAt: number;
   progress: VerseProgress;

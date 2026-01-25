@@ -130,7 +130,7 @@ export default function HomeScreen() {
         // Fetch verse text
         if (!isRefresh) setTextLoading(true);
         try {
-          const text = await getVerseText({
+          const { text } = await getVerseText({
             book: currentVotm.book,
             chapter: currentVotm.chapter,
             verseStart: currentVotm.verseStart,

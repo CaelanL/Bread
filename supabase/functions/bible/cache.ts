@@ -249,6 +249,58 @@ export async function getCachedVerseRange(
 }
 
 /**
+ * Get cached verse range as keyed data (preserves verse numbers)
+ * Returns null if ANY verse in range is missing
+ */
+export async function getCachedVerseRangeKeyed(
+  book: string,
+  chapter: number,
+  verseStart: number,
+  verseEnd: number,
+  version: string
+): Promise<Record<string, string> | null> {
+  const admin = getAdminClient();
+
+  const { data, error } = await admin
+    .from("verse_cache")
+    .select("verse, text")
+    .eq("book", book)
+    .eq("chapter", chapter)
+    .eq("version", version)
+    .gte("verse", verseStart)
+    .lte("verse", verseEnd)
+    .order("verse", { ascending: true });
+
+  if (error || !data) {
+    return null;
+  }
+
+  // Check we have all verses in range
+  const expectedCount = verseEnd - verseStart + 1;
+  if (data.length < expectedCount) {
+    return null;
+  }
+
+  // Update last_used_at for LRU (fire and forget)
+  admin
+    .from("verse_cache")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("book", book)
+    .eq("chapter", chapter)
+    .eq("version", version)
+    .gte("verse", verseStart)
+    .lte("verse", verseEnd)
+    .then(() => {});
+
+  // Return keyed data
+  const verses: Record<string, string> = {};
+  for (const row of data) {
+    verses[row.verse.toString()] = row.text;
+  }
+  return verses;
+}
+
+/**
  * Cache a single verse
  */
 export async function cacheVerse(

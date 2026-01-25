@@ -92,11 +92,11 @@ export function useStudySession({
       const verses = await getSavedVerses();
       const found = verses.find((v) => v.id === verseId);
       if (found) {
-        // Ensure we have the verse text (may need to fetch from cache/API)
+        // Ensure we have both text and keyed verses data
         let verseWithText = found;
-        if (!found.text) {
-          const text = await getVerseText(found);
-          verseWithText = { ...found, text };
+        if (!found.text || !found.verses) {
+          const { text, verses: keyedVerses } = await getVerseText(found);
+          verseWithText = { ...found, text, verses: keyedVerses };
         }
         setVerse(verseWithText);
         const parsedChunks = parseVerseIntoChunks(verseWithText, difficulty, chunkSize, Math.floor(Math.random() * 2));

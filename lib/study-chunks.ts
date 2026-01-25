@@ -54,18 +54,24 @@ export function annotateWithVerseNum(text: string, verseNum: number): string {
 
 /**
  * Extract a single verse's text from a combined multi-verse string.
- * Tries to split by sentence boundaries first, falls back to word count.
+ *
+ * DEPRECATED: This function uses sentence splitting which is broken for verses.
+ * Use keyed verse data (verse.verses) instead when available.
+ * This remains as a fallback for old cached data without keyed verses.
  */
 export function getVerseText(fullText: string, index: number, total: number): string {
   if (total === 1) return fullText;
 
   // Try to split by sentence-like boundaries
+  // WARNING: This is broken - sentences don't align with verses!
   const sentences = fullText.split(/(?<=[.!?])\s+/);
   if (sentences.length >= total) {
+    console.warn('[STUDY-CHUNKS] Using deprecated sentence splitting - keyed data not available');
     return sentences[index] || fullText;
   }
 
-  // Fallback: split by words
+  // Fallback: split by words (also broken, but less so)
+  console.warn('[STUDY-CHUNKS] Using deprecated word splitting - keyed data not available');
   const words = fullText.split(' ');
   const chunkSize = Math.ceil(words.length / total);
   const start = index * chunkSize;
@@ -125,7 +131,26 @@ export function applyDifficulty(text: string, difficulty: Difficulty, seed: numb
 // ============================================================================
 
 /**
+ * Annotate a full verse range using keyed verse data
+ */
+function annotateVerseRangeKeyed(
+  verses: Record<string, string>,
+  startVerse: number,
+  endVerse: number
+): string {
+  const parts: string[] = [];
+  for (let v = startVerse; v <= endVerse; v++) {
+    const verseText = verses[v.toString()] || '';
+    if (verseText) {
+      parts.push(annotateWithVerseNum(verseText, v));
+    }
+  }
+  return parts.join(' ');
+}
+
+/**
  * Annotate a full verse range (for when all verses are in one chunk)
+ * DEPRECATED: Use annotateVerseRangeKeyed when keyed data is available
  */
 function annotateVerseRange(fullText: string, startVerse: number, totalVerses: number): string {
   const parts: string[] = [];
@@ -140,6 +165,9 @@ function annotateVerseRange(fullText: string, startVerse: number, totalVerses: n
  * Parse a saved verse into chunks for study.
  * Each chunk gets a stable ID for FlatList keys.
  *
+ * Uses keyed verse data (verse.verses) when available for correct alignment.
+ * Falls back to deprecated sentence splitting for old cached data.
+ *
  * @param verse - The saved verse to parse
  * @param difficulty - Difficulty level for display masking
  * @param chunkSize - Number of verses per chunk
@@ -153,24 +181,47 @@ export function parseVerseIntoChunks(
   sessionSeed: number = 0
 ): Chunk[] {
   const totalVerses = verse.verseEnd - verse.verseStart + 1;
-  const text = verse.text || ''; // Guard against optional text
+  const text = verse.text || '';
+  const hasKeyedData = verse.verses && Object.keys(verse.verses).length > 0;
 
   // If only one verse, return single chunk
   if (totalVerses === 1) {
-    const annotatedText = annotateWithVerseNum(text, verse.verseStart);
+    const verseText = hasKeyedData
+      ? verse.verses![verse.verseStart.toString()] || text
+      : text;
+    const annotatedText = annotateWithVerseNum(verseText, verse.verseStart);
     const chunkId = `${verse.id}:${verse.verseStart}`;
     return [{
       id: chunkId,
       verseNum: verse.verseStart,
-      text: text,
+      text: verseText,
       displayWords: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
     }];
   }
 
   // If chunkSize >= totalVerses, return all verses as one chunk
   if (chunkSize >= totalVerses) {
-    const annotatedText = annotateVerseRange(text, verse.verseStart, totalVerses);
     const chunkId = `${verse.id}:${verse.verseStart}-${verse.verseEnd}`;
+
+    if (hasKeyedData) {
+      // Use keyed data for correct annotation
+      const annotatedText = annotateVerseRangeKeyed(
+        verse.verses!,
+        verse.verseStart,
+        verse.verseEnd
+      );
+      const combinedText = Object.values(verse.verses!).join(' ');
+      return [{
+        id: chunkId,
+        verseNum: verse.verseStart,
+        verseNumEnd: verse.verseEnd,
+        text: combinedText,
+        displayWords: applyDifficulty(annotatedText, difficulty, hashString(chunkId) + sessionSeed),
+      }];
+    }
+
+    // Fallback: use deprecated sentence splitting
+    const annotatedText = annotateVerseRange(text, verse.verseStart, totalVerses);
     return [{
       id: chunkId,
       verseNum: verse.verseStart,
@@ -182,9 +233,19 @@ export function parseVerseIntoChunks(
 
   // Get individual verse texts
   const verseTexts: { verseNum: number; text: string }[] = [];
-  for (let v = verse.verseStart; v <= verse.verseEnd; v++) {
-    const verseText = getVerseText(text, v - verse.verseStart, totalVerses);
-    verseTexts.push({ verseNum: v, text: verseText });
+
+  if (hasKeyedData) {
+    // Use keyed data - correct!
+    for (let v = verse.verseStart; v <= verse.verseEnd; v++) {
+      const verseText = verse.verses![v.toString()] || '';
+      verseTexts.push({ verseNum: v, text: verseText });
+    }
+  } else {
+    // Fallback: deprecated sentence splitting
+    for (let v = verse.verseStart; v <= verse.verseEnd; v++) {
+      const verseText = getVerseText(text, v - verse.verseStart, totalVerses);
+      verseTexts.push({ verseNum: v, text: verseText });
+    }
   }
 
   // Group verses into chunks based on chunkSize

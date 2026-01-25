@@ -48,6 +48,7 @@ export default function StudySetupScreen() {
   const resetVerseProgress = useAppStore((s) => s.resetVerseProgress);
 
   const [verseText, setVerseText] = useState<string>('');
+  const [verseKeyed, setVerseKeyed] = useState<Record<string, string>>({});
   const [textLoading, setTextLoading] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [chunkSize, setChunkSize] = useState(1);
@@ -71,15 +72,29 @@ export default function StudySetupScreen() {
     }
   }, [verse]);
 
-  // Load verse text
+  // Load verse text (both combined and keyed)
   useEffect(() => {
     if (verse) {
-      if (verse.text) {
+      if (verse.text && verse.verses) {
+        // Already have both formats
         setVerseText(verse.text);
-      } else {
+        setVerseKeyed(verse.verses);
+      } else if (verse.text && !verse.verses) {
+        // Have text but no keyed data - fetch to get keyed
+        setVerseText(verse.text);
         setTextLoading(true);
         fetchVerseText(verse)
-          .then(setVerseText)
+          .then(({ verses }) => setVerseKeyed(verses))
+          .catch(() => {})
+          .finally(() => setTextLoading(false));
+      } else {
+        // Need to fetch both
+        setTextLoading(true);
+        fetchVerseText(verse)
+          .then(({ text, verses }) => {
+            setVerseText(text);
+            setVerseKeyed(verses);
+          })
           .catch(() => setVerseText('Failed to load verse text'))
           .finally(() => setTextLoading(false));
       }
@@ -120,14 +135,22 @@ export default function StudySetupScreen() {
     const total = verse.verseEnd - verse.verseStart + 1;
 
     if (total === 1) {
-      return `${toSuperscript(verse.verseStart)}${verseText}`;
+      const text = verseKeyed[verse.verseStart.toString()] || verseText;
+      return `${toSuperscript(verse.verseStart)}${text}`;
     }
 
-    // Multi-verse: annotate each verse
+    // Multi-verse: use keyed data if available
+    const hasKeyedData = Object.keys(verseKeyed).length > 0;
+
     const parts: string[] = [];
     for (let i = 0; i < total; i++) {
-      const extracted = extractVerseText(verseText, i, total);
-      parts.push(`${toSuperscript(verse.verseStart + i)}${extracted}`);
+      const verseNum = verse.verseStart + i;
+      const text = hasKeyedData
+        ? verseKeyed[verseNum.toString()] || ''
+        : extractVerseText(verseText, i, total); // Fallback to deprecated splitting
+      if (text) {
+        parts.push(`${toSuperscript(verseNum)}${text}`);
+      }
     }
     return parts.join(' ');
   };

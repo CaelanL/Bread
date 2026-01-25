@@ -6,6 +6,8 @@ import {
   setVerseInSession,
   getSavedVerseFromSession,
   setSavedVerseInSession,
+  getSavedVerseKeyedFromSession,
+  setSavedVerseKeyedInSession,
   clearSessionCache,
   getSessionCacheStats,
 } from "../cache/session-cache";
@@ -20,7 +22,16 @@ export interface BibleVerse {
   reference: string;
   version: BibleVersion;
   text: string;
+  verses?: Record<string, string>; // Keyed data for ranges (e.g., { "15": "text", "16": "text" })
   cached: boolean;
+}
+
+/**
+ * Result from getVerseText - provides both combined and keyed formats
+ */
+export interface VerseTextResult {
+  text: string; // Combined text (for plain display)
+  verses: Record<string, string>; // Keyed data (for annotated display)
 }
 
 export interface ChapterResponse {
@@ -219,30 +230,41 @@ export async function fetchChapter(
 }
 
 /**
- * Get text for a saved verse
+ * Get text for a saved verse - returns both combined and keyed formats
  *
  * Checks session cache first, then fetches from API (which checks verse_cache).
  * If the verse was evicted from cache, re-fetches from API.
  *
- * @param verse - The saved verse (may or may not have text)
- * @returns The verse text
+ * @param verse - The saved verse (may or may not have text/verses)
+ * @returns Object with both text (combined) and verses (keyed)
  */
-export async function getVerseText(verse: SavedVerse): Promise<string> {
-  // If text is already available, return it
-  if (verse.text) {
-    return verse.text;
+export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> {
+  // If both formats already available, return them
+  if (verse.text && verse.verses) {
+    return { text: verse.text, verses: verse.verses };
   }
 
-  // Check session cache for this exact saved verse
-  const sessionCached = getSavedVerseFromSession(
+  // Check session cache for keyed data
+  const sessionKeyedCached = getSavedVerseKeyedFromSession(
     verse.book,
     verse.chapter,
     verse.verseStart,
     verse.verseEnd,
     verse.version
   );
-  if (sessionCached) {
-    return sessionCached;
+
+  // Check session cache for combined text
+  const sessionTextCached = getSavedVerseFromSession(
+    verse.book,
+    verse.chapter,
+    verse.verseStart,
+    verse.verseEnd,
+    verse.version
+  );
+
+  // If we have both from cache, return
+  if (sessionKeyedCached && sessionTextCached) {
+    return { text: sessionTextCached, verses: sessionKeyedCached };
   }
 
   // Build reference string
@@ -254,17 +276,69 @@ export async function getVerseText(verse: SavedVerse): Promise<string> {
   // Fetch from API (which checks verse_cache internally, then external API)
   const result = await fetchVerse(reference, verse.version);
 
-  // Cache in session for next time
+  // Handle single verse
+  if (verse.verseStart === verse.verseEnd) {
+    const keyed = { [verse.verseStart.toString()]: result.text };
+
+    // Cache both formats
+    setSavedVerseInSession(
+      verse.book,
+      verse.chapter,
+      verse.verseStart,
+      verse.verseEnd,
+      verse.version,
+      result.text
+    );
+    setSavedVerseKeyedInSession(
+      verse.book,
+      verse.chapter,
+      verse.verseStart,
+      verse.verseEnd,
+      verse.version,
+      keyed
+    );
+
+    return { text: result.text, verses: keyed };
+  }
+
+  // Handle range - API now returns both text and verses
+  const keyed = result.verses || {};
+  const text = result.text;
+
+  // If API didn't return verses (old backend), construct keyed from text
+  // This is a fallback during transition - should not happen after backend deploy
+  if (Object.keys(keyed).length === 0) {
+    console.warn("[BIBLE] API returned range without verses field - using fallback");
+    setSavedVerseInSession(
+      verse.book,
+      verse.chapter,
+      verse.verseStart,
+      verse.verseEnd,
+      verse.version,
+      text
+    );
+    return { text, verses: { [verse.verseStart.toString()]: text } };
+  }
+
+  // Cache both formats
   setSavedVerseInSession(
     verse.book,
     verse.chapter,
     verse.verseStart,
     verse.verseEnd,
     verse.version,
-    result.text
+    text
+  );
+  setSavedVerseKeyedInSession(
+    verse.book,
+    verse.chapter,
+    verse.verseStart,
+    verse.verseEnd,
+    verse.version,
+    keyed
   );
 
-  return result.text;
+  return { text, verses: keyed };
 }
 
 /**
