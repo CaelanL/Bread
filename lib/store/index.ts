@@ -278,7 +278,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
         updates.colorMode = savedColorMode as ColorMode;
       }
-      if (savedBibleVersion && ['ESV', 'NLT', 'NIV', 'NKJV', 'CSB', 'KJV'].includes(savedBibleVersion)) {
+      if (savedBibleVersion && ['ESV', 'NLT', 'NIV', 'NKJV', 'KJV'].includes(savedBibleVersion)) {
         updates.bibleVersion = savedBibleVersion as BibleVersion;
       }
       if (Object.keys(updates).length > 0) {

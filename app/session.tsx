@@ -16,7 +16,7 @@ import {
 } from '@/lib/study-chunks';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -383,15 +383,8 @@ export default function StudySessionScreen() {
         leftButton={{
           icon: 'xmark',
           onPress: () => {
-            // If all chunks completed, just go back without warning
-            if (session.allChunksCompleted) {
-              router.back();
-              return;
-            }
-            Alert.alert('End Session?', 'Your progress will not be saved.', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'End', style: 'destructive', onPress: () => router.back() },
-            ]);
+            // Save progress (if any) and exit
+            session.saveAndExit();
           },
         }}
       />

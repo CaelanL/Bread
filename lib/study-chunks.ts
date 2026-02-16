@@ -315,6 +315,38 @@ export function calculateFinalScore(allAlignments: Map<number, AlignmentWord[]>)
   return totalDenom > 0 ? Math.round((totalCorrect + totalClose * 0.5) / totalDenom * 100) : 0;
 }
 
+/**
+ * Calculate score for a partial session (early exit).
+ * Treats words from uncompleted chunks as missing.
+ */
+export function calculatePartialScore(
+  chunks: Chunk[],
+  completedChunks: Set<number>,
+  chunkAlignments: Map<number, AlignmentWord[]>
+): number {
+  let totalCorrect = 0, totalClose = 0, totalMissing = 0, totalAdded = 0;
+
+  // Add results from completed chunks
+  chunkAlignments.forEach((alignment) => {
+    for (const item of alignment) {
+      if (item.status === 'correct') totalCorrect++;
+      else if (item.status === 'close') totalClose++;
+      else if (item.status === 'missing') totalMissing++;
+      else if (item.status === 'added') totalAdded++;
+    }
+  });
+
+  // Add words from uncompleted chunks as missing
+  chunks.forEach((chunk, i) => {
+    if (!completedChunks.has(i)) {
+      totalMissing += chunk.text.split(/\s+/).filter(Boolean).length;
+    }
+  });
+
+  const totalDenom = totalCorrect + totalClose + totalMissing + totalAdded;
+  return totalDenom > 0 ? Math.round((totalCorrect + totalClose * 0.5) / totalDenom * 100) : 0;
+}
+
 // ============================================================================
 // Utilities
 // ============================================================================

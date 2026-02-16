@@ -17,6 +17,7 @@ import {
   parseVerseIntoChunks,
   calculateChunkScore,
   calculateFinalScore,
+  calculatePartialScore,
   createResultsPageItem,
 } from '@/lib/study-chunks';
 import { processRecording as processRecordingApi, logSessionAttempt } from '@/lib/api';
@@ -58,6 +59,7 @@ interface UseStudySessionReturn {
   goToResults: () => void;
   viewResults: () => void;
   done: () => void;
+  saveAndExit: () => Promise<void>;
 
   // Recording result handler
   processRecording: (uri: string, durationMs: number) => Promise<{
@@ -225,6 +227,42 @@ export function useStudySession({
     router.back();
   }, []);
 
+  const saveAndExit = useCallback(async () => {
+    // Only save if at least one chunk completed AND not already fully completed
+    // (full completion already saves in processRecording)
+    if (completedChunks.size > 0 && !allChunksCompleted && verse && verseId && difficulty) {
+      // Calculate partial score (treats uncompleted chunks as missing)
+      const alignmentsMap = new Map(
+        Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment])
+      );
+      const partialScore = calculatePartialScore(chunks, completedChunks, alignmentsMap);
+
+      try {
+        await useAppStore.getState().updateVerseProgress(verseId, difficulty as StorageDifficulty, partialScore);
+      } catch (e) {
+        console.error('[STUDY] Failed to update progress:', e);
+        // Don't block exit on error
+      }
+
+      // Log session attempt (fire-and-forget)
+      const wordCount = verse.text ? verse.text.split(/\s+/).filter(Boolean).length : undefined;
+      logSessionAttempt({
+        book: verse.book,
+        chapter: verse.chapter,
+        verseStart: verse.verseStart,
+        verseEnd: verse.verseEnd,
+        version: verse.version,
+        difficulty,
+        chunkSize,
+        accuracy: partialScore,
+        recordingDurationMs: totalRecordingDurationMs,
+        wordCount,
+      }).catch(e => console.error('[STUDY] Failed to log attempt:', e));
+    }
+
+    router.back();
+  }, [completedChunks, allChunksCompleted, verse, verseId, difficulty, chunks, chunkResults, chunkSize, totalRecordingDurationMs]);
+
   return {
     verse,
     chunks,
@@ -241,6 +279,7 @@ export function useStudySession({
     goToResults,
     viewResults,
     done,
+    saveAndExit,
     processRecording,
     flatListRef,
   };
