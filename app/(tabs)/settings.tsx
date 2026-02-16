@@ -306,7 +306,7 @@ export default function SettingsScreen() {
 
         {/* About */}
         <SettingsSection title="ABOUT">
-          <SettingsRow icon="info.circle.fill" label="Version" description="1.0.0" />
+          <SettingsRow icon="info.circle.fill" label="Version" description="1.0.3" />
           <Pressable onPress={() => setCopyrightVisible(true)}>
             <SettingsRow
               icon="doc.text.fill"

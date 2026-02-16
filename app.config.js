@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Bread",
     slug: "biblemem",
-    version: "1.0.2",
+    version: "1.0.3",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "com.biblemem",
