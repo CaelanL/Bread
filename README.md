@@ -1,50 +1,32 @@
-# Welcome to your Expo app 👋
+# Bread
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A Bible memorization app. Add verses, organize them into collections, then practice by reciting out loud — the app listens and scores your accuracy.
 
-## Get started
+Available on the [App Store](https://apps.apple.com/app/id6757946016).
 
-1. Install dependencies
+<!-- TODO: Add screenshots -->
 
-   ```bash
-   npm install
-   ```
+## How It Works
 
-2. Start the app
+Verses are organized into **collections** (like playlists). You study a verse by reciting it out loud — the app transcribes your attempt and scores your accuracy. 90% accuracy completes a verse at that difficulty.
 
-   ```bash
-   npx expo start 
-   ```
+Three difficulty levels control how much of the verse you can see:
+- **Easy** — full text visible
+- **Medium** — half the words hidden
+- **Hard** — no words visible (pure recall)
 
-In the output, you'll find options to open the app in a
+Completing on Hard means you've **mastered** the verse. Master it once a month for four consecutive months and it becomes **engraved**.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Features
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- Browse any book/chapter, add verses or verse ranges to collections
+- Voice transcription via Soniox, scored against the original text
+- Mastered verse collection
+- Global **Verse of the Month** — see how many people have memorized it
+- Insights: verses mastered, in progress, total time studied, average time to master a verse, most popular verse ranges
+- ESV, NLT, and KJV translations
+- Light and dark mode
 
-## Get a fresh project
+## License
 
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+MIT
