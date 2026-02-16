@@ -47,7 +47,6 @@ const adapters: Record<string, BibleAdapter> = {
   NLT: apiBibleAdapter,
   NIV: apiBibleAdapter,
   NKJV: apiBibleAdapter,
-  CSB: apiBibleAdapter,
 };
 
 /**

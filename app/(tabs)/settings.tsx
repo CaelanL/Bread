@@ -392,16 +392,10 @@ export default function SettingsScreen() {
                   The Holy Bible, New International Version® NIV® Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.® Used by Permission of Biblica, Inc.® All rights reserved worldwide.
                 </Text>
               </View>
-              <View style={styles.copyrightItem}>
+              <View style={[styles.copyrightItem, styles.copyrightItemLast]}>
                 <Text style={[styles.copyrightVersion, { color: colors.text }]}>NKJV</Text>
                 <Text style={[styles.copyrightText, { color: colors.icon }]}>
                   New King James Version®, Copyright © 1982, Thomas Nelson. All rights reserved.
-                </Text>
-              </View>
-              <View style={[styles.copyrightItem, styles.copyrightItemLast]}>
-                <Text style={[styles.copyrightVersion, { color: colors.text }]}>CSB</Text>
-                <Text style={[styles.copyrightText, { color: colors.icon }]}>
-                  Christian Standard Bible® and CSB® are federally registered trademarks of Holman Bible Publishers. All rights reserved. bhpublishinggroup.com
                 </Text>
               </View>
             </ScrollView>
