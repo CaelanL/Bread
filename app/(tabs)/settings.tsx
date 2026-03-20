@@ -18,6 +18,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion } from '@/lib/settings';
 import { useAuth } from '@/lib/auth';
 import { useAppStore } from '@/lib/store';
+import Constants from 'expo-constants';
 
 interface SettingsSectionProps {
   title: string;
@@ -306,7 +307,7 @@ export default function SettingsScreen() {
 
         {/* About */}
         <SettingsSection title="ABOUT">
-          <SettingsRow icon="info.circle.fill" label="Version" description="1.0.0" />
+          <SettingsRow icon="info.circle.fill" label="Version" description={Constants.expoConfig?.version ?? '?.?.?'} />
           <Pressable onPress={() => setCopyrightVisible(true)}>
             <SettingsRow
               icon="doc.text.fill"
