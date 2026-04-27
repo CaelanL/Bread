@@ -17,7 +17,7 @@ const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.30;
 const SCROLL_MAX_HEIGHT = CARD_MAX_HEIGHT - 28 - 16 - 20 - 20;
 const STAGGER_DELAY = 30; // ms between each word
 
-interface AnimatedWordProps {
+interface InlineWordProps {
   word: DisplayWord;
   index: number;
   revealed: boolean;
@@ -25,8 +25,11 @@ interface AnimatedWordProps {
   underlineColor: string;
 }
 
-function AnimatedWord({ word, index, revealed, textColor, underlineColor }: AnimatedWordProps) {
-  const opacity = useSharedValue(revealed ? 1 : 0);
+// Renders a single word as an inline Text span inside the parent paragraph
+// Text. Blanks use textDecorationLine for the underline so it stays bonded
+// to the glyph instead of an absolutely-positioned sibling that desyncs.
+function InlineWord({ word, index, revealed, textColor, underlineColor }: InlineWordProps) {
+  const opacity = useSharedValue(revealed || !word.isBlank ? 1 : 0);
 
   useEffect(() => {
     if (revealed && word.isBlank) {
@@ -41,22 +44,22 @@ function AnimatedWord({ word, index, revealed, textColor, underlineColor }: Anim
     opacity: word.isBlank ? opacity.value : 1,
   }));
 
+  const showUnderline = word.isBlank && !revealed;
+
   return (
-    <View style={styles.wordWrapper}>
-      <Animated.Text
-        style={[
-          styles.chunkText,
-          word.isBlank && styles.blankWord,
-          { color: word.isBlank && !revealed ? 'transparent' : textColor },
-          animatedStyle,
-        ]}
-      >
-        {word.text}
-      </Animated.Text>
-      {word.isBlank && !revealed && (
-        <View style={[styles.underline, { backgroundColor: underlineColor }]} />
-      )}
-    </View>
+    <Animated.Text
+      style={[
+        word.isBlank && styles.blankWord,
+        showUnderline && {
+          textDecorationLine: 'underline',
+          textDecorationColor: underlineColor,
+        },
+        { color: showUnderline ? 'transparent' : textColor },
+        animatedStyle,
+      ]}
+    >
+      {word.text}
+    </Animated.Text>
   );
 }
 
@@ -111,18 +114,20 @@ export function VerseCard({ chunk, difficulty, verseLabel, revealed = false }: V
               </Text>
             </View>
           ) : (
-            <View style={styles.wordsContainer}>
+            <Text style={styles.chunkText}>
               {chunk.displayWords.map((word, i) => (
-                <AnimatedWord
-                  key={i}
-                  word={word}
-                  index={i}
-                  revealed={revealed}
-                  textColor={colors.text}
-                  underlineColor={underlineColor}
-                />
+                <React.Fragment key={i}>
+                  {i > 0 && <Text>{' '}</Text>}
+                  <InlineWord
+                    word={word}
+                    index={i}
+                    revealed={revealed}
+                    textColor={colors.text}
+                    underlineColor={underlineColor}
+                  />
+                </React.Fragment>
               ))}
-            </View>
+            </Text>
           )}
         </ScrollView>
       </View>
@@ -168,28 +173,12 @@ const styles = StyleSheet.create({
   verseTextContainer: {
     paddingBottom: 4,
   },
-  wordsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  wordWrapper: {
-    position: 'relative',
-    marginRight: 6,
-    marginBottom: 4,
-  },
   chunkText: {
     fontSize: 19,
     lineHeight: 30,
   },
   blankWord: {
     fontWeight: '600',
-  },
-  underline: {
-    position: 'absolute',
-    bottom: 6,
-    left: 0,
-    right: 0,
-    height: 1.5,
   },
   hardModeContainer: {
     alignItems: 'center',
