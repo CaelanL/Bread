@@ -64,6 +64,7 @@ export default function StudySessionScreen() {
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [transcribing, setTranscribing] = useState(false);
   const [waveformTrigger, setWaveformTrigger] = useState(0);
+  const [exitingChunks, setExitingChunks] = useState<Set<number>>(new Set());
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const meteringRef = useRef<NodeJS.Timeout | null>(null);
@@ -234,6 +235,24 @@ export default function StudySessionScreen() {
     }
   }, [stopMetering, hideRecordingBar, session]);
 
+  const handleRetry = useCallback((index: number) => {
+    console.log('[RETRY] handleRetry called, setting exitingChunks for index:', index);
+    // Start exit animation (fade out + collapse result card)
+    setExitingChunks((prev) => new Set([...prev, index]));
+  }, []);
+
+  const handleExitComplete = useCallback((index: number) => {
+    console.log('[RETRY] handleExitComplete called for index:', index);
+    setExitingChunks((prev) => {
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+    console.log('[RETRY] calling retryChunk + handleMicPress');
+    session.retryChunk(index);
+    handleMicPress();
+  }, [session, handleMicPress]);
+
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems.length > 0) {
@@ -319,7 +338,17 @@ export default function StudySessionScreen() {
 
     // Regular chunk
     const isCompleted = session.completedChunks.has(index);
+    const isRetrying = session.retryingChunks.has(index);
+    const isExiting = exitingChunks.has(index);
     const result = session.getChunkResult(index);
+    const retryResult = session.getRetryResult(index);
+
+    // When retrying, show mic instead of result. When retry result exists, show that.
+    const showMic = (!isCompleted || isRetrying) && !retryResult;
+    // Keep result card visible during exit animation
+    const showResult = (isCompleted && !isRetrying) || isExiting;
+
+    console.log(`[RETRY RENDER] index=${index} isCompleted=${isCompleted} isRetrying=${isRetrying} isExiting=${isExiting} showMic=${showMic} showResult=${showResult} revealed=${isCompleted && !isRetrying}`);
 
     // Build verse label
     const verseLabel =
@@ -332,21 +361,50 @@ export default function StudySessionScreen() {
     return (
       <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
         <View style={styles.cardsArea}>
-          <VerseCard chunk={item} difficulty={difficulty ?? 'easy'} verseLabel={verseLabel} revealed={isCompleted} />
-
+          {/* Score badge on top of verse card when completed */}
           {isCompleted && result && (
+            <View style={[styles.scoreBadgeRow]}>
+              <View style={[styles.scoreBadgeInline, {
+                backgroundColor: result.score >= 90 ? `${colors.success}20` : result.score >= 65 ? '#f59e0b20' : `${colors.error}20`,
+              }]}>
+                <Text style={[styles.scoreBadgeInlineText, {
+                  color: result.score >= 90 ? colors.success : result.score >= 65 ? '#f59e0b' : colors.error,
+                }]}>
+                  Score: {result.score}%
+                </Text>
+              </View>
+            </View>
+          )}
+
+          <VerseCard chunk={item} difficulty={difficulty ?? 'easy'} verseLabel={verseLabel} revealed={isCompleted && !isRetrying} />
+
+          {/* Show original result or retry result */}
+          {showResult && result && !retryResult && (
             <ResultCard
               score={result.score}
               alignment={result.alignment}
               transcription={result.transcription}
+              exiting={isExiting}
+              onExitComplete={() => handleExitComplete(index)}
+            />
+          )}
+          {showResult && retryResult && (
+            <ResultCard
+              score={retryResult.score}
+              alignment={retryResult.alignment}
+              transcription={retryResult.transcription}
+              isRetry
+              exiting={isExiting}
+              onExitComplete={() => handleExitComplete(index)}
             />
           )}
         </View>
 
         <View style={styles.controlsContainer}>
+          {/* Mic button — first attempt or retry */}
           {recordingState === 'idle' &&
             !transcribing &&
-            !isCompleted &&
+            showMic &&
             session.currentIndex === index && (
               <Pressable
                 style={[styles.micButton, { backgroundColor: buttonBg }]}
@@ -356,19 +414,30 @@ export default function StudySessionScreen() {
               </Pressable>
             )}
 
+          {/* Next + Retry buttons */}
           {recordingState === 'idle' &&
             !transcribing &&
             isCompleted &&
+            !isRetrying &&
+            !isExiting &&
             session.currentIndex === index && (
-              <Pressable
-                style={[styles.nextButton, { backgroundColor: buttonBg }]}
-                onPress={session.goToNext}
-              >
-                <Text style={styles.nextButtonText}>
-                  {session.allChunksCompleted ? 'See Results' : 'Next'}
-                </Text>
-                <IconSymbol name="arrow.right" size={20} color={colors.white} />
-              </Pressable>
+              <View style={styles.controlsRow}>
+                <Pressable
+                  style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
+                  onPress={() => handleRetry(index)}
+                >
+                  <IconSymbol name="arrow.counterclockwise" size={22} color={colors.text} />
+                </Pressable>
+                <Pressable
+                  style={[styles.nextButton, { backgroundColor: buttonBg }]}
+                  onPress={session.goToNext}
+                >
+                  <Text style={styles.nextButtonText}>
+                    {session.allChunksCompleted ? 'See Results' : 'Next'}
+                  </Text>
+                  <IconSymbol name="arrow.right" size={20} color={colors.white} />
+                </Pressable>
+              </View>
             )}
         </View>
       </View>
@@ -485,6 +554,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  retryButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -496,6 +577,20 @@ const styles = StyleSheet.create({
   nextButtonText: {
     color: '#fff', // Always white on colored button
     fontSize: 17,
+    fontWeight: '600',
+  },
+  scoreBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginBottom: 6,
+  },
+  scoreBadgeInline: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  scoreBadgeInlineText: {
+    fontSize: 13,
     fontWeight: '600',
   },
   resultsContent: {
