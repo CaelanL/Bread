@@ -2,7 +2,11 @@
  * API.Bible Adapter
  *
  * Handles fetching from the API.Bible service (rest.api.bible).
- * Supports: NLT, NIV, NKJV, KJV, and other translations.
+ * Supports: NLT, NIV, NKJV.
+ *
+ * Note: KJV is NOT served from here — it's served client-side from
+ * a bundled JSON (assets/bible/kjv-1769.json). See
+ * docs/features/kjv-offline-bundle.md.
  */
 
 import { BibleAdapter, VerseResult, ChapterResult } from "./types.ts";
@@ -18,7 +22,6 @@ const BIBLE_IDS: Record<string, string> = {
   NLT: "d6e14a625393b4da-01",
   NIV: "78a9f6124f344018-01",
   NKJV: "63097d2a0a2f7db3-01",
-  KJV: "a6aee10bb058511c-02", // King James Version, American Edition
 };
 
 /**

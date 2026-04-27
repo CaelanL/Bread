@@ -11,6 +11,7 @@ import {
   clearSessionCache,
   getSessionCacheStats,
 } from "../cache/session-cache";
+import { getKjvVerse, getKjvChapter } from "../bible/kjv-bundle";
 import type { SavedVerse } from "../storage";
 
 // Re-export for dev tools
@@ -94,6 +95,29 @@ export async function fetchVerse(
         cached: true,
       };
     }
+  }
+
+  // KJV is served from the bundled JSON — no network, no rate limit.
+  // Spec: docs/features/kjv-offline-bundle.md
+  if (version === "KJV" && parsed?.verse) {
+    const result = getKjvVerse(
+      parsed.book,
+      parsed.chapter,
+      parsed.verse,
+      parsed.verseEnd
+    );
+    if (result.verses) {
+      for (const [verseNum, text] of Object.entries(result.verses)) {
+        setVerseInSession(
+          parsed.book,
+          parsed.chapter,
+          parseInt(verseNum, 10),
+          version,
+          text
+        );
+      }
+    }
+    return result;
   }
 
   // Fetch from API
@@ -186,6 +210,13 @@ export async function fetchChapter(
       verses: cached,
       cached: true,
     };
+  }
+
+  // KJV is served from the bundled JSON — no network, no rate limit.
+  if (version === "KJV") {
+    const result = getKjvChapter(book, chapter);
+    setChapterInSession(book, chapter, version, result.verses);
+    return result;
   }
 
   // Fetch from API

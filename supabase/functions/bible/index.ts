@@ -38,12 +38,15 @@ import { getExpectedVerseCount } from "./verse-counts.ts";
 
 /**
  * Version → Adapter registry
- * Each version maps to its adapter
+ * Each version maps to its adapter.
+ *
+ * KJV is intentionally absent: the client serves KJV from a bundled
+ * JSON (assets/bible/kjv-1769.json), so KJV requests never reach this
+ * function. See docs/features/kjv-offline-bundle.md.
  */
 const adapters: Record<string, BibleAdapter> = {
   ESV: esvAdapter,
   // API.Bible translations
-  KJV: apiBibleAdapter,
   NLT: apiBibleAdapter,
   NIV: apiBibleAdapter,
   NKJV: apiBibleAdapter,
