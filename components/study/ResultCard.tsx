@@ -39,10 +39,14 @@ const STATUS_CONFIG = {
   },
 };
 
-function getStatus(score: number): ResultStatus {
+export function getStatus(score: number): ResultStatus {
   if (score >= 90) return 'success';
   if (score >= 65) return 'partial';
   return 'retry';
+}
+
+export function getScoreColor(score: number): string {
+  return STATUS_CONFIG[getStatus(score)].color;
 }
 
 function getStatusColors(status: ResultStatus, isDark: boolean) {
@@ -150,17 +154,12 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, e
   const exitOpacity = useSharedValue(1);
   const exitHeight = useSharedValue(-1); // -1 = use auto height
 
-  console.log(`[RESULTCARD] render: exiting=${exiting} measuredHeight=${measuredHeight}`);
-
   useEffect(() => {
-    console.log(`[RESULTCARD] useEffect: exiting=${exiting} measuredHeight=${measuredHeight}`);
     if (exiting && measuredHeight > 0) {
-      console.log('[RESULTCARD] Starting exit animation, height:', measuredHeight);
       const config = { duration: 300, easing: Easing.bezier(0.4, 0.0, 0.65, 0.15) };
       exitOpacity.value = withTiming(0, config);
       exitHeight.value = measuredHeight;
       exitHeight.value = withTiming(0, config, (finished) => {
-        console.log('[RESULTCARD] Exit animation finished:', finished);
         if (finished && onExitComplete) {
           runOnJS(onExitComplete)();
         }
@@ -191,9 +190,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, e
       ]}
       entering={customEntering}
       onLayout={(e) => {
-        console.log(`[RESULTCARD] onLayout: height=${e.nativeEvent.layout.height} exiting=${exiting} measuredHeight=${measuredHeight}`);
         if (!exiting && measuredHeight === 0) {
-          console.log('[RESULTCARD] Setting measuredHeight:', e.nativeEvent.layout.height);
           setMeasuredHeight(e.nativeEvent.layout.height);
         }
       }}

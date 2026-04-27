@@ -2,7 +2,7 @@ import { AppHeader } from '@/components/app-header';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { WAVEFORM_SAMPLES } from '@/components/study/Waveform';
 import { VerseCard } from '@/components/study/VerseCard';
-import { ResultCard } from '@/components/study/ResultCard';
+import { ResultCard, getScoreColor } from '@/components/study/ResultCard';
 import { RecordingBar, RECORDING_BAR_HEIGHT } from '@/components/study/RecordingBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -236,19 +236,15 @@ export default function StudySessionScreen() {
   }, [stopMetering, hideRecordingBar, session]);
 
   const handleRetry = useCallback((index: number) => {
-    console.log('[RETRY] handleRetry called, setting exitingChunks for index:', index);
-    // Start exit animation (fade out + collapse result card)
     setExitingChunks((prev) => new Set([...prev, index]));
   }, []);
 
   const handleExitComplete = useCallback((index: number) => {
-    console.log('[RETRY] handleExitComplete called for index:', index);
     setExitingChunks((prev) => {
       const next = new Set(prev);
       next.delete(index);
       return next;
     });
-    console.log('[RETRY] calling retryChunk + handleMicPress');
     session.retryChunk(index);
     handleMicPress();
   }, [session, handleMicPress]);
@@ -348,8 +344,6 @@ export default function StudySessionScreen() {
     // Keep result card visible during exit animation
     const showResult = (isCompleted && !isRetrying) || isExiting;
 
-    console.log(`[RETRY RENDER] index=${index} isCompleted=${isCompleted} isRetrying=${isRetrying} isExiting=${isExiting} showMic=${showMic} showResult=${showResult} revealed=${isCompleted && !isRetrying}`);
-
     // Build verse label
     const verseLabel =
       session.verse!.verseStart === session.verse!.verseEnd
@@ -365,10 +359,10 @@ export default function StudySessionScreen() {
           {isCompleted && result && (
             <View style={[styles.scoreBadgeRow]}>
               <View style={[styles.scoreBadgeInline, {
-                backgroundColor: result.score >= 90 ? `${colors.success}20` : result.score >= 65 ? '#f59e0b20' : `${colors.error}20`,
+                backgroundColor: `${getScoreColor(result.score)}20`,
               }]}>
                 <Text style={[styles.scoreBadgeInlineText, {
-                  color: result.score >= 90 ? colors.success : result.score >= 65 ? '#f59e0b' : colors.error,
+                  color: getScoreColor(result.score),
                 }]}>
                   Score: {result.score}%
                 </Text>

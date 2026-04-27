@@ -30,12 +30,6 @@ interface ChunkResult {
   alignment: AlignmentWord[];
 }
 
-interface RetryResult {
-  score: number;
-  transcription: string;
-  alignment: AlignmentWord[];
-}
-
 interface UseStudySessionOptions {
   verseId: string;
   difficulty: Difficulty;
@@ -53,7 +47,7 @@ interface UseStudySessionReturn {
 
   // Results per chunk
   getChunkResult: (index: number) => ChunkResult | undefined;
-  getRetryResult: (index: number) => RetryResult | undefined;
+  getRetryResult: (index: number) => ChunkResult | undefined;
 
   // Retry state
   retryingChunks: Set<number>;
@@ -97,7 +91,7 @@ export function useStudySession({
   const [showResults, setShowResults] = useState(false);
   const [totalRecordingDurationMs, setTotalRecordingDurationMs] = useState(0);
   const [retryingChunks, setRetryingChunks] = useState<Set<number>>(new Set());
-  const [retryResults, setRetryResults] = useState<Map<number, RetryResult>>(new Map());
+  const [retryResults, setRetryResults] = useState<Map<number, ChunkResult>>(new Map());
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -139,13 +133,12 @@ export function useStudySession({
   }, [chunkResults]);
 
   // Get retry result for a specific chunk
-  const getRetryResult = useCallback((index: number): RetryResult | undefined => {
+  const getRetryResult = useCallback((index: number): ChunkResult | undefined => {
     return retryResults.get(index);
   }, [retryResults]);
 
   // Retry a completed chunk (resets to recording state without affecting score)
   const retryChunk = useCallback((index: number) => {
-    console.log('[RETRY] retryChunk called for index:', index);
     setRetryingChunks((prev) => new Set([...prev, index]));
     // Clear any previous retry result for this chunk
     setRetryResults((prev) => {
