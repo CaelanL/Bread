@@ -106,13 +106,17 @@ export async function fetchVerse(
       parsed.verse,
       parsed.verseEnd
     );
-    setVerseInSession(
-      parsed.book,
-      parsed.chapter,
-      parsed.verse,
-      version,
-      result.text
-    );
+    if (result.verses) {
+      for (const [verseNum, text] of Object.entries(result.verses)) {
+        setVerseInSession(
+          parsed.book,
+          parsed.chapter,
+          parseInt(verseNum, 10),
+          version,
+          text
+        );
+      }
+    }
     return result;
   }
 

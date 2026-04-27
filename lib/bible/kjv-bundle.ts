@@ -1,4 +1,5 @@
 import type { BibleVerse, ChapterResponse } from "../api/bible";
+import { normalizeBookName } from "./index";
 
 let bundle: Record<string, string> | null = null;
 
@@ -18,15 +19,19 @@ export function getKjvVerse(
   verse: number,
   verseEnd?: number
 ): BibleVerse {
+  const canonicalBook = normalizeBookName(book);
   const data = load();
   const end = verseEnd ?? verse;
+  if (end < verse) {
+    throw new Error(`KJV invalid verse range: ${verse}-${end}`);
+  }
   const verses: Record<string, string> = {};
   const parts: string[] = [];
 
   for (let v = verse; v <= end; v++) {
-    const text = data[makeKey(book, chapter, v)];
+    const text = data[makeKey(canonicalBook, chapter, v)];
     if (!text) {
-      throw new Error(`KJV verse not found in bundle: ${book} ${chapter}:${v}`);
+      throw new Error(`KJV verse not found in bundle: ${canonicalBook} ${chapter}:${v}`);
     }
     verses[String(v)] = text;
     parts.push(text);
@@ -34,8 +39,8 @@ export function getKjvVerse(
 
   const reference =
     end === verse
-      ? `${book} ${chapter}:${verse}`
-      : `${book} ${chapter}:${verse}-${end}`;
+      ? `${canonicalBook} ${chapter}:${verse}`
+      : `${canonicalBook} ${chapter}:${verse}-${end}`;
 
   return {
     reference,
@@ -50,9 +55,10 @@ export function getKjvChapter(
   book: string,
   chapter: number
 ): ChapterResponse {
+  const canonicalBook = normalizeBookName(book);
   const data = load();
   const verses: Record<string, string> = {};
-  const prefix = `${book} ${chapter}:`;
+  const prefix = `${canonicalBook} ${chapter}:`;
 
   for (const key of Object.keys(data)) {
     if (key.startsWith(prefix)) {
@@ -62,11 +68,11 @@ export function getKjvChapter(
   }
 
   if (Object.keys(verses).length === 0) {
-    throw new Error(`KJV chapter not found in bundle: ${book} ${chapter}`);
+    throw new Error(`KJV chapter not found in bundle: ${canonicalBook} ${chapter}`);
   }
 
   return {
-    reference: `${book} ${chapter}`,
+    reference: `${canonicalBook} ${chapter}`,
     version: "KJV",
     verses,
     cached: true,

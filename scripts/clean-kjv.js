@@ -143,7 +143,11 @@ function main() {
     lines.push(`${JSON.stringify(k)}:${JSON.stringify(cleaned[k])}${comma}`);
   }
   lines.push("}");
-  fs.writeFileSync(KJV_PATH, lines.join("\n"));
+  // Atomic write: temp file + rename, so a Ctrl-C mid-write can't
+  // corrupt the bundle on disk.
+  const tmpPath = KJV_PATH + ".tmp";
+  fs.writeFileSync(tmpPath, lines.join("\n"));
+  fs.renameSync(tmpPath, KJV_PATH);
   console.log(`\nWrote cleaned bundle to ${path.relative(root, KJV_PATH)}`);
 }
 
