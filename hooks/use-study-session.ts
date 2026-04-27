@@ -47,6 +47,11 @@ interface UseStudySessionReturn {
 
   // Results per chunk
   getChunkResult: (index: number) => ChunkResult | undefined;
+  getRetryResult: (index: number) => ChunkResult | undefined;
+
+  // Retry state
+  retryingChunks: Set<number>;
+  retryChunk: (index: number) => void;
 
   // Computed
   allChunksCompleted: boolean;
@@ -85,6 +90,8 @@ export function useStudySession({
   const [chunkResults, setChunkResults] = useState<Map<number, ChunkResult>>(new Map());
   const [showResults, setShowResults] = useState(false);
   const [totalRecordingDurationMs, setTotalRecordingDurationMs] = useState(0);
+  const [retryingChunks, setRetryingChunks] = useState<Set<number>>(new Set());
+  const [retryResults, setRetryResults] = useState<Map<number, ChunkResult>>(new Map());
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -125,6 +132,22 @@ export function useStudySession({
     return chunkResults.get(index);
   }, [chunkResults]);
 
+  // Get retry result for a specific chunk
+  const getRetryResult = useCallback((index: number): ChunkResult | undefined => {
+    return retryResults.get(index);
+  }, [retryResults]);
+
+  // Retry a completed chunk (resets to recording state without affecting score)
+  const retryChunk = useCallback((index: number) => {
+    setRetryingChunks((prev) => new Set([...prev, index]));
+    // Clear any previous retry result for this chunk
+    setRetryResults((prev) => {
+      const next = new Map(prev);
+      next.delete(index);
+      return next;
+    });
+  }, []);
+
   // Process a recording and update state
   const processRecording = useCallback(async (uri: string, durationMs: number) => {
     const currentChunk = chunks[currentIndex];
@@ -141,6 +164,24 @@ export function useStudySession({
 
     // Calculate score
     const score = calculateChunkScore(alignment);
+
+    const isRetrying = retryingChunks.has(currentIndex);
+
+    if (isRetrying) {
+      // Store as retry result — don't touch the original score
+      setRetryResults((prev) => new Map(prev).set(currentIndex, {
+        score,
+        transcription: cleanedTranscription,
+        alignment,
+      }));
+      // Clear retry mode for this chunk
+      setRetryingChunks((prev) => {
+        const next = new Set(prev);
+        next.delete(currentIndex);
+        return next;
+      });
+      return { score, alignment, allDone: false };
+    }
 
     // Store result
     setChunkResults((prev) => new Map(prev).set(currentIndex, {
@@ -194,7 +235,7 @@ export function useStudySession({
     }
 
     return { score, alignment, allDone };
-  }, [chunks, currentIndex, completedChunks, chunkResults, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
+  }, [chunks, currentIndex, completedChunks, chunkResults, retryingChunks, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
 
   // Navigation actions
   const goToNext = useCallback(() => {
@@ -271,6 +312,9 @@ export function useStudySession({
     completedChunks,
     showResults,
     getChunkResult,
+    getRetryResult,
+    retryingChunks,
+    retryChunk,
     allChunksCompleted,
     listData,
     finalScore,

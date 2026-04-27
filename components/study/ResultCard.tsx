@@ -2,9 +2,9 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AlignmentWord } from '@/lib/study-chunks';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { AlignmentHelpModal } from './AlignmentHelpModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -16,6 +16,9 @@ interface ResultCardProps {
   score: number;
   alignment?: AlignmentWord[];
   transcription?: string;
+  isRetry?: boolean;
+  exiting?: boolean;
+  onExitComplete?: () => void;
 }
 
 const STATUS_CONFIG = {
@@ -36,10 +39,14 @@ const STATUS_CONFIG = {
   },
 };
 
-function getStatus(score: number): ResultStatus {
+export function getStatus(score: number): ResultStatus {
   if (score >= 90) return 'success';
   if (score >= 65) return 'partial';
   return 'retry';
+}
+
+export function getScoreColor(score: number): string {
+  return STATUS_CONFIG[getStatus(score)].color;
 }
 
 function getStatusColors(status: ResultStatus, isDark: boolean) {
@@ -71,6 +78,7 @@ const customEntering = () => {
     },
   };
 };
+
 
 // Colors for alignment statuses
 const ALIGNMENT_COLORS = {
@@ -131,15 +139,43 @@ function AlignmentDisplay({ alignment, textColor }: { alignment: AlignmentWord[]
   );
 }
 
-export function ResultCard({ score, alignment, transcription }: ResultCardProps) {
+export function ResultCard({ score, alignment, transcription, isRetry = false, exiting = false, onExitComplete }: ResultCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
   const [showHelp, setShowHelp] = useState(false);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
 
   const status = getStatus(score);
   const statusConfig = STATUS_CONFIG[status];
   const statusColors = getStatusColors(status, isDark);
+
+  // Exit animation: fade out + collapse height
+  const exitOpacity = useSharedValue(1);
+  const exitHeight = useSharedValue(-1); // -1 = use auto height
+
+  useEffect(() => {
+    if (exiting && measuredHeight > 0) {
+      const config = { duration: 300, easing: Easing.bezier(0.4, 0.0, 0.65, 0.15) };
+      exitOpacity.value = withTiming(0, config);
+      exitHeight.value = measuredHeight;
+      exitHeight.value = withTiming(0, config, (finished) => {
+        if (finished && onExitComplete) {
+          runOnJS(onExitComplete)();
+        }
+      });
+    }
+  }, [exiting, measuredHeight]);
+
+  const exitAnimStyle = useAnimatedStyle(() => {
+    if (exitHeight.value === -1) {
+      return { opacity: exitOpacity.value };
+    }
+    return {
+      opacity: exitOpacity.value,
+      maxHeight: exitHeight.value,
+    };
+  });
 
   return (
     <Animated.View
@@ -148,12 +184,28 @@ export function ResultCard({ score, alignment, transcription }: ResultCardProps)
         {
           backgroundColor: statusColors.bg,
           borderColor: statusColors.border,
-          maxHeight: CARD_MAX_HEIGHT,
+          maxHeight: exiting ? undefined : CARD_MAX_HEIGHT,
         },
+        exitAnimStyle,
       ]}
       entering={customEntering}
+      onLayout={(e) => {
+        if (!exiting && measuredHeight === 0) {
+          setMeasuredHeight(e.nativeEvent.layout.height);
+        }
+      }}
     >
       <View style={styles.cardContent}>
+        {/* Retry notice */}
+        {isRetry && (
+          <View style={styles.retryBanner}>
+            <IconSymbol name="arrow.counterclockwise" size={12} color={colors.icon} />
+            <Text style={[styles.retryBannerText, { color: colors.icon }]}>
+              Retries don't affect your score
+            </Text>
+          </View>
+        )}
+
         {/* Header with status */}
         <View style={styles.header}>
           <View style={styles.statusRow}>
@@ -253,6 +305,16 @@ const styles = StyleSheet.create({
   addedWord: {
     color: '#f59e0b',
     textDecorationLine: 'underline',
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  retryBannerText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   // Close: amber background (future: synonym/near-match)
   closeWord: {
