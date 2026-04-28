@@ -2,6 +2,7 @@ import { AppHeader } from '@/components/app-header';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
+import type { ReviewBadgeState } from '@/components/library/ReviewStateBadge';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatVerseReference, type SavedVerse, MASTERED_COLLECTION_ID } from '@/lib/storage';
@@ -227,15 +228,25 @@ export default function CollectionScreen() {
       ) : (
         <FlatList
           data={sortedVerses}
-          renderItem={({ item }) => (
-            <SwipeableVerseCard
-              verse={item}
-              onPress={() => handleVersePress(item)}
-              onDelete={() => handleDeleteVerse(item.id)}
-              disableSwipe={isMasteredCollection}
-              collectionCount={getVerseCollectionCount(item)}
-            />
-          )}
+          renderItem={({ item, index }) => {
+            // SPIKE: fake review state per index, only inside Mastered, so we can see all variants
+            let reviewState: ReviewBadgeState | undefined;
+            if (isMasteredCollection) {
+              if (index === 0) reviewState = { kind: 'due' };
+              else if (index === 1) reviewState = { kind: 'locked', daysUntilDue: 4 };
+              else reviewState = { kind: 'engraved', lifetimeReviews: 14 };
+            }
+            return (
+              <SwipeableVerseCard
+                verse={item}
+                onPress={() => handleVersePress(item)}
+                onDelete={() => handleDeleteVerse(item.id)}
+                disableSwipe={isMasteredCollection}
+                collectionCount={getVerseCollectionCount(item)}
+                reviewState={reviewState}
+              />
+            );
+          }}
           keyExtractor={(item) => item.id}
           contentContainerStyle={sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
           ListEmptyComponent={renderEmptyState}

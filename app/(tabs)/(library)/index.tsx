@@ -42,12 +42,16 @@ function CollectionCard({
   const verseCount = isMastered ? masteredVerseCount : collectionVerseCount;
   const collectionWithCount: CollectionWithCount = { ...collection, verseCount };
 
+  // SPIKE: fake "due" count for UI testing — Mastered: 1 due, others: 0
+  const fakeDueCount = isMastered && verseCount > 0 ? 1 : 0;
+
   return (
     <SwipeableCollectionCard
       collection={collectionWithCount}
       index={index}
       onPress={onPress}
       onDelete={onDelete}
+      dueCount={fakeDueCount}
     />
   );
 }

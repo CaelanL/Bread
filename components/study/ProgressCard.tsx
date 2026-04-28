@@ -1,14 +1,31 @@
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { VerseProgress } from '@/lib/storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { ProgressInfoButton, ProgressInfoModal } from './ProgressInfoModal';
+
+const ENGRAVED_THRESHOLD = 10;
 
 interface ProgressCardProps {
   progress: VerseProgress;
+  /** SPIKE-only: stable id used to derive a fake review state so different verses show different variants */
+  verseIdForSpike?: string;
+}
+
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return Math.abs(h);
 }
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -19,47 +36,7 @@ const difficultyLabels: Record<Difficulty, string> = {
   hard: 'Hard',
 };
 
-/**
- * Convert "YYYY-MM" to short month name (e.g., "Jan")
- */
-function getMonthLabel(monthStr: string): string {
-  const [year, month] = monthStr.split('-').map(Number);
-  const date = new Date(year, month - 1);
-  return date.toLocaleDateString('en-US', { month: 'short' });
-}
-
-/**
- * Convert "YYYY-MM" to elegant date format (e.g., "December 2024")
- */
-function getEngravedDate(monthStr: string): string {
-  const [year, month] = monthStr.split('-').map(Number);
-  const date = new Date(year, month - 1);
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-}
-
-/**
- * Get future month label based on offset from a starting month
- * If lastMonth provided, calculates consecutive months after it
- * Otherwise starts from current month
- */
-function getFutureMonthLabel(offset: number, lastMonth?: string): string {
-  let date: Date;
-
-  if (lastMonth) {
-    // Start from the month after lastMonth
-    const [year, month] = lastMonth.split('-').map(Number);
-    date = new Date(year, month - 1); // month is 0-indexed
-    date.setMonth(date.getMonth() + offset + 1); // +1 to get next month
-  } else {
-    // No completed months, start from current month
-    date = new Date();
-    date.setMonth(date.getMonth() + offset);
-  }
-
-  return date.toLocaleDateString('en-US', { month: 'short' });
-}
-
-export function ProgressCard({ progress }: ProgressCardProps) {
+export function ProgressCard({ progress, verseIdForSpike }: ProgressCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [infoModalVisible, setInfoModalVisible] = useState(false);
@@ -70,13 +47,47 @@ export function ProgressCard({ progress }: ProgressCardProps) {
 
   // Engraved section always shows
   const engraved = progress.engraved || { completed: false, months: [] };
-  const isFullyEngraved = engraved.completed;
+  // SPIKE: passCount is not yet on the type. Fall back to legacy months.length until migration.
+  const passCount = ((engraved as unknown) as { passCount?: number }).passCount
+    ?? engraved.months.length;
+  const lifetimeReviews = ((engraved as unknown) as { lifetimeReviews?: number }).lifetimeReviews
+    ?? engraved.months.length;
+  const isFullyEngraved = passCount >= ENGRAVED_THRESHOLD || engraved.completed;
+  const progressPct = Math.min(100, (passCount / ENGRAVED_THRESHOLD) * 100);
+
+  // SPIKE: fake review state so different verses preview different variants.
+  // Driven by a hash of the verse id when provided — stable across reloads,
+  // varies between verses so you can see Locked + Due on different cards.
+  const isMastered = progress.hard?.completed === true;
+  type SpikeStatus =
+    | { kind: 'pre' }
+    | { kind: 'locked'; hoursUntilDue: number; daysUntilDue: number }
+    | { kind: 'due' }
+    | { kind: 'engraved' };
+
+  const spikeBucket = verseIdForSpike ? hashId(verseIdForSpike) % 4 : 0;
+  // Buckets:
+  //  0 → Locked, ~14 hours until due (sub-24h countdown)
+  //  1 → Locked, ~3 days until due
+  //  2 → Due (ready)
+  //  3 → Due (ready) — duplicated so 50% land on Due
+  const fakeStatus: SpikeStatus = !isMastered
+    ? { kind: 'pre' }
+    : isFullyEngraved
+      ? { kind: 'engraved' }
+      : spikeBucket === 0
+        ? { kind: 'locked', hoursUntilDue: 14, daysUntilDue: 0 }
+        : spikeBucket === 1
+          ? { kind: 'locked', hoursUntilDue: 0, daysUntilDue: 3 }
+          : { kind: 'due' };
+
+  const isLocked = fakeStatus.kind === 'locked';
+  const isDue = fakeStatus.kind === 'due';
 
   // Colors for engraved section
   const isDark = colorScheme === 'dark';
-  const silverColor = '#9ca3af'; // Gray/silver for in-progress
-  const goldColor = colors.tint; // App's bronze gold for 4/4 completed
-  const unfilledColor = isDark ? '#514f4fff' : colors.border; // Lighter in dark mode for visibility
+  const goldColor = colors.tint;
+  const unfilledColor = isDark ? '#514f4fff' : colors.border;
 
   return (
     <View style={styles.container}>
@@ -131,99 +142,134 @@ export function ProgressCard({ progress }: ProgressCardProps) {
         {/* Engraved Progress Section */}
         <View style={[
             styles.engravedSection,
-            { borderTopColor: isFullyEngraved ? 'rgba(245, 158, 11, 0.3)' : colors.borderLight },
+            {
+              borderTopColor: isFullyEngraved
+                ? 'rgba(245, 158, 11, 0.3)'
+                : colors.borderLight,
+            },
             isFullyEngraved && styles.engravedSectionGlow,
+            isLocked && styles.lockedSection,
+            isDue && styles.dueSection,
           ]}>
             {/* Header */}
             <View style={styles.engravedHeader}>
               <Text style={[
                 styles.engravedLabel,
-                { color: isFullyEngraved ? goldColor : colors.icon },
+                {
+                  color: isFullyEngraved
+                    ? goldColor
+                    : isLocked
+                      ? colors.icon
+                      : isDue
+                        ? goldColor
+                        : colors.icon,
+                },
               ]}>
-                {isFullyEngraved ? 'Engraved' : 'Engraved Progress'}
+                {isFullyEngraved
+                  ? 'Engraved'
+                  : isLocked
+                    ? 'Locked'
+                    : isDue
+                      ? 'Ready to Review'
+                      : 'Engraved Progress'}
               </Text>
               {isFullyEngraved ? (
                 <EngravedIcon size={16} color={goldColor} />
+              ) : isLocked ? (
+                <IconSymbol name="lock.fill" size={14} color={colors.icon} />
+              ) : isDue ? (
+                <IconSymbol name="sparkles" size={16} color={goldColor} />
               ) : (
-                <MaterialCommunityIcons name="cross" size={16} color={silverColor} />
+                <MaterialCommunityIcons name="cross" size={16} color={colors.icon} />
               )}
             </View>
 
-            {/* Progress circles with connecting line */}
-            <View style={styles.circlesContainer}>
-              {/* Background line (unfilled) */}
-              <View style={[
-                styles.connectingLine,
-                { backgroundColor: unfilledColor },
-              ]} />
-              {/* Filled line (only spans completed circles) */}
-              {engraved.months.length > 1 && (
-                <View style={[
-                  styles.connectingLine,
-                  { backgroundColor: isFullyEngraved ? goldColor : silverColor },
-                  // For partial fill (less than 4), override right to stop at last completed circle
-                  engraved.months.length < 4 && styles.connectingLinePartial,
-                  engraved.months.length === 2 && { right: '66.7%' },
-                  engraved.months.length === 3 && { right: '33.3%' },
-                ]} />
-              )}
-
-              {/* 4 circles */}
-              {Array.from({ length: 4 }).map((_, i) => {
-                const isCompleted = i < engraved.months.length;
-                const monthLabel = engraved.months[i];
-                const isGolden = isFullyEngraved && isCompleted;
-
-                return (
-                  <View key={i} style={styles.circleWrapper}>
-                    <View style={[
-                      styles.circle,
-                      isGolden
-                        ? { backgroundColor: goldColor, borderColor: goldColor }
-                        : isCompleted
-                          ? { backgroundColor: silverColor, borderColor: silverColor }
-                          : { backgroundColor: colors.cardAlt, borderColor: unfilledColor },
-                    ]}>
-                      {isCompleted && (
-                        <MaterialCommunityIcons name="check" size={12} color="#fff" />
-                      )}
-                    </View>
-                    {/* Hide month labels when fully engraved */}
-                    {!isFullyEngraved && (
-                      <Text style={[
-                        styles.monthLabel,
-                        { color: colors.icon },
-                      ]}>
-                        {monthLabel
-                          ? getMonthLabel(monthLabel)
-                          : getFutureMonthLabel(i - engraved.months.length, engraved.months[engraved.months.length - 1])}
-                      </Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Tagline and engraved date when fully engraved */}
-            {isFullyEngraved && (
-              <>
-                <Text style={[styles.tagline, { color: goldColor }]}>
-                  "I have hidden your word in my heart"
-                </Text>
-                {engraved.months[3] && (
-                  <View style={styles.engravedDateRow}>
-                    <View style={[styles.engravedDateLine, { backgroundColor: goldColor }]} />
-                    <Text style={[styles.engravedDateText, { color: goldColor }]}>
-                      Engraved {getEngravedDate(engraved.months[3])}
-                    </Text>
-                    <View style={[styles.engravedDateLine, { backgroundColor: goldColor }]} />
-                  </View>
+            {/* Progress count + bar */}
+            <View style={[styles.progressBarRow, isLocked && styles.lockedDimmed]}>
+              <Text
+                style={[
+                  styles.progressCountText,
+                  {
+                    color: isLocked
+                      ? colors.icon
+                      : isFullyEngraved || isDue
+                        ? goldColor
+                        : colors.text,
+                  },
+                ]}
+              >
+                {Math.min(passCount, ENGRAVED_THRESHOLD)} / {ENGRAVED_THRESHOLD}
+              </Text>
+              <View style={[styles.progressBarTrack, { backgroundColor: unfilledColor }]}>
+                {isDue && !isFullyEngraved ? (
+                  <PulsingFill widthPct={progressPct} color={goldColor} />
+                ) : (
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        backgroundColor: isLocked ? colors.icon : goldColor,
+                        width: `${progressPct}%`,
+                      },
+                    ]}
+                  />
                 )}
-              </>
+              </View>
+            </View>
+
+            {/* Status line under bar */}
+            {isLocked && fakeStatus.kind === 'locked' && (
+              <View style={styles.lockedStatusRow}>
+                <IconSymbol name="lock.fill" size={11} color={colors.icon} />
+                <Text style={[styles.lockedStatusText, { color: colors.icon }]}>
+                  {fakeStatus.hoursUntilDue > 0
+                    ? `Unlocks in ${fakeStatus.hoursUntilDue}h`
+                    : fakeStatus.daysUntilDue === 1
+                      ? 'Unlocks tomorrow'
+                      : `Unlocks in ${fakeStatus.daysUntilDue} days`}
+                </Text>
+              </View>
+            )}
+            {isDue && (
+              <View style={styles.dueCallout}>
+                <View style={[styles.dueCalloutPill, { backgroundColor: goldColor }]}>
+                  <IconSymbol name="play.fill" size={10} color="#fff" />
+                  <Text style={styles.dueCalloutText}>Review now to advance</Text>
+                </View>
+              </View>
+            )}
+            {fakeStatus.kind === 'engraved' && lifetimeReviews > 0 && (
+              <Text style={[styles.lifetimeText, { color: goldColor }]}>
+                {lifetimeReviews} lifetime {lifetimeReviews === 1 ? 'review' : 'reviews'}
+              </Text>
+            )}
+
+            {/* Tagline when fully engraved */}
+            {isFullyEngraved && (
+              <Text style={[styles.tagline, { color: goldColor }]}>
+                "I have hidden your word in my heart"
+              </Text>
             )}
           </View>
       </View>
     </View>
+  );
+}
+
+function PulsingFill({ widthPct, color }: { widthPct: number; color: string }) {
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    opacity.value = withRepeat(withTiming(0.55, { duration: 900 }), -1, true);
+  }, [opacity]);
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View
+      style={[
+        styles.progressBarFill,
+        animatedStyle,
+        { backgroundColor: color, width: `${widthPct}%` },
+      ]}
+    />
   );
 }
 
@@ -278,6 +324,77 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     marginBottom: 16,
+  },
+  progressBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  progressCountText: {
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 56,
+  },
+  progressBarTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  lifetimeText: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  statusLine: {
+    textAlign: 'center',
+    fontSize: 13,
+    marginTop: 12,
+  },
+  lockedSection: {
+    opacity: 0.85,
+  },
+  lockedDimmed: {
+    opacity: 0.6,
+  },
+  dueSection: {
+    backgroundColor: 'rgba(176, 141, 87, 0.06)',
+  },
+  lockedStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 12,
+  },
+  lockedStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  dueCallout: {
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  dueCalloutPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  dueCalloutText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   engravedLabel: {
     fontSize: 11,

@@ -296,7 +296,7 @@ export default function StudySetupScreen() {
           </View>
 
           {/* Progress Card */}
-          <ProgressCard progress={verse.progress} />
+          <ProgressCard progress={verse.progress} verseIdForSpike={verse.id} />
 
           {/* Chunk Size Selection - only show if multiple verses */}
           {totalVerses > 1 && (

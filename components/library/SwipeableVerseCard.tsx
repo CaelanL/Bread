@@ -1,3 +1,4 @@
+import { ReviewStateBadge, type ReviewBadgeState } from '@/components/library/ReviewStateBadge';
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
@@ -27,6 +28,7 @@ interface SwipeableVerseCardProps {
   disableSwipe?: boolean;
   /** Number of collections this verse is in (for accurate delete message) */
   collectionCount?: number;
+  reviewState?: ReviewBadgeState;
 }
 
 export function SwipeableVerseCard({
@@ -35,6 +37,7 @@ export function SwipeableVerseCard({
   onDelete,
   disableSwipe = false,
   collectionCount = 1,
+  reviewState,
 }: SwipeableVerseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -228,6 +231,11 @@ export function SwipeableVerseCard({
                     {text}
                   </Text>
                 )}
+                {reviewState && reviewState.kind !== 'none' && (
+                  <View style={styles.badgeRow}>
+                    <ReviewStateBadge state={reviewState} />
+                  </View>
+                )}
               </View>
             </View>
           </Pressable>
@@ -317,6 +325,11 @@ const styles = StyleSheet.create({
   versePreview: {
     fontSize: 15,
     lineHeight: 21,
+  },
+  badgeRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   skeletonContainer: {
     gap: 6,

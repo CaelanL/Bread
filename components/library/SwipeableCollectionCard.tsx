@@ -1,3 +1,4 @@
+import { DueCountPill } from '@/components/library/DueCountPill';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -26,6 +27,7 @@ interface SwipeableCollectionCardProps {
   index: number;
   onPress: () => void;
   onDelete: () => Promise<void>;
+  dueCount?: number;
 }
 
 export function SwipeableCollectionCard({
@@ -33,6 +35,7 @@ export function SwipeableCollectionCard({
   index,
   onPress,
   onDelete,
+  dueCount = 0,
 }: SwipeableCollectionCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -173,7 +176,10 @@ export function SwipeableCollectionCard({
                   </Text>
                 </View>
               </View>
-              <IconSymbol name="chevron.right" size={18} color={colors.icon} />
+              <View style={styles.cardRight}>
+                {dueCount > 0 && <DueCountPill count={dueCount} />}
+                <IconSymbol name="chevron.right" size={18} color={colors.icon} />
+              </View>
             </View>
           </Pressable>
         </Animated.View>
@@ -230,6 +236,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+  },
+  cardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   iconContainer: {
     width: 48,
