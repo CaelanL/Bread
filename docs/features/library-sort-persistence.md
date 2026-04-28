@@ -1,17 +1,18 @@
 # Feature: Per-Collection Sort Persistence
 
-> **Status:** `planning`
+> **Status:** `superseded`
 > **Author:** Caelan
 > **Created:** 2026-04-27
 > **Shipped:** —
 >
-> **Sibling docs:**
-> - `docs/features/review-system.md` — built and shipped **before**
->   this feature. Adds a `due-first` sort option using the existing
->   non-persistent `useState` cycle. This feature comes next and
->   makes all sort options durable globally — including `due-first`
->   from the prior feature, with no rework needed in review-system.
-> - Each feature is planned, built, tested, and reviewed independently.
+> **Superseded by:** `docs/features/library-sort-persistence-and-last-practiced.md`
+> — that doc rolls this plan in unchanged on the persistence axis
+> and adds the "Recent → Last Practiced" semantics change on top.
+> Building together avoided two rounds of churn through the same
+> screen + sort enum.
+>
+> The content below is preserved as historical context. Do not
+> implement from this doc.
 
 ## Problem
 

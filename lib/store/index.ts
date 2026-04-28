@@ -10,11 +10,17 @@ import { ensureAuth } from '@/lib/api';
 import { getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
 import type { ColorMode } from '@/lib/settings';
-import type { BibleVersion, Collection, Difficulty, SavedVerse } from '@/lib/storage';
-import { DEFAULT_PROGRESS, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress } from '@/lib/storage';
+import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
+import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress, parseSortPreference, updateCollectionSort } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import {
+  getInProgressSort,
+  getMasteredSort,
+  setInProgressSort as persistInProgressSort,
+  setMasteredSort as persistMasteredSort,
+} from './library-sort';
 import { computeNextSrState } from './review';
 import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from './review-config';
 
@@ -66,6 +72,10 @@ interface AppState {
   bibleVersion: BibleVersion;
   reviewMaxIntervalDays: number;
 
+  // Sort preferences for virtual collections (device-local; mirrored to AsyncStorage)
+  masteredSort: SortOption;
+  inProgressSort: SortOption;
+
   // Loading states
   hydrated: boolean;
   collectionsLoading: boolean;
@@ -91,6 +101,7 @@ interface AppState {
   // Actions - Collections
   addCollection: (name: string) => Promise<Collection>;
   deleteCollection: (id: string) => Promise<void>;
+  setCollectionSort: (collectionId: string, sort: SortOption) => Promise<void>;
 
   // Actions - Verses
   addVerse: (
@@ -130,6 +141,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   colorMode: 'system',
   bibleVersion: 'ESV',
   reviewMaxIntervalDays: DEFAULT_MAX_INTERVAL_DAYS,
+  // Mastered defaults to due-first (review-aware default). Overwritten
+  // by hydrate() if AsyncStorage has a saved value. In Progress and
+  // user collections default to 'recent'.
+  masteredSort: 'due-first',
+  inProgressSort: DEFAULT_SORT,
   hydrated: false,
   collectionsLoading: true,
   versesLoading: true,
@@ -154,11 +170,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         return false;
       }
 
-      const collections = data.map((c) => ({
+      const collections: Collection[] = data.map((c) => ({
         id: c.client_id,
         name: c.name,
         isDefault: c.is_default,
         createdAt: new Date(c.created_at).getTime(),
+        sortPreference: parseSortPreference(c.sort_preference),
       }));
 
       // Ensure default collection always exists
@@ -203,7 +220,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       // Map junction rows to SavedVerse (one entry per collection membership)
-      const verses = data.map((vc: any) => ({
+      const verses: SavedVerse[] = data.map((vc: any) => ({
         id: vc.user_verses.client_id,
         collectionId: vc.user_collections.client_id,
         book: vc.user_verses.book,
@@ -213,6 +230,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         version: vc.user_verses.version as BibleVersion,
         createdAt: new Date(vc.added_at).getTime(),
         progress: parseProgress(vc.user_verses.progress),
+        lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
+          ? vc.user_verses.last_practiced_at
+          : undefined,
       }));
 
       set({ verses, versesLoading: false, error: null });
@@ -242,7 +262,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         return false;
       }
 
-      const masteredVerses = data.map((v) => ({
+      const masteredVerses: SavedVerse[] = data.map((v) => ({
         id: v.client_id,
         collectionId: MASTERED_COLLECTION_ID,
         book: v.book,
@@ -252,6 +272,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         version: v.version as BibleVersion,
         createdAt: new Date(v.created_at).getTime(),
         progress: parseProgress(v.progress),
+        lastPracticedAt: typeof v.last_practiced_at === 'string'
+          ? v.last_practiced_at
+          : undefined,
       }));
 
       set({ masteredVerses, masteredLoading: false });
@@ -266,10 +289,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrate: async () => {
     // Load settings from AsyncStorage (doesn't require auth)
     try {
-      const [savedColorMode, savedBibleVersion, savedReviewMax] = await Promise.all([
+      const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort] = await Promise.all([
         AsyncStorage.getItem(COLOR_MODE_KEY),
         AsyncStorage.getItem(BIBLE_VERSION_KEY),
         AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
+        getMasteredSort(),
+        getInProgressSort(),
       ]);
 
       const updates: Partial<AppState> = {};
@@ -284,6 +309,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (Number.isFinite(parsed) && parsed >= MIN_USER_MAX_INTERVAL_DAYS && parsed <= MAX_USER_MAX_INTERVAL_DAYS) {
           updates.reviewMaxIntervalDays = parsed;
         }
+      }
+      if (savedMasteredSort) {
+        updates.masteredSort = savedMasteredSort;
+      }
+      if (savedInProgressSort) {
+        updates.inProgressSort = savedInProgressSort;
       }
       if (Object.keys(updates).length > 0) {
         set(updates);
@@ -494,6 +525,44 @@ export const useAppStore = create<AppState>((set, get) => ({
       verses: state.verses.filter((v) => v.collectionId !== id),
       // Keep mastered verses in masteredVerses list (they're soft-deleted)
     }));
+  },
+
+  setCollectionSort: async (collectionId: string, sort: SortOption) => {
+    // Route by ID literal — virtual collection objects in `collections`
+    // never carry a sortPreference field.
+    if (collectionId === MASTERED_COLLECTION_ID) {
+      set({ masteredSort: sort });
+      try {
+        await persistMasteredSort(sort);
+      } catch (e) {
+        console.error('[STORE] Failed to persist mastered sort:', e);
+      }
+      return;
+    }
+    if (collectionId === IN_PROGRESS_COLLECTION_ID) {
+      set({ inProgressSort: sort });
+      try {
+        await persistInProgressSort(sort);
+      } catch (e) {
+        console.error('[STORE] Failed to persist in-progress sort:', e);
+      }
+      return;
+    }
+
+    // Real user collection — optimistic Zustand update, then DB write.
+    const previous = get().collections;
+    set((state) => ({
+      collections: state.collections.map((c) =>
+        c.id === collectionId ? { ...c, sortPreference: sort } : c,
+      ),
+    }));
+    try {
+      await updateCollectionSort(collectionId, sort);
+    } catch (e) {
+      console.error('[STORE] Failed to persist collection sort:', e);
+      set({ collections: previous });
+      showErrorToast("Couldn't save sort preference.");
+    }
   },
 
   // ============ VERSE ACTIONS ============
@@ -745,40 +814,62 @@ export const useAppStore = create<AppState>((set, get) => ({
     // accepts this as drift-by-1 for personal use (review-system.md
     // "Concurrent updates from two devices"). If realtime sync is added
     // later, reconcile passCount via lastReviewedAt comparison.
-    const verse = get().verses.find((v) => v.id === id);
+    // Look up across both arrays — a soft-deleted-but-mastered verse
+    // is in `masteredVerses` only (not in `verses`), and the study setup
+    // screen routes through useVerse() which checks both. Without this
+    // fallback, practicing such a verse would silently no-op the
+    // timestamp bump and the "Recent" sort wouldn't reflect the session.
+    const verse =
+      get().verses.find((v) => v.id === id) ??
+      get().masteredVerses.find((v) => v.id === id);
     if (!verse) return;
 
     const currentBest = verse.progress[difficulty]?.bestAccuracy;
     const isNewBest = currentBest === null || accuracy > currentBest;
     const isQualifyingReview = difficulty === 'hard' && accuracy >= 90 && fullSession;
+    const nowIso = new Date().toISOString();
 
-    if (!isNewBest && !isQualifyingReview) return;
+    // Build the UPDATE shape. `last_practiced_at` always present so any
+    // session completion (full or partial, new-best or not) floats this
+    // verse to the top of the "Recent" sort. `progress` only included
+    // when something actually changed.
+    const updateShape: { last_practiced_at: string; progress?: VerseProgress } = {
+      last_practiced_at: nowIso,
+    };
 
-    const newProgress = { ...verse.progress };
+    let newProgress: VerseProgress = verse.progress;
+    let justBecameMastered = false;
 
-    if (isNewBest) {
-      newProgress[difficulty] = {
-        bestAccuracy: accuracy,
-        completed: accuracy >= 90,
-      };
-    }
+    if (isNewBest || isQualifyingReview) {
+      newProgress = { ...verse.progress };
 
-    if (isQualifyingReview) {
-      const prevEngraved = newProgress.engraved ?? DEFAULT_PROGRESS.engraved!;
-      newProgress.engraved = computeNextSrState(
-        prevEngraved,
-        accuracy,
-        difficulty,
-        fullSession,
-        new Date(),
-        get().reviewMaxIntervalDays,
-      );
+      if (isNewBest) {
+        newProgress[difficulty] = {
+          bestAccuracy: accuracy,
+          completed: accuracy >= 90,
+        };
+      }
+
+      if (isQualifyingReview) {
+        const prevEngraved = newProgress.engraved ?? DEFAULT_PROGRESS.engraved!;
+        newProgress.engraved = computeNextSrState(
+          prevEngraved,
+          accuracy,
+          difficulty,
+          fullSession,
+          new Date(),
+          get().reviewMaxIntervalDays,
+        );
+      }
+
+      updateShape.progress = newProgress;
+      justBecameMastered = !!(newProgress.hard?.completed && !verse.progress.hard?.completed);
     }
 
     // Update on server
     const { error } = await supabase
       .from('user_verses')
-      .update({ progress: newProgress })
+      .update(updateShape)
       .eq('client_id', id);
 
     if (error) {
@@ -786,29 +877,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       throw new Error('Failed to save progress');
     }
 
-    // Check if verse just became mastered
-    const justBecameMastered = newProgress.hard?.completed && !verse.progress.hard?.completed;
-
-    // Update in store (both verses and masteredVerses if needed)
+    // Optimistic Zustand update mirrors both progress and timestamp on
+    // every entry for this verse (junction-row shape: a verse in N
+    // collections has N entries in `verses[]`, all sharing one client_id).
     set((state) => {
       const updatedVerses = state.verses.map((v) =>
-        v.id === id ? { ...v, progress: newProgress } : v
+        v.id === id ? { ...v, progress: newProgress, lastPracticedAt: nowIso } : v,
       );
 
       let updatedMastered = state.masteredVerses;
       if (justBecameMastered) {
-        // Add to mastered list with MASTERED_COLLECTION_ID
         const masteredVerse: SavedVerse = {
           ...verse,
           progress: newProgress,
+          lastPracticedAt: nowIso,
           collectionId: MASTERED_COLLECTION_ID,
         };
         updatedMastered = [masteredVerse, ...state.masteredVerses];
       } else {
-        // Already-mastered verse advancing: keep the masteredVerses copy in
-        // sync so SR badges/sort reflect the new schedule without a refetch.
         updatedMastered = state.masteredVerses.map((v) =>
-          v.id === id ? { ...v, progress: newProgress } : v
+          v.id === id ? { ...v, progress: newProgress, lastPracticedAt: nowIso } : v,
         );
       }
 
@@ -825,10 +913,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const previousVerses = get().verses;
     const previousMastered = get().masteredVerses;
 
-    // Optimistic update
+    // Optimistic update — also clear lastPracticedAt so the reset verse
+    // drops to the bottom of the "Recent" sort.
     set((state) => ({
       verses: state.verses.map((v) =>
-        v.id === id ? { ...v, progress: DEFAULT_PROGRESS } : v
+        v.id === id ? { ...v, progress: DEFAULT_PROGRESS, lastPracticedAt: undefined } : v
       ),
       // Remove from mastered if it was mastered
       masteredVerses: wasMastered
@@ -840,7 +929,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Update on server
       const { error } = await supabase
         .from('user_verses')
-        .update({ progress: DEFAULT_PROGRESS })
+        .update({ progress: DEFAULT_PROGRESS, last_practiced_at: null })
         .eq('client_id', id);
 
       if (error) {
@@ -861,9 +950,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       collections: [],
       verses: [],
       masteredVerses: [],
-      // Device prefs (colorMode, bibleVersion, reviewMaxIntervalDays) are
-      // preserved across sign-out by virtue of being absent from this set
-      // call — Zustand keeps unspecified keys.
+      // Device prefs (colorMode, bibleVersion, reviewMaxIntervalDays,
+      // masteredSort, inProgressSort) are preserved across sign-out by
+      // virtue of being absent from this set call — Zustand keeps
+      // unspecified keys. AsyncStorage copies are never touched here.
       hydrated: false,
       collectionsLoading: true,
       versesLoading: true,
@@ -883,6 +973,21 @@ export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
 export const useStoreError = () => useAppStore((state) => state.error);
 export const useReviewMaxIntervalDays = () => useAppStore((state) => state.reviewMaxIntervalDays);
+
+/**
+ * Sort preference for a given collection. Routes by ID literal because
+ * virtual-collection objects in `collections` never carry a
+ * `sortPreference` field — the splice in fetchCollections inserts the
+ * frozen MASTERED_COLLECTION / IN_PROGRESS_COLLECTION constants.
+ */
+export function useCollectionSort(collectionId: string): SortOption {
+  return useAppStore((state) => {
+    if (collectionId === MASTERED_COLLECTION_ID) return state.masteredSort;
+    if (collectionId === IN_PROGRESS_COLLECTION_ID) return state.inProgressSort;
+    const collection = state.collections.find((c) => c.id === collectionId);
+    return collection?.sortPreference ?? DEFAULT_SORT;
+  });
+}
 
 export function useVersesByCollection(collectionId: string) {
   const verses = useAppStore(useShallow((state) => state.verses));
