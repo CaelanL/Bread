@@ -11,6 +11,10 @@ import { ENGRAVED_THRESHOLD } from '@/lib/store/review-config';
 
 // ============ TYPES ============
 
+export type SortOption = 'recent' | 'alphabetical' | 'mastery' | 'due-first';
+
+export const DEFAULT_SORT: SortOption = 'recent';
+
 export interface DifficultyProgress {
   bestAccuracy: number | null;
   completed: boolean; // true if bestAccuracy >= 90
@@ -50,6 +54,7 @@ export interface SavedVerse {
   version: BibleVersion;
   createdAt: number;
   progress: VerseProgress;
+  lastPracticedAt?: string; // ISO UTC of last completed session (any difficulty)
 }
 
 export interface Collection {
@@ -60,6 +65,7 @@ export interface Collection {
   icon?: string; // SF Symbol name
   iconColor?: string; // Hex color for icon
   createdAt: number;
+  sortPreference?: SortOption; // Per-collection sort, NULL = default
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -177,11 +183,12 @@ export async function getCollections(): Promise<Collection[]> {
       return [DEFAULT_COLLECTION];
     }
 
-    const collections = data.map((c) => ({
+    const collections: Collection[] = data.map((c) => ({
       id: c.client_id,
       name: c.name,
       isDefault: c.is_default,
       createdAt: new Date(c.created_at).getTime(),
+      sortPreference: parseSortPreference(c.sort_preference),
     }));
 
     // Ensure default collection always exists
@@ -349,6 +356,9 @@ export async function getSavedVerses(): Promise<SavedVerse[]> {
       version: vc.user_verses.version as BibleVersion,
       createdAt: new Date(vc.added_at).getTime(),
       progress: parseProgress(vc.user_verses.progress),
+      lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
+        ? vc.user_verses.last_practiced_at
+        : undefined,
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -395,6 +405,9 @@ export async function getVersesByCollection(collectionId: string): Promise<Saved
       version: vc.user_verses.version as BibleVersion,
       createdAt: new Date(vc.added_at).getTime(),
       progress: parseProgress(vc.user_verses.progress),
+      lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
+        ? vc.user_verses.last_practiced_at
+        : undefined,
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -689,6 +702,9 @@ export async function getMasteredVerses(): Promise<SavedVerse[]> {
       version: v.version as BibleVersion,
       createdAt: new Date(v.created_at).getTime(),
       progress: parseProgress(v.progress),
+      lastPracticedAt: typeof v.last_practiced_at === 'string'
+        ? v.last_practiced_at
+        : undefined,
     }));
   } catch (e) {
     console.error('[STORAGE] Mastered verses fetch error:', e);
@@ -726,6 +742,79 @@ export async function resetVerseProgress(id: string): Promise<void> {
   if (error) {
     console.error('[STORAGE] Failed to reset verse progress:', error);
     throw new Error('Failed to reset progress');
+  }
+}
+
+// ============ SORT PREFERENCE (per-collection) ============
+
+const VALID_SORTS: readonly SortOption[] = ['recent', 'alphabetical', 'mastery', 'due-first'] as const;
+
+/**
+ * Defensive parser for the `sort_preference` column. Tolerates NULL,
+ * unrecognized values, and pre-migration rows (column missing → undefined).
+ * Returns undefined when the value is unknown so callers fall back to
+ * DEFAULT_SORT.
+ */
+export function parseSortPreference(raw: unknown): SortOption | undefined {
+  if (typeof raw !== 'string') return undefined;
+  return VALID_SORTS.includes(raw as SortOption) ? (raw as SortOption) : undefined;
+}
+
+/**
+ * Persist a per-collection sort preference. The default `my-verses`
+ * collection is lazy-created on first verse add; if the user cycles
+ * the sort *before* their first verse, the row doesn't exist yet —
+ * we lazy-create it here so the preference survives app restart.
+ *
+ * Virtual collections (Mastered, In Progress) never reach this
+ * function — `setCollectionSort` in the store routes them to the
+ * AsyncStorage helpers in `lib/store/library-sort.ts`.
+ */
+export async function updateCollectionSort(
+  collectionId: string,
+  sort: SortOption,
+): Promise<void> {
+  // Use .select() so we can detect zero-row updates (the default
+  // collection's row may not exist yet for users with no verses).
+  const { data, error } = await supabase
+    .from('user_collections')
+    .update({ sort_preference: sort })
+    .eq('client_id', collectionId)
+    .select('id');
+
+  if (error) {
+    console.error('[STORAGE] Failed to update collection sort:', error);
+    throw new Error('Failed to save sort preference');
+  }
+
+  // If the UPDATE matched a row, we're done.
+  if (data && data.length > 0) return;
+
+  // Zero rows matched. Only the default collection can legitimately
+  // be missing from the DB (lazy-created on first verse add). For any
+  // other collection, this is a stale ID — surface as an error rather
+  // than silently inserting a row.
+  if (collectionId !== DEFAULT_COLLECTION_ID) {
+    console.warn(`[STORAGE] updateCollectionSort: no row matched for ${collectionId}`);
+    return;
+  }
+
+  // Lazy-create the default collection with the chosen sort.
+  const userId = await getCurrentUserId();
+  const { error: insertError } = await supabase
+    .from('user_collections')
+    .insert({
+      user_id: userId,
+      client_id: DEFAULT_COLLECTION_ID,
+      name: 'My Verses',
+      is_default: true,
+      sort_preference: sort,
+      created_at: new Date(0).toISOString(),
+    });
+
+  if (insertError) {
+    console.error('[STORAGE] Failed to lazy-create default collection:', insertError);
+    throw new Error('Failed to save sort preference');
   }
 }
 

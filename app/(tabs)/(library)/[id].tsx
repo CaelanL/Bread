@@ -4,10 +4,11 @@ import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { formatVerseReference, type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
+import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useVersesByCollection, useCollection, useHydrated, useInProgressVerses, useMasteredVerses, useVerses } from '@/lib/store';
-import { daysUntilDue, isDueForReview } from '@/lib/store/review';
+import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useVerses, useVersesByCollection } from '@/lib/store';
+import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
+import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -63,8 +64,8 @@ export default function CollectionScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  type SortOption = 'recent' | 'alphabetical' | 'mastery' | 'due-first';
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const sortBy = useCollectionSort(id || '');
+  const setCollectionSort = useAppStore((s) => s.setCollectionSort);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -97,32 +98,7 @@ export default function CollectionScreen() {
 
   // Sort verses based on sortBy
   const now = useReviewNow();
-  const sortedVerses = [...filteredVerses].sort((a, b) => {
-    switch (sortBy) {
-      case 'alphabetical':
-        const refA = formatVerseReference(a);
-        const refB = formatVerseReference(b);
-        return refA.localeCompare(refB);
-      case 'mastery':
-        const getMasteryLevel = (v: SavedVerse) => {
-          if (v.progress.engraved?.completed) return 4;
-          if (v.progress.hard.completed) return 3;
-          if (v.progress.medium.completed) return 2;
-          if (v.progress.easy.completed) return 1;
-          return 0;
-        };
-        return getMasteryLevel(b) - getMasteryLevel(a);
-      case 'due-first': {
-        const da = daysUntilDue(a, now);
-        const db = daysUntilDue(b, now);
-        if (da !== db) return da - db;
-        return b.createdAt - a.createdAt;
-      }
-      case 'recent':
-      default:
-        return b.createdAt - a.createdAt;
-    }
-  });
+  const sortedVerses = sortVerses(filteredVerses, sortBy, now);
 
   const dueCount = useMemo(
     () => (isMasteredCollection ? sortedVerses.filter((v) => isDueForReview(v, now)).length : 0),
@@ -130,24 +106,12 @@ export default function CollectionScreen() {
   );
 
   const cycleSortBy = () => {
-    setSortBy((current) => {
-      switch (current) {
-        case 'recent': return 'alphabetical';
-        case 'alphabetical': return 'mastery';
-        case 'mastery': return isMasteredCollection ? 'due-first' : 'recent';
-        case 'due-first': return 'recent';
-      }
-    });
+    if (!id) return;
+    const next = cycleSort(sortBy, isMasteredCollection);
+    setCollectionSort(id, next);
   };
 
-  const getSortLabel = () => {
-    switch (sortBy) {
-      case 'recent': return 'Recent';
-      case 'alphabetical': return 'A-Z';
-      case 'mastery': return 'Mastery';
-      case 'due-first': return 'Due first';
-    }
-  };
+  const sortLabel = getSortLabel(sortBy);
 
   const renderEmptyState = () => {
     // No search results
@@ -238,7 +202,7 @@ export default function CollectionScreen() {
             onPress={cycleSortBy}
           >
             <IconSymbol name="arrow.up.arrow.down" size={14} color={colors.icon} />
-            <Text style={[styles.sortLabel, { color: colors.icon }]}>{getSortLabel()}</Text>
+            <Text style={[styles.sortLabel, { color: colors.icon }]}>{sortLabel}</Text>
           </Pressable>
         </View>
       )}
