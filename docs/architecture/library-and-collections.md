@@ -56,17 +56,42 @@ see deletion semantics below).
 
 ## The "Mastered" virtual collection
 
-- Constant: `MASTERED_COLLECTION_ID = '@mastered'`.
+- Constant: `MASTERED_COLLECTION_ID = 'mastered'`.
 - **No row exists in `user_collections`.** It's a client-side
   synthesis.
 - Populated by `fetchMasteredVerses()` — pulls verses where
   `progress->hard->completed = true`, regardless of `deleted_at`.
 - Cannot be deleted (no-op in store).
 - Cannot be added to directly (mastery is the only way in).
+- The Mastered detail screen has a `due-first` sort option (added by
+  the review-system feature) that sorts by ascending
+  `daysUntilDue` so verses that are due for SR review rise to the
+  top. Selectable from the existing sort cycle:
+  Recent → A-Z → Mastery → Due first.
+
+## The "In Progress" virtual collection
+
+- Constant: `IN_PROGRESS_COLLECTION_ID = 'in-progress'`.
+- **No row exists in `user_collections`.** Client-side synthesis,
+  parallel to Mastered.
+- Populated by `useInProgressVerses()` — any verse with non-null
+  `bestAccuracy` on any difficulty AND `!hard.completed`, deduped
+  by verse id. Lenient: any practice puts the verse in progress.
+- Hidden from the Library list when the count is zero.
+- Cannot be deleted, cannot be added to directly, swipe-to-delete
+  on individual verses is disabled (verses live in real
+  collections; this is just a view).
+- Does **not** participate in SR scheduling — In Progress means
+  "still learning," distinct from Mastered's "needs review."
+- The Insights "Verses in progress" count and the Library
+  In Progress collection size are sourced from the same
+  `isInProgressVerse` predicate; they are guaranteed equal.
 
 > **If you query `user_collections` and use the result in client
-> code, remember to inject the virtual `@mastered` entry.** That's
-> done in `getCollections()` in `lib/storage/index.ts`.
+> code, remember to inject the virtual `mastered` and (when
+> `useInProgressVerses().length > 0`) `in-progress` entries.**
+> Both are added in `getCollections()` in `lib/storage/index.ts`
+> and `fetchCollections` in `lib/store/index.ts`.
 
 ## Adding a verse — multi-select gesture
 
@@ -137,7 +162,7 @@ deleteVerse(verseId, collectionId)
   │
   ├── If verse is in NO other collections AND mastered (progress.hard.completed):
   │     Soft-delete (set deleted_at = NOW()).
-  │     Verse stays in the @mastered virtual collection forever.
+  │     Verse stays in the `mastered` virtual collection forever.
   │
   └── If verse is in NO other collections AND NOT mastered:
         Hard-delete (DELETE FROM user_verses).
@@ -231,9 +256,9 @@ There's no UI to reorder collections.
 - **A collection-delete is a fan-out write.** Partial failure is
   possible. Optimistic rollback exists locally but the server can
   end up half-applied.
-- **`@mastered` is client-side only.** If you write code expecting
-  every collection ID to map to a `user_collections` row, you'll
-  blow up on `@mastered`.
+- **`mastered` and `in-progress` are client-side only.** If you
+  write code expecting every collection ID to map to a
+  `user_collections` row, you'll blow up on either of them.
 - **Multi-select gesture is fragile.** It uses long-press timing,
   drag distance thresholds, and auto-scroll. Don't refactor
   carelessly.

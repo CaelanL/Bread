@@ -82,6 +82,21 @@ The dedup is by verse `id`, because a verse can be in multiple
 collections. Soft-deleted mastered verses count toward
 `versesMastered` (mastery is permanent).
 
+The "in progress" count is sourced from the same `isInProgressVerse`
+predicate as the Library `useInProgressVerses()` selector that
+populates the In Progress virtual collection. The two counts are
+guaranteed equal — same predicate, same dedup.
+
+## Engraved status
+
+Engraved is **no longer** a 4-consecutive-month streak. It's now a
+spaced-repetition milestone: a verse is engraved once
+`progress.engraved.passCount >= 10` (see `ENGRAVED_THRESHOLD` in
+`lib/store/review-config.ts`). Engraving is permanent — failing or
+skipping a review never un-engraves. See
+`docs/architecture/study-session.md` step 8 and
+`docs/features/review-system.md` for the full algorithm.
+
 ## Average time to master
 
 Source: `user_stats.avg_time_per_word_ms`. Multiplied by 23 (the

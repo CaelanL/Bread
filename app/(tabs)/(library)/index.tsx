@@ -4,8 +4,9 @@ import { SwipeableCollectionCard } from '@/components/library/SwipeableCollectio
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { type Collection, MASTERED_COLLECTION_ID } from '@/lib/storage';
-import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useMasteredVerseCount } from '@/lib/store';
+import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
+import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useDueCounts, useInProgressVerseCount, useMasteredVerseCount } from '@/lib/store';
+import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -36,11 +37,20 @@ function CollectionCard({
   onDelete: () => void;
 }) {
   const isMastered = collection.id === MASTERED_COLLECTION_ID;
+  const isInProgress = collection.id === IN_PROGRESS_COLLECTION_ID;
   const collectionVerseCount = useCollectionVerseCount(collection.id);
   const masteredVerseCount = useMasteredVerseCount();
+  const inProgressVerseCount = useInProgressVerseCount();
+  const now = useReviewNowValue();
+  const dueCounts = useDueCounts(now);
 
-  const verseCount = isMastered ? masteredVerseCount : collectionVerseCount;
+  const verseCount = isMastered
+    ? masteredVerseCount
+    : isInProgress
+      ? inProgressVerseCount
+      : collectionVerseCount;
   const collectionWithCount: CollectionWithCount = { ...collection, verseCount };
+  const dueCount = isMastered ? dueCounts.mastered : 0;
 
   return (
     <SwipeableCollectionCard
@@ -48,6 +58,7 @@ function CollectionCard({
       index={index}
       onPress={onPress}
       onDelete={onDelete}
+      dueCount={dueCount}
     />
   );
 }
@@ -56,9 +67,14 @@ export default function LibraryScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const now = useReviewNow();
 
   // Store data
-  const collections = useCollections();
+  const allCollections = useCollections();
+  const inProgressCount = useInProgressVerseCount();
+  const collections = inProgressCount > 0
+    ? allCollections
+    : allCollections.filter((c) => c.id !== IN_PROGRESS_COLLECTION_ID);
   const hydrated = useHydrated();
   const addCollection = useAppStore((s) => s.addCollection);
   const deleteCollection = useAppStore((s) => s.deleteCollection);
@@ -109,48 +125,50 @@ export default function LibraryScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Library</Text>
-        <Pressable
-          style={styles.addButton}
-          onPress={() => setModalVisible(true)}
+    <ReviewNowProvider value={now}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: colors.text }]}>Library</Text>
+          <Pressable
+            style={styles.addButton}
+            onPress={() => setModalVisible(true)}
+          >
+            <IconSymbol name="plus" size={28} color={primaryColor} />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.collectionsContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+          }
         >
-          <IconSymbol name="plus" size={28} color={primaryColor} />
-        </Pressable>
+          {!hydrated ? (
+            <CollectionCardSkeleton count={3} />
+          ) : (
+            <>
+              {collections.map((collection, index) => (
+                <CollectionCard
+                  key={collection.id}
+                  collection={collection}
+                  index={index}
+                  onPress={() => handleCollectionPress(collection)}
+                  onDelete={() => handleDeleteCollection(collection.id)}
+                />
+              ))}
+              {collections.length <= 1 && renderEmptyHint()}
+            </>
+          )}
+        </ScrollView>
+
+        <AddCollectionModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          onAdd={handleAddCollection}
+        />
       </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.collectionsContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
-        }
-      >
-        {!hydrated ? (
-          <CollectionCardSkeleton count={3} />
-        ) : (
-          <>
-            {collections.map((collection, index) => (
-              <CollectionCard
-                key={collection.id}
-                collection={collection}
-                index={index}
-                onPress={() => handleCollectionPress(collection)}
-                onDelete={() => handleDeleteCollection(collection.id)}
-              />
-            ))}
-            {collections.length <= 1 && renderEmptyHint()}
-          </>
-        )}
-      </ScrollView>
-
-      <AddCollectionModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        onAdd={handleAddCollection}
-      />
-    </View>
+    </ReviewNowProvider>
   );
 }
 

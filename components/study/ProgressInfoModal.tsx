@@ -52,6 +52,21 @@ export function ProgressInfoModal({ visible, onClose }: ProgressInfoModalProps) 
               </View>
             </View>
 
+            {/* Review Schedule Section */}
+            <View style={styles.section}>
+              <View style={[styles.iconBox, { backgroundColor: 'rgba(245, 158, 11, 0.1)' }]}>
+                <MaterialCommunityIcons name="calendar-clock" size={24} color={goldColor} />
+              </View>
+              <View style={styles.textContent}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Review Schedule</Text>
+                <Text style={[styles.description, { color: colors.icon }]}>
+                  Mastered verses come back for review on a growing schedule:{' '}
+                  <Text style={[styles.highlight, { color: goldColor }]}>1 day, 2 days, 3 days</Text>, and so on,
+                  capped at your chosen maximum.
+                </Text>
+              </View>
+            </View>
+
             {/* Engraved Section */}
             <View style={styles.section}>
               <View style={[styles.iconBox, { backgroundColor: 'rgba(176, 141, 87, 0.1)' }]}>
@@ -60,8 +75,8 @@ export function ProgressInfoModal({ visible, onClose }: ProgressInfoModalProps) 
               <View style={styles.textContent}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Engraved</Text>
                 <Text style={[styles.description, { color: colors.icon }]}>
-                  Master the verse <Text style={[styles.highlight, { color: goldColor }]}>once per month</Text> for{' '}
-                  <Text style={[styles.highlight, { color: goldColor }]}>4 consecutive months</Text>
+                  Complete <Text style={[styles.highlight, { color: goldColor }]}>10 successful reviews</Text> on the
+                  schedule and the verse is engraved — yours forever.
                 </Text>
               </View>
             </View>

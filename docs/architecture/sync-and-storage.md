@@ -21,6 +21,7 @@ AsyncStorage holds device settings only.
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
 | `bibleVersion` | — | ✓ | ✓ (`app_bible_version`) |
+| `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
 | Auth session | — | (via Supabase) | ✓ (Supabase-managed) |
 | Migration flag | — | — | ✓ (`data_synced_to_server`) |
 
@@ -45,6 +46,7 @@ interface AppState {
   // Settings (also in AsyncStorage)
   colorMode: 'system' | 'light' | 'dark';
   bibleVersion: BibleVersion;
+  reviewMaxIntervalDays: number;
 
   // Lifecycle flags
   hydrated: boolean;
@@ -97,10 +99,11 @@ The convention is `useX(...)` selectors, not direct
 
 ### `clear()`
 
-Wipes all state **except `colorMode`** (theme is a device
-preference, not a user preference). Called on sign-out. If you
-extend the store with more device-level prefs, exempt them
-explicitly.
+Wipes user data on sign-out. Device-level prefs (`colorMode`,
+`bibleVersion`, `reviewMaxIntervalDays`) are **preserved by
+omission** — `clear()` calls `set(...)` listing only the data and
+loading-state keys, and Zustand keeps everything else. If you add
+another device-level pref, just don't list it in `clear()`'s `set`.
 
 ## Hydration
 
@@ -109,7 +112,8 @@ restored.
 
 ```
 hydrate()
-  ├── Promise.all(AsyncStorage.getItem on COLOR_MODE_KEY, BIBLE_VERSION_KEY)
+  ├── Promise.all(AsyncStorage.getItem on COLOR_MODE_KEY,
+  │                BIBLE_VERSION_KEY, REVIEW_MAX_INTERVAL_DAYS_KEY)
   │     → set colorMode, bibleVersion in store
   │
   ├── Promise.all(fetchCollections, fetchVerses, fetchMasteredVerses)
@@ -247,8 +251,10 @@ renders don't need to wait on the network.
 5. **Verse text never goes through Zustand.** The session cache
    handles that. If you find yourself stuffing text into a verse
    row in the store, redirect through `getVerseText`.
-6. **`clear()` exempts `colorMode`.** If you add device-level
-   preferences, exempt them too.
+6. **`clear()` preserves device prefs by omission.** `colorMode`,
+   `bibleVersion`, and `reviewMaxIntervalDays` survive sign-out
+   because `clear()` doesn't list them in its `set(...)` call. Add
+   new device-level prefs the same way — just don't include them.
 7. **No offline write queue exists.** Don't pretend writes will
    eventually succeed. If a feature needs offline durability, that's
    a feature doc.
