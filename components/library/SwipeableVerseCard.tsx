@@ -1,4 +1,4 @@
-import { EngravedIcon } from '@/components/ui/EngravedIcon';
+import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -208,14 +208,12 @@ export function SwipeableVerseCard({
                       {' '}• {verse.version}
                     </Text>
                   </Text>
-                  {verse.progress.engraved?.completed ? (
-                    <EngravedIcon size={14} color={colors.tint} />
-                  ) : highestDifficulty === 'easy' ? (
+                  {/* Mastered verses surface their state via ReviewStateBadge below;
+                      unmastered verses show the highest-difficulty dot/checkmark. */}
+                  {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
                     <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
-                  ) : highestDifficulty === 'medium' ? (
+                  ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
                     <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
-                  ) : highestDifficulty === 'hard' ? (
-                    <IconSymbol name="checkmark" size={12} color={colors.success} />
                   ) : null}
                 </View>
                 {loading ? (
@@ -228,6 +226,7 @@ export function SwipeableVerseCard({
                     {text}
                   </Text>
                 )}
+                <ReviewStateBadge verse={verse} />
               </View>
             </View>
           </Pressable>

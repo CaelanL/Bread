@@ -11,41 +11,20 @@ import { getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
 import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse } from '@/lib/storage';
-import { MASTERED_COLLECTION_ID } from '@/lib/storage';
+import { DEFAULT_PROGRESS, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { computeNextSrState } from './review';
+import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from './review-config';
 
 const COLOR_MODE_KEY = 'app_color_mode';
 const BIBLE_VERSION_KEY = 'app_bible_version';
-
-// ============ HELPERS ============
-
-/**
- * Check if two month strings are consecutive (e.g., "2025-01" -> "2025-02")
- */
-function isConsecutiveMonth(prev: string, current: string): boolean {
-  const [prevYear, prevMonth] = prev.split('-').map(Number);
-  const [currYear, currMonth] = current.split('-').map(Number);
-
-  if (prevMonth === 12) {
-    // December -> January of next year
-    return currYear === prevYear + 1 && currMonth === 1;
-  }
-  // Same year, next month
-  return currYear === prevYear && currMonth === prevMonth + 1;
-}
+const REVIEW_MAX_INTERVAL_DAYS_KEY = 'review_max_interval_days';
 
 // ============ CONSTANTS ============
 
 const DEFAULT_COLLECTION_ID = 'my-verses';
-
-const DEFAULT_PROGRESS = {
-  easy: { bestAccuracy: null, completed: false },
-  medium: { bestAccuracy: null, completed: false },
-  hard: { bestAccuracy: null, completed: false },
-  engraved: { completed: false, months: [] },
-};
 
 const DEFAULT_COLLECTION: Collection = {
   id: DEFAULT_COLLECTION_ID,
@@ -64,6 +43,16 @@ const MASTERED_COLLECTION: Collection = {
   createdAt: 0,
 };
 
+const IN_PROGRESS_COLLECTION: Collection = {
+  id: IN_PROGRESS_COLLECTION_ID,
+  name: 'In Progress',
+  isDefault: false,
+  isVirtual: true,
+  icon: 'circle.dotted',
+  iconColor: '#f59e0b',
+  createdAt: 0,
+};
+
 // ============ STORE INTERFACE ============
 
 interface AppState {
@@ -75,6 +64,7 @@ interface AppState {
   // Settings
   colorMode: ColorMode;
   bibleVersion: BibleVersion;
+  reviewMaxIntervalDays: number;
 
   // Loading states
   hydrated: boolean;
@@ -96,6 +86,7 @@ interface AppState {
   // Actions - Settings
   setColorMode: (mode: ColorMode) => Promise<void>;
   setBibleVersion: (version: BibleVersion) => Promise<void>;
+  setReviewMaxIntervalDays: (days: number) => Promise<void>;
 
   // Actions - Collections
   addCollection: (name: string) => Promise<Collection>;
@@ -108,7 +99,12 @@ interface AppState {
     version: BibleVersion
   ) => Promise<SavedVerse>;
   deleteVerse: (id: string, collectionId: string) => Promise<{ wasMastered: boolean }>;
-  updateVerseProgress: (id: string, difficulty: Difficulty, accuracy: number) => Promise<void>;
+  updateVerseProgress: (
+    id: string,
+    difficulty: Difficulty,
+    accuracy: number,
+    fullSession?: boolean,
+  ) => Promise<void>;
   resetVerseProgress: (id: string) => Promise<void>;
 
   // Reset
@@ -133,6 +129,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   masteredVerses: [],
   colorMode: 'system',
   bibleVersion: 'ESV',
+  reviewMaxIntervalDays: DEFAULT_MAX_INTERVAL_DAYS,
   hydrated: false,
   collectionsLoading: true,
   versesLoading: true,
@@ -170,9 +167,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         collections.unshift(DEFAULT_COLLECTION);
       }
 
-      // Add Mastered collection after default (always second)
+      // Add Mastered + In Progress virtual collections after default
       const defaultIndex = collections.findIndex((c) => c.isDefault);
-      collections.splice(defaultIndex + 1, 0, MASTERED_COLLECTION);
+      collections.splice(defaultIndex + 1, 0, MASTERED_COLLECTION, IN_PROGRESS_COLLECTION);
 
       set({ collections, collectionsLoading: false, error: null });
       return true;
@@ -215,7 +212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         verseEnd: vc.user_verses.verse_end,
         version: vc.user_verses.version as BibleVersion,
         createdAt: new Date(vc.added_at).getTime(),
-        progress: vc.user_verses.progress || DEFAULT_PROGRESS,
+        progress: parseProgress(vc.user_verses.progress),
       }));
 
       set({ verses, versesLoading: false, error: null });
@@ -254,7 +251,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         verseEnd: v.verse_end,
         version: v.version as BibleVersion,
         createdAt: new Date(v.created_at).getTime(),
-        progress: v.progress || DEFAULT_PROGRESS,
+        progress: parseProgress(v.progress),
       }));
 
       set({ masteredVerses, masteredLoading: false });
@@ -269,9 +266,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrate: async () => {
     // Load settings from AsyncStorage (doesn't require auth)
     try {
-      const [savedColorMode, savedBibleVersion] = await Promise.all([
+      const [savedColorMode, savedBibleVersion, savedReviewMax] = await Promise.all([
         AsyncStorage.getItem(COLOR_MODE_KEY),
         AsyncStorage.getItem(BIBLE_VERSION_KEY),
+        AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
       ]);
 
       const updates: Partial<AppState> = {};
@@ -280,6 +278,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       if (savedBibleVersion && ['ESV', 'NLT', 'NIV', 'NKJV', 'KJV'].includes(savedBibleVersion)) {
         updates.bibleVersion = savedBibleVersion as BibleVersion;
+      }
+      if (savedReviewMax) {
+        const parsed = parseInt(savedReviewMax, 10);
+        if (Number.isFinite(parsed) && parsed >= MIN_USER_MAX_INTERVAL_DAYS && parsed <= MAX_USER_MAX_INTERVAL_DAYS) {
+          updates.reviewMaxIntervalDays = parsed;
+        }
       }
       if (Object.keys(updates).length > 0) {
         set(updates);
@@ -352,6 +356,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       await AsyncStorage.setItem(BIBLE_VERSION_KEY, version);
     } catch (e) {
       console.error('[STORE] Failed to save bibleVersion:', e);
+    }
+  },
+
+  setReviewMaxIntervalDays: async (days: number) => {
+    const clamped = Math.min(
+      MAX_USER_MAX_INTERVAL_DAYS,
+      Math.max(MIN_USER_MAX_INTERVAL_DAYS, Math.round(days)),
+    );
+    set({ reviewMaxIntervalDays: clamped });
+    try {
+      await AsyncStorage.setItem(REVIEW_MAX_INTERVAL_DAYS_KEY, String(clamped));
+    } catch (e) {
+      console.error('[STORE] Failed to save reviewMaxIntervalDays:', e);
     }
   },
 
@@ -542,12 +559,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     let verseId: string;
     let clientId: string;
-    let progress = DEFAULT_PROGRESS;
+    let progress: SavedVerse['progress'] = DEFAULT_PROGRESS;
 
     if (existing) {
       verseId = existing.id;
       clientId = existing.client_id;
-      progress = existing.progress || DEFAULT_PROGRESS;
+      progress = parseProgress(existing.progress);
 
       // Restore if soft-deleted
       if (existing.deleted_at) {
@@ -716,22 +733,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  updateVerseProgress: async (id: string, difficulty: Difficulty, accuracy: number) => {
-    // Get current verse from store
+  updateVerseProgress: async (id, difficulty, accuracy, fullSession = false) => {
+    // Look up the verse in `state.verses` only — `masteredVerses` may
+    // contain soft-deleted rows that aren't in `state.verses` and shouldn't
+    // be progressing anyway (no active session can reach them today).
+    //
+    // Multi-device note: writes to Supabase are last-write-wins. Two
+    // devices reviewing the same verse against their own stale local
+    // `nextDueAt` can each treat the review as on-time and double-bump
+    // passCount, OR clobber each other and lose an increment. Spec
+    // accepts this as drift-by-1 for personal use (review-system.md
+    // "Concurrent updates from two devices"). If realtime sync is added
+    // later, reconcile passCount via lastReviewedAt comparison.
     const verse = get().verses.find((v) => v.id === id);
     if (!verse) return;
 
     const currentBest = verse.progress[difficulty]?.bestAccuracy;
     const isNewBest = currentBest === null || accuracy > currentBest;
+    const isQualifyingReview = difficulty === 'hard' && accuracy >= 90 && fullSession;
 
-    // Check if we need to update engraved progress (hard mode 90%+)
-    const shouldUpdateEngraved = difficulty === 'hard' && accuracy >= 90;
+    if (!isNewBest && !isQualifyingReview) return;
 
-    if (!isNewBest && !shouldUpdateEngraved) return;
+    const newProgress = { ...verse.progress };
 
-    let newProgress = { ...verse.progress };
-
-    // Update difficulty best score if new best
     if (isNewBest) {
       newProgress[difficulty] = {
         bestAccuracy: accuracy,
@@ -739,34 +763,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }
 
-    // Update engraved progress if hard mode 90%+
-    if (shouldUpdateEngraved) {
-      const now = new Date();
-      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const engraved = newProgress.engraved || { completed: false, months: [] };
-      const months = [...engraved.months];
-      const lastMonth = months[months.length - 1];
-
-      if (engraved.completed) {
-        // Already engraved, no need to update
-      } else if (!lastMonth) {
-        // First entry
-        months.push(currentMonth);
-      } else if (lastMonth === currentMonth) {
-        // Already logged this month, do nothing
-      } else if (isConsecutiveMonth(lastMonth, currentMonth)) {
-        // Consecutive month, add to streak
-        months.push(currentMonth);
-      } else {
-        // Streak broken, reset
-        months.length = 0;
-        months.push(currentMonth);
-      }
-
-      newProgress.engraved = {
-        completed: months.length >= 4,
-        months: months.slice(0, 4), // Cap at 4
-      };
+    if (isQualifyingReview) {
+      const prevEngraved = newProgress.engraved ?? DEFAULT_PROGRESS.engraved!;
+      newProgress.engraved = computeNextSrState(
+        prevEngraved,
+        accuracy,
+        difficulty,
+        fullSession,
+        new Date(),
+        get().reviewMaxIntervalDays,
+      );
     }
 
     // Update on server
@@ -798,6 +804,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           collectionId: MASTERED_COLLECTION_ID,
         };
         updatedMastered = [masteredVerse, ...state.masteredVerses];
+      } else {
+        // Already-mastered verse advancing: keep the masteredVerses copy in
+        // sync so SR badges/sort reflect the new schedule without a refetch.
+        updatedMastered = state.masteredVerses.map((v) =>
+          v.id === id ? { ...v, progress: newProgress } : v
+        );
       }
 
       return { verses: updatedVerses, masteredVerses: updatedMastered };
@@ -805,13 +817,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   resetVerseProgress: async (id: string) => {
-    const DEFAULT_PROGRESS = {
-      easy: { bestAccuracy: null, completed: false },
-      medium: { bestAccuracy: null, completed: false },
-      hard: { bestAccuracy: null, completed: false },
-      engraved: { completed: false, months: [] },
-    };
-
     // Check if verse was mastered before reset
     const verse = get().verses.find((v) => v.id === id);
     const wasMastered = verse?.progress?.hard?.completed === true;
@@ -856,7 +861,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       collections: [],
       verses: [],
       masteredVerses: [],
-      // Note: colorMode is NOT cleared - it persists across logout
+      // Device prefs (colorMode, bibleVersion, reviewMaxIntervalDays) are
+      // preserved across sign-out by virtue of being absent from this set
+      // call — Zustand keeps unspecified keys.
       hydrated: false,
       collectionsLoading: true,
       versesLoading: true,
@@ -875,6 +882,7 @@ export const useCollections = () => useAppStore((state) => state.collections);
 export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
 export const useStoreError = () => useAppStore((state) => state.error);
+export const useReviewMaxIntervalDays = () => useAppStore((state) => state.reviewMaxIntervalDays);
 
 export function useVersesByCollection(collectionId: string) {
   const verses = useAppStore(useShallow((state) => state.verses));
@@ -922,7 +930,102 @@ export function useMasteredVerseCount() {
 }
 
 /**
- * Get insights stats: mastered count and in-progress count
+ * Internal: predicate matching the In Progress definition. Lenient — any
+ * non-null bestAccuracy on any difficulty AND not yet mastered on Hard.
+ * Used by both the In Progress virtual collection and the Insights count
+ * so the two can never drift.
+ */
+function isInProgressVerse(v: SavedVerse): boolean {
+  if (v.progress.hard?.completed) return false;
+  const p = v.progress;
+  return (
+    p.easy?.bestAccuracy !== null ||
+    p.medium?.bestAccuracy !== null ||
+    p.hard?.bestAccuracy !== null
+  );
+}
+
+/**
+ * Get unique In Progress verses (any progress on any difficulty, not yet
+ * mastered on Hard). Deduped by verse id.
+ */
+export function useInProgressVerses() {
+  const verses = useAppStore(useShallow((state) => state.verses));
+  return useMemo(() => {
+    const seen = new Set<string>();
+    const result: SavedVerse[] = [];
+    for (const v of verses) {
+      if (seen.has(v.id)) continue;
+      if (!isInProgressVerse(v)) continue;
+      seen.add(v.id);
+      result.push(v);
+    }
+    return result;
+  }, [verses]);
+}
+
+export function useInProgressVerseCount() {
+  const inProgress = useInProgressVerses();
+  return inProgress.length;
+}
+
+/**
+ * Per-verse review state. 'pre-mastery' for unmastered verses; 'due',
+ * 'locked', or 'engraved' for mastered ones.
+ *
+ * Precedence: engraved > due > locked > pre-mastery. Engraved verses that
+ * are also due render as Engraved (the lifetime count carries the visual
+ * weight); their due-ness is communicated via sort order, not the badge.
+ */
+export type ReviewState = 'pre-mastery' | 'locked' | 'due' | 'engraved';
+
+export function useReviewState(verseId: string, now?: Date): ReviewState {
+  const verse = useVerse(verseId);
+  const nowMs = now ? now.getTime() : Date.now();
+  return useMemo<ReviewState>(() => {
+    if (!verse) return 'pre-mastery';
+    const e = verse.progress.engraved;
+    if (!verse.progress.hard?.completed) return 'pre-mastery';
+    if (e?.completed) return 'engraved';
+    if (!e || e.nextDueAt === null) return 'due';
+    return nowMs >= new Date(e.nextDueAt).getTime() ? 'due' : 'locked';
+  }, [verse, nowMs]);
+}
+
+/**
+ * Counts of due verses by virtual collection. Only Mastered has an SR
+ * schedule; In Progress verses are pre-mastery and cannot be "due".
+ *
+ * Pass a live-ticking `now` (e.g. from `useReviewNow`) to keep the count
+ * fresh as verses transition from Locked → Due without a manual refresh.
+ */
+export function useDueCounts(now?: Date) {
+  const masteredVerses = useAppStore(useShallow((state) => state.masteredVerses));
+  const nowMs = now ? now.getTime() : Date.now();
+  return useMemo(() => {
+    let mastered = 0;
+    const seen = new Set<string>();
+    for (const v of masteredVerses) {
+      if (seen.has(v.id)) continue;
+      seen.add(v.id);
+      const e = v.progress.engraved;
+      if (!v.progress.hard?.completed) continue;
+      if (!e || e.nextDueAt === null) {
+        mastered += 1;
+        continue;
+      }
+      if (nowMs >= new Date(e.nextDueAt).getTime()) mastered += 1;
+    }
+    return { mastered };
+  }, [masteredVerses, nowMs]);
+}
+
+/**
+ * Get insights stats: mastered count and in-progress count.
+ *
+ * In Progress count is sourced from the same `isInProgressVerse` predicate
+ * as `useInProgressVerses`, so the Library In Progress collection count
+ * and the Insights "Verses in progress" count are guaranteed equal.
  */
 export function useInsightsStats() {
   const verses = useAppStore(useShallow((state) => state.verses));
@@ -930,25 +1033,15 @@ export function useInsightsStats() {
 
   return useMemo(() => {
     const versesMastered = masteredVerses.length;
-
-    // Get unique verse IDs that have any progress but aren't mastered
-    const masteredIds = new Set(masteredVerses.map((v) => v.id));
-    const inProgressVerses = verses.filter((v) => {
-      if (masteredIds.has(v.id)) return false;
-      const p = v.progress;
-      return (
-        p.easy?.bestAccuracy !== null ||
-        p.medium?.bestAccuracy !== null ||
-        p.hard?.bestAccuracy !== null
-      );
-    });
-
-    // Deduplicate by verse ID (verse may be in multiple collections)
-    const uniqueInProgress = new Set(inProgressVerses.map((v) => v.id));
-
+    const seen = new Set<string>();
+    for (const v of verses) {
+      if (seen.has(v.id)) continue;
+      if (!isInProgressVerse(v)) continue;
+      seen.add(v.id);
+    }
     return {
       versesMastered,
-      inProgress: uniqueInProgress.size,
+      inProgress: seen.size,
     };
   }, [verses, masteredVerses]);
 }

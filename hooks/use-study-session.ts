@@ -208,7 +208,7 @@ export function useStudySession({
       // Update progress in Zustand store (writes to Supabase + updates local state)
       if (verseId && difficulty && verse) {
         try {
-          await useAppStore.getState().updateVerseProgress(verseId, difficulty as StorageDifficulty, finalScoreValue);
+          await useAppStore.getState().updateVerseProgress(verseId, difficulty as StorageDifficulty, finalScoreValue, true);
         } catch (e) {
           console.error('[STUDY] Failed to update progress:', e);
           showErrorToast('Failed to save your progress.');

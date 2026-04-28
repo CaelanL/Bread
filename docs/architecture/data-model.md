@@ -82,21 +82,40 @@ Indexes:
 - `idx_user_verses_unique_verse (user_id, book, chapter, verse_start, verse_end, version) WHERE deleted_at IS NULL`
   — prevents adding the same verse twice while it's active
 
-`progress` JSONB shape (default in `lib/store/index.ts`):
+`progress` JSONB shape (canonical default in `lib/storage/index.ts`):
 
 ```ts
 {
   easy:     { bestAccuracy: number | null, completed: boolean },
   medium:   { bestAccuracy: number | null, completed: boolean },
   hard:     { bestAccuracy: number | null, completed: boolean },
-  engraved: { months: string[], completed: boolean }
+  engraved: {
+    completed:       boolean,           // passCount >= 10 (sticky)
+    passCount:       number,            // monotonic; advances per on-time review
+    lifetimeReviews: number,            // includes early/locked qualifying reviews
+    nextDueAt:       string | null,     // ISO UTC; review time = lastReviewedAt + N*24h
+    lastReviewedAt:  string | null,     // ISO UTC of last qualifying session
+    months?:         string[]           // legacy; preserved during App Store rollout
+  }
 }
 ```
 
-`completed` flips to `true` when `bestAccuracy >= 90`.
-`engraved.months` is a list of `"YYYY-MM"` strings — appended on each
-new month the user hits ≥90% on Hard. Reset if a month is skipped.
-4 consecutive months = `engraved.completed = true`.
+`completed` (per-difficulty) flips to `true` when `bestAccuracy >= 90`.
+
+The `engraved` sub-object holds spaced-repetition state. The schedule
+is `nextDueAt = now + min(passCount, userMaxIntervalDays) * 24h` —
+i.e. the review interval is exactly N×24h from completion, not aligned
+to local midnight. A qualifying review (Hard, ≥ 90%, full session) on
+or after `nextDueAt` advances `passCount` and reschedules.
+`engraved.completed = true` once `passCount >= 10` and is permanent.
+See `lib/store/review.ts` for the algorithm and
+`docs/features/review-system.md` for the why.
+
+The legacy `months: string[]` array is preserved by migration 014 for
+cross-client safety during the App Store rollout window — old clients
+still write it, the new client read-fallbacks from it
+(`passCount := months?.length ?? 0`) but never writes it. A follow-up
+cleanup migration drops it once all live clients have updated.
 
 ### `verse_collections`
 

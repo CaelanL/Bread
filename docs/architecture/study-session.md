@@ -165,17 +165,24 @@ shows a banner — "Retries don't affect your score." Final score uses
 ### 8. End of session — mastery progression
 
 When all chunks complete, `updateVerseProgress(verseId, difficulty,
-finalScore)` runs in the Zustand store:
+finalScore, /* fullSession */ true)` runs in the Zustand store:
 
 1. Update `progress[difficulty].bestAccuracy` and
    `progress[difficulty].completed = (finalScore >= 90)`.
-2. If `difficulty === 'hard'` AND `finalScore >= 90`:
-   - Get current month string (`YYYY-MM`).
-   - If `engraved.months` ends with the previous month →
-     append current month (consecutive).
-   - If it ends with the current month → no-op.
-   - Otherwise → reset `months = [currentMonth]` (broken streak).
-   - When `months.length >= 4` → `engraved.completed = true`.
+2. If `difficulty === 'hard'` AND `finalScore >= 90` AND it was a
+   full session, hand the current `engraved` sub-object to
+   `computeNextSrState()` in `lib/store/review.ts`. That function
+   advances the spaced-repetition schedule:
+   - First-ever qualifying review → `passCount = 1`,
+     `nextDueAt = now + 24h`.
+   - On-time / overdue review → `passCount += 1`,
+     `nextDueAt = now + min(passCount, userMaxInterval) * 24h`.
+   - Early review (before `nextDueAt`) → `lifetimeReviews += 1`
+     only; passCount and schedule untouched.
+   - `passCount >= 10` flips `engraved.completed = true` (sticky).
+
+The user-tunable `reviewMaxIntervalDays` (default 90, range 30–365)
+caps how long the schedule can stretch.
 
 A `session_attempts` row is logged via `logSessionAttempt()` —
 fire-and-forget, no error toast on failure.

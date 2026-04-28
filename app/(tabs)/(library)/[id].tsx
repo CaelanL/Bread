@@ -4,12 +4,14 @@ import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { formatVerseReference, type SavedVerse, MASTERED_COLLECTION_ID } from '@/lib/storage';
+import { formatVerseReference, type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useVersesByCollection, useCollection, useHydrated, useMasteredVerses, useVerses } from '@/lib/store';
+import { useAppStore, useVersesByCollection, useCollection, useHydrated, useInProgressVerses, useMasteredVerses, useVerses } from '@/lib/store';
+import { daysUntilDue, isDueForReview } from '@/lib/store/review';
+import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -26,13 +28,15 @@ export default function CollectionScreen() {
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
-  // Check if this is the Mastered collection
+  // Check if this is a virtual collection
   const isMasteredCollection = id === MASTERED_COLLECTION_ID;
+  const isInProgressCollection = id === IN_PROGRESS_COLLECTION_ID;
 
   // Store data
   const collection = useCollection(id || '');
   const collectionVerses = useVersesByCollection(id || '');
   const masteredVerses = useMasteredVerses();
+  const inProgressVerses = useInProgressVerses();
   const allVerses = useVerses();
   const hydrated = useHydrated();
   const deleteVerse = useAppStore((s) => s.deleteVerse);
@@ -50,12 +54,17 @@ export default function CollectionScreen() {
     ).length;
   };
 
-  // Use mastered verses for the Mastered collection, otherwise use collection verses
-  const verses = isMasteredCollection ? masteredVerses : collectionVerses;
+  // Source verses by collection: Mastered + In Progress are virtual.
+  const verses = isMasteredCollection
+    ? masteredVerses
+    : isInProgressCollection
+      ? inProgressVerses
+      : collectionVerses;
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'recent' | 'alphabetical' | 'mastery'>('recent');
+  type SortOption = 'recent' | 'alphabetical' | 'mastery' | 'due-first';
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -87,6 +96,7 @@ export default function CollectionScreen() {
   const filteredVerses = filterVerses(verses, searchQuery);
 
   // Sort verses based on sortBy
+  const now = useReviewNow();
   const sortedVerses = [...filteredVerses].sort((a, b) => {
     switch (sortBy) {
       case 'alphabetical':
@@ -94,7 +104,6 @@ export default function CollectionScreen() {
         const refB = formatVerseReference(b);
         return refA.localeCompare(refB);
       case 'mastery':
-        // Sort by mastery level: engraved > hard > medium > easy > none
         const getMasteryLevel = (v: SavedVerse) => {
           if (v.progress.engraved?.completed) return 4;
           if (v.progress.hard.completed) return 3;
@@ -103,18 +112,30 @@ export default function CollectionScreen() {
           return 0;
         };
         return getMasteryLevel(b) - getMasteryLevel(a);
+      case 'due-first': {
+        const da = daysUntilDue(a, now);
+        const db = daysUntilDue(b, now);
+        if (da !== db) return da - db;
+        return b.createdAt - a.createdAt;
+      }
       case 'recent':
       default:
         return b.createdAt - a.createdAt;
     }
   });
 
+  const dueCount = useMemo(
+    () => (isMasteredCollection ? sortedVerses.filter((v) => isDueForReview(v, now)).length : 0),
+    [isMasteredCollection, sortedVerses, now],
+  );
+
   const cycleSortBy = () => {
     setSortBy((current) => {
       switch (current) {
         case 'recent': return 'alphabetical';
         case 'alphabetical': return 'mastery';
-        case 'mastery': return 'recent';
+        case 'mastery': return isMasteredCollection ? 'due-first' : 'recent';
+        case 'due-first': return 'recent';
       }
     });
   };
@@ -124,6 +145,7 @@ export default function CollectionScreen() {
       case 'recent': return 'Recent';
       case 'alphabetical': return 'A-Z';
       case 'mastery': return 'Mastery';
+      case 'due-first': return 'Due first';
     }
   };
 
@@ -180,6 +202,7 @@ export default function CollectionScreen() {
   };
 
   return (
+    <ReviewNowProvider value={now}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
         title={collection?.name || 'Collection'}
@@ -232,10 +255,17 @@ export default function CollectionScreen() {
               verse={item}
               onPress={() => handleVersePress(item)}
               onDelete={() => handleDeleteVerse(item.id)}
-              disableSwipe={isMasteredCollection}
+              disableSwipe={isMasteredCollection || isInProgressCollection}
               collectionCount={getVerseCollectionCount(item)}
             />
           )}
+          ListHeaderComponent={
+            sortBy === 'due-first' && dueCount > 0 ? (
+              <Text style={[styles.dueFirstLabel, { color: colors.icon }]}>
+                {dueCount} {dueCount === 1 ? 'verse' : 'verses'} due — review {dueCount === 1 ? 'it' : 'them'} first.
+              </Text>
+            ) : null
+          }
           keyExtractor={(item) => item.id}
           contentContainerStyle={sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
           ListEmptyComponent={renderEmptyState}
@@ -245,6 +275,7 @@ export default function CollectionScreen() {
         />
       )}
     </View>
+    </ReviewNowProvider>
   );
 }
 
@@ -296,6 +327,11 @@ const styles = StyleSheet.create({
   versesContainer: {
     padding: 16,
     gap: 12,
+  },
+  dueFirstLabel: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginBottom: 4,
   },
   emptyState: {
     alignItems: 'center',

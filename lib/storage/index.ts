@@ -7,6 +7,7 @@
 
 import { supabase } from '@/lib/api/client';
 import { ensureAuth } from '@/lib/api';
+import { ENGRAVED_THRESHOLD } from '@/lib/store/review-config';
 
 // ============ TYPES ============
 
@@ -16,8 +17,16 @@ export interface DifficultyProgress {
 }
 
 export interface EngravedProgress {
-  completed: boolean; // true when 4 consecutive months achieved
-  months: string[]; // Array of "YYYY-MM" strings, up to 4 consecutive
+  completed: boolean; // true once passCount >= ENGRAVED_THRESHOLD
+  passCount: number; // monotonic; advances on each on-time qualifying review
+  lifetimeReviews: number; // every qualifying Hard ≥90% session, on-time or early
+  nextDueAt: string | null; // ISO UTC of local-midnight due moment; null until first qualifying review
+  lastReviewedAt: string | null; // ISO UTC of last qualifying review
+  // Legacy "YYYY-MM" streak array. Preserved through the App Store rollout
+  // window so old clients keep reading; new clients ignore on read after
+  // parseProgress derives passCount, and never write it. Dropped by a
+  // follow-up cleanup migration.
+  months?: string[];
 }
 
 export interface VerseProgress {
@@ -59,12 +68,57 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 
 const DEFAULT_COLLECTION_ID = 'my-verses';
 
-const DEFAULT_PROGRESS: VerseProgress = {
+export const DEFAULT_PROGRESS: VerseProgress = {
   easy: { bestAccuracy: null, completed: false },
   medium: { bestAccuracy: null, completed: false },
   hard: { bestAccuracy: null, completed: false },
-  engraved: { completed: false, months: [] },
+  engraved: {
+    completed: false,
+    passCount: 0,
+    lifetimeReviews: 0,
+    nextDueAt: null,
+    lastReviewedAt: null,
+    months: [],
+  },
 };
+
+/**
+ * Defensive parser for the `engraved` JSONB sub-object. Tolerates:
+ *  - Pre-migration rows (legacy `months` only) — derives passCount from
+ *    months.length, lifetimeReviews from the same.
+ *  - Post-migration rows with the new fields — uses them directly.
+ *  - Old clients overwriting a new-shape row (drops new fields) — re-derives
+ *    on next read so SR resumes at the legacy month-based count.
+ *  - Malformed JSONB (null, non-object) — returns the default shape.
+ *
+ * `completed` is preserved if it was true (don't silently un-engrave a
+ * pre-engraved user); otherwise derived from passCount.
+ */
+export function parseEngravedProgress(raw: unknown): EngravedProgress {
+  const e = (raw && typeof raw === 'object') ? raw as Partial<EngravedProgress> : {};
+  const months = Array.isArray(e.months) ? e.months : [];
+  const passCount = typeof e.passCount === 'number' ? e.passCount : months.length;
+  const lifetimeReviews = typeof e.lifetimeReviews === 'number' ? e.lifetimeReviews : months.length;
+  const completed = e.completed === true || passCount >= ENGRAVED_THRESHOLD;
+  return {
+    completed,
+    passCount,
+    lifetimeReviews,
+    nextDueAt: typeof e.nextDueAt === 'string' ? e.nextDueAt : null,
+    lastReviewedAt: typeof e.lastReviewedAt === 'string' ? e.lastReviewedAt : null,
+    months,
+  };
+}
+
+export function parseProgress(raw: unknown): VerseProgress {
+  const p = (raw && typeof raw === 'object') ? raw as Partial<VerseProgress> : {};
+  return {
+    easy: p.easy ?? { bestAccuracy: null, completed: false },
+    medium: p.medium ?? { bestAccuracy: null, completed: false },
+    hard: p.hard ?? { bestAccuracy: null, completed: false },
+    engraved: parseEngravedProgress(p.engraved),
+  };
+}
 
 const DEFAULT_COLLECTION: Collection = {
   id: DEFAULT_COLLECTION_ID,
@@ -74,6 +128,7 @@ const DEFAULT_COLLECTION: Collection = {
 };
 
 export const MASTERED_COLLECTION_ID = 'mastered';
+export const IN_PROGRESS_COLLECTION_ID = 'in-progress';
 
 const MASTERED_COLLECTION: Collection = {
   id: MASTERED_COLLECTION_ID,
@@ -82,6 +137,16 @@ const MASTERED_COLLECTION: Collection = {
   isVirtual: true,
   icon: 'checkmark.circle.fill',
   iconColor: '#22c55e', // Green
+  createdAt: 0,
+};
+
+const IN_PROGRESS_COLLECTION: Collection = {
+  id: IN_PROGRESS_COLLECTION_ID,
+  name: 'In Progress',
+  isDefault: false,
+  isVirtual: true,
+  icon: 'circle.dotted',
+  iconColor: '#f59e0b', // Amber
   createdAt: 0,
 };
 
@@ -125,9 +190,9 @@ export async function getCollections(): Promise<Collection[]> {
       collections.unshift(DEFAULT_COLLECTION);
     }
 
-    // Add Mastered collection after default (always second)
+    // Add Mastered + In Progress virtual collections after default
     const defaultIndex = collections.findIndex((c) => c.isDefault);
-    collections.splice(defaultIndex + 1, 0, MASTERED_COLLECTION);
+    collections.splice(defaultIndex + 1, 0, MASTERED_COLLECTION, IN_PROGRESS_COLLECTION);
 
     return collections;
   } catch (e) {
@@ -283,7 +348,7 @@ export async function getSavedVerses(): Promise<SavedVerse[]> {
       verseEnd: vc.user_verses.verse_end,
       version: vc.user_verses.version as BibleVersion,
       createdAt: new Date(vc.added_at).getTime(),
-      progress: vc.user_verses.progress || DEFAULT_PROGRESS,
+      progress: parseProgress(vc.user_verses.progress),
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -329,7 +394,7 @@ export async function getVersesByCollection(collectionId: string): Promise<Saved
       verseEnd: vc.user_verses.verse_end,
       version: vc.user_verses.version as BibleVersion,
       createdAt: new Date(vc.added_at).getTime(),
-      progress: vc.user_verses.progress || DEFAULT_PROGRESS,
+      progress: parseProgress(vc.user_verses.progress),
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -406,11 +471,11 @@ export async function saveVerse(
     .maybeSingle();
 
   let clientId: string;
-  let progress = DEFAULT_PROGRESS;
+  let progress: VerseProgress = DEFAULT_PROGRESS;
 
   if (existing) {
     clientId = existing.client_id;
-    progress = existing.progress || DEFAULT_PROGRESS;
+    progress = parseProgress(existing.progress);
 
     // Restore if soft-deleted
     if (existing.deleted_at) {
@@ -571,7 +636,7 @@ export async function updateVerseProgress(
     return;
   }
 
-  const currentProgress = verse.progress || DEFAULT_PROGRESS;
+  const currentProgress = parseProgress(verse.progress);
   const currentBest = currentProgress[difficulty]?.bestAccuracy;
 
   // Only update if this is a new best score
@@ -623,7 +688,7 @@ export async function getMasteredVerses(): Promise<SavedVerse[]> {
       verseEnd: v.verse_end,
       version: v.version as BibleVersion,
       createdAt: new Date(v.created_at).getTime(),
-      progress: v.progress || DEFAULT_PROGRESS,
+      progress: parseProgress(v.progress),
     }));
   } catch (e) {
     console.error('[STORAGE] Mastered verses fetch error:', e);

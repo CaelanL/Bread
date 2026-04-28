@@ -112,7 +112,7 @@ export default function StudySetupScreen() {
 
     const isMastered = verse.progress?.hard?.completed === true;
     const message = isMastered
-      ? 'This will clear all scores and remove this verse from your Mastered list.'
+      ? 'This will clear all scores and review progress, and remove this verse from your Mastered list.'
       : 'This will clear all your scores for this verse.';
 
     Alert.alert('Reset Progress?', message, [

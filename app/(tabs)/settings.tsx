@@ -12,12 +12,15 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { IntervalSlider } from '@/components/settings/IntervalSlider';
+import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion } from '@/lib/settings';
+import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion, type ColorMode } from '@/lib/settings';
 import { useAuth } from '@/lib/auth';
 import { useAppStore } from '@/lib/store';
+import { MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from '@/lib/store/review-config';
 import Constants from 'expo-constants';
 
 interface SettingsSectionProps {
@@ -138,10 +141,13 @@ export default function SettingsScreen() {
   const setColorMode = useAppStore((state) => state.setColorMode);
   const bibleVersion = useAppStore((state) => state.bibleVersion);
   const setBibleVersion = useAppStore((state) => state.setBibleVersion);
+  const reviewMaxIntervalDays = useAppStore((state) => state.reviewMaxIntervalDays);
+  const setReviewMaxIntervalDays = useAppStore((state) => state.setReviewMaxIntervalDays);
   const { user, signOut, updatePassword, deleteAccount } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
   const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
   const [copyrightVisible, setCopyrightVisible] = React.useState(false);
+  const [reviewInfoVisible, setReviewInfoVisible] = React.useState(false);
 
   // Change Password state
   const [passwordModalVisible, setPasswordModalVisible] = React.useState(false);
@@ -265,6 +271,41 @@ export default function SettingsScreen() {
           </SettingsRow>
         </SettingsSection>
 
+        {/* Review System */}
+        <SettingsSection title="REVIEW">
+          <View style={styles.reviewBlock}>
+            <Text style={[styles.reviewLabel, { color: colors.text }]}>
+              Maximum review interval: {reviewMaxIntervalDays} {reviewMaxIntervalDays === 1 ? 'day' : 'days'}
+            </Text>
+            <Text style={[styles.reviewDescription, { color: colors.icon }]}>
+              How many days at most between reviews of an engraved verse.
+              Applies to your next review — existing schedules don't change.
+            </Text>
+            <IntervalSlider
+              value={reviewMaxIntervalDays}
+              min={MIN_USER_MAX_INTERVAL_DAYS}
+              max={MAX_USER_MAX_INTERVAL_DAYS}
+              onChange={setReviewMaxIntervalDays}
+            />
+            <View style={styles.reviewRange}>
+              <Text style={[styles.reviewRangeLabel, { color: colors.icon }]}>
+                {MIN_USER_MAX_INTERVAL_DAYS}d
+              </Text>
+              <Text style={[styles.reviewRangeLabel, { color: colors.icon }]}>
+                {MAX_USER_MAX_INTERVAL_DAYS}d
+              </Text>
+            </View>
+          </View>
+          <Pressable onPress={() => setReviewInfoVisible(true)}>
+            <SettingsRow
+              icon="info.circle.fill"
+              label="How does this work?"
+            >
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
+        </SettingsSection>
+
         {/* Account */}
         <SettingsSection title="ACCOUNT">
           <SettingsRow
@@ -326,6 +367,12 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
       </ScrollView>
+
+      {/* Review Info Modal (shared with study screen) */}
+      <ProgressInfoModal
+        visible={reviewInfoVisible}
+        onClose={() => setReviewInfoVisible(false)}
+      />
 
       {/* Version Picker Modal */}
       <Modal visible={versionPickerVisible} transparent animationType="fade">
@@ -707,5 +754,28 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  reviewBlock: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  reviewLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  reviewDescription: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  reviewRange: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -4,
+  },
+  reviewRangeLabel: {
+    fontSize: 11,
   },
 });
