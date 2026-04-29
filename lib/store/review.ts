@@ -20,12 +20,9 @@ import { ENGRAVED_THRESHOLD } from './review-config';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const HOURS_PER_DAY = 24;
-const MS_PER_HOUR = 60 * 60 * 1000;
-
 /**
- * ISO UTC timestamp `daysFromNow` days after `now`, rounded down to
- * local midnight of the target day.
+ * ISO UTC timestamp at local midnight, `daysFromNow` calendar days
+ * after `now`.
  *
  * Rationale: the notification system delivers a daily-or-weekly
  * digest at a user-chosen wall-clock time (default 9 AM local). For
@@ -38,15 +35,25 @@ const MS_PER_HOUR = 60 * 60 * 1000;
  * docs/features/notification-system.md ("Why the review system
  * change") for the product framing.
  *
- * NOT YET IMPLEMENTED: the snap implementation lands when this doc
- * graduates from `planning` to `building`. Today this function still
- * returns the unrounded instant; downstream readers (`isDueForReview`,
- * `daysUntilDue`, `lockedVersesFor`) compare with `>=`/`<` and
- * tolerate either precision, so old- and new-client mixed values
- * self-resolve as users update.
+ * DST: we advance via `setDate(getDate() + daysFromNow)`, which is
+ * calendar-aware. A naive `now.getTime() + daysFromNow * 86400_000`
+ * would be a fixed-UTC-ms hop and disagree with `setHours(0,0,0,0)`
+ * on DST days (23 or 25 hours long), producing off-by-one-day errors
+ * — and on the fall-back day, a `nextDueAt` *earlier than now* for
+ * verses mastered in the first hour after midnight. `setDate` always
+ * lands on the intended calendar day's midnight regardless.
+ *
+ * Forward-only: old clients in the wild keep writing hour-precise
+ * values until they update. Mixed precision is fine — readers
+ * (`isDueForReview`, `daysUntilDue`, `lockedVersesFor`) compare with
+ * `>=`/`<` and tolerate either. A verse touched by an old client
+ * gets midnight-snapped on its next qualifying review here.
  */
 export function nextDueAfterDays(now: Date, daysFromNow: number): string {
-  return new Date(now.getTime() + daysFromNow * HOURS_PER_DAY * MS_PER_HOUR).toISOString();
+  const target = new Date(now);
+  target.setHours(0, 0, 0, 0);
+  target.setDate(target.getDate() + daysFromNow);
+  return target.toISOString();
 }
 
 /**
@@ -152,29 +159,24 @@ export function dueVersesFor(verses: SavedVerse[], now: Date): SavedVerse[] {
  * source of truth for review-state UI labels — used by ReviewStateBadge
  * (verse cards) and ProgressCard (Setup screen) so they never drift.
  *
- * Scheme:
- *   - >= 24h: "Xd Yh" (or "Xd" when hours = 0, i.e. exactly N*24h)
- *   - 1h to <24h: "Xh"
- *   - 1m to <1h: "X min"
- *   - <1m: "<1 min"
- *   - <= 0: "now"
+ * Callers gate on `isDueForReview` first, so this function is never
+ * called with `diffMs <= 0`. Defensive `<= 0 → "tmr"` is a non-issue
+ * in practice; readers see "Review now" via the badge's due branch.
  *
- * Boundaries are crisp by design: at exactly 72h shows "3d", and any
- * second after drops to "2d 23h" — no overlap with the day-only label.
- * Days/hours are floored, so "in 1d 5h" stays "in 1d 5h" for the full
- * hour from 29h-down-to-28h-and-1-second.
+ * Scheme (post midnight-snap):
+ *   - < 24h:        "tmr"   (any sub-day amount — verses always come due
+ *                            at local midnight, so anything <24h means
+ *                            "due tomorrow morning")
+ *   - 1d–3d, exact: "Xd"    (exactly N×24h)
+ *   - 1d–3d, +hrs:  "Xd Yh" (with non-zero hour part)
+ *   - >= 4d:        "Xd"    (drop hour part — at this range hours are noise)
  */
 export function formatTimeUntilDue(diffMs: number): string {
-  if (diffMs <= 0) return 'now';
-  if (diffMs < 60_000) return '<1 min';
-
-  const totalMinutes = Math.floor(diffMs / 60_000);
-  if (totalMinutes < 60) return `${totalMinutes} min`;
+  if (diffMs < 24 * 60 * 60_000) return 'tmr';
 
   const totalHours = Math.floor(diffMs / (60 * 60_000));
-  if (totalHours < 24) return `${totalHours}h`;
-
   const days = Math.floor(diffMs / (24 * 60 * 60_000));
+  if (days >= 4) return `${days}d`;
   const hours = totalHours - days * 24;
   return hours === 0 ? `${days}d` : `${days}d ${hours}h`;
 }
