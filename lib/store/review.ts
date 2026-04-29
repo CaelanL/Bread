@@ -24,20 +24,26 @@ const HOURS_PER_DAY = 24;
 const MS_PER_HOUR = 60 * 60 * 1000;
 
 /**
- * ISO UTC timestamp of `daysFromNow * 24h` after `now`. Returns the
- * exact moment 1, 2, 3… days later — not aligned to local midnight.
+ * ISO UTC timestamp `daysFromNow` days after `now`, rounded down to
+ * local midnight of the target day.
  *
- * Rationale: a review at 11pm with daysFromNow=1 should be due 24
- * hours later (the next 11pm), not just 1 hour later at the next
- * midnight. The user's mental model is "review interval = N days,"
- * and seeing "in 11h" the moment after a review is confusing.
+ * Rationale: the notification system delivers a daily-or-weekly
+ * digest at a user-chosen wall-clock time (default 9 AM local). For
+ * the digest to *reliably* catch every newly-due verse on its due
+ * day, due moments must land at a wall-clock instant the user's
+ * digest is guaranteed to fire after — local midnight is the only
+ * such moment. A verse mastered at 11:59 PM Tuesday with a 1-day
+ * interval becomes due Wednesday 12:00 AM, and any digest the user
+ * picks for Wednesday catches it. See
+ * docs/features/notification-system.md ("Why the review system
+ * change") for the product framing.
  *
- * The round-7 notification system (see
- * docs/features/notification-system.md) is server-side: a Supabase
- * cron polls every minute and pushes a digest naming verses where
- * `nextDueAt <= now()`. Hour-precise `nextDueAt` is what we want —
- * the digest catches the verse on the next cron pass after it
- * becomes due, regardless of wall-clock alignment.
+ * NOT YET IMPLEMENTED: the snap implementation lands when this doc
+ * graduates from `planning` to `building`. Today this function still
+ * returns the unrounded instant; downstream readers (`isDueForReview`,
+ * `daysUntilDue`, `lockedVersesFor`) compare with `>=`/`<` and
+ * tolerate either precision, so old- and new-client mixed values
+ * self-resolve as users update.
  */
 export function nextDueAfterDays(now: Date, daysFromNow: number): string {
   return new Date(now.getTime() + daysFromNow * HOURS_PER_DAY * MS_PER_HOUR).toISOString();
