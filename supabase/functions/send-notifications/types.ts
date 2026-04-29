@@ -1,9 +1,5 @@
 /**
  * Shared types for the send-notifications edge function.
- *
- * Chunk 1 keeps this minimal — the only consumer is the auth
- * skeleton. Sources land in chunk 2 and will extend this with body
- * composition + Expo Push payload shapes.
  */
 
 export type NotificationSource = "reviews" | "in-progress";

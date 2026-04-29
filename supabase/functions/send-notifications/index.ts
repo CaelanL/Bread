@@ -3,13 +3,9 @@
  *
  * Invoked by pg_cron every minute. Authenticates a cron-secret
  * bearer (constant-time compare against the Vault-stored secret),
- * then dispatches to each notification source.
- *
- * CHUNK 1 SCAFFOLD: this file currently only handles auth. Source
- * dispatch (reviews-digest, in-progress) lands in chunk 2. Isolating
- * the auth model proves the load-bearing piece — Vault read,
- * constant-time compare, gateway bypass — before any source logic
- * exists to muddy the diagnosis.
+ * then dispatches each notification source sequentially (Reviews
+ * first, In-progress second). Per-source dispatch handles its own
+ * "users matching this minute" query and per-user error isolation.
  *
  * See:
  *   - docs/features/notification-system.md (design)
@@ -19,6 +15,8 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { getAdminClient } from "../_shared/auth.ts";
 import { unauthorized, jsonResponse, serverError } from "../_shared/errors.ts";
+import { dispatchReviewsDigest } from "./sources/reviews-digest.ts";
+import { dispatchInProgress } from "./sources/in-progress.ts";
 
 /**
  * Constant-time string compare. The function is publicly reachable
@@ -87,12 +85,24 @@ serve(async (req) => {
     const authError = await authenticateCron(req);
     if (authError) return authError;
 
-    // Chunk 1: auth-only skeleton. Log the pass to the function's
-    // stdout (visible in the Supabase Functions Logs dashboard);
-    // source dispatch lands in chunk 2.
-    console.log("[notifications] cron pass authenticated");
+    const admin = getAdminClient();
+    const reviews = await dispatchReviewsDigest(admin);
+    const inProgress = await dispatchInProgress(admin);
 
-    return jsonResponse({ ok: true, dispatched: 0 });
+    // Quiet by default; verbose only when at least one source had
+    // matched users to act on. Avoids 1440 noise lines/day in the
+    // dashboard logs.
+    if (reviews.matched + inProgress.matched > 0) {
+      console.log(
+        `[notifications] reviews matched=${reviews.matched} sent=${reviews.sent} errors=${reviews.errors}; in-progress matched=${inProgress.matched} sent=${inProgress.sent} errors=${inProgress.errors}`,
+      );
+    }
+
+    return jsonResponse({
+      ok: true,
+      reviews,
+      inProgress,
+    });
   } catch (err) {
     console.error("[notifications] unhandled error", err);
     return serverError("Internal error");
