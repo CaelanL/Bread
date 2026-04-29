@@ -24,25 +24,20 @@ const HOURS_PER_DAY = 24;
 const MS_PER_HOUR = 60 * 60 * 1000;
 
 /**
- * ISO UTC timestamp `daysFromNow` days after `now`, rounded down to
- * local midnight of the target day.
+ * ISO UTC timestamp of `daysFromNow * 24h` after `now`. Returns the
+ * exact moment 1, 2, 3… days later — not aligned to local midnight.
  *
- * Round-6 of the notification system (see
- * docs/features/notification-system.md) introduced a daily digest
- * fired at the user's chosen wall-clock time. To make "verse becomes
- * due before today's digest fires" predictable, every `nextDueAt`
- * lands at local midnight: a verse mastered at 9:01am Tue with a
- * 1-day interval is due Wed 12:00am, and Wed 9am's digest catches
- * it. Rounding down (toward earlier) keeps "review tomorrow"
- * meaning tomorrow, not the day after. Sub-day precision loss on
- * longer intervals is invisible.
+ * Rationale: a review at 11pm with daysFromNow=1 should be due 24
+ * hours later (the next 11pm), not just 1 hour later at the next
+ * midnight. The user's mental model is "review interval = N days,"
+ * and seeing "in 11h" the moment after a review is confusing.
  *
- * NOTE: actual rounding implementation lands when this doc graduates
- * from `planning` to `building`. Today this function still returns
- * the unrounded instant; downstream readers (`isDueForReview`,
- * `daysUntilDue`, `lockedVersesFor`) compare with `>=` and tolerate
- * either precision, so mixed values across users self-resolve as
- * the new client rolls out.
+ * The round-7 notification system (see
+ * docs/features/notification-system.md) is server-side: a Supabase
+ * cron polls every minute and pushes a digest naming verses where
+ * `nextDueAt <= now()`. Hour-precise `nextDueAt` is what we want —
+ * the digest catches the verse on the next cron pass after it
+ * becomes due, regardless of wall-clock alignment.
  */
 export function nextDueAfterDays(now: Date, daysFromNow: number): string {
   return new Date(now.getTime() + daysFromNow * HOURS_PER_DAY * MS_PER_HOUR).toISOString();
