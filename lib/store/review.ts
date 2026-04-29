@@ -32,11 +32,9 @@ const MS_PER_HOUR = 60 * 60 * 1000;
  * midnight. The user's mental model is "review interval = N days,"
  * and seeing "in 11h" the moment after a review is confusing.
  *
- * Originally the algorithm aligned to local midnight (calendar-day-
- * aligned: any review on the named day counted as on-time). That
- * coupled the SR cadence to the user's TZ in a way that wasn't
- * actually needed; daily-digest notifications can fire at a fixed
- * local time independent of per-verse `nextDueAt` values.
+ * The notification system (see docs/features/notification-system.md)
+ * fires per-verse review notifications at the clamped `nextDueAt`
+ * instant, not at a daily-digest checkpoint. Precision matters.
  */
 export function nextDueAfterDays(now: Date, daysFromNow: number): string {
   return new Date(now.getTime() + daysFromNow * HOURS_PER_DAY * MS_PER_HOUR).toISOString();
