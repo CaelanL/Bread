@@ -39,7 +39,6 @@ export function ProgressCard({ progress }: ProgressCardProps) {
   const e = progress.engraved;
   const masteredOnHard = progress.hard?.completed === true;
   const passCount = e?.passCount ?? 0;
-  const lifetimeReviews = e?.lifetimeReviews ?? 0;
   const isEngraved = e?.completed === true;
 
   // State derivation matches the badge precedence (engraved > due > locked > pre).
@@ -157,31 +156,14 @@ export function ProgressCard({ progress }: ProgressCardProps) {
             </View>
           )}
           {state === 'locked' && e?.nextDueAt && (
-            <>
-              <Text style={[styles.statusText, { color: colors.icon }]}>
-                Unlocks in {formatTimeUntilDue(new Date(e.nextDueAt).getTime() - now.getTime())}
-              </Text>
-              {lifetimeReviews > 0 && (
-                <Text style={[styles.lifetimeText, { color: colors.icon }]}>
-                  {lifetimeReviews} lifetime {lifetimeReviews === 1 ? 'review' : 'reviews'}
-                </Text>
-              )}
-            </>
-          )}
-          {state === 'due' && !isEngraved && lifetimeReviews > 0 && (
-            <Text style={[styles.lifetimeText, { color: colors.icon }]}>
-              {lifetimeReviews} lifetime {lifetimeReviews === 1 ? 'review' : 'reviews'}
+            <Text style={[styles.statusText, { color: colors.icon }]}>
+              Unlocks in {formatTimeUntilDue(new Date(e.nextDueAt).getTime() - now.getTime())}
             </Text>
           )}
           {isEngraved && (
-            <>
-              <Text style={[styles.lifetimeText, { color: goldColor }]}>
-                {lifetimeReviews} lifetime {lifetimeReviews === 1 ? 'review' : 'reviews'}
-              </Text>
-              <Text style={[styles.tagline, { color: goldColor }]}>
-                "I have hidden your word in my heart"
-              </Text>
-            </>
+            <Text style={[styles.tagline, { color: goldColor }]}>
+              "I have hidden your word in my heart"
+            </Text>
           )}
         </View>
       </View>
@@ -275,11 +257,6 @@ const styles = StyleSheet.create({
   statusText: {
     marginTop: 2,
     fontSize: 12,
-  },
-  lifetimeText: {
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: '500',
   },
   tagline: {
     textAlign: 'center',
