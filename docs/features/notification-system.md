@@ -16,11 +16,24 @@
 > proposed `nextDueAfterDays` midnight-snap is reverted — the server
 > cron polls every minute, so hour-precise `nextDueAt` is fine).
 >
+> **Updated:** 2026-04-29 (round 7a) — adversarial review surfaced
+> three real concerns. Locked answers: (1) sticking with edge function
+> + TypeScript, with explicit migration deltas for the missing
+> infrastructure (`pg_net`, Vault, per-function `verify_jwt = false`);
+> (2) device-token uniqueness constraint changed to `UNIQUE(expo_token)`
+> to fix the account-switch privacy leak; (3) deep-link target lands on
+> `MASTERED_COLLECTION_ID` — its default sort is already `'due-first'`
+> (`lib/store/index.ts:147`) and per-collection sort persists, so the
+> tap target needs no new UI work. Other 5c-class fixes (SQL fidelity,
+> idempotency, DST, missing TZ defaults, I8 weekly-cadence
+> acknowledgement) folded in.
+>
 > **History:** rounds 1–5d (per-verse local) and round 6 (digest local)
 > are preserved in the Decisions Log and in git on this branch
 > (`feat/notification-system-rewrite`):
 > - `c6aa654` — round-5d baseline
 > - `c993cab` — round-6 (digest local)
+> - `360ff59` — round-7 (server-side, pre-revision)
 
 ## Why server-side, not local
 
@@ -84,11 +97,18 @@ fresh-at-fire-time composition, which forces server-side push.
   `notification_preferences`, additive-only schema, RLS-gated by
   `auth.uid()`.
 - **Scheduling: pg_cron, every minute.** Bread already uses pg_cron
-  (`011_user_stats_cron.sql.done`, `010_popular_verses.sql.done`).
+  (`011_user_stats_cron.sql.done`, `010_popular_verses.sql.done`),
+  but those crons call SQL functions directly. Round 7 introduces a
+  *new pattern* for Bread: pg_cron → `net.http_post` → edge function.
+  This requires three pieces of infrastructure not currently in the
+  repo: `pg_net` extension, Vault for the cron secret, and a
+  per-function `verify_jwt = false` entry in `config.toml`.
+  All three are documented as explicit migration steps in the
+  "Migration shape" section below.
 - **Client: `expo-notifications`** for permission flow, push token
-  retrieval, foreground handler, and tap deep-link handling. Same
-  client SDK as round 6, but the *scheduler* module is gone — all
-  scheduling logic lives server-side.
+  retrieval, foreground handler, and tap deep-link handling. The
+  scheduler module that round 6 *would* have built is no longer
+  needed — scheduling logic lives server-side.
 
 ## What collapses out vs round 6
 
@@ -168,40 +188,93 @@ design accommodates it explicitly.
 
 ### Migration shape — additive only
 
-Two new tables. Zero changes to existing tables.
+Two new tables. Zero changes to existing tables. Three pieces of
+*infrastructure* not currently in Bread also get enabled here.
 
 ```sql
 -- Migration 017_notification_system.sql
 
+-- ─── Infrastructure (new for Bread) ─────────────────────────────
+
+-- (1) pg_net for outbound HTTP from Postgres (cron → edge function).
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- (2) Vault — Supabase Vault is enabled by default on hosted projects
+-- but the secret needs to be created. This is done out-of-band via
+-- the Supabase dashboard or CLI BEFORE this migration runs:
+--
+--   SELECT vault.create_secret('<random-256-bit-hex>', 'cron_secret');
+--
+-- Document the rotation procedure in supabase/README.md or similar.
+-- The secret value is fetched at cron-fire time via:
+--   (SELECT decrypted_secret FROM vault.decrypted_secrets
+--    WHERE name = 'cron_secret')
+
+-- (3) config.toml — add the following block to supabase/config.toml
+-- so the gateway doesn't reject the cron's POST. The function
+-- itself does its own auth check via the cron_secret bearer.
+--
+--   [functions.send-notifications]
+--   verify_jwt = false
+--
+-- This is not a SQL change, but is part of this migration's surface
+-- and ships in the same PR.
+
+-- ─── Tables ─────────────────────────────────────────────────────
+
 CREATE TABLE device_tokens (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  expo_token      TEXT NOT NULL,             -- ExponentPushToken[xxx]
-  platform        TEXT NOT NULL,             -- 'ios' | 'android' (future)
+  expo_token      TEXT NOT NULL UNIQUE,      -- globally unique; one device → one current owner
+  platform        TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
   last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, expo_token)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- UNIQUE(expo_token) means: when User B signs in on a device
+-- previously used by User A, User B's UPSERT overwrites the row's
+-- user_id. User A's sign-in elsewhere is unaffected (their token on
+-- *their* device is different). Sign-out does NOT delete the row;
+-- the constraint is what prevents privacy leaks. See "Sign-out
+-- behavior" below.
 
 CREATE TABLE notification_preferences (
   user_id              UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   master_enabled       BOOLEAN NOT NULL DEFAULT true,
   reviews_enabled      BOOLEAN NOT NULL DEFAULT true,
-  reviews_cadence      TEXT NOT NULL DEFAULT 'daily',     -- 'daily' | 'weekly'
-  reviews_weekday      SMALLINT,                          -- 0–6, only for weekly; null for daily
-  reviews_hour         SMALLINT NOT NULL DEFAULT 9,       -- 0–23
-  reviews_minute       SMALLINT NOT NULL DEFAULT 0,       -- 0–59
+  reviews_cadence      TEXT NOT NULL DEFAULT 'daily'
+                       CHECK (reviews_cadence IN ('daily', 'weekly')),
+  reviews_weekday      SMALLINT
+                       CHECK (reviews_weekday IS NULL
+                              OR reviews_weekday BETWEEN 0 AND 6),
+  -- weekday convention: matches Postgres `extract(dow FROM ...)`.
+  -- 0 = Sunday, 1 = Monday, ..., 6 = Saturday.
+  -- Couple to cadence: weekly cadence requires non-null weekday.
+  CHECK ((reviews_cadence = 'daily' AND reviews_weekday IS NULL)
+         OR (reviews_cadence = 'weekly' AND reviews_weekday IS NOT NULL)),
+  reviews_hour         SMALLINT NOT NULL DEFAULT 9
+                       CHECK (reviews_hour BETWEEN 0 AND 23),
+  reviews_minute       SMALLINT NOT NULL DEFAULT 0
+                       CHECK (reviews_minute BETWEEN 0 AND 59),
   in_progress_enabled  BOOLEAN NOT NULL DEFAULT true,
-  in_progress_hour     SMALLINT NOT NULL DEFAULT 18,
-  in_progress_minute   SMALLINT NOT NULL DEFAULT 0,
+  in_progress_hour     SMALLINT NOT NULL DEFAULT 18
+                       CHECK (in_progress_hour BETWEEN 0 AND 23),
+  in_progress_minute   SMALLINT NOT NULL DEFAULT 0
+                       CHECK (in_progress_minute BETWEEN 0 AND 59),
   -- re-engagement is invisible plumbing; no toggle, no time field
   -- (always 12pm local per Q15)
-  timezone             TEXT NOT NULL DEFAULT 'UTC',       -- IANA name, e.g. 'America/Los_Angeles'
+  timezone             TEXT NOT NULL,        -- IANA name; client provides at INSERT
   last_foregrounded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_re_engagement_fired_at TIMESTAMPTZ,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- timezone has NO default — client MUST send IANA TZ at INSERT
+-- (computed from `Intl.DateTimeFormat().resolvedOptions().timeZone`).
+-- This avoids the "default 'UTC' until the client TZ-update writes"
+-- race that would push 9am-UTC = 2am-PST notifications. If the
+-- client somehow INSERTs without a TZ, the NOT NULL constraint
+-- fails and the user sees a Settings error — visible failure beats
+-- silent 2am pings.
 
 -- RLS: standard ownership pattern matching existing tables
 ALTER TABLE device_tokens ENABLE ROW LEVEL SECURITY;
@@ -212,7 +285,8 @@ CREATE POLICY "users own their tokens" ON device_tokens
 CREATE POLICY "users own their prefs" ON notification_preferences
   FOR ALL USING (auth.uid() = user_id);
 
--- pg_cron — every minute
+-- ─── Cron schedule ──────────────────────────────────────────────
+
 SELECT cron.schedule(
   'send-notifications',
   '* * * * *',
@@ -304,40 +378,100 @@ Decided over OneSignal / Direct APNs because:
 
 ### Edge function design — minute-resolution cron
 
-Cron runs every minute. Edge function runs the following query:
+Cron runs every minute. Edge function runs a per-source matching
+query, with **defensive TZ handling** (a single user with an
+unrecognized TZ must not crash the whole pass — `now() AT TIME ZONE`
+throws on invalid IANA names).
+
+Wrap the TZ math in a SQL function that catches the exception:
 
 ```sql
--- "Which users have a digest matching the current minute, in their TZ?"
-SELECT np.user_id, np.timezone, np.reviews_enabled, np.in_progress_enabled, ...
+CREATE OR REPLACE FUNCTION local_time_in_tz(tz text)
+RETURNS timestamp LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN
+  RETURN now() AT TIME ZONE tz;
+EXCEPTION WHEN others THEN
+  -- Unknown / removed IANA name. Treat as UTC for this pass; client
+  -- self-heals on next foreground when it sends a current TZ.
+  RETURN now() AT TIME ZONE 'UTC';
+END;
+$$;
+```
+
+Then the matching query (one branch per source — illustrative;
+build-time may fan out into separate edge-function calls or a
+single fan-out per row):
+
+```sql
+-- Which users have a Reviews digest matching the current minute?
+SELECT np.user_id, np.timezone
 FROM notification_preferences np
 WHERE np.master_enabled = true
-  AND (
-    -- Reviews digest match
-    (np.reviews_enabled = true
-     AND extract(hour FROM (now() AT TIME ZONE np.timezone)) = np.reviews_hour
-     AND extract(minute FROM (now() AT TIME ZONE np.timezone)) = np.reviews_minute
-     AND (np.reviews_cadence = 'daily'
-          OR (np.reviews_cadence = 'weekly'
-              AND extract(dow FROM (now() AT TIME ZONE np.timezone)) = np.reviews_weekday)))
-    OR
-    -- In-progress match (always weekly Mon, fixed weekday)
-    (np.in_progress_enabled = true
-     AND extract(hour FROM (now() AT TIME ZONE np.timezone)) = np.in_progress_hour
-     AND extract(minute FROM (now() AT TIME ZONE np.timezone)) = np.in_progress_minute
-     AND extract(dow FROM (now() AT TIME ZONE np.timezone)) = 1)  -- Mondays
-    OR
-    -- Re-engagement: invisible, fires at 12pm local if 14+d inactive
-    (extract(hour FROM (now() AT TIME ZONE np.timezone)) = 12
-     AND extract(minute FROM (now() AT TIME ZONE np.timezone)) = 0
-     AND now() - np.last_foregrounded_at >= INTERVAL '14 days'
-     AND (np.last_re_engagement_fired_at IS NULL
-          OR np.last_re_engagement_fired_at < np.last_foregrounded_at))
-  );
+  AND np.reviews_enabled = true
+  AND extract(hour   FROM local_time_in_tz(np.timezone)) = np.reviews_hour
+  AND extract(minute FROM local_time_in_tz(np.timezone)) = np.reviews_minute
+  AND (np.reviews_cadence = 'daily'
+       OR extract(dow FROM local_time_in_tz(np.timezone)) = np.reviews_weekday);
+
+-- Which users have an In-progress digest matching the current minute?
+-- 24h activity-skip is checked *here*, at fire time (fixes round-6 I14).
+-- Eligibility (≥1 in-progress verse with bestAccuracy != null) is
+-- checked per-user after this query, in the function.
+SELECT np.user_id, np.timezone
+FROM notification_preferences np
+WHERE np.master_enabled = true
+  AND np.in_progress_enabled = true
+  AND extract(hour   FROM local_time_in_tz(np.timezone)) = np.in_progress_hour
+  AND extract(minute FROM local_time_in_tz(np.timezone)) = np.in_progress_minute
+  AND extract(dow    FROM local_time_in_tz(np.timezone)) = 1   -- Monday
+  AND now() - np.last_foregrounded_at >= INTERVAL '24 hours';
+
+-- Which users get re-engagement? Invisible; 14d inactive; 12pm local.
+SELECT np.user_id, np.timezone
+FROM notification_preferences np
+WHERE np.master_enabled = true
+  AND extract(hour   FROM local_time_in_tz(np.timezone)) = 12
+  AND extract(minute FROM local_time_in_tz(np.timezone)) = 0
+  AND now() - np.last_foregrounded_at >= INTERVAL '14 days'
+  AND (np.last_re_engagement_fired_at IS NULL
+       OR np.last_re_engagement_fired_at < np.last_foregrounded_at);
 ```
+
+A user matching multiple sources at the same minute (e.g. Reviews
+and In-progress both at 6pm Mon) gets **one push per source** — the
+edge function processes each source's match list independently.
+Different titles, different tap targets, conceptually distinct
+prompts. Acceptable.
 
 Returns at most a few hundred rows per minute even at 100K MAU
 (uniform distribution across 24*60 = 1440 minutes/day = ~70 users/min
 per source). For each row, the function queries due verses and pushes.
+
+**Idempotency for re-engagement:** the SELECT above is read-only, so
+two concurrent cron passes (rare retries / over-fires) can both pick
+up the same user before either updates `last_re_engagement_fired_at`.
+Mitigation: claim each user with a row-locking UPDATE in the same
+transaction *before* sending the push:
+
+```sql
+UPDATE notification_preferences
+SET last_re_engagement_fired_at = now()
+WHERE user_id = $1
+  AND (last_re_engagement_fired_at IS NULL
+       OR last_re_engagement_fired_at < last_foregrounded_at)
+RETURNING 1;
+```
+
+If the UPDATE returns 0 rows, another pass already claimed this
+user — skip the push. Otherwise send.
+
+**DST handling:** during fall-back (e.g. Nov 2026, 1am happens twice
+local), the cron's UTC-minute polling crosses the same local minute
+twice — a user with `reviews_hour=1, reviews_minute=30` would fire
+twice. During spring-forward (2am skipped), the user fires zero times
+that day. Mitigation: track last-fired-date per user per source and
+skip if already fired today in the user's local date. Build-time
+addition to the SQL.
 
 **Why minute-resolution, not five-minute or hourly:** users pick
 their digest time to the minute (e.g. "9:00 am"). Five-minute
@@ -476,16 +610,20 @@ is what the rule actually meant.
 Edge function flow when a user matches the current minute:
 
 ```
-1. Query: SELECT mastered verses where nextDueAt <= now().
-   Filter: progress.hard.completed = true AND
-           (progress.engraved.nextDueAt IS NULL
-            OR progress.engraved.nextDueAt <= now()).
-2. If empty → skip (no push). The user gets nothing this fire-time;
-   they'll get one next fire-time when there's actually something due.
+1. Query: SELECT due-and-mastered verses for this user.
+   The progress JSONB shape lives in lib/storage/index.ts:23–117.
+   pg-side filter:
+     (progress->'hard'->>'completed')::boolean = true
+     AND ((progress->'engraved'->>'nextDueAt') IS NULL
+          OR (progress->'engraved'->>'nextDueAt')::timestamptz <= now())
+2. If empty → skip (no push). User gets nothing this fire-time;
+   next fire-time will check again.
 3. If 1 due → body: "<Verse Reference> is ready for review"
 4. If 2+ due → body: "<Verse Reference> and N more ready for review"
-   - Hero verse pick: deterministic — earliest nextDueAt, ties
-     broken by verse `created_at` ascending.
+   - Hero verse pick: deterministic — earliest nextDueAt;
+     ties broken by `created_at` ascending; final tiebreaker `id`
+     lexicographic (so two verses with identical timestamps don't
+     churn the body).
 5. Title: "Review time"
 6. POST to Expo Push Service.
 ```
@@ -495,7 +633,26 @@ right before composing. Round-6 staleness scenarios (deleted verse
 named in body, reviewed verse still in count) are impossible by
 construction.
 
+**No `fetchVerse` from edge function.** Per CLAUDE.md invariant 3,
+all Bible verse reads go through `fetchVerse`/`fetchChapter`. The
+digest body uses *verse references only* ("Psalm 23"), which are
+derivable from `user_verses` columns alone — no Bible API call
+needed, no licensing concern.
+
+**Per-user error isolation.** The function processes users in
+try/catch per user — one bad row (corrupt JSONB, missing field)
+must not black-hole the rest of the pass.
+
 **Empty-digest behavior:** suppressed. No "no reviews today" copy.
+
+**Weekly cadence + short SR intervals (round-6 carry-forward I8).**
+A user with weekly cadence (e.g. Monday 9am) who masters a verse
+Tuesday with a 1-day interval gets pinged the *following* Monday —
+6+ days late. Acknowledged trade-off: weekly users are explicitly
+opting into low-frequency reminders. Default is daily, which
+sidesteps this entirely. If user feedback ever asks for it, a v2
+addition could send a "you have N overdue verses" variant on the
+weekly fire when the wait was excessive.
 
 ---
 
@@ -528,7 +685,20 @@ What the client *does* track:
 | 3 | Permission revoked externally (granted → denied) | Optionally DELETE `device_tokens` row (server stops pushing — though Expo also returns DeviceNotRegistered, so this is belt-and-suspenders). Surface in Settings UI. |
 | 4 | User changes a preference | Optimistic Zustand + AsyncStorage write, then UPDATE `notification_preferences`. |
 | 5 | Sign-in completes | SELECT prefs row, hydrate Zustand + AsyncStorage. INSERT default prefs row if first-time on this account. |
-| 6 | Sign-out | Clear AsyncStorage notification cache (DB row stays for next sign-in). |
+| 6 | Sign-out | Clear AsyncStorage notification cache (DB pref row stays for next sign-in). `device_tokens` row also stays — its ownership transfers to the next user via the `UNIQUE(expo_token)` constraint when they sign in. |
+
+**Sign-out behavior — privacy safety.** The `device_tokens` row is
+NOT deleted on sign-out. The schema's `UNIQUE(expo_token)` constraint
+ensures only the *most recent* signer-in on a given device owns that
+token: when User B signs in on User A's device, B's UPSERT
+overwrites the row's `user_id` (since the token is the same, the
+unique constraint forces an upsert-replace). The cron query joins
+on `user_id`, so it only fires for the current owner.
+
+This replaces an earlier compound `UNIQUE(user_id, expo_token)`
+which allowed both rows to coexist — that would have leaked User
+A's verse content to User B. See Decisions Log entry "Round 7a —
+device_token UNIQUE(expo_token)".
 
 **Concurrent-write protection:** Supabase RLS + `UNIQUE` constraints
 prevent corruption. If the user toggles a switch twice rapidly,
@@ -544,15 +714,22 @@ to `device_tokens`. Cheap.
 
 ### Q8: Deep-link target
 
-*Unchanged.* Always to a collection.
-- **Reviews digest** → library, filtered to the review view (route
-  `/(tabs)/(library)?reviewView=true`). **Implementation note**: this
-  route did not exist as of round-6 audit (round-6 finding C2). Build
-  prerequisite: either add the param or repoint to the existing
-  Mastered collection (`/(tabs)/(library)/mastered`) which already
-  shows due verses via `useDueCounts`. Caelan to confirm during
-  build.
-- **In progress** → `IN_PROGRESS_COLLECTION_ID`.
+*Locked round 7a.* Always to a collection. **No new UI work required.**
+
+- **Reviews digest** → `MASTERED_COLLECTION_ID`
+  (`lib/store/index.ts:43`, accessed via `/(tabs)/(library)/[id]`
+  with `id="mastered"`). The Mastered collection's default sort is
+  already `'due-first'` (`lib/store/index.ts:147`) and per-collection
+  sort persists to AsyncStorage (round-recent feature, see commits
+  `5f3db58` and `b246c7e` on main). So:
+  - First-time taps land users on Mastered with due verses at the
+    top — the verses named in the digest body are immediately
+    visible.
+  - Users who customized the sort see their preferred order; the
+    digest still respects their choice (we don't force-set sort on
+    deep-link).
+- **In progress** → `IN_PROGRESS_COLLECTION_ID`
+  (`lib/store/index.ts:53`).
 - **Re-engagement** → in-progress collection if any in-progress;
   otherwise mastered if any; otherwise home.
 
@@ -834,6 +1011,51 @@ api.updateLastForegroundedAt() // debounced
   background before INSERT lands. On next foreground, retry token
   registration if `device_tokens` lookup returns 0 rows.
 
+## Build prerequisites — codebase scan findings
+
+Verified against the current main branch during round-7a final pass:
+
+- **`expo-notifications` is NOT installed** (`package.json` confirms
+  no entry as of `360ff59`). Build PR #1 must:
+  `npx expo install expo-notifications`. This requires an EAS build
+  rebuild (cannot ship via OTA updates) — same constraint as Q10.
+- **APN auth key.** A `.p8` APN key from Apple Developer must be
+  uploaded to the Expo project (`eas credentials`). Plus the iOS
+  app needs the Push Notifications capability enabled in `app.json`
+  via the `expo-notifications` config plugin form:
+  `["expo-notifications", { ... }]` in the `plugins` array.
+- **Soft-delete filter mandatory.** All edge-function queries
+  against `user_verses` MUST include `deleted_at IS NULL` (matches
+  `lib/storage/index.ts:178, 251, 261, 295, 307`). Otherwise a
+  user-deleted verse could be named in the digest body.
+- **Verse references built from columns.** `user_verses` has
+  `book`, `chapter`, `verse_start`, `verse_end` columns
+  (`lib/storage/index.ts:352–355`). Body composition needs only
+  these — no `fetchVerse` call required, no Bible API hop, no
+  licensing concern.
+- **Existing edge function auth pattern reused.** The new function
+  uses `_shared/auth.ts:getAdminClient()` (line 140) for
+  service-role queries, same as `bible` and `process-recording`.
+  Cron-secret auth check is added to the function entry point
+  (compare incoming `Authorization: Bearer ...` against
+  `Deno.env.get('CRON_SECRET')` — set via Vault).
+- **`config.toml` already follows the pattern.** Existing entries
+  for `bible` and `process-recording` use `verify_jwt = false` with
+  comment *"we use ES256 asymmetric keys ... handle verification
+  ourselves in the function code"* (line 38–46). The new
+  `[functions.send-notifications]` block is purely additive.
+- **Sort persistence already supports the deep-link.** Mastered
+  collection's default `'due-first'` sort (`lib/store/index.ts:147`)
+  + per-collection sort persistence (lib/store/index.ts:530–545,
+  AsyncStorage via `getMasteredSort` / `persistMasteredSort` in
+  `lib/storage/`). No new UI for the deep-link target.
+- **CLAUDE.md invariant 1.** All Supabase writes from the client
+  (token UPSERT, prefs INSERT/UPDATE, last_foregrounded_at debounced
+  update) must go through `lib/storage/` or a new
+  `lib/notifications/api.ts` wrapper — not direct supabase client
+  calls from components. This is doc-firm but worth re-stating
+  because the new module is greenfield.
+
 ## What this feature explicitly will NOT add
 
 - LLM-generated copy.
@@ -850,15 +1072,27 @@ api.updateLastForegroundedAt() // debounced
 
 ## Action Items
 
-- [ ] **Agent review of round-7 rewrite.** Diff vs commit `c993cab`
-      (round-6 baseline) reviewed exhaustively.
-- [ ] **Confirm Expo Push Service is the right transport.** Doc
-      defaults to it; if the build agent or Caelan wants OneSignal
-      or Direct APNs instead, swap one edge-function file.
-- [ ] **Decide deep-link target route.** Either add
-      `?reviewView=true` to library or repoint to
-      `/(tabs)/(library)/mastered`. (Carries over from round 6 C2.)
-- [ ] **Promote doc to `building`** once review feedback resolved.
+- [x] **Agent review of round-7 rewrite.** ✅ 41 findings; round 7a
+      folds in critical fixes.
+- [x] **Confirm Expo Push Service is the right transport.** ✅
+      Locked round 7a.
+- [x] **Decide deep-link target route.** ✅ Locked round 7a:
+      `MASTERED_COLLECTION_ID`, leveraging existing `'due-first'`
+      default sort + per-collection sort persistence. No new UI.
+- [x] **Decide edge function vs plpgsql cron.** ✅ Locked round 7a:
+      edge function. Migration explicitly enables `pg_net` + Vault
+      and adds `verify_jwt = false` for the new function.
+- [x] **Decide device-token uniqueness model.** ✅ Locked round 7a:
+      `UNIQUE(expo_token)`. Sign-out leaves the row; next sign-in
+      transfers ownership.
+- [ ] **Add DST per-day idempotency to source SQL.** Track
+      `last_*_fired_date_local` per source per user; skip if already
+      fired today in user's local date. Build-time addition.
+- [ ] **`notification_log` table for debugging.** Promote from
+      "Nice to have" to v1 must-have — a 7-day rolling log of
+      `(user_id, source, fire-minute, body, expo_response)` is
+      essential for any user debug request.
+- [ ] **Promote doc to `building`** once round-7a review settles.
       Fill in full Technical Approach (file-by-file) and Build
       order (PR-sized chunks).
 
@@ -896,6 +1130,15 @@ api.updateLastForegroundedAt() // debounced
 | 2026-04-29 | **Round 7 — IANA timezone stored per user; PostgreSQL handles DST natively.** | `now() AT TIME ZONE np.timezone` evaluates against OS tzdata. No client TZ math. |
 | 2026-04-29 | **Round 7 — In-progress 24h-skip checked at fire time, server-side.** | Fixes round-6 I14 (calendar-trigger checked at schedule time only). |
 | 2026-04-29 | **Round 7 — body composed fresh at fire time.** | The whole point of switching to server. Round-6 staleness scenarios (deleted verse named in body) are impossible by construction. |
+| 2026-04-29 | **Round 7a — keep edge function pattern; add explicit migration deltas for `pg_net`, Vault, and `verify_jwt = false`.** | Adversarial review correctly noted the round-7 doc claimed pattern parity with `010_popular_verses` / `011_user_stats_cron` (which call SQL functions, not HTTP). Caelan: "infrastructure is pretty simple to set up" — accepted, but doc needs to spell it out so the build agent doesn't get blindsided. TypeScript ergonomics for body composition + Expo Push error handling > plpgsql. |
+| 2026-04-29 | **Round 7a — `device_tokens` uses `UNIQUE(expo_token)` only (not `UNIQUE(user_id, expo_token)`).** | Round-7 schema would have allowed two rows per token (User A + User B coexisting after account switch on shared device), causing the cron to push User A's verse content to User B's foregrounded app. Single-token uniqueness means most-recent UPSERT owns the device; sign-out doesn't need to delete the row; ownership transfer happens at next sign-in. Simpler and avoids the privacy leak by construction. |
+| 2026-04-29 | **Round 7a — deep-link target is `MASTERED_COLLECTION_ID` (existing route + existing default sort).** | The Mastered collection's default sort is already `'due-first'` (`lib/store/index.ts:147`) and per-collection sort persists. Tapping a notification lands users on the existing route with due verses naturally at top. Zero new UI work. Earlier rounds proposed building a `?reviewView=true` filter; that's deferred indefinitely as not needed. |
+| 2026-04-29 | **Round 7a — `notification_preferences.timezone` has no default; client must INSERT with current IANA TZ.** | Round 7's `DEFAULT 'UTC'` would have produced 9am-UTC = 2am-PST notifications during the brief window between INSERT and the client's TZ-update write. Forcing client to provide TZ at INSERT time fails fast (NOT NULL violation visible in Settings UI) instead of silently mistiming. |
+| 2026-04-29 | **Round 7a — TZ exception isolation via `local_time_in_tz()` SQL function.** | A single user with an unrecognized IANA name (e.g. post-tzdata-rename) would otherwise crash the entire cron pass, blackholing notifications for everyone. Function catches and falls back to UTC for that user; client self-heals on next foreground. |
+| 2026-04-29 | **Round 7a — re-engagement idempotency via row-locking UPDATE before send.** | Round 7's "in the same transaction" claim wasn't sufficient under READ COMMITTED isolation. Two concurrent passes could both pass the read check and both fire. Fix: claim the user with an UPDATE in the same transaction; if 0 rows returned, skip (someone else got there first). |
+| 2026-04-29 | **Round 7a — DST handling via per-day idempotency.** | Fall-back fires the user twice in the same local minute (1:30am happens twice in real time). Spring-forward skips them entirely (2:30am doesn't exist). Mitigation: track `last_*_fired_date_local` per source; skip if already fired today in user's local date. Build-time SQL addition. |
+| 2026-04-29 | **Round 7a — per-user error isolation in edge function.** | One bad row (corrupt JSONB, missing `nextDueAt`) must not blackhole the rest of the pass. Try/catch per user; log + skip + continue. |
+| 2026-04-29 | **Round 7a — weekly cadence + short-interval delay (round-6 I8) accepted, daily is default.** | Weekly users with a 1-day-interval verse get pinged 6+ days late on the next Monday. Default is daily; weekly users explicitly opt into low-frequency. v2 could add an "N overdue" copy variant. |
 
 ## Next step
 
