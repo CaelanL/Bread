@@ -12,7 +12,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { IntervalSlider } from '@/components/settings/IntervalSlider';
+import { ReviewIntervalModal } from '@/components/settings/ReviewIntervalModal';
 import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
@@ -148,6 +148,7 @@ export default function SettingsScreen() {
   const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
   const [copyrightVisible, setCopyrightVisible] = React.useState(false);
   const [reviewInfoVisible, setReviewInfoVisible] = React.useState(false);
+  const [reviewIntervalModalVisible, setReviewIntervalModalVisible] = React.useState(false);
 
   // Change Password state
   const [passwordModalVisible, setPasswordModalVisible] = React.useState(false);
@@ -273,29 +274,17 @@ export default function SettingsScreen() {
 
         {/* Review System */}
         <SettingsSection title="REVIEW">
-          <View style={styles.reviewBlock}>
-            <Text style={[styles.reviewLabel, { color: colors.text }]}>
-              Maximum review interval: {reviewMaxIntervalDays} {reviewMaxIntervalDays === 1 ? 'day' : 'days'}
-            </Text>
-            <Text style={[styles.reviewDescription, { color: colors.icon }]}>
-              How many days at most between reviews of an engraved verse.
-              Applies to your next review — existing schedules don't change.
-            </Text>
-            <IntervalSlider
-              value={reviewMaxIntervalDays}
-              min={MIN_USER_MAX_INTERVAL_DAYS}
-              max={MAX_USER_MAX_INTERVAL_DAYS}
-              onChange={setReviewMaxIntervalDays}
-            />
-            <View style={styles.reviewRange}>
-              <Text style={[styles.reviewRangeLabel, { color: colors.icon }]}>
-                {MIN_USER_MAX_INTERVAL_DAYS}d
+          <Pressable onPress={() => setReviewIntervalModalVisible(true)}>
+            <SettingsRow
+              icon="hourglass"
+              label="Maximum review interval"
+            >
+              <Text style={[styles.rowValue, { color: colors.icon }]}>
+                {reviewMaxIntervalDays} {reviewMaxIntervalDays === 1 ? 'day' : 'days'}
               </Text>
-              <Text style={[styles.reviewRangeLabel, { color: colors.icon }]}>
-                {MAX_USER_MAX_INTERVAL_DAYS}d
-              </Text>
-            </View>
-          </View>
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
           <Pressable onPress={() => setReviewInfoVisible(true)}>
             <SettingsRow
               icon="info.circle.fill"
@@ -450,6 +439,16 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Review Interval Modal */}
+      <ReviewIntervalModal
+        visible={reviewIntervalModalVisible}
+        initialValue={reviewMaxIntervalDays}
+        min={MIN_USER_MAX_INTERVAL_DAYS}
+        max={MAX_USER_MAX_INTERVAL_DAYS}
+        onSave={setReviewMaxIntervalDays}
+        onClose={() => setReviewIntervalModalVisible(false)}
+      />
 
       {/* Change Password Modal */}
       <Modal visible={passwordModalVisible} transparent animationType="fade">
@@ -755,27 +754,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  reviewBlock: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  reviewLabel: {
+  rowValue: {
     fontSize: 15,
-    fontWeight: '500',
-  },
-  reviewDescription: {
-    fontSize: 13,
-    marginTop: 4,
-  },
-  reviewRange: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: -4,
-  },
-  reviewRangeLabel: {
-    fontSize: 11,
+    marginRight: 8,
+    fontVariant: ['tabular-nums'],
   },
 });

@@ -61,8 +61,14 @@ export function ProgressInfoModal({ visible, onClose }: ProgressInfoModalProps) 
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Review Schedule</Text>
                 <Text style={[styles.description, { color: colors.icon }]}>
                   Mastered verses come back for review on a growing schedule:{' '}
-                  <Text style={[styles.highlight, { color: goldColor }]}>1 day, 2 days, 3 days</Text>, and so on,
-                  capped at your chosen maximum.
+                  <Text style={[styles.highlight, { color: goldColor }]}>1 day</Text>, then{' '}
+                  <Text style={[styles.highlight, { color: goldColor }]}>2 days</Text>, then{' '}
+                  <Text style={[styles.highlight, { color: goldColor }]}>3 days</Text>, and so on, up to your
+                  chosen cap. After{' '}
+                  <Text style={[styles.highlight, { color: goldColor }]}>1</Text> successful review the next is
+                  due in <Text style={[styles.highlight, { color: goldColor }]}>1 day</Text>; after{' '}
+                  <Text style={[styles.highlight, { color: goldColor }]}>10</Text>, in{' '}
+                  <Text style={[styles.highlight, { color: goldColor }]}>10 days</Text>, unless your cap is lower.
                 </Text>
               </View>
             </View>

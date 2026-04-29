@@ -151,7 +151,7 @@ const IN_PROGRESS_COLLECTION: Collection = {
   name: 'In Progress',
   isDefault: false,
   isVirtual: true,
-  icon: 'circle.dotted',
+  icon: 'hourglass',
   iconColor: '#f59e0b', // Amber
   createdAt: 0,
 };
