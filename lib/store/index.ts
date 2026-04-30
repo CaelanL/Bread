@@ -1039,6 +1039,12 @@ export function useMasteredVerseCount() {
  * non-null bestAccuracy on any difficulty AND not yet mastered on Hard.
  * Used by both the In Progress virtual collection and the Insights count
  * so the two can never drift.
+ *
+ * SQL parity: the in-progress notification source mirrors this predicate
+ * server-side at supabase/functions/send-notifications/sources/in-progress.ts
+ * (`loadInProgressVerses`). If you change this predicate, change there too —
+ * otherwise users will get nudged about verses the in-app collection
+ * doesn't show, or vice versa.
  */
 function isInProgressVerse(v: SavedVerse): boolean {
   if (v.progress.hard?.completed) return false;

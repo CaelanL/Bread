@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Bread",
     slug: "biblemem",
-    version: "1.0.3",
+    version: "1.1.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "com.biblemem",
@@ -13,7 +13,7 @@ export default {
       bundleIdentifier: "com.caelanliu.biblemem",
       buildNumber: "1",
       infoPlist: {
-        NSMicrophoneUsageDescription: "BibleMem needs microphone access to record your verse recitations for accuracy scoring.",
+        NSMicrophoneUsageDescription: "Bread needs microphone access to record your verse recitations for accuracy scoring.",
       },
     },
     android: {
@@ -43,6 +43,13 @@ export default {
           dark: {
             backgroundColor: "#000000",
           },
+        },
+      ],
+      [
+        "expo-notifications",
+        {
+          // Default icon/color for Android (no-op on iOS).
+          color: "#ffffff",
         },
       ],
     ],

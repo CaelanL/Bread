@@ -155,11 +155,15 @@ export function ProgressCard({ progress }: ProgressCardProps) {
               <Text style={[styles.calloutText, { color: goldColor }]}>Review now to advance</Text>
             </View>
           )}
-          {state === 'locked' && e?.nextDueAt && (
-            <Text style={[styles.statusText, { color: colors.icon }]}>
-              Unlocks in {formatTimeUntilDue(new Date(e.nextDueAt).getTime() - now.getTime())}
-            </Text>
-          )}
+          {state === 'locked' && e?.nextDueAt && (() => {
+            const label = formatTimeUntilDue(new Date(e.nextDueAt).getTime() - now.getTime());
+            const text = label === 'tmr' ? 'Unlocks tomorrow' : `Unlocks in ${label}`;
+            return (
+              <Text style={[styles.statusText, { color: colors.icon }]}>
+                {text}
+              </Text>
+            );
+          })()}
           {isEngraved && (
             <Text style={[styles.tagline, { color: goldColor }]}>
               "I have hidden your word in my heart"
