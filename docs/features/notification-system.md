@@ -1,10 +1,14 @@
 # Feature: Notification System
 
-> **Status:** `planning`
+> **Status:** `shipped`
 > **Author:** Caelan
 > **Created:** 2026-04-27
-> **Last revised:** 2026-04-29
-> **Shipped:** —
+> **Last revised:** 2026-04-30
+> **Shipped:** 2026-04-30 (v1.1.0)
+>
+> **Durable decisions graduated to:** `docs/architecture/notifications.md`.
+> This doc is preserved as the historical "why" — the architecture doc
+> is the living source of truth from here on.
 >
 > **Depends on:** `docs/features/review-system.md` — already shipped.
 > This feature introduces a **single coupled change** to

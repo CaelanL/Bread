@@ -298,7 +298,7 @@ Per the design doc's "Build prerequisites" section:
 | 2 | Both sources + push client | shipped | 61e959d |
 | 3 | review.ts midnight-snap | shipped | d2082d2 |
 | 4 | Client + dev menu + foreground | shipped | e328e41 |
-| 5 | Settings UI + Q1 + Q14 | shipped | (pending commit) |
-| 6 | Polish + doc graduation | in progress | — |
+| 5 | Settings UI + Q1 + Q14 | shipped | 66b9a45 |
+| 6 | Polish + doc graduation | shipped | (pending commit) |
 
 Update this table as chunks land.
