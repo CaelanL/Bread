@@ -408,7 +408,13 @@ export default function StudySessionScreen() {
               </Pressable>
             )}
 
-          {/* Next + Retry buttons */}
+          {/* Next + Retry buttons. Retry is hidden when there's only
+              one chunk — in that case the chunk's score *is* the
+              session score, but retry doesn't update it (chunkResults
+              is the source of truth, retryResults is display-only),
+              so showing it would be misleading: user would retry,
+              see a higher score, and the saved progress would still
+              reflect the original attempt. */}
           {recordingState === 'idle' &&
             !transcribing &&
             isCompleted &&
@@ -416,12 +422,14 @@ export default function StudySessionScreen() {
             !isExiting &&
             session.currentIndex === index && (
               <View style={styles.controlsRow}>
-                <Pressable
-                  style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
-                  onPress={() => handleRetry(index)}
-                >
-                  <IconSymbol name="arrow.counterclockwise" size={22} color={colors.text} />
-                </Pressable>
+                {session.chunks.length > 1 && (
+                  <Pressable
+                    style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
+                    onPress={() => handleRetry(index)}
+                  >
+                    <IconSymbol name="arrow.counterclockwise" size={22} color={colors.text} />
+                  </Pressable>
+                )}
                 <Pressable
                   style={[styles.nextButton, { backgroundColor: buttonBg }]}
                   onPress={session.goToNext}
