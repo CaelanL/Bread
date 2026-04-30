@@ -277,8 +277,8 @@ Per the design doc's "Build prerequisites" section:
 |---|---|---|---|
 | 1 | Backend infrastructure | shipped | 5ff5847 |
 | 2 | Both sources + push client | shipped | 61e959d |
-| 3 | review.ts midnight-snap | shipped | (pending commit) |
-| 4 | Client + dev menu + foreground | not started | — |
+| 3 | review.ts midnight-snap | shipped | d2082d2 |
+| 4 | Client + dev menu + foreground | shipped | (pending commit) |
 | 5 | Settings UI + Q1 + Q14 | not started | — |
 | 6 | Polish + doc graduation | not started | — |
 

@@ -45,6 +45,13 @@ export default {
           },
         },
       ],
+      [
+        "expo-notifications",
+        {
+          // Default icon/color for Android (no-op on iOS).
+          color: "#ffffff",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,
