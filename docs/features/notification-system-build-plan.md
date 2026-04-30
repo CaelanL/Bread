@@ -199,8 +199,27 @@ some iteration.
 ### Chunk 5 — Settings UI + Q1 explainer card + Q14 badge
 
 **Files:**
-- `app/(tabs)/settings.tsx` — notifications section: master toggle,
-  per-source toggles, cadence picker, time picker.
+- `app/(tabs)/settings.tsx` — single Notifications row (On/Off
+  summary) that navigates to a dedicated page. Inline section was
+  built first then folded into a sub-page during chunk-5 review —
+  rationale: commit-on-Save protects users from accidentally
+  flipping the master toggle.
+- `app/notifications.tsx` (new) — dedicated configure page. Local
+  draft state for every field; Save commits one batched PATCH;
+  Back-with-dirty prompts Discard. iOS permission still uses the
+  live request because the OS one-shots the dialog from
+  `undetermined` only.
+- `components/settings/NotificationTimeModal.tsx`,
+  `NotificationCadenceModal.tsx` — reused by the page; commit on
+  modal-Save into draft (not server).
+- `supabase/migrations/019_in_progress_cadence.sql` — adds
+  `in_progress_cadence` + `in_progress_weekday` columns so the page
+  can offer cadence parity between Reviews and In-progress.
+  Backfills existing rows to weekly+Monday (preserves the prior
+  hard-coded behavior).
+- `supabase/functions/send-notifications/sources/in-progress.ts` —
+  honors `in_progress_cadence`/`in_progress_weekday` instead of the
+  hard-coded MONDAY constant.
 - New component for Q1 explainer card mounted at root after sign-in
   (gated by AsyncStorage flag).
 - Q14 "1" badge component on Settings tab icon.
@@ -278,8 +297,8 @@ Per the design doc's "Build prerequisites" section:
 | 1 | Backend infrastructure | shipped | 5ff5847 |
 | 2 | Both sources + push client | shipped | 61e959d |
 | 3 | review.ts midnight-snap | shipped | d2082d2 |
-| 4 | Client + dev menu + foreground | shipped | (pending commit) |
-| 5 | Settings UI + Q1 + Q14 | not started | — |
-| 6 | Polish + doc graduation | not started | — |
+| 4 | Client + dev menu + foreground | shipped | e328e41 |
+| 5 | Settings UI + Q1 + Q14 | shipped | (pending commit) |
+| 6 | Polish + doc graduation | in progress | — |
 
 Update this table as chunks land.

@@ -1,9 +1,11 @@
 /**
  * In-progress nudge source.
  *
- * Weekly Mondays at the user's chosen wall-clock time, IF the user
- * hasn't foregrounded the app in 24h AND has at least one in-progress
- * verse. Cadence is locked at weekly (no daily option).
+ * Fires at the user's chosen wall-clock time on the days defined by
+ * `in_progress_cadence` (daily / weekly+weekday), IF the user hasn't
+ * foregrounded the app in 24h AND has at least one in-progress verse.
+ * Schema mirrors reviews — cadence='daily' ⇒ weekday IS NULL,
+ * cadence='weekly' ⇒ weekday∈0..6 (CHECK enforced).
  *
  * In-progress predicate mirrors `isInProgressVerse` at
  * `lib/store/index.ts:1043`: any non-null bestAccuracy on any
@@ -38,7 +40,6 @@ interface InProgressVerse {
   last_practiced_at: string | null;
 }
 
-const MONDAY = 1;
 const ACTIVE_GATE_MS = 24 * 60 * 60 * 1000;
 
 export async function dispatchInProgress(
@@ -47,7 +48,7 @@ export async function dispatchInProgress(
   const { data: prefs, error } = await admin
     .from("notification_preferences")
     .select(
-      "user_id, timezone, in_progress_hour, in_progress_minute, in_progress_last_fired_local_date, last_foregrounded_at",
+      "user_id, timezone, in_progress_cadence, in_progress_weekday, in_progress_hour, in_progress_minute, in_progress_last_fired_local_date, last_foregrounded_at",
     )
     .eq("master_enabled", true)
     .eq("in_progress_enabled", true);
@@ -64,7 +65,9 @@ export async function dispatchInProgress(
   for (const p of prefs) {
     const local = localTimeInTz(now, p.timezone as string);
     if (!local) continue;
-    if (local.getDay() !== MONDAY) continue;
+    if (p.in_progress_cadence === "weekly") {
+      if (local.getDay() !== p.in_progress_weekday) continue;
+    }
     if (local.getHours() !== p.in_progress_hour) continue;
     if (local.getMinutes() !== p.in_progress_minute) continue;
 

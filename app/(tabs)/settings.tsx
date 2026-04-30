@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  AppState,
   Modal,
   KeyboardAvoidingView,
   Platform,
@@ -21,6 +22,13 @@ import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion, type ColorMode } from '
 import { useAuth } from '@/lib/auth';
 import { useAppStore } from '@/lib/store';
 import { MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from '@/lib/store/review-config';
+import {
+  getPermissionStatus,
+  markSettingsVisited,
+  useNotificationPreferences,
+  type IosPermissionStatus,
+} from '@/lib/notifications';
+import { router } from 'expo-router';
 import Constants from 'expo-constants';
 
 interface SettingsSectionProps {
@@ -161,6 +169,28 @@ export default function SettingsScreen() {
   const [deleteConfirmText, setDeleteConfirmText] = React.useState('');
   const [deleteLoading, setDeleteLoading] = React.useState(false);
 
+  // Notification permission status — re-evaluated on mount, when the
+  // master toggle's request resolves, and on each app foreground (the
+  // user may grant via iOS Settings without the in-app flow).
+  const notificationPrefs = useNotificationPreferences();
+  const [notificationPermission, setNotificationPermission] =
+    React.useState<IosPermissionStatus>('undetermined');
+  const refreshPermission = React.useCallback(async () => {
+    const status = await getPermissionStatus();
+    setNotificationPermission(status);
+  }, []);
+
+  // Mark Settings as visited (clears Q14 badge) on first mount, probe
+  // permission, and listen for foreground transitions.
+  React.useEffect(() => {
+    markSettingsVisited().catch(() => { /* best-effort */ });
+    refreshPermission();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') refreshPermission();
+    });
+    return () => sub.remove();
+  }, [refreshPermission]);
+
   const handleSignOut = async () => {
     setSigningOut(true);
     await signOut();
@@ -290,6 +320,26 @@ export default function SettingsScreen() {
               icon="info.circle.fill"
               label="How does this work?"
             >
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
+        </SettingsSection>
+
+        {/* Notifications — opens a dedicated page so changes are
+            commit-on-Save. The summary reflects whether the user is
+            actively receiving anything (master ON + permission
+            granted). Permission-denied always summarizes as Off, even
+            if the server row has master_enabled=true. */}
+        <SettingsSection title="NOTIFICATIONS">
+          <Pressable onPress={() => router.push('/notifications')}>
+            <SettingsRow icon="bell.fill" label="Notifications">
+              <Text style={[styles.rowValue, { color: colors.icon }]}>
+                {notificationPrefs?.masterEnabled &&
+                (notificationPermission === 'granted' ||
+                  notificationPermission === 'provisional')
+                  ? 'On'
+                  : 'Off'}
+              </Text>
               <IconSymbol name="chevron.right" size={16} color={colors.icon} />
             </SettingsRow>
           </Pressable>

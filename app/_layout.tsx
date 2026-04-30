@@ -15,6 +15,7 @@ import { NetworkProvider } from '@/lib/network';
 import { NoInternetOverlay } from '@/components/ui/NoInternetOverlay';
 import { ErrorToast } from '@/components/ui/ErrorToast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
 import {
@@ -23,6 +24,7 @@ import {
   replayColdStartTap,
   syncForegroundState,
   usePrefsStore,
+  useUxFlagsStore,
 } from '@/lib/notifications';
 
 // Foreground notification handler — suppress everything while the app
@@ -82,6 +84,11 @@ function RootLayoutNav() {
         useAppStore.getState().hydrate().catch((e) => {
           console.error('[App] Store hydration error:', e);
         });
+
+        // Hydrate UX flags (Q1 dismissed, settings visited) so the
+        // explainer card and badge resolve their initial state without
+        // a flicker.
+        useUxFlagsStore.getState().hydrate().catch(() => { /* best-effort */ });
 
         // Hydrate notification prefs (cache → server), then foreground
         // sync once (registers token if granted, resyncs TZ, fires
@@ -157,9 +164,11 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="reset-password" />
+        <Stack.Screen name="notifications" />
         <Stack.Screen name="session" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
+      <Q1ExplainerCard isAuthenticated={isAuthenticated} />
       <StatusBar style="auto" />
     </ThemeProvider>
   );

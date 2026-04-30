@@ -5,9 +5,13 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useSettingsBadge } from '@/lib/notifications';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  // Q14: nudges users to Settings when they've dismissed the explainer
+  // card but haven't yet enabled notifications.
+  const settingsBadge = useSettingsBadge();
 
   return (
     <Tabs
@@ -35,6 +39,7 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+          tabBarBadge: settingsBadge ? '1' : undefined,
         }}
       />
       <Tabs.Screen

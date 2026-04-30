@@ -20,6 +20,9 @@ export interface NotificationPreferences {
   reviewsMinute: number;   // 0..59
 
   inProgressEnabled: boolean;
+  inProgressCadence: Cadence;
+  /** 0 = Sunday, 6 = Saturday. Null when cadence === 'daily'. */
+  inProgressWeekday: number | null;
   inProgressHour: number;
   inProgressMinute: number;
 

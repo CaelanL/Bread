@@ -6,6 +6,9 @@
  * Available in dev console:
  *   notifPrefs()         — print current Zustand-cached prefs
  *   notifResetCache()    — wipe AsyncStorage prefs cache + token cache
+ *   notifResetUx()       — reset the Q1 explainer + Q14 badge flags
+ *                          (lets you re-trigger onboarding without
+ *                          reinstalling)
  *   notifPermStatus()    — log current iOS permission status
  *   notifRegisterToken() — force a token register (returns the token)
  *
@@ -19,6 +22,7 @@
 import { clearPrefsCache, usePrefsStore } from './preferences';
 import { getPermissionStatus } from './permissions';
 import { registerDeviceToken, clearCachedToken } from './tokens';
+import { useUxFlagsStore } from './uxFlags';
 
 export function installDevTools(): void {
   if (!__DEV__) return;
@@ -42,5 +46,10 @@ export function installDevTools(): void {
     await clearPrefsCache();
     await clearCachedToken();
     console.log('[notif] cache cleared');
+  };
+
+  (globalThis as unknown as { notifResetUx: () => Promise<void> }).notifResetUx = async () => {
+    await useUxFlagsStore.getState().resetForDev();
+    console.log('[notif] UX flags reset (Q1 + settings-visited)');
   };
 }

@@ -56,8 +56,13 @@ export { installDevTools } from './debug';
 
 export { syncForegroundState } from './foreground';
 
+export { useSettingsBadge, markSettingsVisited } from './useSettingsBadge';
+
+export { useUxFlagsStore } from './uxFlags';
+
 export {
   fetchPreferences,
   updateLastForegroundedAt,
   updateTimezone,
+  defaultPreferences,
 } from './api';

@@ -223,13 +223,6 @@ export default function CollectionScreen() {
               collectionCount={getVerseCollectionCount(item)}
             />
           )}
-          ListHeaderComponent={
-            sortBy === 'due-first' && dueCount > 0 ? (
-              <Text style={[styles.dueFirstLabel, { color: colors.icon }]}>
-                {dueCount} {dueCount === 1 ? 'verse' : 'verses'} due — review {dueCount === 1 ? 'it' : 'them'} first.
-              </Text>
-            ) : null
-          }
           keyExtractor={(item) => item.id}
           contentContainerStyle={sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
           ListEmptyComponent={renderEmptyState}
@@ -291,11 +284,6 @@ const styles = StyleSheet.create({
   versesContainer: {
     padding: 16,
     gap: 12,
-  },
-  dueFirstLabel: {
-    fontSize: 13,
-    fontStyle: 'italic',
-    marginBottom: 4,
   },
   emptyState: {
     alignItems: 'center',

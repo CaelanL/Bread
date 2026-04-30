@@ -22,6 +22,8 @@ interface PrefsRow {
   reviews_hour: number;
   reviews_minute: number;
   in_progress_enabled: boolean;
+  in_progress_cadence: Cadence;
+  in_progress_weekday: number | null;
   in_progress_hour: number;
   in_progress_minute: number;
   timezone: string;
@@ -36,6 +38,11 @@ function rowToPrefs(row: PrefsRow): NotificationPreferences {
     reviewsHour: row.reviews_hour,
     reviewsMinute: row.reviews_minute,
     inProgressEnabled: row.in_progress_enabled,
+    // Old DB rows (pre-migration 019) won't have these columns.
+    // Fall back to the prior hard-coded behavior so the new client
+    // works against an un-migrated server during rollout.
+    inProgressCadence: row.in_progress_cadence ?? 'weekly',
+    inProgressWeekday: row.in_progress_weekday ?? 1,
     inProgressHour: row.in_progress_hour,
     inProgressMinute: row.in_progress_minute,
     timezone: row.timezone,
@@ -51,6 +58,8 @@ function patchToRow(patch: Partial<NotificationPreferences>): Partial<PrefsRow> 
   if (patch.reviewsHour !== undefined) out.reviews_hour = patch.reviewsHour;
   if (patch.reviewsMinute !== undefined) out.reviews_minute = patch.reviewsMinute;
   if (patch.inProgressEnabled !== undefined) out.in_progress_enabled = patch.inProgressEnabled;
+  if (patch.inProgressCadence !== undefined) out.in_progress_cadence = patch.inProgressCadence;
+  if (patch.inProgressWeekday !== undefined) out.in_progress_weekday = patch.inProgressWeekday;
   if (patch.inProgressHour !== undefined) out.in_progress_hour = patch.inProgressHour;
   if (patch.inProgressMinute !== undefined) out.in_progress_minute = patch.inProgressMinute;
   if (patch.timezone !== undefined) out.timezone = patch.timezone;
@@ -75,27 +84,51 @@ export async function fetchPreferences(): Promise<NotificationPreferences | null
 }
 
 /**
+ * Single source of truth for the default preferences row shape.
+ * Both `insertDefaultPreferences` and the page's local-draft seed
+ * read from this so the no-prefs-yet Save path lands a row that
+ * matches what the page rendered. Schema defaults stay in sync via
+ * the migrations.
+ */
+export function defaultPreferences(timezone: string): NotificationPreferences {
+  return {
+    masterEnabled: true,
+    reviewsEnabled: true,
+    reviewsCadence: 'daily',
+    reviewsWeekday: null,
+    reviewsHour: 9,
+    reviewsMinute: 0,
+    inProgressEnabled: true,
+    inProgressCadence: 'weekly',
+    inProgressWeekday: 1,
+    inProgressHour: 18,
+    inProgressMinute: 0,
+    timezone,
+  };
+}
+
+/**
  * Insert the user's first prefs row with sane defaults. Called when
  * permission is freshly granted. Returns the resulting prefs.
- *
- * Defaults match the schema: reviews on, daily, 9 AM; in-progress on,
- * 6 PM. Master enabled. Timezone from the device.
  */
 export async function insertDefaultPreferences(timezone: string): Promise<NotificationPreferences | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
+  const defaults = defaultPreferences(timezone);
   const row: PrefsRow = {
     user_id: user.id,
-    master_enabled: true,
-    reviews_enabled: true,
-    reviews_cadence: 'daily',
-    reviews_weekday: null,
-    reviews_hour: 9,
-    reviews_minute: 0,
-    in_progress_enabled: true,
-    in_progress_hour: 18,
-    in_progress_minute: 0,
-    timezone,
+    master_enabled: defaults.masterEnabled,
+    reviews_enabled: defaults.reviewsEnabled,
+    reviews_cadence: defaults.reviewsCadence,
+    reviews_weekday: defaults.reviewsWeekday,
+    reviews_hour: defaults.reviewsHour,
+    reviews_minute: defaults.reviewsMinute,
+    in_progress_enabled: defaults.inProgressEnabled,
+    in_progress_cadence: defaults.inProgressCadence,
+    in_progress_weekday: defaults.inProgressWeekday,
+    in_progress_hour: defaults.inProgressHour,
+    in_progress_minute: defaults.inProgressMinute,
+    timezone: defaults.timezone,
   };
   const { data, error } = await supabase
     .from(PREFS_TABLE)
