@@ -319,6 +319,33 @@ export default function StudySetupScreen() {
                 containerStyle={{ width: 78, zIndex: 1000 }}
                 showTickIcon={false}
               />
+              {/* "All" shortcut — saves the user from scrolling the
+                  dropdown to the largest value when they want to
+                  practice the whole passage as one chunk. We don't
+                  call setDropdownOpen(false) here; an external value
+                  change while the picker is mid-open-animation
+                  causes a one-frame label flash in
+                  react-native-dropdown-picker@5. The picker closes on
+                  outside-tap anyway, and a tap on this Pressable
+                  registers as outside. */}
+              <Pressable
+                onPress={() => setChunkSize(totalVerses)}
+                style={[
+                  styles.chunkAllButton,
+                  {
+                    backgroundColor: chunkSize === totalVerses ? colors.primary : colors.cardAlt,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chunkAllButtonText,
+                    { color: chunkSize === totalVerses ? colors.white : colors.text },
+                  ]}
+                >
+                  All
+                </Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -466,6 +493,17 @@ const styles = StyleSheet.create({
   },
   dropdownContainer: {
     borderRadius: 10,
+  },
+  chunkAllButton: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chunkAllButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   bottomSection: {
     paddingTop: 20,
