@@ -208,12 +208,21 @@ export function SwipeableVerseCard({
                       {' '}• {verse.version}
                     </Text>
                   </Text>
-                  {/* Mastered verses surface their state via ReviewStateBadge below;
-                      unmastered verses show the highest-difficulty dot/checkmark. */}
+                  {/* Top-line indicator. Unmastered verses show a
+                      progression dot (gray=easy, blue=medium).
+                      Mastered-but-not-engraved verses get a green
+                      checkmark — visual parity with the unmastered
+                      dots so users can scan a list at a glance.
+                      Engraved verses skip this slot; their gold
+                      card styling (glow + reference text color) is
+                      the indicator. ReviewStateBadge below carries
+                      the SR review-status detail in all cases. */}
                   {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
                     <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
                   ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
                     <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
+                  ) : verse.progress.hard.completed && !verse.progress.engraved?.completed ? (
+                    <IconSymbol name="checkmark" size={14} color={colors.success} />
                   ) : null}
                 </View>
                 {loading ? (

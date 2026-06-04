@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/app-header';
+import { ChunkSizeModal } from '@/components/study/ChunkSizeModal';
 import { ProgressCard } from '@/components/study/ProgressCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
@@ -9,12 +10,12 @@ import { formatVerseReference } from '@/lib/storage';
 import { useAppStore, useVerse } from '@/lib/store';
 import { getVerseText as extractVerseText, toSuperscript } from '@/lib/study-chunks';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -22,7 +23,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import DropDownPicker from 'react-native-dropdown-picker';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -31,16 +32,38 @@ type Difficulty = 'easy' | 'medium' | 'hard';
 const LARGE_SCREEN_THRESHOLD = 920;
 const MEDIUM_SCREEN_THRESHOLD = 870;
 
+// Floating pill height + breathing room. Used to reserve scroll
+// padding so content can scroll fully past the pill without being
+// hidden under it.
+const START_BUTTON_HEIGHT = 42;
+
+/** Convert a #rrggbb hex color to an `rgba()` string with the given
+ * alpha. Used so the bottom fade-gradient's "transparent" stop
+ * matches the page background's hue exactly (RN's `'transparent'`
+ * keyword interpolates through black, which produces a visible gray
+ * band on light themes). */
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export default function StudySetupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
-  // Detect screen size and set verse preview lines accordingly
-  const screenHeight = Dimensions.get('window').height;
-  const versePreviewLines = screenHeight > LARGE_SCREEN_THRESHOLD ? 4
-    : screenHeight > MEDIUM_SCREEN_THRESHOLD ? 3
+  // Detect screen size and set verse preview lines accordingly.
+  // Use safe-area frame (excludes Dynamic Island / notch) so
+  // breakpoint comparisons reflect usable height across iPhone
+  // models, not raw window height.
+  const insets = useSafeAreaInsets();
+  const frameHeight = useSafeAreaFrame().height;
+  const versePreviewLines = frameHeight > LARGE_SCREEN_THRESHOLD ? 4
+    : frameHeight > MEDIUM_SCREEN_THRESHOLD ? 3
     : 2;
 
   // Get verse from store (instant, no loading)
@@ -52,25 +75,28 @@ export default function StudySetupScreen() {
   const [textLoading, setTextLoading] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [chunkSize, setChunkSize] = useState(1);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [dropdownItems, setDropdownItems] = useState<{label: string; value: number}[]>([]);
+  const [chunkModalOpen, setChunkModalOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [defaultsApplied, setDefaultsApplied] = useState(false);
 
   // Calculate total verses in this passage
   const totalVerses = verse ? verse.verseEnd - verse.verseStart + 1 : 1;
 
-  // Update dropdown items when verse loads
+  // For an already-mastered verse, default to the toughest setup —
+  // Hard difficulty and the whole passage in one chunk — since the
+  // user is reviewing for retention, not first-time learning. Runs
+  // once after the verse loads; the user can still change either
+  // control afterward (defaultsApplied gate keeps it from fighting
+  // their choice on re-render).
   useEffect(() => {
-    if (verse) {
-      const total = verse.verseEnd - verse.verseStart + 1;
-      const items = Array.from({ length: total }, (_, i) => ({
-        label: String(i + 1),
-        value: i + 1,
-      }));
-      setDropdownItems(items);
+    if (!verse || defaultsApplied) return;
+    if (verse.progress?.hard?.completed === true) {
+      setDifficulty('hard');
+      setChunkSize(totalVerses);
     }
-  }, [verse]);
+    setDefaultsApplied(true);
+  }, [verse, defaultsApplied, totalVerses]);
 
   // Load verse text (both combined and keyed)
   useEffect(() => {
@@ -190,9 +216,15 @@ export default function StudySetupScreen() {
         ]}
       />
 
-      <View style={styles.content}>
-        {/* Top section - fixed content */}
-        <View style={styles.topSection}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + START_BUTTON_HEIGHT + 32 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.formColumn}>
           {/* Verse Preview */}
           <View style={[styles.previewCard, { backgroundColor: colors.cardAlt }]}>
             <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
@@ -298,49 +330,35 @@ export default function StudySetupScreen() {
           {/* Progress Card */}
           <ProgressCard progress={verse.progress} />
 
-          {/* Chunk Size Selection - only show if multiple verses */}
+          {/* Chunk Size Selection - only show if multiple verses.
+              Tapping the value-pill opens ChunkSizeModal where the
+              user picks 1..N or "All". Replaces the prior
+              react-native-dropdown-picker — same data, new shell. */}
           {totalVerses > 1 && (
             <View style={styles.chunkRow}>
               <Text style={[styles.chunkLabel, { color: colors.text }]}>Verses per chunk</Text>
-              <DropDownPicker
-                open={dropdownOpen}
-                value={chunkSize}
-                items={dropdownItems}
-                setOpen={setDropdownOpen}
-                setValue={setChunkSize}
-                setItems={setDropdownItems}
-                style={[styles.dropdown, { backgroundColor: colors.cardAlt, borderWidth: 0 }]}
-                dropDownContainerStyle={[styles.dropdownContainer, { backgroundColor: colors.cardAlt, borderWidth: 0, maxHeight: 140 }]}
-                textStyle={{ color: colors.text, fontSize: 16, fontWeight: '600' }}
-                arrowIconStyle={{ tintColor: colors.icon } as any}
-                tickIconStyle={{ tintColor: colors.text } as any}
-                listItemLabelStyle={{ color: colors.text }}
-                selectedItemContainerStyle={{ backgroundColor: colors.border }}
-                containerStyle={{ width: 78, zIndex: 1000 }}
-                showTickIcon={false}
-              />
-              {/* "All" shortcut — saves the user from scrolling the
-                  dropdown to the largest value when they want to
-                  practice the whole passage as one chunk. We don't
-                  call setDropdownOpen(false) here; an external value
-                  change while the picker is mid-open-animation
-                  causes a one-frame label flash in
-                  react-native-dropdown-picker@5. The picker closes on
-                  outside-tap anyway, and a tap on this Pressable
-                  registers as outside. */}
+              <Pressable
+                onPress={() => setChunkModalOpen(true)}
+                style={[styles.chunkValueButton, { backgroundColor: colors.cardAlt }]}
+              >
+                <Text style={[styles.chunkValueText, { color: colors.text }]}>
+                  {Math.min(chunkSize, totalVerses)}
+                </Text>
+                <IconSymbol name="chevron.right" size={14} color={colors.icon} />
+              </Pressable>
               <Pressable
                 onPress={() => setChunkSize(totalVerses)}
                 style={[
                   styles.chunkAllButton,
                   {
-                    backgroundColor: chunkSize === totalVerses ? colors.primary : colors.cardAlt,
+                    backgroundColor: chunkSize >= totalVerses ? colors.primary : colors.cardAlt,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.chunkAllButtonText,
-                    { color: chunkSize === totalVerses ? colors.white : colors.text },
+                    { color: chunkSize >= totalVerses ? colors.white : colors.text },
                   ]}
                 >
                   All
@@ -349,17 +367,49 @@ export default function StudySetupScreen() {
             </View>
           )}
         </View>
+      </ScrollView>
 
-        {/* Start Button - flex pushes to bottom */}
-        <View style={styles.bottomSection}>
-          <Pressable
-            style={[styles.startButton, { backgroundColor: 'rgba(176, 141, 87, 0.9)' }]}
-            onPress={handleStartSession}
-          >
-            <IconSymbol name="play.fill" size={24} color={colors.white} />
-          </Pressable>
-        </View>
+      {/* Soft fade behind the pill. The gradient occupies the bottom
+          ~140pt and goes from fully-transparent at the top to the
+          screen background at the bottom. Effect: content scrolling
+          behind the pill visibly fades out before reaching it, so
+          the pill reads as hovering above (not colliding with) the
+          form. iOS-conventional pattern (Maps, Music, App Store).
+          pointerEvents=none so the gradient never intercepts taps. */}
+      <LinearGradient
+        colors={[hexToRgba(colors.background, 0), colors.background]}
+        style={[styles.fadeOverlay, { height: insets.bottom + 110 }]}
+        pointerEvents="none"
+      />
+
+      {/* Floating start pill — absolutely positioned so it always
+          sits above the scroll content. ScrollView's contentInset
+          reserves matching space at the bottom so the pill never
+          covers the last form row. Anchored to safe-area-bottom +
+          16, with a soft shadow to read as floating. */}
+      <View style={[styles.floatingButtonWrap, { bottom: Math.max(insets.bottom - 8, 4) }]} pointerEvents="box-none">
+        <Pressable
+          style={({ pressed }) => [
+            styles.startPill,
+            {
+              backgroundColor: 'rgba(176, 141, 87, 0.95)',
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+          onPress={handleStartSession}
+        >
+          <Text style={styles.startPillText}>Start session</Text>
+          <IconSymbol name="arrow.right" size={18} color={colors.white} />
+        </Pressable>
       </View>
+
+      <ChunkSizeModal
+        visible={chunkModalOpen}
+        totalVerses={totalVerses}
+        initialChunkSize={chunkSize}
+        onSave={setChunkSize}
+        onClose={() => setChunkModalOpen(false)}
+      />
     </View>
   );
 }
@@ -368,14 +418,49 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
+  scrollView: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'space-between',
   },
-  topSection: {
-    flex: 1,
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    // paddingBottom is computed dynamically (insets + pill height)
+    // via inline style on the ScrollView.
+  },
+  formColumn: {
     gap: 20,
+  },
+  fadeOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  floatingButtonWrap: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+  },
+  startPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 42,
+    paddingHorizontal: 24,
+    borderRadius: 21,
+    minWidth: 180,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  startPillText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   centered: {
     justifyContent: 'center',
@@ -450,33 +535,33 @@ const styles = StyleSheet.create({
   },
   segmentedControl: {
     flexDirection: 'row',
-    borderRadius: 12,
-    padding: 4,
+    borderRadius: 10,
+    padding: 3,
   },
   segment: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 8,
     alignItems: 'center',
   },
   segmentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   segmentText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   difficultyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   segmentSubtext: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 10,
+    marginTop: 1,
   },
   chunkRow: {
     flexDirection: 'row',
@@ -487,34 +572,27 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
-  dropdown: {
-    borderRadius: 10,
+  chunkValueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
-  dropdownContainer: {
-    borderRadius: 10,
+  chunkValueText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   chunkAllButton: {
     height: 34,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   chunkAllButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-  },
-  bottomSection: {
-    paddingTop: 20,
-    paddingBottom: 0,
-  },
-  startButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
   },
 });
