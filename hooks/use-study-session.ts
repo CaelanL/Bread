@@ -22,7 +22,7 @@ import {
 } from '@/lib/study-chunks';
 import { processRecording as processRecordingApi, logSessionAttempt } from '@/lib/api';
 import { showErrorToast } from '@/lib/toast';
-import { alignTranscription } from '@/lib/align';
+import { alignTranscription, buildAllMissingAlignment } from '@/lib/align';
 
 interface ChunkResult {
   score: number;
@@ -48,10 +48,16 @@ interface UseStudySessionReturn {
   // Results per chunk
   getChunkResult: (index: number) => ChunkResult | undefined;
   getRetryResult: (index: number) => ChunkResult | undefined;
+  getPeekResult: (index: number) => ChunkResult | undefined;
 
   // Retry state
   retryingChunks: Set<number>;
   retryChunk: (index: number) => void;
+
+  // Peek (reveal) state — a peeked chunk scores 0 (Medium/Hard only)
+  peekedChunks: Set<number>;
+  peekChunk: (index: number) => void;
+  sessionSeed: number;
 
   // Computed
   allChunksCompleted: boolean;
@@ -92,6 +98,9 @@ export function useStudySession({
   const [totalRecordingDurationMs, setTotalRecordingDurationMs] = useState(0);
   const [retryingChunks, setRetryingChunks] = useState<Set<number>>(new Set());
   const [retryResults, setRetryResults] = useState<Map<number, ChunkResult>>(new Map());
+  const [peekedChunks, setPeekedChunks] = useState<Set<number>>(new Set());
+  const [peekResults, setPeekResults] = useState<Map<number, ChunkResult>>(new Map());
+  const [sessionSeed, setSessionSeed] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -108,7 +117,9 @@ export function useStudySession({
           verseWithText = { ...found, text, verses: keyedVerses };
         }
         setVerse(verseWithText);
-        const parsedChunks = parseVerseIntoChunks(verseWithText, difficulty, chunkSize, Math.floor(Math.random() * 2));
+        const seed = Math.floor(Math.random() * 2);
+        setSessionSeed(seed);
+        const parsedChunks = parseVerseIntoChunks(verseWithText, difficulty, chunkSize, seed);
         setChunks(parsedChunks);
       }
       setLoading(false);
@@ -136,6 +147,18 @@ export function useStudySession({
   const getRetryResult = useCallback((index: number): ChunkResult | undefined => {
     return retryResults.get(index);
   }, [retryResults]);
+
+  // Get the real recited result for a peeked chunk (display-only; the
+  // chunk's scored result in chunkResults is a forced 0)
+  const getPeekResult = useCallback((index: number): ChunkResult | undefined => {
+    return peekResults.get(index);
+  }, [peekResults]);
+
+  // Mark a chunk as peeked (revealed before reciting). Sticky and
+  // one-way: re-hiding never untaints. Only meaningful on Medium/Hard.
+  const peekChunk = useCallback((index: number) => {
+    setPeekedChunks((prev) => new Set([...prev, index]));
+  }, []);
 
   // Retry a completed chunk (resets to recording state without affecting score)
   const retryChunk = useCallback((index: number) => {
@@ -183,11 +206,27 @@ export function useStudySession({
       return { score, alignment, allDone: false };
     }
 
-    // Store result
+    // Peeked chunks score 0: the user revealed the answer before
+    // reciting, so this attempt counts as if every word was missed.
+    // The real recited result is stashed (display-only) so the card
+    // can still show what they actually said.
+    const isPeeked = peekedChunks.has(currentIndex);
+    const scoredAlignment = isPeeked ? buildAllMissingAlignment(actualText) : alignment;
+    const scoredValue = isPeeked ? 0 : score;
+
+    if (isPeeked) {
+      setPeekResults((prev) => new Map(prev).set(currentIndex, {
+        score,
+        transcription: cleanedTranscription,
+        alignment,
+      }));
+    }
+
+    // Store result (the scored alignment — forced-missing if peeked)
     setChunkResults((prev) => new Map(prev).set(currentIndex, {
-      score,
+      score: scoredValue,
       transcription: cleanedTranscription,
-      alignment,
+      alignment: scoredAlignment,
     }));
 
     // Mark as completed
@@ -202,7 +241,7 @@ export function useStudySession({
       const allAlignments = new Map(
         Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment])
       );
-      allAlignments.set(currentIndex, alignment);
+      allAlignments.set(currentIndex, scoredAlignment);
       const finalScoreValue = calculateFinalScore(allAlignments);
 
       // Update progress in Zustand store (writes to Supabase + updates local state)
@@ -235,7 +274,7 @@ export function useStudySession({
     }
 
     return { score, alignment, allDone };
-  }, [chunks, currentIndex, completedChunks, chunkResults, retryingChunks, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
+  }, [chunks, currentIndex, completedChunks, chunkResults, retryingChunks, peekedChunks, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
 
   // Navigation actions
   const goToNext = useCallback(() => {
@@ -313,8 +352,12 @@ export function useStudySession({
     showResults,
     getChunkResult,
     getRetryResult,
+    getPeekResult,
     retryingChunks,
     retryChunk,
+    peekedChunks,
+    peekChunk,
+    sessionSeed,
     allChunksCompleted,
     listData,
     finalScore,

@@ -12,7 +12,9 @@ import {
   type Chunk,
   type Difficulty,
   type ResultsPageItem,
+  type HideMode,
   isResultsPage,
+  maskDisplayWords,
 } from '@/lib/study-chunks';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
@@ -65,6 +67,9 @@ export default function StudySessionScreen() {
   const [transcribing, setTranscribing] = useState(false);
   const [waveformTrigger, setWaveformTrigger] = useState(0);
   const [exitingChunks, setExitingChunks] = useState<Set<number>>(new Set());
+  // Per-chunk visibility override driven by the header reveal/hide button.
+  // Cosmetic only; scoring always uses chunk.text. Absence = mode default.
+  const [hideModes, setHideModes] = useState<Map<number, HideMode>>(new Map());
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const meteringRef = useRef<NodeJS.Timeout | null>(null);
@@ -249,6 +254,34 @@ export default function StudySessionScreen() {
     handleMicPress();
   }, [session, handleMicPress]);
 
+  // Reveal/hide button. Easy cycles show → some → all → show (cosmetic).
+  // Medium/Hard toggles reveal (show) ↔ original mask; the first reveal
+  // taints the chunk (peekChunk) so it scores 0.
+  const isEasy = (difficulty ?? 'easy') === 'easy';
+
+  const handleToggleVisibility = useCallback((index: number) => {
+    Haptics.selectionAsync();
+    setHideModes((prev) => {
+      const next = new Map(prev);
+      const current = next.get(index);
+      if (isEasy) {
+        // show (no override) → some → all → show
+        if (current === undefined) next.set(index, 'some');
+        else if (current === 'some') next.set(index, 'all');
+        else next.delete(index);
+      } else {
+        // Medium/Hard: reveal ↔ original mask
+        if (current === 'show') next.delete(index);
+        else next.set(index, 'show');
+      }
+      return next;
+    });
+    // Medium/Hard: revealing taints the chunk (one-way, sticky).
+    if (!isEasy) {
+      session.peekChunk(index);
+    }
+  }, [isEasy, session]);
+
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems.length > 0) {
@@ -344,6 +377,36 @@ export default function StudySessionScreen() {
     // Keep result card visible during exit animation
     const showResult = (isCompleted && !isRetrying) || isExiting;
 
+    // Resolve the reveal/hide override for this chunk. Completion wins:
+    // a finished chunk always shows its text, whatever the toggle said.
+    const hideMode = hideModes.get(index);
+    const isPeeked = session.peekedChunks.has(index);
+    const peekResult = session.getPeekResult(index);
+    // Effective display words + revealed flag. Absent override = the
+    // chunk's original mask (preserves Medium's seeded 50% / Hard blanks).
+    let displayChunk = item;
+    let revealed = isCompleted && !isRetrying;
+    let memoryPlaceholder = false;
+    if (!revealed) {
+      if (hideMode === 'show') {
+        revealed = true;
+      } else if (hideMode === 'some') {
+        displayChunk = {
+          ...item,
+          // Vary the "some" parity per chunk (like medium) so chunks in a
+          // session don't all blank the same words — verseNum is stable.
+          displayWords: maskDisplayWords(item.displayWords, 'some', session.sessionSeed + item.verseNum),
+        };
+      } else if (hideMode === 'all') {
+        // Easy "all hidden": Hard's recite-from-memory placeholder
+        // instead of a wall of underscores.
+        memoryPlaceholder = true;
+      }
+    }
+    // Eye toggle lives on the card; hidden once the chunk completes
+    // (the card is already revealed there).
+    const wordsCurrentlyShown = isEasy ? hideMode === undefined : hideMode === 'show';
+
     // Build verse label
     const verseLabel =
       session.verse!.verseStart === session.verse!.verseEnd
@@ -355,39 +418,68 @@ export default function StudySessionScreen() {
     return (
       <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
         <View style={styles.cardsArea}>
-          {/* Score badge on top of verse card when completed */}
-          {isCompleted && result && (
-            <View style={[styles.scoreBadgeRow]}>
-              <View style={[styles.scoreBadgeInline, {
-                backgroundColor: `${getScoreColor(result.score)}20`,
-              }]}>
-                <Text style={[styles.scoreBadgeInlineText, {
-                  color: getScoreColor(result.score),
+          {/* Score badge on top of verse card when completed. For a
+              peeked chunk, show the real recited score (the scored 0
+              lives only in the session total, explained on the card). */}
+          {isCompleted && (isPeeked ? peekResult : result) && (() => {
+            const badgeScore = (isPeeked ? peekResult! : result!).score;
+            return (
+              <View style={[styles.scoreBadgeRow]}>
+                <View style={[styles.scoreBadgeInline, {
+                  backgroundColor: `${getScoreColor(badgeScore)}20`,
                 }]}>
-                  Score: {result.score}%
-                </Text>
+                  <Text style={[styles.scoreBadgeInlineText, {
+                    color: getScoreColor(badgeScore),
+                  }]}>
+                    Score: {badgeScore}%
+                  </Text>
+                </View>
               </View>
-            </View>
-          )}
+            );
+          })()}
 
-          <VerseCard chunk={item} difficulty={difficulty ?? 'easy'} verseLabel={verseLabel} revealed={isCompleted && !isRetrying} />
+          <VerseCard
+            chunk={displayChunk}
+            difficulty={difficulty ?? 'easy'}
+            verseLabel={verseLabel}
+            revealed={revealed}
+            revealFast={hideMode === 'show'}
+            memoryPlaceholder={memoryPlaceholder}
+            visibilityIcon={wordsCurrentlyShown ? 'eye' : 'eye.slash'}
+            onToggleVisibility={
+              isCompleted ? undefined : () => handleToggleVisibility(index)
+            }
+          />
 
-          {/* Show original result or retry result */}
-          {showResult && result && !retryResult && (
-            <ResultCard
-              score={result.score}
-              alignment={result.alignment}
-              transcription={result.transcription}
-              exiting={isExiting}
-              onExitComplete={() => handleExitComplete(index)}
-            />
-          )}
+          {/* Result card. Priority: retry > peek > original. A peeked
+              chunk shows the REAL recited score (peekResult) with a
+              "won't count" banner — the scored 0 lives only in
+              chunkResults and feeds the session total. */}
           {showResult && retryResult && (
             <ResultCard
               score={retryResult.score}
               alignment={retryResult.alignment}
               transcription={retryResult.transcription}
               isRetry
+              exiting={isExiting}
+              onExitComplete={() => handleExitComplete(index)}
+            />
+          )}
+          {showResult && !retryResult && isPeeked && peekResult && (
+            <ResultCard
+              score={peekResult.score}
+              alignment={peekResult.alignment}
+              transcription={peekResult.transcription}
+              isPeeked
+              exiting={isExiting}
+              onExitComplete={() => handleExitComplete(index)}
+            />
+          )}
+          {showResult && !retryResult && !isPeeked && result && (
+            <ResultCard
+              score={result.score}
+              alignment={result.alignment}
+              transcription={result.transcription}
               exiting={isExiting}
               onExitComplete={() => handleExitComplete(index)}
             />

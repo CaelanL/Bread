@@ -29,6 +29,7 @@ interface ResultCardProps {
   alignment?: AlignmentWord[];
   transcription?: string;
   isRetry?: boolean;
+  isPeeked?: boolean;
   exiting?: boolean;
   onExitComplete?: () => void;
 }
@@ -151,7 +152,7 @@ function AlignmentDisplay({ alignment, textColor }: { alignment: AlignmentWord[]
   );
 }
 
-export function ResultCard({ score, alignment, transcription, isRetry = false, exiting = false, onExitComplete }: ResultCardProps) {
+export function ResultCard({ score, alignment, transcription, isRetry = false, isPeeked = false, exiting = false, onExitComplete }: ResultCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -218,6 +219,16 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, e
           </View>
         )}
 
+        {/* Peek notice — chunk was revealed, so it scored 0 */}
+        {isPeeked && !isRetry && (
+          <View style={styles.retryBanner}>
+            <IconSymbol name="eye" size={12} color={colors.icon} />
+            <Text style={[styles.retryBannerText, { color: colors.icon }]}>
+              Revealed — this chunk won&apos;t count
+            </Text>
+          </View>
+        )}
+
         {/* Header with status */}
         <View style={styles.header}>
           <View style={styles.statusRow}>
@@ -244,7 +255,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, e
         <ScrollView
           style={[
             styles.scrollContent,
-            { maxHeight: CARD_MAX_HEIGHT - (isRetry ? CHROME_WITH_RETRY : CHROME_NO_RETRY) },
+            { maxHeight: CARD_MAX_HEIGHT - (isRetry || isPeeked ? CHROME_WITH_RETRY : CHROME_NO_RETRY) },
           ]}
           contentContainerStyle={styles.scrollInner}
         >
