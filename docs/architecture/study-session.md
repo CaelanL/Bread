@@ -162,6 +162,35 @@ Critical: **retrying does not modify the original score**. The UI
 shows a banner — "Retries don't affect your score." Final score uses
 `chunkResults`, not `retryResults`.
 
+### 7b. Peek / Reveal
+
+Feature doc: `docs/features/peek-reveal.md`. An eye toggle in the
+top-right of each `VerseCard` (hidden once the chunk completes):
+
+- **Medium/Hard** — toggles the current chunk's hidden words visible
+  (2x-speed stagger via `revealFast`) and back. The first reveal
+  **taints** the chunk via `session.peekChunk(index)`: sticky and
+  one-way, re-hiding never untaints. A tainted chunk's recorded
+  attempt stores an **all-`missing` alignment**
+  (`buildAllMissingAlignment` in `lib/align.ts`) in `chunkResults`,
+  so it contributes 0 to the final score through the normal
+  aggregator — no scorer special-casing. The real recited result is
+  stashed in `peekResults` and shown on the result card with a
+  "Revealed — this chunk won't count" banner (`ResultCard isPeeked`).
+  Taint is evaluated at submit time, so revealing mid-recording still
+  zeroes the in-flight attempt. Because the damage is word-pooled,
+  peeking one chunk only zeroes that chunk's words — other chunks
+  score normally.
+- **Easy** — nothing is hidden, so the toggle is a self-testing aid
+  with **no taint**: it cycles show → some → all → show. "some" masks
+  ~50% via `maskDisplayWords` (`lib/study-chunks.ts`, cosmetic only);
+  "all" renders Hard's recite-from-memory placeholder.
+
+Visibility (`hideModes`, screen-local) is decoupled from taint
+(`peekedChunks`, hook). **Completion wins over any hide override** —
+a finished chunk always shows its text. Result card priority:
+retry > peek > original.
+
 ### 8. End of session — mastery progression
 
 When all chunks complete, `updateVerseProgress(verseId, difficulty,
@@ -213,6 +242,9 @@ If the user closes mid-session with ≥1 chunk completed,
 | `chunkResults: Map<number, ChunkResult>` | hook | No |
 | `retryingChunks: Set<number>` | hook | No |
 | `retryResults: Map<number, ChunkResult>` | hook | No |
+| `peekedChunks: Set<number>` (taint, one-way) | hook | No |
+| `peekResults: Map<number, ChunkResult>` (display-only) | hook | No |
+| `hideModes: Map<number, HideMode>` (visibility) | screen (useState) | No |
 | `totalRecordingDurationMs` | hook | Persisted to DB at session end |
 | `recordingState: 'idle' | 'recording'` | screen (useState) | No |
 | `transcribing` | screen (useState) | No |

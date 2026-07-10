@@ -8,7 +8,19 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay,
 import { AlignmentHelpModal } from './AlignmentHelpModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.30;
+const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.35;
+
+// Inner-scroll budget. RN's `maxHeight` on a parent View doesn't
+// propagate as a height constraint to flex children — using flex
+// to derive ScrollView height from the card's maxHeight collapses
+// the layout in the "short content" case. Instead, we explicitly
+// cap the ScrollView at the card's maxHeight minus a fixed budget
+// for the card chrome (padding + header + optional retry banner).
+//   16 + 16   card padding (top + bottom)
+//   ~42       header row (~30pt content + 12pt marginBottom)
+//   ~32       retry banner when present (~22pt + 10pt marginBottom)
+const CHROME_NO_RETRY = 16 + 16 + 42;
+const CHROME_WITH_RETRY = CHROME_NO_RETRY + 32;
 
 type ResultStatus = 'success' | 'partial' | 'retry';
 
@@ -17,6 +29,7 @@ interface ResultCardProps {
   alignment?: AlignmentWord[];
   transcription?: string;
   isRetry?: boolean;
+  isPeeked?: boolean;
   exiting?: boolean;
   onExitComplete?: () => void;
 }
@@ -139,7 +152,7 @@ function AlignmentDisplay({ alignment, textColor }: { alignment: AlignmentWord[]
   );
 }
 
-export function ResultCard({ score, alignment, transcription, isRetry = false, exiting = false, onExitComplete }: ResultCardProps) {
+export function ResultCard({ score, alignment, transcription, isRetry = false, isPeeked = false, exiting = false, onExitComplete }: ResultCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -206,6 +219,16 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, e
           </View>
         )}
 
+        {/* Peek notice — chunk was revealed, so it scored 0 */}
+        {isPeeked && !isRetry && (
+          <View style={styles.retryBanner}>
+            <IconSymbol name="eye" size={12} color={colors.icon} />
+            <Text style={[styles.retryBannerText, { color: colors.icon }]}>
+              Revealed — this chunk won&apos;t count
+            </Text>
+          </View>
+        )}
+
         {/* Header with status */}
         <View style={styles.header}>
           <View style={styles.statusRow}>
@@ -226,8 +249,16 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, e
           </View>
         </View>
 
-        {/* Transcription/Alignment */}
-        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner}>
+        {/* Transcription/Alignment. Explicit maxHeight so the
+            ScrollView is bounded even though its grandparent's
+            `maxHeight` doesn't propagate as a layout constraint. */}
+        <ScrollView
+          style={[
+            styles.scrollContent,
+            { maxHeight: CARD_MAX_HEIGHT - (isRetry || isPeeked ? CHROME_WITH_RETRY : CHROME_NO_RETRY) },
+          ]}
+          contentContainerStyle={styles.scrollInner}
+        >
           {alignment && alignment.length > 0 ? (
             <AlignmentDisplay alignment={alignment} textColor={colors.text} />
           ) : transcription ? (
@@ -282,10 +313,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   scrollContent: {
-    flexGrow: 0,
+    // maxHeight is set inline based on whether the retry banner is
+    // showing (which steals ~32pt from the budget).
   },
   scrollInner: {
-    paddingBottom: 4,
+    paddingBottom: 16,
   },
   alignmentContainer: {
     fontSize: 16,

@@ -126,6 +126,35 @@ export function applyDifficulty(text: string, difficulty: Difficulty, seed: numb
   }));
 }
 
+/**
+ * Re-mask a chunk's display words on demand (Easy-mode "hide" toggle).
+ * Purely cosmetic — does not touch scoring, which always uses chunk.text.
+ *
+ * - 'show': reveal everything (isBlank = false)
+ * - 'some': blank ~50% (same alternating rule as medium difficulty)
+ * - 'all':  blank everything (isBlank = true)
+ *
+ * Keeps each word's existing `text`; only flips `isBlank`. The seed
+ * gives a stable "some" pattern for the session (same as medium).
+ */
+export type HideMode = 'show' | 'some' | 'all';
+
+export function maskDisplayWords(
+  words: DisplayWord[],
+  mode: HideMode,
+  seed: number = 0
+): DisplayWord[] {
+  if (mode === 'show') {
+    return words.map(word => ({ ...word, isBlank: false }));
+  }
+  if (mode === 'all') {
+    return words.map(word => ({ ...word, isBlank: true }));
+  }
+  // 'some' — blank every other word, offset by seed (matches medium)
+  const offset = seed % 2;
+  return words.map((word, i) => ({ ...word, isBlank: i % 2 === offset }));
+}
+
 // ============================================================================
 // Chunk Parsing
 // ============================================================================

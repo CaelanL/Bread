@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Dimensions, Pressable } from 'react-native';
 import Animated, {
   Layout,
   useSharedValue,
@@ -21,6 +21,7 @@ interface InlineWordProps {
   word: DisplayWord;
   index: number;
   revealed: boolean;
+  fast: boolean;
   textColor: string;
   underlineColor: string;
 }
@@ -28,14 +29,16 @@ interface InlineWordProps {
 // Renders a single word as an inline Text span inside the parent paragraph
 // Text. Blanks use textDecorationLine for the underline so it stays bonded
 // to the glyph instead of an absolutely-positioned sibling that desyncs.
-function InlineWord({ word, index, revealed, textColor, underlineColor }: InlineWordProps) {
+function InlineWord({ word, index, revealed, fast, textColor, underlineColor }: InlineWordProps) {
   const opacity = useSharedValue(revealed || !word.isBlank ? 1 : 0);
 
   useEffect(() => {
     if (revealed && word.isBlank) {
+      // Manual peek reveals run at 2x speed; completion reveals keep
+      // the original leisurely stagger.
       opacity.value = withDelay(
-        index * STAGGER_DELAY,
-        withTiming(1, { duration: 200 })
+        index * (fast ? STAGGER_DELAY / 2 : STAGGER_DELAY),
+        withTiming(1, { duration: fast ? 100 : 200 })
       );
     }
   }, [revealed]);
@@ -68,9 +71,28 @@ interface VerseCardProps {
   difficulty: Difficulty;
   verseLabel: string;
   revealed?: boolean;
+  // Reveal came from the peek/hide toggle (2x animation) rather than
+  // chunk completion.
+  revealFast?: boolean;
+  // Easy "all hidden": render the same recite-from-memory placeholder
+  // Hard uses instead of the verse text. The card resizes to fit; the
+  // Layout animation smooths the change.
+  memoryPlaceholder?: boolean;
+  // Reveal/hide toggle in the card's top-right. Omit to hide the button.
+  visibilityIcon?: 'eye' | 'eye.slash';
+  onToggleVisibility?: () => void;
 }
 
-export function VerseCard({ chunk, difficulty, verseLabel, revealed = false }: VerseCardProps) {
+export function VerseCard({
+  chunk,
+  difficulty,
+  verseLabel,
+  revealed = false,
+  revealFast = false,
+  memoryPlaceholder = false,
+  visibilityIcon = 'eye',
+  onToggleVisibility,
+}: VerseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -104,7 +126,7 @@ export function VerseCard({ chunk, difficulty, verseLabel, revealed = false }: V
           style={[styles.cardScrollContent, { maxHeight: SCROLL_MAX_HEIGHT }]}
           contentContainerStyle={styles.verseTextContainer}
         >
-          {difficulty === 'hard' && !revealed ? (
+          {(difficulty === 'hard' || memoryPlaceholder) && !revealed ? (
             <View style={styles.hardModeContainer}>
               <View style={[styles.hardModeIcon, { backgroundColor: badgeBg }]}>
                 <IconSymbol name="lightbulb.fill" size={28} color={accentColor} />
@@ -122,6 +144,7 @@ export function VerseCard({ chunk, difficulty, verseLabel, revealed = false }: V
                     word={word}
                     index={i}
                     revealed={revealed}
+                    fast={revealFast}
                     textColor={colors.text}
                     underlineColor={underlineColor}
                   />
@@ -131,6 +154,16 @@ export function VerseCard({ chunk, difficulty, verseLabel, revealed = false }: V
           )}
         </ScrollView>
       </View>
+
+      {onToggleVisibility && (
+        <Pressable
+          onPress={onToggleVisibility}
+          hitSlop={10}
+          style={styles.visibilityButton}
+        >
+          <IconSymbol name={visibilityIcon} size={20} color={colors.icon} />
+        </Pressable>
+      )}
     </Animated.View>
   );
 }
@@ -195,5 +228,11 @@ const styles = StyleSheet.create({
   hardModeHint: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  visibilityButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 4,
   },
 });

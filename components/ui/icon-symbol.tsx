@@ -28,6 +28,8 @@ const MAPPING = {
   'checkmark': 'check',
   'arrow.counterclockwise': 'refresh',
   'arrow.right': 'arrow-forward',
+  'eye': 'visibility',
+  'eye.slash': 'visibility-off',
 } as IconMapping;
 
 /**

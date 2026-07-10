@@ -122,3 +122,16 @@ export function alignTranscription(
 
   return alignment;
 }
+
+/**
+ * Build an alignment where every word of the expected verse is missing,
+ * as if the user said nothing. Used for "peeked" chunks: revealing the
+ * answer before reciting zeroes that chunk's contribution to the score.
+ *
+ * Reuses the same tokenizer as alignTranscription (via the empty-string
+ * transcription path) so the word count stays consistent with normal
+ * scoring.
+ */
+export function buildAllMissingAlignment(expectedVerse: string): AlignmentWord[] {
+  return alignTranscription(expectedVerse, '');
+}
