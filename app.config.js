@@ -2,7 +2,17 @@ export default {
   expo: {
     name: "Bread",
     slug: "biblemem",
-    version: "1.1.1",
+    version: "1.2.0",
+    // OTA updates (EAS Update). fingerprint policy: a hash of the native
+    // project decides update compatibility, so JS-only merges ship OTA
+    // and native changes force a store build. See
+    // docs/features/release-automation.md.
+    updates: {
+      url: "https://u.expo.dev/7e758050-0746-4516-a231-dbea6ec702c6",
+    },
+    runtimeVersion: {
+      policy: "fingerprint",
+    },
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "com.biblemem",

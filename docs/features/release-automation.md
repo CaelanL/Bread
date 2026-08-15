@@ -1,6 +1,6 @@
 # Feature: Release Automation (EAS Workflows + EAS Update)
 
-> **Status:** `planning`
+> **Status:** `building`
 > **Author:** Caelan (research by agent, 2026-08-15, all claims fetched
 > from live Expo docs — sources inline)
 > **Created:** 2026-08-15
@@ -35,10 +35,12 @@ free tier hard-stops instead of billing.
 
 ### Must have
 
-- [ ] `expo-updates` installed + `eas update:configure` run
-      (adds `runtimeVersion` + `updates.url` to app config, channels to
-      eas.json). [Getting started](https://docs.expo.dev/eas-update/getting-started/)
-- [ ] `runtimeVersion` policy set to **`fingerprint`** explicitly (do
+- [x] `expo-updates` installed (`~29.0.19`, SDK-54-pinned) +
+      `updates.url`/`runtimeVersion` added to app.config.js manually
+      (dynamic config — `eas update:configure` can't write it) +
+      `channel: "production"` on the production build profile.
+      [Getting started](https://docs.expo.dev/eas-update/getting-started/)
+- [x] `runtimeVersion` policy set to **`fingerprint`** explicitly (do
       not trust the configure default — docs don't specify it).
       Rationale: appVersion policy breaks if we forget to bump version
       on a native change; fingerprint makes incompatible updates
@@ -54,13 +56,14 @@ free tier hard-stops instead of billing.
       [Submit iOS](https://docs.expo.dev/submit/ios.md)
 - [ ] `ascAppId` in eas.json submit profile (the numeric Apple ID from
       ASC App Information — likely 6757946016, confirm in ASC).
-- [ ] `.eas/workflows/deploy.yml` using the docs'
+- [x] `.eas/workflows/deploy.yml` using the docs'
       **deploy-to-production** example verbatim as the base:
       fingerprint → existing build with matching hash? → OTA update :
-      build + submit. [Example](https://docs.expo.dev/eas/workflows/examples/deploy-to-production.md)
-- [ ] Remote version source + autoIncrement in eas.json
-      (`cli.appVersionSource: "remote"`, `build.production.autoIncrement`)
-      — already effectively in use (EAS manages buildNumber 11/12/13).
+      build + submit. iOS jobs only.
+      [Example](https://docs.expo.dev/eas/workflows/examples/deploy-to-production.md)
+- [x] Remote version source + autoIncrement in eas.json — was already
+      in place (EAS manages buildNumber 11/12/13), as was
+      `ascAppId: 6757946016`.
       [App versions](https://docs.expo.dev/build-reference/app-versions/)
 
 ### Nice to have
