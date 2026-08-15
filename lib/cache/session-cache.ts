@@ -81,27 +81,6 @@ export function getVerseFromSession(
 }
 
 /**
- * Get cached verse range
- */
-export function getVerseRangeFromSession(
-  book: string,
-  chapter: number,
-  verseStart: number,
-  verseEnd: number,
-  version: string
-): string | null {
-  const texts: string[] = [];
-
-  for (let v = verseStart; v <= verseEnd; v++) {
-    const text = getVerseFromSession(book, chapter, v, version);
-    if (!text) return null; // Missing a verse, can't satisfy from cache
-    texts.push(text);
-  }
-
-  return texts.join(" ");
-}
-
-/**
  * Cache a single verse
  */
 export function setVerseInSession(

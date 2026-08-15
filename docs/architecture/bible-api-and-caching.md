@@ -55,6 +55,20 @@ cleared on restart:
 No eviction — relies on app restart. No TTL. The session cache is
 why opening the same verse twice in a session never hits the network.
 
+Two invariants, both learned from a real bug (Psalm 103, 2026-08):
+
+- **`verseCache` entries are always single-verse text.** Range fetches
+  cache each verse individually from the API's keyed data — never the
+  combined range text under the start verse. Regression tests:
+  `lib/__tests__/study-chunks.test.ts`.
+- **`fetchVerse` results carry keyed `verses` on every path, including
+  session-cache hits.** The hit path assembles the keyed map from
+  `verseCache` per-verse. If a result ever lacks keyed data,
+  `getVerseText` returns `verses: {}` (never a fabricated
+  `{ start: wholeText }`), which routes `parseVerseIntoChunks` to its
+  legacy sentence-split fallback. The fabricated shape put the entire
+  passage in chunk 1 and left every other chunk empty.
+
 ### Tier 2 — Postgres `verse_cache`
 
 `supabase/functions/bible/cache.ts` and the `verse_cache` table
