@@ -1,5 +1,14 @@
-import React, { useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Dimensions, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Dimensions,
+  Pressable,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
+} from 'react-native';
 import Animated, {
   Layout,
   useSharedValue,
@@ -103,6 +112,40 @@ export function VerseCard({
   const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
   const underlineColor = isDark ? '#666' : '#999'; // Keep underline colors as-is
 
+  // Preserve scroll position across peek → hide → re-peek. Hiding swaps
+  // the text for the short placeholder, which clamps the scroll offset
+  // to 0; on the swap back we restore the last text-visible offset once
+  // the re-grown content reports its size. The clamp event that fires
+  // during the collapse must not overwrite the saved offset — only
+  // record while text is showing and no restore is pending.
+  const showPlaceholder = (difficulty === 'hard' || memoryPlaceholder) && !revealed;
+  const scrollRef = useRef<ScrollView>(null);
+  const savedOffsetY = useRef(0);
+  const restorePending = useRef(false);
+  const prevShowPlaceholder = useRef(showPlaceholder);
+
+  useEffect(() => {
+    if (prevShowPlaceholder.current && !showPlaceholder) {
+      restorePending.current = true;
+    }
+    prevShowPlaceholder.current = showPlaceholder;
+  }, [showPlaceholder]);
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!showPlaceholder && !restorePending.current) {
+      savedOffsetY.current = e.nativeEvent.contentOffset.y;
+    }
+  };
+
+  const handleContentSizeChange = () => {
+    if (restorePending.current && !showPlaceholder) {
+      restorePending.current = false;
+      if (savedOffsetY.current > 0) {
+        scrollRef.current?.scrollTo({ y: savedOffsetY.current, animated: false });
+      }
+    }
+  };
+
   return (
     <Animated.View
       style={[
@@ -123,8 +166,12 @@ export function VerseCard({
 
         {/* Verse Text */}
         <ScrollView
+          ref={scrollRef}
           style={[styles.cardScrollContent, { maxHeight: SCROLL_MAX_HEIGHT }]}
           contentContainerStyle={styles.verseTextContainer}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={handleContentSizeChange}
         >
           {(difficulty === 'hard' || memoryPlaceholder) && !revealed ? (
             <View style={styles.hardModeContainer}>
