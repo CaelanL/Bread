@@ -2,7 +2,7 @@ import { getAuthToken, getSupabaseUrl } from "./client";
 import {
   getChapterFromSession,
   setChapterInSession,
-  getVerseRangeFromSession,
+  getVerseFromSession,
   setVerseInSession,
   getSavedVerseFromSession,
   setSavedVerseInSession,
@@ -76,22 +76,29 @@ export async function fetchVerse(
   reference: string,
   version: BibleVersion = "ESV"
 ): Promise<BibleVerse> {
-  // Check session cache first
+  // Check session cache first. Assemble per-verse so the result carries
+  // keyed data — returning combined text without `verses` makes
+  // getVerseText fabricate { start: wholeText }, which breaks per-verse
+  // chunking (all text lands in the first chunk).
   const parsed = parseReference(reference);
   if (parsed?.verse) {
     const verseEnd = parsed.verseEnd || parsed.verse;
-    const cached = getVerseRangeFromSession(
-      parsed.book,
-      parsed.chapter,
-      parsed.verse,
-      verseEnd,
-      version
-    );
-    if (cached) {
+    const cachedVerses: Record<string, string> = {};
+    let complete = true;
+    for (let v = parsed.verse; v <= verseEnd; v++) {
+      const text = getVerseFromSession(parsed.book, parsed.chapter, v, version);
+      if (!text) {
+        complete = false;
+        break;
+      }
+      cachedVerses[v.toString()] = text;
+    }
+    if (complete) {
       return {
         reference,
         version,
-        text: cached,
+        text: Object.values(cachedVerses).join(" "),
+        verses: cachedVerses,
         cached: true,
       };
     }
@@ -151,20 +158,22 @@ export async function fetchVerse(
 
   const result = await response.json();
 
-  // Cache in session (if single verse, cache it; if range, cache each)
+  // Cache in session. Ranges are cached per-verse from the API's keyed
+  // data — never store combined range text under the start verse, it
+  // poisons later single-verse and range lookups.
   if (parsed?.verse) {
-    if (parsed.verseEnd) {
-      // Range - we'd need individual verses to cache properly
-      // For now, just cache the combined text as the start verse
-      setVerseInSession(
-        parsed.book,
-        parsed.chapter,
-        parsed.verse,
-        version,
-        result.text
-      );
-    } else {
-      // Single verse
+    if (result.verses && Object.keys(result.verses).length > 0) {
+      for (const [verseNum, text] of Object.entries(result.verses)) {
+        setVerseInSession(
+          parsed.book,
+          parsed.chapter,
+          parseInt(verseNum, 10),
+          version,
+          text as string
+        );
+      }
+    } else if (!parsed.verseEnd) {
+      // Single verse without keyed data
       setVerseInSession(
         parsed.book,
         parsed.chapter,
@@ -173,6 +182,7 @@ export async function fetchVerse(
         result.text
       );
     }
+    // Range without keyed data: cache nothing rather than poison.
   }
 
   return result;
@@ -336,10 +346,13 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
   const keyed = result.verses || {};
   const text = result.text;
 
-  // If API didn't return verses (old backend), construct keyed from text
-  // This is a fallback during transition - should not happen after backend deploy
+  // If the response has no keyed verses, return an EMPTY keyed map —
+  // parseVerseIntoChunks then falls back to sentence splitting, which
+  // is imperfect but functional. Never fabricate { start: wholeText }:
+  // that puts the entire passage in the first chunk and leaves the
+  // remaining chunks empty.
   if (Object.keys(keyed).length === 0) {
-    console.warn("[BIBLE] API returned range without verses field - using fallback");
+    console.warn("[BIBLE] Range response without verses field - no keyed data");
     setSavedVerseInSession(
       verse.book,
       verse.chapter,
@@ -348,7 +361,7 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
       verse.version,
       text
     );
-    return { text, verses: { [verse.verseStart.toString()]: text } };
+    return { text, verses: {} };
   }
 
   // Cache both formats
