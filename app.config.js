@@ -21,6 +21,8 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.caelanliu.biblemem",
+      // Ignored: appVersionSource "remote" in eas.json means EAS owns
+      // the real buildNumber (14+ as of Aug 2026).
       buildNumber: "1",
       infoPlist: {
         NSMicrophoneUsageDescription: "Bread needs microphone access to record your verse recitations for accuracy scoring.",

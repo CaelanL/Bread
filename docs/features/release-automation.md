@@ -6,6 +6,34 @@
 > **Created:** 2026-08-15
 > **Shipped:** —
 
+## Current state
+
+> ⚠️ **Agents: this block is the source of truth for pipeline state,
+> and much of that state lives OUTSIDE the repo** (EAS dashboard,
+> App Store Connect, interactive CLI). It cannot be reconstructed from
+> git. If you change the pipeline, complete a dashboard/CLI step, or
+> learn a release shipped, UPDATE THIS BLOCK in the same PR — a stale
+> block sends the next agent to exactly the wrong conclusion (it
+> already happened once: an agent read the unchecked boxes below and
+> concluded the pipeline had never run, days after its first build).
+
+As of **2026-08-16**:
+
+- **Pipeline is LIVE.** GitHub repo linked (EAS dashboard,
+  2026-08-15) and ASC API key configured (`eas credentials`,
+  2026-08-15) — both interactive steps, no repo artifact.
+- **First workflow run: SUCCESS** (2026-08-15, 8 min) — built
+  **1.2.0 / build 14** and auto-submitted it. Currently **in App
+  Store review**; store users are still on 1.1.1 / build 13.
+- **⚠️ The OTA path is INERT for store users until 1.2.0 is
+  released.** Build 13 has no expo-updates runtime and can never
+  receive an update; build 14 isn't on users' devices yet. A JS-only
+  merge today publishes an OTA that only TestFlight installs of
+  build 14 receive. Do not assume a merged JS fix has reached users
+  until 1.2.0 (or later) is the live store version.
+- Remaining: OTA loop verification (JS-only merge → update lands on
+  a device), then graduation.
+
 ## Problem
 
 Releases are fully manual: merge to main, then (sometimes weeks later)
@@ -46,16 +74,18 @@ free tier hard-stops instead of billing.
       on a native change; fingerprint makes incompatible updates
       "extremely unlikely". [Runtime versions](https://docs.expo.dev/eas-update/runtime-versions.md)
 - [ ] **One store release after setup** — OTA capability only exists in
-      binaries built with expo-updates. Current build 13 can never
-      receive updates. This gates everything.
-- [ ] GitHub repo linked to EAS project (installs the Expo GitHub app
-      at expo.dev project settings → GitHub). [Get started](https://docs.expo.dev/eas/workflows/get-started.md)
-- [ ] App Store Connect API key configured for non-interactive submit:
-      `eas credentials --platform ios` → production → "Set up your
-      project to use an API Key for EAS Submit".
+      binaries built with expo-updates. Build 13 can never receive
+      updates. This gates everything. *(1.2.0 / build 14 built +
+      submitted 2026-08-15 — check this box when it's released.)*
+- [x] GitHub repo linked to EAS project — done 2026-08-15 via the EAS
+      dashboard (interactive; no repo artifact).
+      [Get started](https://docs.expo.dev/eas/workflows/get-started.md)
+- [x] App Store Connect API key configured — verified 2026-08-15 via
+      `eas credentials --platform ios` (was already set up from earlier
+      manual submits; interactive, no repo artifact).
       [Submit iOS](https://docs.expo.dev/submit/ios.md)
-- [ ] `ascAppId` in eas.json submit profile (the numeric Apple ID from
-      ASC App Information — likely 6757946016, confirm in ASC).
+- [x] `ascAppId` in eas.json submit profile (6757946016 — confirmed,
+      the first workflow submit succeeded against it).
 - [x] `.eas/workflows/deploy.yml` using the docs'
       **deploy-to-production** example verbatim as the base:
       fingerprint → existing build with matching hash? → OTA update :
