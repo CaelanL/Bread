@@ -1,9 +1,8 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { verifyJwt } from "../_shared/auth.ts";
-import { handleCors } from "../_shared/cors.ts";
+import { corsHeaders, handleCors } from "../_shared/cors.ts";
 import {
   badRequest,
-  jsonResponse,
   serverError,
   unauthorized,
 } from "../_shared/errors.ts";
@@ -88,88 +87,136 @@ serve(async (req) => {
     const durationSeconds = durationMs / 1000;
     console.log(`[PROCESS] User: ${user.id.slice(0, 8)}..., Duration: ${durationSeconds.toFixed(2)}s, Size: ${(audioBlob.size / 1024).toFixed(1)}KB`);
 
-    const transcribeStart = Date.now();
-    const transcriptionResult = await transcribeWithSoniox(audioBlob, actualVerse);
-    const transcription = transcriptionResult.text;
-    const transcribeTiming = transcriptionResult.timing;
-    const transcribeMs = Date.now() - transcribeStart;
-
-    const rawWordCount = transcription.split(/\s+/).filter(Boolean).length;
-    console.log(`[PROCESS] Transcription: ${transcribeMs}ms`);
-    console.log(`[PROCESS] Raw (${rawWordCount} words, ${transcription.length} chars): "${transcription.slice(0, 200)}${transcription.length > 200 ? "..." : ""}"`);
-
-    // Record transcription usage
-    const recordStart = Date.now();
-    await recordTranscriptionUsage(user.id, durationSeconds);
-    const recordMs = Date.now() - recordStart;
-    console.log(`[PROCESS] Usage recorded: ${recordMs}ms`);
-
-    // ========== CLEANING (disabled - skip LLM, use raw transcription) ==========
-    const CLEANING_ENABLED = false;
-    let cleanedTranscription: string;
-    let cleaningUsed = false;
-
-    if (CLEANING_ENABLED) {
-      try {
-        const cleanStart = Date.now();
-        const cleanResult = await cleanTranscription(actualVerse, transcription);
-        const cleanMs = Date.now() - cleanStart;
-
-        cleanedTranscription = cleanResult.text;
-
-        // Cleaning used = OpenAI succeeded AND returned non-empty
-        // (empty means LLM had nothing to clean, e.g. empty transcript)
-        cleaningUsed = cleanResult.model !== undefined && cleanedTranscription.trim().length > 0;
-
-        if (cleaningUsed) {
-          await recordEvaluateUsage(user.id);
-          const cleanedWordCount = cleanedTranscription.split(/\s+/).filter(Boolean).length;
-          const wordsRemoved = rawWordCount - cleanedWordCount;
-
-          console.log(`[PROCESS] Cleaning: ${cleanMs}ms`);
-          if (cleanResult.model) {
-            console.log(`[PROCESS] Model: ${cleanResult.model}`);
+    // Stream the response: a heartbeat space every 10s while Soniox works,
+    // then the JSON payload. Without this the response is silent for the
+    // whole transcription and long recordings trip the client's ~60s socket
+    // idle timeout. Leading whitespace is valid JSON, so old clients'
+    // response.json() parses unchanged. Errors past this point can't change
+    // the already-sent 200 status — they ship as { error } in the body.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(" "));
+          } catch {
+            clearInterval(heartbeat);
           }
-          if (cleanResult.usage) {
-            console.log(`[PROCESS] Tokens - Input: ${cleanResult.usage.inputTokens}, Output: ${cleanResult.usage.outputTokens}, Reasoning: ${cleanResult.usage.reasoningTokens}, Total: ${cleanResult.usage.totalTokens}`);
-          }
-          console.log(`[PROCESS] Cleaned (${cleanedWordCount} words, ${cleanedTranscription.length} chars, ${wordsRemoved} words removed): "${cleanedTranscription.slice(0, 200)}${cleanedTranscription.length > 200 ? "..." : ""}"`);
-        } else {
-          console.log(`[PROCESS] Cleaning: returned empty (nothing to clean)`);
+        }, 10_000);
+
+        let payload: ProcessingResult | { error: string };
+        try {
+          payload = await processAudio(user.id, audioBlob, durationSeconds, actualVerse, requestStart, authMs);
+        } catch (error) {
+          console.error("[PROCESS] Error:", error);
+          payload = { error: "Processing failed" };
         }
-      } catch (cleanError) {
-        console.error("[PROCESS] Cleaning failed, using raw:", cleanError);
-        cleanedTranscription = transcription;
-        cleaningUsed = false;
-      }
-    } else {
-      // Cleaning disabled - pass raw transcription through
-      cleanedTranscription = transcription;
-      cleaningUsed = false;
-      console.log(`[PROCESS] Cleaning: skipped (disabled)`);
-    }
 
-    const totalMs = Date.now() - requestStart;
-    const wordCount = cleanedTranscription.split(/\s+/).filter(Boolean).length;
-    const sizeKB = (audioBlob.size / 1024).toFixed(1);
+        clearInterval(heartbeat);
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(payload)));
+          controller.close();
+        } catch {
+          // Client disconnected mid-stream; nothing left to do
+        }
+      },
+    });
 
-    // Comprehensive summary log
-    console.log(
-      `[PROCESS] ✓ ${totalMs}ms | ${durationSeconds}s recording (${sizeKB}KB) | ${wordCount} words\n` +
-      `         → Auth: ${authMs}ms | Upload: ${transcribeTiming.uploadMs}ms | Job: ${transcribeTiming.jobMs}ms | ` +
-      `Poll: ${transcribeTiming.pollMs}ms | Fetch: ${transcribeTiming.fetchMs}ms | Usage: ${recordMs}ms`
-    );
-
-    return jsonResponse({
-      transcription,
-      cleanedTranscription,
-      cleaningUsed,
-    } satisfies ProcessingResult);
+    return new Response(stream, {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("[PROCESS] Error:", error);
     return serverError("Processing failed");
   }
 });
+
+async function processAudio(
+  userId: string,
+  audioBlob: Blob,
+  durationSeconds: number,
+  actualVerse: string,
+  requestStart: number,
+  authMs: number
+): Promise<ProcessingResult> {
+  const transcribeStart = Date.now();
+  const transcriptionResult = await transcribeWithSoniox(audioBlob, actualVerse);
+  const transcription = transcriptionResult.text;
+  const transcribeTiming = transcriptionResult.timing;
+  const transcribeMs = Date.now() - transcribeStart;
+
+  const rawWordCount = transcription.split(/\s+/).filter(Boolean).length;
+  console.log(`[PROCESS] Transcription: ${transcribeMs}ms`);
+  console.log(`[PROCESS] Raw (${rawWordCount} words, ${transcription.length} chars): "${transcription.slice(0, 200)}${transcription.length > 200 ? "..." : ""}"`);
+
+  // Record transcription usage
+  const recordStart = Date.now();
+  await recordTranscriptionUsage(userId, durationSeconds);
+  const recordMs = Date.now() - recordStart;
+  console.log(`[PROCESS] Usage recorded: ${recordMs}ms`);
+
+  // ========== CLEANING (disabled - skip LLM, use raw transcription) ==========
+  const CLEANING_ENABLED = false;
+  let cleanedTranscription: string;
+  let cleaningUsed = false;
+
+  if (CLEANING_ENABLED) {
+    try {
+      const cleanStart = Date.now();
+      const cleanResult = await cleanTranscription(actualVerse, transcription);
+      const cleanMs = Date.now() - cleanStart;
+
+      cleanedTranscription = cleanResult.text;
+
+      // Cleaning used = OpenAI succeeded AND returned non-empty
+      // (empty means LLM had nothing to clean, e.g. empty transcript)
+      cleaningUsed = cleanResult.model !== undefined && cleanedTranscription.trim().length > 0;
+
+      if (cleaningUsed) {
+        await recordEvaluateUsage(userId);
+        const cleanedWordCount = cleanedTranscription.split(/\s+/).filter(Boolean).length;
+        const wordsRemoved = rawWordCount - cleanedWordCount;
+
+        console.log(`[PROCESS] Cleaning: ${cleanMs}ms`);
+        if (cleanResult.model) {
+          console.log(`[PROCESS] Model: ${cleanResult.model}`);
+        }
+        if (cleanResult.usage) {
+          console.log(`[PROCESS] Tokens - Input: ${cleanResult.usage.inputTokens}, Output: ${cleanResult.usage.outputTokens}, Reasoning: ${cleanResult.usage.reasoningTokens}, Total: ${cleanResult.usage.totalTokens}`);
+        }
+        console.log(`[PROCESS] Cleaned (${cleanedWordCount} words, ${cleanedTranscription.length} chars, ${wordsRemoved} words removed): "${cleanedTranscription.slice(0, 200)}${cleanedTranscription.length > 200 ? "..." : ""}"`);
+      } else {
+        console.log(`[PROCESS] Cleaning: returned empty (nothing to clean)`);
+      }
+    } catch (cleanError) {
+      console.error("[PROCESS] Cleaning failed, using raw:", cleanError);
+      cleanedTranscription = transcription;
+      cleaningUsed = false;
+    }
+  } else {
+    // Cleaning disabled - pass raw transcription through
+    cleanedTranscription = transcription;
+    cleaningUsed = false;
+    console.log(`[PROCESS] Cleaning: skipped (disabled)`);
+  }
+
+  const totalMs = Date.now() - requestStart;
+  const wordCount = cleanedTranscription.split(/\s+/).filter(Boolean).length;
+  const sizeKB = (audioBlob.size / 1024).toFixed(1);
+
+  // Comprehensive summary log
+  console.log(
+    `[PROCESS] ✓ ${totalMs}ms | ${durationSeconds}s recording (${sizeKB}KB) | ${wordCount} words\n` +
+    `         → Auth: ${authMs}ms | Upload: ${transcribeTiming.uploadMs}ms | Job: ${transcribeTiming.jobMs}ms | ` +
+    `Poll: ${transcribeTiming.pollMs}ms | Fetch: ${transcribeTiming.fetchMs}ms | Usage: ${recordMs}ms`
+  );
+
+  return {
+    transcription,
+    cleanedTranscription,
+    cleaningUsed,
+  };
+}
 
 /**
  * Transcribe audio using Soniox async API
@@ -216,7 +263,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
     },
     body: JSON.stringify({
       file_id: fileId,
-      model: "stt-async-v3",
+      model: "stt-async-v5",
       language_hints: ["en"],
       context: {
         general: [
@@ -238,12 +285,14 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
   const jobMs = Date.now() - jobStart;
   console.log(`[PROCESS] Soniox job created: ${jobMs}ms`);
 
-  // Step 3: Poll for completion (max 60 seconds)
+  // Step 3: Poll for completion (max ~90 seconds — the client can wait
+  // now that the response heartbeat keeps its socket alive)
   const pollStart = Date.now();
+  const maxAttempts = 90;
+  let completed = false;
   let attempts = 0;
-  const maxAttempts = 60;
 
-  while (attempts < maxAttempts) {
+  for (; attempts < maxAttempts; attempts++) {
     const statusRes = await fetch(
       `https://api.soniox.com/v1/transcriptions/${transcriptionId}`,
       { headers: { Authorization: `Bearer ${SONIOX_API_KEY}` } }
@@ -256,6 +305,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
     const status = await statusRes.json();
 
     if (status.status === "completed") {
+      completed = true;
       break;
     }
 
@@ -266,10 +316,9 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
 
     // Wait 1 second before polling again
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    attempts++;
   }
 
-  if (attempts >= maxAttempts) {
+  if (!completed) {
     throw new Error("Transcription timed out");
   }
 
@@ -289,12 +338,15 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
 
   const { text } = await transcriptRes.json();
   const fetchMs = Date.now() - fetchStart;
+  // Silent audio may yield a null transcript — treat it as empty so the
+  // client scores 0 instead of erroring
+  const transcriptText = text ?? "";
   console.log(`[PROCESS] Soniox fetch transcript: ${fetchMs}ms`);
 
   const totalMs = Date.now() - uploadStart;
 
   return {
-    text,
+    text: transcriptText,
     timing: {
       uploadMs,
       jobMs,

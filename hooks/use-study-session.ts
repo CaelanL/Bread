@@ -176,11 +176,12 @@ export function useStudySession({
     const currentChunk = chunks[currentIndex];
     const actualText = currentChunk.text;
 
-    // Track recording duration
-    setTotalRecordingDurationMs((prev) => prev + durationMs);
-
-    // Process recording: transcribe + clean in one call (or two for longer recordings)
+    // Process recording: transcribe via the edge function
     const { cleanedTranscription } = await processRecordingApi(uri, durationMs, actualText);
+
+    // Track recording duration — only after a transcript came back, so
+    // failed transcriptions don't inflate time studied
+    setTotalRecordingDurationMs((prev) => prev + durationMs);
 
     // Align locally (no API call needed)
     const alignment = alignTranscription(actualText, cleanedTranscription);

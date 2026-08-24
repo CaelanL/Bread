@@ -93,11 +93,18 @@ User taps mic
 
 User taps submit
   → stop metering loop
+  → clear the 5-minute cap timer
   → recording.stopAndUnloadAsync()
   → uri = recording.getURI()
   → session.processRecording(uri, durationMs)   // hook owns from here
   → animate recording bar out
 ```
+
+Recordings are capped at 5 minutes (`MAX_RECORDING_MS` in
+`app/session.tsx`): a timer started at record-start fires the same
+submit handler as tap-done, plus a toast — the user still gets their
+score for what they recited. The timer is cleared on submit, cancel,
+scroll-away, and unmount, the same teardown paths as the recorder.
 
 The screen owns the recorder, the metering ref, the waveform data
 ref, and the recording-state useState. The hook owns everything
@@ -248,7 +255,7 @@ If the user closes mid-session with ≥1 chunk completed,
 | `totalRecordingDurationMs` | hook | Persisted to DB at session end |
 | `recordingState: 'idle' | 'recording'` | screen (useState) | No |
 | `transcribing` | screen (useState) | No |
-| `recordingRef`, `meteringRef`, `waveformDataRef` | screen (useRef) | No |
+| `recordingRef`, `meteringRef`, `capTimerRef`, `waveformDataRef` | screen (useRef) | No |
 | `progress`, `engraved` | Zustand store → Supabase | Yes |
 
 The recording state lives on the screen because it's tightly coupled
@@ -262,10 +269,14 @@ hook.
 
 ```
 Receive: multipart form-data with audio blob, durationMs, actualVerse text
-  → upload audio to Soniox async API (using actualVerse as context)
-  → poll Soniox until transcription completes (up to 60s)
+  → commit a 200 and stream a heartbeat space every 10s
+    (keeps the client socket alive past its ~60s idle timeout)
+  → upload audio to Soniox async API (stt-async-v5, actualVerse as context)
+  → poll Soniox until transcription completes (1s interval, up to 90 polls)
   → optionally run cleaning pass via OpenAI GPT-5-mini (CLEANING_ENABLED = false right now)
-Return: { transcription, cleanedTranscription, cleaningUsed }
+Stream: { transcription, cleanedTranscription, cleaningUsed }
+  (failures after the 200 is committed arrive as { error } in the body;
+   the client checks the payload shape, not just response.ok)
 ```
 
 Alignment and scoring happen on the device after this returns. The
