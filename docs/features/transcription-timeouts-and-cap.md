@@ -155,6 +155,17 @@ live:
 - Test account and its usage rows deleted; `stream-test` function
   stubbed to an authed 410 — safe to delete from the dashboard.
 
+**Latency pass (v60, same day):** measured breakdown showed ~75% of
+server time was the poll loop's 1s granularity (Soniox finishes a
+short clip in ~1s but completion was discovered up to 1s late) and
+~200-330ms was the usage DB write blocking the response. Fixed by
+polling at 250ms for the first 3s (then 1s, 90s deadline) and firing
+the usage write via `EdgeRuntime.waitUntil`. Short-verse server time
+dropped from 1.5–2.5s to 1.0–1.8s (curl totals 1.5–2.2s, was
+1.9–3.2s). The remaining ~1–1.5s floor (Soniox job spin-up + upload
+round-trips) is inherent to the async batch API — removing it is the
+live-transcription feature's job.
+
 Remaining before shipping the client: the on-device checklist above
 (items 1–5, 7) on Caelan's phone.
 

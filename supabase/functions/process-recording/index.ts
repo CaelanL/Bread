@@ -149,11 +149,13 @@ async function processAudio(
   console.log(`[PROCESS] Transcription: ${transcribeMs}ms`);
   console.log(`[PROCESS] Raw (${rawWordCount} words, ${transcription.length} chars): "${transcription.slice(0, 200)}${transcription.length > 200 ? "..." : ""}"`);
 
-  // Record transcription usage
-  const recordStart = Date.now();
-  await recordTranscriptionUsage(userId, durationSeconds);
-  const recordMs = Date.now() - recordStart;
-  console.log(`[PROCESS] Usage recorded: ${recordMs}ms`);
+  // Record transcription usage without blocking the response (~200-330ms);
+  // waitUntil keeps the isolate alive until the write lands
+  const usageWrite = recordTranscriptionUsage(userId, durationSeconds)
+    .then(() => console.log("[PROCESS] Usage recorded"))
+    .catch((e) => console.error("[PROCESS] Usage record failed:", e));
+  // deno-lint-ignore no-explicit-any
+  (globalThis as any).EdgeRuntime?.waitUntil?.(usageWrite);
 
   // ========== CLEANING (disabled - skip LLM, use raw transcription) ==========
   const CLEANING_ENABLED = false;
@@ -208,7 +210,7 @@ async function processAudio(
   console.log(
     `[PROCESS] ✓ ${totalMs}ms | ${durationSeconds}s recording (${sizeKB}KB) | ${wordCount} words\n` +
     `         → Auth: ${authMs}ms | Upload: ${transcribeTiming.uploadMs}ms | Job: ${transcribeTiming.jobMs}ms | ` +
-    `Poll: ${transcribeTiming.pollMs}ms | Fetch: ${transcribeTiming.fetchMs}ms | Usage: ${recordMs}ms`
+    `Poll: ${transcribeTiming.pollMs}ms | Fetch: ${transcribeTiming.fetchMs}ms`
   );
 
   return {
@@ -285,14 +287,16 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
   const jobMs = Date.now() - jobStart;
   console.log(`[PROCESS] Soniox job created: ${jobMs}ms`);
 
-  // Step 3: Poll for completion (max ~90 seconds — the client can wait
-  // now that the response heartbeat keeps its socket alive)
+  // Step 3: Poll for completion, up to a ~90s deadline (the client can
+  // wait — the response heartbeat keeps its socket alive). Fast 250ms
+  // cadence for the first 3s: short clips finish in ~1s, and a flat 1s
+  // sleep was costing more than the transcription itself.
   const pollStart = Date.now();
-  const maxAttempts = 90;
+  const deadline = pollStart + 90_000;
   let completed = false;
-  let attempts = 0;
+  let polls = 0;
 
-  for (; attempts < maxAttempts; attempts++) {
+  while (Date.now() < deadline) {
     const statusRes = await fetch(
       `https://api.soniox.com/v1/transcriptions/${transcriptionId}`,
       { headers: { Authorization: `Bearer ${SONIOX_API_KEY}` } }
@@ -303,6 +307,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
     }
 
     const status = await statusRes.json();
+    polls++;
 
     if (status.status === "completed") {
       completed = true;
@@ -314,8 +319,8 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
       throw new Error(`Transcription failed: ${status.error || status.message || "unknown error"}`);
     }
 
-    // Wait 1 second before polling again
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const elapsed = Date.now() - pollStart;
+    await new Promise((resolve) => setTimeout(resolve, elapsed < 3000 ? 250 : 1000));
   }
 
   if (!completed) {
@@ -323,7 +328,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
   }
 
   const pollMs = Date.now() - pollStart;
-  console.log(`[PROCESS] Soniox polling complete: ${pollMs}ms (${attempts + 1} polls)`);
+  console.log(`[PROCESS] Soniox polling complete: ${pollMs}ms (${polls} polls)`);
 
   // Step 4: Get transcript
   const fetchStart = Date.now();
