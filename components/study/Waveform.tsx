@@ -66,14 +66,16 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: 1,
     height: 32,
     marginHorizontal: 8,
     overflow: 'hidden',
   },
   bar: {
-    width: 1.5,
+    // Bars split the available width evenly, so the waveform always
+    // spans the full gap between the cancel and submit buttons
+    // regardless of screen width.
+    flex: 1,
     backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 1,
   },

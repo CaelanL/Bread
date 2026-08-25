@@ -253,7 +253,9 @@ retry > peek > original.
 When all chunks complete, `updateVerseProgress(verseId, difficulty,
 finalScore, /* fullSession */ true)` runs in the Zustand store
 (fire-and-forget — the results screen shows immediately; a failed
-write surfaces as a toast, matching `saveAndExit`):
+write surfaces as a toast, matching `saveAndExit`. Force-quitting
+within ~one network RTT of the results appearing can lose the write —
+same accepted-loss class as the app's no-offline-queue stance):
 
 1. Update `progress[difficulty].bestAccuracy` and
    `progress[difficulty].completed = (finalScore >= 90)`.
