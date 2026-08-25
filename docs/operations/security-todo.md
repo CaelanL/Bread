@@ -4,9 +4,17 @@
 
 Supabase Security Advisor flagged several issues. None are critical blockers - the app works fine - but should be addressed before public launch.
 
+**Update 2026-08-25:** Items 1–3 (the ERROR-level ones) are RESOLVED by
+migration `020_lock_down_shared_tables.sql` — RLS enabled on
+`verse_cache` and `app_config`, all API-role grants revoked on both
+tables plus `verse_cache_stats`, and the view switched to
+`security_invoker`. Note the original risk notes below understated the
+issue: default grants meant `anon` could also WRITE/DELETE (cache
+poisoning), not just read. The WARNING-level items below are still open.
+
 ---
 
-## ERRORS (High Priority)
+## ERRORS (High Priority) — RESOLVED, see update above
 
 ### 1. `verse_cache` - RLS Disabled
 
