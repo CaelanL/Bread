@@ -96,6 +96,8 @@ export default function StudySessionScreen() {
   // Bar levels live in a shared value so the waveform animates on the
   // UI thread without re-rendering this screen (10x/sec while recording)
   const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
+  // Meter ballistics state: fast attack, slow release (kills ripple)
+  const smoothedLevelRef = useRef(0);
 
   // Animation values
   const recordingTabY = useSharedValue(RECORDING_BAR_HEIGHT + 60);
@@ -260,7 +262,15 @@ export default function StudySessionScreen() {
         const start = q * quarter;
         const end = q === 3 ? pcm.length : (q + 1) * quarter;
         const level = computeBarLevel(pcm, start, end);
-        if (level !== null) bars.push(level);
+        if (level !== null) {
+          // Fast attack / slow release: peaks land instantly, but the
+          // level decays smoothly instead of flickering bar-to-bar
+          const prev = smoothedLevelRef.current;
+          const alpha = level > prev ? 0.75 : 0.25;
+          const smoothed = prev + alpha * (level - prev);
+          smoothedLevelRef.current = smoothed;
+          bars.push(smoothed);
+        }
       }
       if (bars.length > 0) {
         waveformLevels.value = [...waveformLevels.value.slice(bars.length), ...bars];
@@ -324,6 +334,7 @@ export default function StudySessionScreen() {
       recordingTabY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
 
       waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
+      smoothedLevelRef.current = 0;
 
       setRecordingState('recording');
     } catch (error) {
