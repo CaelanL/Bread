@@ -16,9 +16,10 @@ whole passage in one chunk), which was a workaround, not a preference.
 
 Persist the last-chosen chunk size and difficulty **per verse row** in
 `user_verses` (`last_chunk_size INT`, `last_difficulty TEXT`, both
-nullable — migration 021). Saved when the user taps **Start session**;
-restored (clamped to the passage's verse count) when the setup screen
-next opens. The saved preference always wins. The old mastered-verse
+nullable — migration 021). Saved whenever the user changes the setup
+(difficulty tap, chunk picker, All button) and again on **Start
+session**; restored (clamped to the passage's verse count) when the
+setup screen next opens. The saved preference always wins. The old mastered-verse
 default (hard + whole passage) survives only as the fallback for a
 mastered verse with NULL prefs — every pre-021 mastery — because
 engraved reviews only qualify on Hard, and defaulting those to easy

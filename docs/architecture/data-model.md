@@ -123,9 +123,10 @@ still write it, the new client read-fallbacks from it
 cleanup migration drops it once all live clients have updated.
 
 **Study prefs** (`last_chunk_size`, `last_difficulty`, migration 021):
-the setup screen's last-used values, written fire-and-forget when a
-session starts (`setVerseStudyPrefs` store action →
-`updateVerseStudyPrefs` in `lib/storage/`) and restored on next open.
+the setup screen's last-used values, written fire-and-forget on every
+setup edit and on session start (`setVerseStudyPrefs` store action →
+`updateVerseStudyPrefs` in `lib/storage/`, no-op when unchanged) and
+restored on next open.
 They live outside the `progress` JSONB deliberately: progress writes
 are whole-object read-modify-write through `parseProgress` (which
 strips unknown keys), so old clients would clobber a JSONB key, and
