@@ -23,6 +23,11 @@ import {
 import { processRecording as processRecordingApi, logSessionAttempt } from '@/lib/api';
 import { showErrorToast } from '@/lib/toast';
 import { alignTranscription, buildAllMissingAlignment } from '@/lib/align';
+import type { LiveTranscriptionSession } from '@/lib/transcription/live-session';
+
+// Measured finalize latency is ~70-90ms; past this the stream is
+// abandoned and the batch path scores the recording file instead
+const FINALIZE_TIMEOUT_MS = 3000;
 
 interface ChunkResult {
   score: number;
@@ -73,7 +78,11 @@ interface UseStudySessionReturn {
   saveAndExit: () => void;
 
   // Recording result handler
-  processRecording: (uri: string, durationMs: number) => Promise<{
+  processRecording: (
+    uri: string,
+    durationMs: number,
+    liveSession?: LiveTranscriptionSession
+  ) => Promise<{
     score: number;
     alignment: AlignmentWord[];
     allDone: boolean;
@@ -172,12 +181,23 @@ export function useStudySession({
   }, []);
 
   // Process a recording and update state
-  const processRecording = useCallback(async (uri: string, durationMs: number) => {
+  const processRecording = useCallback(async (
+    uri: string,
+    durationMs: number,
+    liveSession?: LiveTranscriptionSession
+  ) => {
     const currentChunk = chunks[currentIndex];
     const actualText = currentChunk.text;
 
-    // Process recording: transcribe via the edge function
-    const { cleanedTranscription } = await processRecordingApi(uri, durationMs, actualText);
+    // Transcribe: live stream finalize when available, batch edge
+    // function otherwise — and silently on any live failure
+    let cleanedTranscription =
+      (await liveSession?.finish(FINALIZE_TIMEOUT_MS).catch(() => null)) ?? null;
+    // Guarantee the socket is closed however finish() settled (idempotent)
+    liveSession?.abort();
+    if (cleanedTranscription === null) {
+      ({ cleanedTranscription } = await processRecordingApi(uri, durationMs, actualText));
+    }
 
     // Track recording duration — only after a transcript came back, so
     // failed transcriptions don't inflate time studied

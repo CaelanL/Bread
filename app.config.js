@@ -64,6 +64,17 @@ export default {
           color: "#ffffff",
         },
       ],
+      [
+        "@siteed/audio-studio",
+        {
+          // Plugin defaults this to true, which adds the iOS "audio"
+          // UIBackgroundModes key — an App Store review flag we don't
+          // need (no background recording).
+          enableBackgroundAudio: false,
+          microphonePermission:
+            "Bread needs microphone access to record your verse recitations for accuracy scoring.",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,

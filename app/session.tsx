@@ -17,7 +17,16 @@ import {
   maskDisplayWords,
 } from '@/lib/study-chunks';
 import { showErrorToast } from '@/lib/toast';
-import { Audio } from 'expo-av';
+import {
+  startLiveTranscription,
+  base64ToUint8Array,
+  type LiveTranscriptionSession,
+} from '@/lib/transcription/live-session';
+import {
+  useAudioRecorder,
+  AudioStudioModule,
+  type AudioDataEvent,
+} from '@siteed/audio-studio';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -76,8 +85,13 @@ export default function StudySessionScreen() {
   // Cosmetic only; scoring always uses chunk.text. Absence = mode default.
   const [hideModes, setHideModes] = useState<Map<number, HideMode>>(new Map());
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const meteringRef = useRef<NodeJS.Timeout | null>(null);
+  const { startRecording, stopRecording } = useAudioRecorder();
+  // The hook's isRecording lags a render; teardown paths need a sync answer
+  const recordingActiveRef = useRef(false);
+  // Bumped by every teardown; a mic press whose startRecording resolves
+  // under a stale generation was torn down mid-start and must not go live
+  const recordingGenRef = useRef(0);
+  const liveSessionRef = useRef<LiveTranscriptionSession | null>(null);
   const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waveformDataRef = useRef<number[]>([]);
 
@@ -109,19 +123,9 @@ export default function StudySessionScreen() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
-        recordingRef.current = null;
-      }
-      if (meteringRef.current) {
-        clearInterval(meteringRef.current);
-        meteringRef.current = null;
-      }
-      if (capTimerRef.current) {
-        clearTimeout(capTimerRef.current);
-        capTimerRef.current = null;
-      }
+      teardownRecording();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const clearCapTimer = useCallback(() => {
@@ -131,13 +135,21 @@ export default function StudySessionScreen() {
     }
   }, []);
 
-  const stopMetering = useCallback(() => {
-    if (meteringRef.current) {
-      clearInterval(meteringRef.current);
-      meteringRef.current = null;
-    }
+  // Shared teardown for every non-submit exit: cancel, scroll-away,
+  // unmount, failed start. Closes the live socket (stops billing),
+  // invalidates any in-flight startRecording, and stops the recorder.
+  const teardownRecording = useCallback((): Promise<unknown> => {
+    recordingGenRef.current++;
+    liveSessionRef.current?.abort();
+    liveSessionRef.current = null;
+    clearCapTimer();
     waveformDataRef.current = [];
-  }, []);
+    if (recordingActiveRef.current) {
+      recordingActiveRef.current = false;
+      return stopRecording().catch(() => {});
+    }
+    return Promise.resolve();
+  }, [clearCapTimer, stopRecording]);
 
   const hideRecordingBar = useCallback((onComplete?: () => void) => {
     recordingTabY.value = withTiming(
@@ -153,10 +165,15 @@ export default function StudySessionScreen() {
 
   const handleSubmit = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    stopMetering();
+    recordingGenRef.current++;
     clearCapTimer();
+    waveformDataRef.current = [];
 
-    if (!recordingRef.current) {
+    const liveSession = liveSessionRef.current;
+    liveSessionRef.current = null;
+
+    if (!recordingActiveRef.current) {
+      liveSession?.abort();
       setRecordingState('idle');
       return;
     }
@@ -164,32 +181,34 @@ export default function StudySessionScreen() {
     try {
       setTranscribing(true);
 
-      // Get duration before stopping
-      const status = await recordingRef.current.getStatusAsync();
-      const durationMs = status.durationMillis ?? 0;
+      recordingActiveRef.current = false;
+      const recording = await stopRecording();
+      const durationMs = recording.durationMs ?? 0;
+      // Compressed (m4a) output is the batch-fallback upload, matching
+      // the frozen process-recording contract; primary WAV is disabled
+      const uri = recording.compression?.compressedFileUri ?? recording.fileUri;
 
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
-
-      if (!uri) {
+      // A missing file only matters if there's no live transcript to
+      // finalize — the live path never reads the file
+      if (!uri && !liveSession) {
         throw new Error('No recording URI');
       }
 
       setRecordingState('idle');
 
-      // Process recording through session hook (with duration in ms)
-      await session.processRecording(uri, durationMs);
+      await session.processRecording(uri, durationMs, liveSession ?? undefined);
 
       // Hide bar after processing
       hideRecordingBar(() => setTranscribing(false));
     } catch (error) {
+      // Covers failures before the hook took ownership (idempotent)
+      liveSession?.abort();
       console.error('Recording submission failed:', error);
       hideRecordingBar(() => setTranscribing(false));
       Alert.alert('Error', `Recording failed: ${error}`);
       setRecordingState('idle');
     }
-  }, [stopMetering, clearCapTimer, hideRecordingBar, session]);
+  }, [clearCapTimer, hideRecordingBar, session, stopRecording]);
 
   // Latest-closure ref for the cap timer: the timer arms at record-start
   // and fires up to 5 minutes later, so calling the captured handleSubmit
@@ -200,25 +219,89 @@ export default function StudySessionScreen() {
     handleSubmitRef.current = handleSubmit;
   });
 
+  // Waveform level computed from the PCM chunks directly (RMS → dBFS),
+  // instead of the library's analysis events — enableProcessing would
+  // make the hook dispatch a state update per 50ms event, re-rendering
+  // this whole screen twice a tick. Two bars per 100ms chunk keeps the
+  // old 50ms visual density at half the render rate.
+  const pushWaveformBar = useCallback((pcm: Uint8Array, start: number, end: number) => {
+    let sumSquares = 0;
+    let count = 0;
+    for (let i = start; i + 1 < end; i += 2) {
+      let sample = pcm[i] | (pcm[i + 1] << 8);
+      if (sample >= 0x8000) sample -= 0x10000;
+      sumSquares += sample * sample;
+      count++;
+    }
+    if (count === 0) return;
+    const rms = Math.sqrt(sumSquares / count) / 32768;
+    const dB = 20 * Math.log10(Math.max(rms, 1e-6));
+    const minDb = -26;
+    const maxDb = -6;
+    const normalized = Math.max(0, Math.min(1, (dB - minDb) / (maxDb - minDb)));
+    waveformDataRef.current.push(normalized);
+    if (waveformDataRef.current.length > WAVEFORM_SAMPLES) {
+      waveformDataRef.current = waveformDataRef.current.slice(-WAVEFORM_SAMPLES);
+    }
+  }, []);
+
+  const handleAudioStream = useCallback(async (event: AudioDataEvent) => {
+    if (typeof event.data !== 'string') return;
+    const pcm = base64ToUint8Array(event.data);
+    liveSessionRef.current?.feedAudio(pcm);
+    if (recordingActiveRef.current) {
+      const half = (pcm.length >> 2) << 1; // even byte boundary
+      pushWaveformBar(pcm, 0, half);
+      pushWaveformBar(pcm, half, pcm.length);
+      setWaveformTrigger((t) => t + 1);
+    }
+  }, [pushWaveformBar]);
+
   const handleMicPress = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await AudioStudioModule.requestPermissionsAsync();
       if (!granted) {
         Alert.alert('Permission required', 'Please allow microphone access to record.');
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
+      // Background live stream: PCM fed from the first callback is
+      // buffered while the token mint + socket connect complete. Any
+      // failure (kill switch, offline, drop) leaves the batch path to
+      // score the file — never surfaced to the user.
+      const chunkText = session.chunks[session.currentIndex]?.text;
+      liveSessionRef.current?.abort();
+      liveSessionRef.current = chunkText ? startLiveTranscription(chunkText) : null;
 
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-      recordingRef.current = recording;
+      const gen = recordingGenRef.current;
+      await startRecording({
+        sampleRate: 16000,
+        channels: 1,
+        encoding: 'pcm_16bit',
+        interval: 100,
+        // m4a for the batch-fallback upload (frozen contract); no WAV
+        output: {
+          primary: { enabled: false },
+          compressed: { enabled: true, format: 'aac' },
+        },
+        ios: {
+          audioSession: {
+            category: 'PlayAndRecord',
+            mode: 'Default',
+            categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth'],
+          },
+        },
+        onAudioStream: handleAudioStream,
+      });
+      if (recordingGenRef.current !== gen) {
+        // Torn down (scroll-away, unmount, cancel) while the native
+        // start was in flight — don't leave the mic hot
+        stopRecording().catch(() => {});
+        return;
+      }
+      recordingActiveRef.current = true;
 
       capTimerRef.current = setTimeout(() => {
         capTimerRef.current = null;
@@ -229,50 +312,28 @@ export default function StudySessionScreen() {
       // Show recording bar
       recordingTabY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
 
-      // Start metering
       waveformDataRef.current = [];
       setWaveformTrigger(0);
-      meteringRef.current = setInterval(async () => {
-        if (recordingRef.current) {
-          const status = await recordingRef.current.getStatusAsync();
-          if (status.isRecording && typeof status.metering === 'number') {
-            const minDb = -26;
-            const maxDb = -6;
-            const normalized = Math.max(0, Math.min(1, (status.metering - minDb) / (maxDb - minDb)));
-
-            waveformDataRef.current.push(normalized);
-            if (waveformDataRef.current.length > WAVEFORM_SAMPLES) {
-              waveformDataRef.current = waveformDataRef.current.slice(-WAVEFORM_SAMPLES);
-            }
-            setWaveformTrigger((t) => t + 1);
-          }
-        }
-      }, 50);
 
       setRecordingState('recording');
     } catch (error) {
+      teardownRecording();
       console.error('Failed to start recording:', error);
       Alert.alert('Error', 'Failed to start recording');
     }
-  }, []);
+  }, [session.chunks, session.currentIndex, startRecording, stopRecording, teardownRecording, handleAudioStream]);
 
   const handleCancel = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    stopMetering();
-    clearCapTimer();
     hideRecordingBar();
 
-    try {
-      if (recordingRef.current) {
-        await recordingRef.current.stopAndUnloadAsync();
-        recordingRef.current = null;
-      }
-    } catch (error) {
-      console.error('Failed to cancel recording:', error);
-    }
+    // Closes the socket (stops billing); the recitation is discarded
+    // unscored, unstored — cancel stays a complete no-op. Awaited so an
+    // immediate re-record can't overlap the stopping mic session.
+    await teardownRecording();
 
     setRecordingState('idle');
-  }, [stopMetering, clearCapTimer, hideRecordingBar]);
+  }, [hideRecordingBar, teardownRecording]);
 
   const handleRetry = useCallback((index: number) => {
     setExitingChunks((prev) => new Set([...prev, index]));
@@ -322,17 +383,13 @@ export default function StudySessionScreen() {
         const index = viewableItems[0].index;
         if (index !== null && index !== session.currentIndex) {
           // Cancel any active recording when scrolling away
-          if (recordingRef.current) {
-            recordingRef.current.stopAndUnloadAsync().catch(() => {});
-            recordingRef.current = null;
-            clearCapTimer();
-            setRecordingState('idle');
-          }
+          teardownRecording();
+          setRecordingState('idle');
           session.setCurrentIndex(index);
         }
       }
     },
-    [session.currentIndex, session.setCurrentIndex, clearCapTimer]
+    [session.currentIndex, session.setCurrentIndex, teardownRecording]
   );
 
   const viewabilityConfig = {

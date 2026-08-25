@@ -81,23 +81,38 @@ is `0` or `1` chosen randomly at session start
 
 ### 4. Recording
 
-`app/session.tsx` owns `expo-av` lifecycle:
+`app/session.tsx` owns the recorder lifecycle via
+`@siteed/audio-studio` (`useAudioRecorder`; pinned exactly to 3.2.0 —
+3.2.1+ requires SDK 57 and breaks the SDK 54 Android build). One mic
+session produces both an m4a file (batch fallback upload) and live
+16kHz mono s16le PCM chunks (100ms cadence) that feed the background
+live-transcription stream:
 
 ```
 User taps mic
-  → request permissions
-  → Audio.Recording.createAsync(...)
-  → start metering loop (50ms tick, normalized 0–1, pushed to waveformDataRef)
+  → request permissions (AudioStudioModule)
+  → liveSessionRef = startLiveTranscription(chunks[currentIndex].text)
+      // lib/transcription/live-session.ts: mints a temp Soniox key via
+      // the transcription-token edge function, opens the WebSocket,
+      // buffers PCM fed before the socket is ready, flushes on open.
+      // Any failure → state 'failed', silently; batch path takes over.
+  → startRecording({ 16kHz mono pcm_16bit, compressed m4a output,
+      onAudioStream → feedAudio(base64→bytes),
+      onAudioAnalysis → waveform dB (50ms cadence) })
   → animate recording bar in
   → haptic Medium
 
 User taps submit
-  → stop metering loop
   → clear the 5-minute cap timer
-  → recording.stopAndUnloadAsync()
-  → uri = recording.getURI()
-  → session.processRecording(uri, durationMs)   // hook owns from here
+  → recording = stopRecording()
+  → uri = recording.compression.compressedFileUri (m4a)
+  → session.processRecording(uri, durationMs, liveSession)  // hook owns from here
   → animate recording bar out
+
+Cancel / scroll-away / unmount
+  → liveSession.abort()   // closes the socket (stops billing);
+                          // recitation discarded — cancel is a no-op
+  → stopRecording() discarded
 ```
 
 Recordings are capped at 5 minutes (`MAX_RECORDING_MS` in
@@ -105,10 +120,14 @@ Recordings are capped at 5 minutes (`MAX_RECORDING_MS` in
 submit handler as tap-done, plus a toast — the user still gets their
 score for what they recited. The timer is cleared on submit, cancel,
 scroll-away, and unmount, the same teardown paths as the recorder.
+(Temp Soniox keys are minted with a 315s session cap so the client
+timer always fires first; if Soniox ever cuts the stream, that's a
+stream failure → batch fallback scores the full file.)
 
-The screen owns the recorder, the metering ref, the waveform data
+The screen owns the recorder, the live-session ref, the waveform data
 ref, and the recording-state useState. The hook owns everything
-else.
+else. All live-transcription network I/O (token mint + WebSocket)
+lives in `lib/transcription/live-session.ts`, never in the screen.
 
 ### 5. Scoring
 
@@ -116,18 +135,31 @@ In `processRecording()` on the hook:
 
 ```
 1. actualText = chunks[currentIndex].text       // ground truth
-2. POST audio + actualText → process-recording edge function
-3. response = { transcription, cleanedTranscription, cleaningUsed }
-4. alignment = alignTranscription(actualText, cleanedTranscription)
-5. score = calculateChunkScore(alignment)        // (correct + close*0.5) / total * 100
-6. chunkResults.set(currentIndex, { score, transcription, alignment })
-7. completedChunks.add(currentIndex)
-8. if all chunks completed:
+2. transcript acquisition (provider-agnostic seam):
+     liveSession present → cleanedTranscription = liveSession.finish(3s timeout)
+       // waits a 150ms flush grace for trailing PCM, sends end-of-audio,
+       // collects final tokens — measured ~250ms total
+     no liveSession, or finish() rejects for ANY reason
+       → POST audio + actualText → process-recording edge function
+       → { transcription, cleanedTranscription, cleaningUsed }
+       // the fallback is silent: worst case is today's batch latency
+3. alignment = alignTranscription(actualText, cleanedTranscription)
+4. score = calculateChunkScore(alignment)        // (correct + close*0.5) / total * 100
+5. chunkResults.set(currentIndex, { score, transcription, alignment })
+6. completedChunks.add(currentIndex)
+7. if all chunks completed:
      finalScore = calculateFinalScore(allAlignments)
      updateVerseProgress(verseId, difficulty, finalScore)   // → store
      logSessionAttempt({ ... })                              // → session_attempts
      showResults = true
 ```
+
+Both transcript sources produce raw Soniox text (server-side LLM
+cleaning is disabled), so scoring is path-independent — modulo small
+model differences between `stt-rt-v5` (live) and `stt-async-v5`
+(batch). Everything below step 2 is identical for both paths. There
+is deliberately NO live/incremental scoring: alignment is local and
+sub-millisecond, so the transcript is the only latency.
 
 `alignTranscription` (`lib/align.ts`) tokenizes both strings, lowercases
 and strips outer punctuation (keeps internal apostrophes), then uses

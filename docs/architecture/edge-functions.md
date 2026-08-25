@@ -27,8 +27,10 @@ supabase/functions/
 │       ├── types.ts     ← BibleAdapter contract
 │       ├── esv.ts       ← Crossway ESV API
 │       └── apibible.ts  ← API.Bible for KJV/NLT/NIV/NKJV
-└── process-recording/
-    └── index.ts         ← Soniox upload, polling, optional GPT cleaning
+├── process-recording/
+│   └── index.ts         ← Soniox upload, polling, optional GPT cleaning
+└── transcription-token/
+    └── index.ts         ← Mints temp Soniox keys for live streaming
 ```
 
 ## `bible`
@@ -101,6 +103,35 @@ re-enabled:
 
 Don't enable without product input.
 
+## `transcription-token`
+
+Mints short-lived Soniox temporary API keys so the client can stream
+audio **directly** to Soniox's real-time WebSocket during recording
+(`lib/transcription/live-session.ts`) — the edge function never
+touches audio bytes. See `docs/features/live-transcription.md`.
+
+```
+POST /functions/v1/transcription-token
+  Headers: Authorization: Bearer <supabase JWT>
+  Body: none
+
+200 → { apiKey, expiresAt, websocketUrl, model }
+403 → { error: "LIVE_DISABLED" }   ← the kill switch
+```
+
+- **Kill switch**: unless the `LIVE_TRANSCRIPTION_ENABLED` secret is
+  exactly `"true"`, every request gets 403 and every client silently
+  falls back to the batch path within one recording. Flip with
+  `supabase secrets set LIVE_TRANSCRIPTION_ENABLED=true|false` — no
+  deploy, no store release.
+- Temp keys: 60s TTL (gates connection establishment only, not the
+  session), `max_session_duration_seconds: 315` (client's 300s cap
+  timer fires first), `client_reference_id: user.id` (per-user
+  attribution in the Soniox console).
+- The client treats *any* non-200 as "use batch" — this endpoint can
+  never break recitation scoring.
+- Old clients never call it; purely additive.
+
 ## `_shared/auth.ts`
 
 Exports `verifyJwt(req)` which:
@@ -142,6 +173,9 @@ Edge functions need:
 - `ESV_API_KEY` — Crossway
 - `API_BIBLE_KEY` — API.Bible
 - `SONIOX_API_KEY` — Soniox
+- `LIVE_TRANSCRIPTION_ENABLED` — `"true"` enables the
+  `transcription-token` endpoint; anything else (or unset) is the
+  live-transcription kill switch
 - `OPENAI_API_KEY` — only if GPT cleaning is re-enabled
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — to read/write
   `verse_cache`, `usage_daily`, `subscriptions` past RLS
@@ -154,6 +188,7 @@ the client bundle.
 ```
 supabase functions deploy bible
 supabase functions deploy process-recording
+supabase functions deploy transcription-token
 ```
 
 Local development:
