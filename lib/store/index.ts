@@ -941,6 +941,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setVerseStudyPrefs: (id, chunkSize, difficulty) => {
+    // No-op when unchanged: the setup screen saves on every edit and
+    // on session start, and a redundant set() would swap the verse's
+    // object identity — re-rendering every subscriber (visible as a
+    // flicker on the setup screen mid-navigation) for nothing.
+    const existing =
+      get().verses.find((v) => v.id === id) ??
+      get().masteredVerses.find((v) => v.id === id);
+    if (!existing || (existing.lastChunkSize === chunkSize && existing.lastDifficulty === difficulty)) {
+      return;
+    }
+
     // Optimistic update on every entry for this verse (junction-row
     // shape: a verse in N collections has N entries in `verses[]`).
     // Fire-and-forget preference write — no rollback; a lost write

@@ -131,11 +131,24 @@ export default function StudySetupScreen() {
           .finally(() => setTextLoading(false));
       }
     }
-  }, [verse]);
+    // Keyed on the verse *reference*, not the object: saving study
+    // prefs swaps the verse's identity in the store, and re-running
+    // this effect then flashes the text loader over already-loaded
+    // text (visible as a flicker when starting a session).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verse?.id]);
+
+  // Persist the setup whenever the user changes it, so prefs stick
+  // even without starting a session. The store action no-ops when
+  // values are unchanged.
+  const savePrefs = (nextChunkSize: number, nextDifficulty: Difficulty) => {
+    if (!id) return;
+    useAppStore.getState().setVerseStudyPrefs(id, nextChunkSize, nextDifficulty);
+  };
 
   const handleStartSession = () => {
     if (!verse || !id) return;
-    useAppStore.getState().setVerseStudyPrefs(id, chunkSize, difficulty);
+    savePrefs(chunkSize, difficulty);
     // Session is at root level, outside tabs
     router.push(`/session?id=${id}&difficulty=${difficulty}&chunkSize=${chunkSize}`);
   };
@@ -298,7 +311,10 @@ export default function StudySetupScreen() {
                     styles.segment,
                     difficulty === level && { backgroundColor: 'rgba(176, 141, 87, 0.9)' },
                   ]}
-                  onPress={() => setDifficulty(level)}
+                  onPress={() => {
+                    setDifficulty(level);
+                    savePrefs(chunkSize, level);
+                  }}
                 >
                   <View style={styles.segmentHeader}>
                     <Text
@@ -354,7 +370,10 @@ export default function StudySetupScreen() {
                 <IconSymbol name="chevron.right" size={14} color={colors.icon} />
               </Pressable>
               <Pressable
-                onPress={() => setChunkSize(totalVerses)}
+                onPress={() => {
+                  setChunkSize(totalVerses);
+                  savePrefs(totalVerses, difficulty);
+                }}
                 style={[
                   styles.chunkAllButton,
                   {
@@ -414,7 +433,10 @@ export default function StudySetupScreen() {
         visible={chunkModalOpen}
         totalVerses={totalVerses}
         initialChunkSize={chunkSize}
-        onSave={setChunkSize}
+        onSave={(size) => {
+          setChunkSize(size);
+          savePrefs(size, difficulty);
+        }}
         onClose={() => setChunkModalOpen(false)}
       />
     </View>
