@@ -16,6 +16,7 @@ import {
   isResultsPage,
   maskDisplayWords,
 } from '@/lib/study-chunks';
+import { showErrorToast } from '@/lib/toast';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
@@ -43,6 +44,10 @@ import Animated, {
 type RecordingState = 'idle' | 'recording';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Recording cap: at 5 minutes the recording auto-submits exactly as if
+// the user tapped done, so they still see how far they got.
+const MAX_RECORDING_MS = 300_000;
 
 export default function StudySessionScreen() {
   const { id, difficulty, chunkSize: chunkSizeParam } = useLocalSearchParams<{
@@ -73,6 +78,7 @@ export default function StudySessionScreen() {
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const meteringRef = useRef<NodeJS.Timeout | null>(null);
+  const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waveformDataRef = useRef<number[]>([]);
 
   // Animation values
@@ -111,7 +117,18 @@ export default function StudySessionScreen() {
         clearInterval(meteringRef.current);
         meteringRef.current = null;
       }
+      if (capTimerRef.current) {
+        clearTimeout(capTimerRef.current);
+        capTimerRef.current = null;
+      }
     };
+  }, []);
+
+  const clearCapTimer = useCallback(() => {
+    if (capTimerRef.current) {
+      clearTimeout(capTimerRef.current);
+      capTimerRef.current = null;
+    }
   }, []);
 
   const stopMetering = useCallback(() => {
@@ -134,76 +151,10 @@ export default function StudySessionScreen() {
     );
   }, []);
 
-  const handleMicPress = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) {
-        Alert.alert('Permission required', 'Please allow microphone access to record.');
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-      recordingRef.current = recording;
-
-      // Show recording bar
-      recordingTabY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
-
-      // Start metering
-      waveformDataRef.current = [];
-      setWaveformTrigger(0);
-      meteringRef.current = setInterval(async () => {
-        if (recordingRef.current) {
-          const status = await recordingRef.current.getStatusAsync();
-          if (status.isRecording && typeof status.metering === 'number') {
-            const minDb = -26;
-            const maxDb = -6;
-            const normalized = Math.max(0, Math.min(1, (status.metering - minDb) / (maxDb - minDb)));
-
-            waveformDataRef.current.push(normalized);
-            if (waveformDataRef.current.length > WAVEFORM_SAMPLES) {
-              waveformDataRef.current = waveformDataRef.current.slice(-WAVEFORM_SAMPLES);
-            }
-            setWaveformTrigger((t) => t + 1);
-          }
-        }
-      }, 50);
-
-      setRecordingState('recording');
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      Alert.alert('Error', 'Failed to start recording');
-    }
-  }, []);
-
-  const handleCancel = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    stopMetering();
-    hideRecordingBar();
-
-    try {
-      if (recordingRef.current) {
-        await recordingRef.current.stopAndUnloadAsync();
-        recordingRef.current = null;
-      }
-    } catch (error) {
-      console.error('Failed to cancel recording:', error);
-    }
-
-    setRecordingState('idle');
-  }, [stopMetering, hideRecordingBar]);
-
   const handleSubmit = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     stopMetering();
+    clearCapTimer();
 
     if (!recordingRef.current) {
       setRecordingState('idle');
@@ -238,7 +189,90 @@ export default function StudySessionScreen() {
       Alert.alert('Error', `Recording failed: ${error}`);
       setRecordingState('idle');
     }
-  }, [stopMetering, hideRecordingBar, session]);
+  }, [stopMetering, clearCapTimer, hideRecordingBar, session]);
+
+  // Latest-closure ref for the cap timer: the timer arms at record-start
+  // and fires up to 5 minutes later, so calling the captured handleSubmit
+  // directly would submit with stale session state (retry/peek flags
+  // committed after record-start would be missed).
+  const handleSubmitRef = useRef(handleSubmit);
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  });
+
+  const handleMicPress = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
+        Alert.alert('Permission required', 'Please allow microphone access to record.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+      recordingRef.current = recording;
+
+      capTimerRef.current = setTimeout(() => {
+        capTimerRef.current = null;
+        showErrorToast('5 minute limit reached — scoring what you recited.');
+        handleSubmitRef.current();
+      }, MAX_RECORDING_MS);
+
+      // Show recording bar
+      recordingTabY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
+
+      // Start metering
+      waveformDataRef.current = [];
+      setWaveformTrigger(0);
+      meteringRef.current = setInterval(async () => {
+        if (recordingRef.current) {
+          const status = await recordingRef.current.getStatusAsync();
+          if (status.isRecording && typeof status.metering === 'number') {
+            const minDb = -26;
+            const maxDb = -6;
+            const normalized = Math.max(0, Math.min(1, (status.metering - minDb) / (maxDb - minDb)));
+
+            waveformDataRef.current.push(normalized);
+            if (waveformDataRef.current.length > WAVEFORM_SAMPLES) {
+              waveformDataRef.current = waveformDataRef.current.slice(-WAVEFORM_SAMPLES);
+            }
+            setWaveformTrigger((t) => t + 1);
+          }
+        }
+      }, 50);
+
+      setRecordingState('recording');
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      Alert.alert('Error', 'Failed to start recording');
+    }
+  }, []);
+
+  const handleCancel = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    stopMetering();
+    clearCapTimer();
+    hideRecordingBar();
+
+    try {
+      if (recordingRef.current) {
+        await recordingRef.current.stopAndUnloadAsync();
+        recordingRef.current = null;
+      }
+    } catch (error) {
+      console.error('Failed to cancel recording:', error);
+    }
+
+    setRecordingState('idle');
+  }, [stopMetering, clearCapTimer, hideRecordingBar]);
 
   const handleRetry = useCallback((index: number) => {
     setExitingChunks((prev) => new Set([...prev, index]));
@@ -291,13 +325,14 @@ export default function StudySessionScreen() {
           if (recordingRef.current) {
             recordingRef.current.stopAndUnloadAsync().catch(() => {});
             recordingRef.current = null;
+            clearCapTimer();
             setRecordingState('idle');
           }
           session.setCurrentIndex(index);
         }
       }
     },
-    [session.currentIndex, session.setCurrentIndex]
+    [session.currentIndex, session.setCurrentIndex, clearCapTimer]
   );
 
   const viewabilityConfig = {

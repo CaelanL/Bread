@@ -24,22 +24,13 @@ export async function processRecording(
   const token = await getAuthToken();
   const baseUrl = getSupabaseUrl();
 
-  // Fetch audio blob
-  const audioResponse = await fetch(audioUri);
-  const audioBlob = await audioResponse.blob();
-
-  // Validate blob has content
-  if (audioBlob.size === 0) {
-    throw new Error(`Audio file is empty. URI: ${audioUri}`);
-  }
-
   const formData = new FormData();
 
   // React Native requires this specific format for file uploads
   // Can't just append a Blob - need uri, type, name
   formData.append("audio", {
     uri: audioUri,
-    type: audioBlob.type || "audio/m4a",
+    type: "audio/m4a",
     name: "recording.m4a",
   } as unknown as Blob);
 
@@ -79,7 +70,13 @@ async function handleProcessingResponse(
     throw new Error(error.error || "Processing failed");
   }
 
+  // The server streams heartbeat whitespace before the JSON payload, and
+  // failures mid-stream arrive as 200 + { error } (the status is already
+  // committed by then). response.json() tolerates the leading whitespace.
   const result = await response.json();
+  if (typeof result.transcription !== "string") {
+    throw new Error(result.error || "Processing failed");
+  }
   return {
     transcription: result.transcription,
     cleanedTranscription: result.cleanedTranscription,

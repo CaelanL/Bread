@@ -56,16 +56,24 @@ POST /functions/v1/process-recording
   │
   ▼
 1. verifyJwt(req)
-2. Acquire transcription_locks row for the user
-   (prevents double-tap spam — 5 min TTL handled by cleanup function)
-3. Increment usage_daily.transcribe_seconds (against subscription tier)
-4. Upload audio to Soniox async API
+2. Validate multipart fields (400/401 returned normally up to here)
+3. Commit a 200 and start streaming: one heartbeat space every 10s
+   while Soniox works (keeps the client socket alive past its ~60s
+   idle timeout; leading whitespace is valid JSON so response.json()
+   on any client parses unchanged)
+4. Upload audio to Soniox async API (model stt-async-v5)
    - actualVerse passed as context for accuracy
-5. Poll Soniox until transcription completes (up to 60s)
-6. Optionally run GPT-5-mini cleaning pass
+5. Poll Soniox until transcription completes (1s interval, up to 90
+   polls)
+6. Record usage_daily.transcribe_seconds (analytics only — the
+   quota gate was removed; nothing returns 429 anymore)
+7. Optionally run GPT-5-mini cleaning pass
    - CLEANING_ENABLED is HARDCODED FALSE right now
-7. Release transcription_locks row
-8. Return { transcription, cleanedTranscription, cleaningUsed }
+8. Stream the JSON payload
+   { transcription, cleanedTranscription, cleaningUsed }
+   - failures after step 3 can't change the committed 200 status;
+     they ship as { error } in the body instead. The client checks
+     the payload shape, not just response.ok.
 ```
 
 The actual scoring (alignment + accuracy %) happens **on the
@@ -175,19 +183,23 @@ installed binary).
 5. **`actualVerse` as Soniox context is load-bearing.** Don't drop
    it; word-error rate on biblical names jumps significantly
    without it.
-6. **`transcription_locks` releases must run in `finally`.** A
-   crash that leaves a lock behind blocks the user for 5 minutes
-   until cleanup. Always release on every exit path.
+6. **`process-recording` must never go silent for 60s+.** The
+   streamed heartbeat exists because iOS kills a socket after ~60s
+   without data; if you restructure the function, keep bytes
+   flowing while Soniox works.
 
 ## Sharp edges
 
 - **GPT cleaning code path is dead code that still exists.** Easy
   to accidentally re-enable by flipping a flag without thinking
   through the consequences.
-- **Soniox polling can take up to 60 seconds.** If the function
-  runtime cap is hit, you'll get a generic timeout from Supabase
-  rather than a useful error. Worth tightening the polling
-  ceiling.
+- **Soniox polling can take up to ~90 seconds.** The response
+  heartbeat keeps clients alive through it, but the Supabase
+  runtime wall-clock (~150s) still bounds the whole request.
+- **`transcription_locks` table is orphaned.** The table and its
+  cleanup function exist in the schema, but no code ever acquires
+  a lock (this doc used to claim otherwise). The only double-submit
+  guard is the client UI disabling the mic while transcribing.
 - **No retry logic on external API failures.** If ESV / API.Bible
   / Soniox returns 5xx, the function returns 500 to the client
   with no automatic retry.
