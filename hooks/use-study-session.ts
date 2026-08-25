@@ -265,14 +265,16 @@ export function useStudySession({
       allAlignments.set(currentIndex, scoredAlignment);
       const finalScoreValue = calculateFinalScore(allAlignments);
 
-      // Update progress in Zustand store (writes to Supabase + updates local state)
+      // Update progress in Zustand store (writes to Supabase + updates
+      // local state). Fire-and-forget like the saveAndExit and
+      // logSessionAttempt call sites — awaiting here held the spinner
+      // through a full DB round-trip before showing the final score.
       if (verseId && difficulty && verse) {
-        try {
-          await useAppStore.getState().updateVerseProgress(verseId, difficulty as StorageDifficulty, finalScoreValue, true);
-        } catch (e) {
-          console.error('[STUDY] Failed to update progress:', e);
-          showErrorToast('Failed to save your progress.');
-        }
+        useAppStore.getState().updateVerseProgress(verseId, difficulty as StorageDifficulty, finalScoreValue, true)
+          .catch(e => {
+            console.error('[STUDY] Failed to update progress:', e);
+            showErrorToast('Failed to save your progress.');
+          });
 
         // Log session attempt for analytics (fire-and-forget, don't block UI)
         const sessionDurationMs = totalRecordingDurationMs + durationMs;

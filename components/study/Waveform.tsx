@@ -1,34 +1,60 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  SharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from 'react-native-reanimated';
 
 const WAVEFORM_SAMPLES = 80;
 
+const BASE_HEIGHT = 3;
+const MAX_HEIGHT = 28;
+
 interface WaveformProps {
-  dataRef: React.MutableRefObject<number[]>;
-  trigger: number;
+  levels: SharedValue<number[]>;
 }
 
 /**
- * Audio waveform visualization component.
- * Renders bars based on audio level data from the dataRef.
- * Only re-renders when trigger changes (memoized).
+ * One bar. Height animates on the UI thread toward the bar's slot in
+ * the shared levels array — the tween (slightly longer than the 100ms
+ * audio-chunk cadence) is what makes the wave flow instead of snap.
  */
-export const Waveform = React.memo(function Waveform({ dataRef, trigger }: WaveformProps) {
-  const baseHeight = 2;
-  const maxHeight = 28;
+function Bar({ levels, index }: WaveformProps & { index: number }) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const curved = Math.pow(levels.value[index] ?? 0, 0.6);
+    return {
+      height: withTiming(BASE_HEIGHT + (MAX_HEIGHT - BASE_HEIGHT) * curved, {
+        duration: 130,
+        easing: Easing.linear,
+      }),
+    };
+  });
 
   return (
+    <Animated.View
+      style={[
+        styles.bar,
+        // Older bars (left) fade out toward the tail
+        { opacity: 0.35 + 0.65 * (index / (WAVEFORM_SAMPLES - 1)) },
+        animatedStyle,
+      ]}
+    />
+  );
+}
+
+/**
+ * Audio waveform visualization. Levels live in a Reanimated shared
+ * value written straight from the PCM stream, so the waveform never
+ * causes a React re-render while recording.
+ */
+export const Waveform = React.memo(function Waveform({ levels }: WaveformProps) {
+  return (
     <View style={styles.container}>
-      {dataRef.current.map((level, i) => {
-        const curved = Math.pow(level, 0.6);
-        const height = baseHeight + (maxHeight - baseHeight) * curved;
-        return (
-          <View
-            key={i}
-            style={[styles.bar, { height }]}
-          />
-        );
-      })}
+      {Array.from({ length: WAVEFORM_SAMPLES }, (_, i) => (
+        <Bar key={i} levels={levels} index={i} />
+      ))}
     </View>
   );
 });
@@ -41,15 +67,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 1.5,
+    gap: 1,
     height: 32,
     marginHorizontal: 8,
     overflow: 'hidden',
   },
   bar: {
-    width: 2,
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    width: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 1,
-    minHeight: 3,
   },
 });

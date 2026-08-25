@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ViewStyle } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { SharedValue } from 'react-native-reanimated';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Waveform } from './Waveform';
 
@@ -8,8 +8,7 @@ const RECORDING_BAR_HEIGHT = 56;
 
 interface RecordingBarProps {
   isProcessing: boolean;
-  waveformDataRef: React.MutableRefObject<number[]>;
-  waveformTrigger: number;
+  waveformLevels: SharedValue<number[]>;
   animatedStyle: ViewStyle;
   spinnerStyle: ViewStyle;
   onCancel: () => void;
@@ -18,8 +17,7 @@ interface RecordingBarProps {
 
 export function RecordingBar({
   isProcessing,
-  waveformDataRef,
-  waveformTrigger,
+  waveformLevels,
   animatedStyle,
   spinnerStyle,
   onCancel,
@@ -48,7 +46,7 @@ export function RecordingBar({
           </Pressable>
 
           {/* Scrolling audio waveform */}
-          <Waveform dataRef={waveformDataRef} trigger={waveformTrigger} />
+          <Waveform levels={waveformLevels} />
 
           {/* Submit button */}
           <Pressable onPress={onSubmit} style={styles.barSubmitButton}>
