@@ -1,10 +1,11 @@
 # Feature: Live Background Transcription
 
-> **Status:** `planning`
+> **Status:** `shipped`
 > **Author:** Caelan (research by agents, 2026-08-16 — Soniox docs/pricing
 > fetched live, usage from production DB, architecture verified in code)
 > **Created:** 2026-08-16
-> **Shipped:** —
+> **Shipped:** 2026-08-25 (merged; store build pending — old binaries keep
+> using the batch path until the release propagates)
 
 ## Problem
 
@@ -118,6 +119,11 @@ async. Projected delta at current usage: **pennies per month**.
 
 - **Live display of the transcript while recording.** Confirmed not
   wanted — background only.
+- **Live/incremental scoring during recording.** Scoring is local and
+  sub-millisecond; the transcript is the only latency. Score once
+  after `finish()`, exactly at the existing seam. (Optimistic reveal
+  from accumulated tokens with a post-`finished` correction is a
+  possible later polish; not part of this feature.)
 - Removing or rewriting the batch path. It is the permanent fallback.
 - AppState/unmount session-save (the pre-existing loss window). Fix
   separately if wanted; this feature shrinks it incidentally.
@@ -177,7 +183,27 @@ What *does* shift, all second-order via "more sessions per sitting":
 
 ## Open Questions
 
-### Q1: Audio capture library (the native change)
+### Q1: Audio capture library — **DECIDED 2026-08-24: `@siteed/audio-studio@3.2.0` (exact pin)**
+
+Library-scout research pass (sources in the scout report): the winner
+is `@siteed/audio-studio` — one `AVAudioEngine` tap feeds both the
+file and the PCM callback (verified in the library's Swift source),
+native 16kHz resampling, metering events, Soniox's own RN docs point
+at it. `expo-audio` is eliminated on a hard capability gap: SDK 54
+has no microphone PCM API at all (sampling is playback-only).
+
+**The pin is load-bearing**: `3.2.1` (current `latest`) is built
+against Expo SDK 57's `expo-modules-core` and fails to compile on
+SDK 54 Android (Kotlin `Promise.reject` nullability flip; audiolab
+issue #421). `package.json` pins `"3.2.0"` exactly — no caret. When
+the app moves to SDK 57+, bump the library in the same PR.
+
+Also decided: `@siteed/expo-audio-studio` (the name in Soniox's docs)
+is a deprecated compatibility shim — use `@siteed/audio-studio`.
+Config plugin sets `enableBackgroundAudio: false` (avoids the iOS
+`audio` UIBackgroundModes key, an App Store review flag). Podspec
+targets iOS 15.1 — no deployment-target bump. Original option
+analysis follows for the record.
 
 `expo-av` records to file only — no PCM chunk callback exists, so it
 cannot feed a stream. Something native must change, which means a
@@ -238,7 +264,17 @@ before this is resolved.
 Sub-question: should the flag default **on** or **off** at first store
 release? (Off = ship dark, flip on after on-device verification.)
 
-### Q4: Usage metering for the live path
+### Q4: Usage metering for the live path — **DECIDED 2026-08-24: A + C**
+
+Accept the gap (`usage_daily.transcribe_seconds` becomes batch-only)
+and rely on `client_reference_id = user.id` on minted keys for
+per-user attribution in the Soniox console.
+`session_attempts.recording_duration_ms` still records the same
+quantity client-side; the meter is surfaced in zero UI and its quota
+check is disabled. Flagged by code review as a real gap — accepted
+deliberately: if quota enforcement is ever re-enabled, it must be
+designed with live-path metering at that point (Option B machinery).
+Original option analysis follows.
 
 Today the edge function records `usage_daily.transcribe_seconds` after
 each successful batch transcription. On the live path the server never
@@ -282,8 +318,9 @@ batch fallback still scores the full file.
 ### Q6: Where finalize-wait UI lands
 
 Tap-done on the live path still has a real (short) wait: empty frame →
-final tokens → `finished: true`. Docs suggest ~200ms-order, unbounded
-worst case.
+final tokens → `finished: true`. Measured 2026-08-24 against the live
+API: **67–92ms** (finalize sent immediately after the last audio
+chunk). Unbounded worst case in theory, hence the timebox.
 
 - **Option A: keep the existing `transcribing` spinner state,
   timeboxed** — if finalize exceeds N seconds (e.g. 3s), abort the
@@ -466,6 +503,27 @@ Internals:
 - `abort()`: close the socket immediately (stops billing), discard
   state. Must be idempotent — it's called from multiple teardown
   paths.
+- **Connect-gap buffering (must-have)**: users speak the instant the
+  mic starts, but mint + WS connect takes ~350ms typical (measured
+  2026-08-24: mint 56–375ms, connect ~180–220ms). PCM chunks arriving
+  while `state === "connecting"` MUST be buffered in the module and
+  flushed on open — otherwise the live transcript silently drops the
+  first word(s) and scores below the batch path. Verified against the
+  real API: backlogs of 0.8s/1.5s/3s flushed as a single burst all
+  produced complete transcripts (first words intact); Soniox ingests
+  faster than real-time and catches up invisibly. No "connecting" UI
+  is needed — recording starts instantly, exactly as today.
+  This is also Soniox's officially prescribed pattern (their FAQ says
+  to buffer locally before the WS is established and flush after the
+  config message; their web SDK implements it as `bufferQueueSize`).
+  Implementation notes from the 2026-08-24 research pass: flush the
+  backlog as normal-sized chunks back-to-back rather than one giant
+  frame (other providers warn bursts in a single frame can confuse
+  endpointing); cap the buffer (~15s is generous) and on cap-hit or
+  connect stall treat it as a stream failure → silent batch fallback,
+  same as any other live-path failure. Account-wide Soniox limit of
+  10 concurrent WS sessions — irrelevant at current scale, worth
+  remembering if usage ever grows.
 - Any socket error / unexpected close → `state = "failed"`,
   `feedAudio` becomes a no-op; the session resolves to fallback at
   submit time. **No error UI** — failure here is invisible by design
@@ -632,6 +690,10 @@ verification against the store build (pending Q3 sub-question).
 | 2026-08-24 | Q5: 300s flat cap, cap-hit = auto-submit-as-if-done + toast | Caelan's call; no word-count formula (real engineering vs ~$0.60 worst case). Server key cap 315s so the client timer fires first |
 | 2026-08-24 | Q2 reaffirmed: dual-path, and no batch↔live mid-flight handoff | Handoff would add a stitching seam at the switchover for zero gain over "both run the whole time" |
 | 2026-08-24 | Batch-path timeout fixes shipped first, separately | Fallback must be solid before live leans on it; see `transcription-timeouts-and-cap.md` |
+| 2026-08-24 | Connect gap solved by buffer-and-flush, not a "connecting" UI gate | Measured against the live API: mint ~150ms warm (375ms cold), WS connect ~200ms, and burst-flushing up to 3s of backlog yields complete transcripts with first words intact. Recording starts instantly as today; no new UI state |
+| 2026-08-24 | Q1: `@siteed/audio-studio@3.2.0`, exact pin | Only viable simultaneous file+PCM capture on SDK 54 (`expo-audio` has no mic PCM API); 3.2.1+ requires SDK 57 — the pin and the SDK version must move together |
+| 2026-08-24 | m4a-only recorder output (no WAV primary) | The file exists solely for the batch fallback, whose frozen contract expects m4a; skipping WAV avoids ~9MB/5min cache files |
+| 2026-08-24 | No live/incremental scoring; score once after `finish()` | Scoring is local and sub-ms (`align.ts` diff); measured finalize wait is ~70–90ms, so tap-done reveal is already effectively instant. Incremental scoring would add a second scoring path over provisional tokens for zero win. Optimistic-reveal-then-correct noted as possible later polish only |
 
 ## Graduation Checklist
 
@@ -647,4 +709,72 @@ verification against the store build (pending Q3 sub-question).
 
 ## What Was Built
 
-(Filled in when shipped.)
+Built 2026-08-24 (pending on-device verification + store build):
+
+- **`supabase/functions/transcription-token/index.ts`** — exactly per
+  the Technical Approach (verifyJwt preamble, `LIVE_TRANSCRIPTION_ENABLED`
+  kill switch → 403 `LIVE_DISABLED`, mints 60s-TTL keys with 315s
+  session cap and `client_reference_id: user.id`). `config.toml` gets
+  the `verify_jwt = false` block. **Not yet deployed** (deploy was
+  permission-blocked in the build session) — deploy + leave the secret
+  unset (= dark) until on-device verification.
+- **`lib/transcription/live-session.ts`** — WS client with states
+  `connecting | streaming | failed | closed`. Deviation from the
+  planned signature: `startLiveTranscription()` returns the session
+  **synchronously** (not `Promise<Session | null>`) so PCM can be fed
+  from the first callback; chunks are buffered while minting/
+  connecting and flushed on open (the connect-gap fix). Extra safety
+  vs plan: `finish()` waits a 150ms flush grace before end-of-audio
+  (trailing-chunk race), and rejects if zero bytes were ever fed
+  (dead PCM capture must not score 0 via an empty live transcript).
+  Includes the hand-rolled base64 decoder for bridge chunks.
+- **`hooks/use-study-session.ts`** — `processRecording` gained an
+  optional `liveSession` param; transcript acquisition is the only
+  changed block (live `finish(3000)` → catch → batch). Everything
+  below the seam untouched.
+- **`app/session.tsx`** — recorder swapped `expo-av` →
+  `useAudioRecorder` (16kHz mono pcm_16bit, 100ms stream interval,
+  compressed **m4a-only** output so the batch fallback upload keeps
+  today's exact contract; no WAV written). Metering poll replaced by
+  `onAudioAnalysis` (50ms) driving the same waveform normalization.
+  `liveSessionRef` aborted on cancel, scroll-away, unmount, and
+  failed submit. `Audio.setAudioModeAsync` removed — audio-studio
+  owns the AVAudioSession (`PlayAndRecord`/`Default`/
+  `DefaultToSpeaker+AllowBluetooth`).
+- **`app.config.js`** — audio-studio plugin, background audio off.
+
+**Verified** (Node integration tests driving the real
+`live-session.ts` module against the real Soniox API, with a local
+stand-in for the token endpoint): happy path with first+last words
+intact through the connect-gap buffer, finish ≈250ms incl. grace,
+finish-while-connecting, abort idempotency on all teardown shapes,
+zero-audio rejection, kill-switch 403 → silent fail, abort-during-
+mint leaves no zombie socket. 13/13.
+
+**Post-review hardening** (code review 2026-08-24, findings verified
+then fixed): teardown-during-start race closed with a recording
+generation counter (`recordingGenRef` — a mic press whose native
+start resolves under a stale generation stops the recorder and never
+goes live); the four teardown paths collapsed into one
+`teardownRecording()` helper; a missing m4a no longer errors when a
+live transcript exists; `finish()` rejects on an empty transcript
+(silence / dead input route → batch model gets a shot at the file,
+verified against the real API); finish-path timers are cleared on
+settle; the hook abort()s the live session right after `finish()`
+settles (socket-close by construction); the waveform is computed
+from the PCM chunks directly (RMS→dBFS in `pushWaveformBar`) instead
+of the library's `enableProcessing` analysis events, whose internal
+dispatch would have re-rendered the screen every 50ms. Review
+findings rejected: overlapping the flush grace with the native stop
+(risks the trailing-chunk race the grace exists for — 150ms is not
+worth it), and live-path `usage_daily` metering (Q4 decided A+C).
+
+**On-device verification (2026-08-25, iOS dev build)**: full session
+recited on a real device with `LIVE_TRANSCRIPTION_ENABLED=true` —
+4 recordings, 4 `transcription-token` mints, **zero**
+`process-recording` calls, zero client-side fallback lines, reveal
+described as "pretty instant". Edge function deployed and verified
+in prod (401 unauth / 403 dark / 200 mint → live Soniox stream).
+Still pending: cancel/peek/retry/airplane-mode spot checks on
+device, waveform dB-range eyeball (`-26/-6` constants), background-
+music ducking behavior, Android, and the store build.

@@ -44,6 +44,9 @@ verify_jwt = false
 [functions.process-recording]
 verify_jwt = false
 
+[functions.transcription-token]
+verify_jwt = false
+
 # send-notifications authenticates a cron-secret bearer (constant-time
 # compare against a Vault-stored value), not a user JWT. Different
 # threat model from bible/process-recording, same gateway-bypass.
