@@ -118,8 +118,31 @@ export function parseEngravedProgress(raw: unknown): EngravedProgress {
   };
 }
 
-export function parseLastDifficulty(raw: unknown): Difficulty | undefined {
+function parseLastDifficulty(raw: unknown): Difficulty | undefined {
   return raw === 'easy' || raw === 'medium' || raw === 'hard' ? raw : undefined;
+}
+
+/**
+ * Map the nullable per-verse columns added after the original schema
+ * (016 `last_practiced_at`, 021 study prefs). Shared by every
+ * user_verses row → SavedVerse mapper so adding a column is one edit,
+ * not five. Defensive: tolerates missing columns (un-migrated DB)
+ * and NULLs.
+ */
+export function parseVerseRowExtras(row: {
+  last_practiced_at?: unknown;
+  last_chunk_size?: unknown;
+  last_difficulty?: unknown;
+}): Pick<SavedVerse, 'lastPracticedAt' | 'lastChunkSize' | 'lastDifficulty'> {
+  return {
+    lastPracticedAt: typeof row.last_practiced_at === 'string'
+      ? row.last_practiced_at
+      : undefined,
+    lastChunkSize: typeof row.last_chunk_size === 'number'
+      ? row.last_chunk_size
+      : undefined,
+    lastDifficulty: parseLastDifficulty(row.last_difficulty),
+  };
 }
 
 export function parseProgress(raw: unknown): VerseProgress {
@@ -362,13 +385,7 @@ export async function getSavedVerses(): Promise<SavedVerse[]> {
       version: vc.user_verses.version as BibleVersion,
       createdAt: new Date(vc.added_at).getTime(),
       progress: parseProgress(vc.user_verses.progress),
-      lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
-        ? vc.user_verses.last_practiced_at
-        : undefined,
-      lastChunkSize: typeof vc.user_verses.last_chunk_size === 'number'
-        ? vc.user_verses.last_chunk_size
-        : undefined,
-      lastDifficulty: parseLastDifficulty(vc.user_verses.last_difficulty),
+      ...parseVerseRowExtras(vc.user_verses),
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -415,13 +432,7 @@ export async function getVersesByCollection(collectionId: string): Promise<Saved
       version: vc.user_verses.version as BibleVersion,
       createdAt: new Date(vc.added_at).getTime(),
       progress: parseProgress(vc.user_verses.progress),
-      lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
-        ? vc.user_verses.last_practiced_at
-        : undefined,
-      lastChunkSize: typeof vc.user_verses.last_chunk_size === 'number'
-        ? vc.user_verses.last_chunk_size
-        : undefined,
-      lastDifficulty: parseLastDifficulty(vc.user_verses.last_difficulty),
+      ...parseVerseRowExtras(vc.user_verses),
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -737,13 +748,7 @@ export async function getMasteredVerses(): Promise<SavedVerse[]> {
       version: v.version as BibleVersion,
       createdAt: new Date(v.created_at).getTime(),
       progress: parseProgress(v.progress),
-      lastPracticedAt: typeof v.last_practiced_at === 'string'
-        ? v.last_practiced_at
-        : undefined,
-      lastChunkSize: typeof v.last_chunk_size === 'number'
-        ? v.last_chunk_size
-        : undefined,
-      lastDifficulty: parseLastDifficulty(v.last_difficulty),
+      ...parseVerseRowExtras(v),
     }));
   } catch (e) {
     console.error('[STORAGE] Mastered verses fetch error:', e);

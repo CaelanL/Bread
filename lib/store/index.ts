@@ -11,7 +11,7 @@ import { getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
 import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
-import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseLastDifficulty, parseProgress, parseSortPreference, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
+import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress, parseSortPreference, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
@@ -231,13 +231,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         version: vc.user_verses.version as BibleVersion,
         createdAt: new Date(vc.added_at).getTime(),
         progress: parseProgress(vc.user_verses.progress),
-        lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
-          ? vc.user_verses.last_practiced_at
-          : undefined,
-        lastChunkSize: typeof vc.user_verses.last_chunk_size === 'number'
-          ? vc.user_verses.last_chunk_size
-          : undefined,
-        lastDifficulty: parseLastDifficulty(vc.user_verses.last_difficulty),
+        ...parseVerseRowExtras(vc.user_verses),
       }));
 
       set({ verses, versesLoading: false, error: null });
@@ -277,13 +271,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         version: v.version as BibleVersion,
         createdAt: new Date(v.created_at).getTime(),
         progress: parseProgress(v.progress),
-        lastPracticedAt: typeof v.last_practiced_at === 'string'
-          ? v.last_practiced_at
-          : undefined,
-        lastChunkSize: typeof v.last_chunk_size === 'number'
-          ? v.last_chunk_size
-          : undefined,
-        lastDifficulty: parseLastDifficulty(v.last_difficulty),
+        ...parseVerseRowExtras(v),
       }));
 
       set({ masteredVerses, masteredLoading: false });

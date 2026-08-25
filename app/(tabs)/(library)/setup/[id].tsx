@@ -84,15 +84,23 @@ export default function StudySetupScreen() {
   const totalVerses = verse ? verse.verseEnd - verse.verseStart + 1 : 1;
 
   // Restore the last setup the user chose for this verse (saved when
-  // a session starts). Falls back to easy / 1-verse chunks for a
-  // never-studied verse. Runs once after the verse loads; the
-  // defaultsApplied gate keeps it from fighting the user's choice on
-  // re-render. Chunk size is clamped in case the saved value exceeds
-  // this passage's verse count.
+  // a session starts). A mastered verse with nothing saved yet (all
+  // pre-migration-021 masteries) falls back to the review setup —
+  // Hard, whole passage — because engraved reviews only qualify on
+  // Hard; defaulting to Easy would silently stall the review loop.
+  // Everything else falls back to easy / 1-verse chunks. Runs once
+  // after the verse loads; the defaultsApplied gate keeps it from
+  // fighting the user's choice on re-render. Saved chunk size is
+  // clamped in case it exceeds this passage's verse count.
   useEffect(() => {
     if (!verse || defaultsApplied) return;
-    if (verse.lastDifficulty) setDifficulty(verse.lastDifficulty);
-    if (verse.lastChunkSize) setChunkSize(Math.min(verse.lastChunkSize, totalVerses));
+    const mastered = verse.progress?.hard?.completed === true;
+    setDifficulty(verse.lastDifficulty ?? (mastered ? 'hard' : 'easy'));
+    setChunkSize(
+      verse.lastChunkSize != null
+        ? Math.min(verse.lastChunkSize, totalVerses)
+        : mastered ? totalVerses : 1,
+    );
     setDefaultsApplied(true);
   }, [verse, defaultsApplied, totalVerses]);
 
@@ -127,10 +135,9 @@ export default function StudySetupScreen() {
 
   const handleStartSession = () => {
     if (!verse || !id) return;
-    const effectiveChunkSize = Math.min(chunkSize, totalVerses);
-    useAppStore.getState().setVerseStudyPrefs(id, effectiveChunkSize, difficulty);
+    useAppStore.getState().setVerseStudyPrefs(id, chunkSize, difficulty);
     // Session is at root level, outside tabs
-    router.push(`/session?id=${id}&difficulty=${difficulty}&chunkSize=${effectiveChunkSize}`);
+    router.push(`/session?id=${id}&difficulty=${difficulty}&chunkSize=${chunkSize}`);
   };
 
   const handleResetProgress = () => {

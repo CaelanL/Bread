@@ -18,9 +18,12 @@ Persist the last-chosen chunk size and difficulty **per verse row** in
 `user_verses` (`last_chunk_size INT`, `last_difficulty TEXT`, both
 nullable — migration 021). Saved when the user taps **Start session**;
 restored (clamped to the passage's verse count) when the setup screen
-next opens. The mastered-verse default is removed — the saved
-preference is the only smart default now; a never-studied verse falls
-back to easy / 1-verse chunks.
+next opens. The saved preference always wins. The old mastered-verse
+default (hard + whole passage) survives only as the fallback for a
+mastered verse with NULL prefs — every pre-021 mastery — because
+engraved reviews only qualify on Hard, and defaulting those to easy
+would silently stall spaced repetition (caught in code review).
+Everything else falls back to easy / 1-verse chunks.
 
 Key calls (details graduated to `docs/architecture/data-model.md`,
 `user_verses` → "Study prefs"):

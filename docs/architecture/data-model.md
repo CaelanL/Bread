@@ -133,7 +133,11 @@ Reset Progress would wipe it. As separate columns they survive both —
 a progress reset intentionally keeps the study prefs. One
 `user_verses` row per reference means the prefs are shared across all
 collections containing the verse. These columns replaced the old
-mastered-verse setup default (hard + whole passage in one chunk).
+mastered-verse setup default (hard + whole passage in one chunk),
+which survives only as the setup screen's fallback for a mastered
+verse whose prefs are still NULL (all pre-021 masteries) — engraved
+reviews only qualify on Hard, so defaulting those to easy would
+silently stall the review loop.
 
 ### `verse_collections`
 
