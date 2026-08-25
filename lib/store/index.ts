@@ -11,7 +11,7 @@ import { getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
 import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
-import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress, parseSortPreference, updateCollectionSort } from '@/lib/storage';
+import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseLastDifficulty, parseProgress, parseSortPreference, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
@@ -117,6 +117,7 @@ interface AppState {
     fullSession?: boolean,
   ) => Promise<void>;
   resetVerseProgress: (id: string) => Promise<void>;
+  setVerseStudyPrefs: (id: string, chunkSize: number, difficulty: Difficulty) => void;
 
   // Reset
   clear: () => void;
@@ -233,6 +234,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
           ? vc.user_verses.last_practiced_at
           : undefined,
+        lastChunkSize: typeof vc.user_verses.last_chunk_size === 'number'
+          ? vc.user_verses.last_chunk_size
+          : undefined,
+        lastDifficulty: parseLastDifficulty(vc.user_verses.last_difficulty),
       }));
 
       set({ verses, versesLoading: false, error: null });
@@ -275,6 +280,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         lastPracticedAt: typeof v.last_practiced_at === 'string'
           ? v.last_practiced_at
           : undefined,
+        lastChunkSize: typeof v.last_chunk_size === 'number'
+          ? v.last_chunk_size
+          : undefined,
+        lastDifficulty: parseLastDifficulty(v.last_difficulty),
       }));
 
       set({ masteredVerses, masteredLoading: false });
@@ -941,6 +950,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ verses: previousVerses, masteredVerses: previousMastered });
       throw error;
     }
+  },
+
+  setVerseStudyPrefs: (id, chunkSize, difficulty) => {
+    // Optimistic update on every entry for this verse (junction-row
+    // shape: a verse in N collections has N entries in `verses[]`).
+    // Fire-and-forget preference write — no rollback; a lost write
+    // just means the setup screen falls back to defaults next open.
+    set((state) => ({
+      verses: state.verses.map((v) =>
+        v.id === id ? { ...v, lastChunkSize: chunkSize, lastDifficulty: difficulty } : v,
+      ),
+      masteredVerses: state.masteredVerses.map((v) =>
+        v.id === id ? { ...v, lastChunkSize: chunkSize, lastDifficulty: difficulty } : v,
+      ),
+    }));
+    void updateVerseStudyPrefs(id, chunkSize, difficulty);
   },
 
   // ============ RESET ============

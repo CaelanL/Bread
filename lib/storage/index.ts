@@ -55,6 +55,8 @@ export interface SavedVerse {
   createdAt: number;
   progress: VerseProgress;
   lastPracticedAt?: string; // ISO UTC of last completed session (any difficulty)
+  lastChunkSize?: number; // Last chunk size chosen on the setup screen
+  lastDifficulty?: Difficulty; // Last difficulty chosen on the setup screen
 }
 
 export interface Collection {
@@ -114,6 +116,10 @@ export function parseEngravedProgress(raw: unknown): EngravedProgress {
     lastReviewedAt: typeof e.lastReviewedAt === 'string' ? e.lastReviewedAt : null,
     months,
   };
+}
+
+export function parseLastDifficulty(raw: unknown): Difficulty | undefined {
+  return raw === 'easy' || raw === 'medium' || raw === 'hard' ? raw : undefined;
 }
 
 export function parseProgress(raw: unknown): VerseProgress {
@@ -359,6 +365,10 @@ export async function getSavedVerses(): Promise<SavedVerse[]> {
       lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
         ? vc.user_verses.last_practiced_at
         : undefined,
+      lastChunkSize: typeof vc.user_verses.last_chunk_size === 'number'
+        ? vc.user_verses.last_chunk_size
+        : undefined,
+      lastDifficulty: parseLastDifficulty(vc.user_verses.last_difficulty),
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -408,6 +418,10 @@ export async function getVersesByCollection(collectionId: string): Promise<Saved
       lastPracticedAt: typeof vc.user_verses.last_practiced_at === 'string'
         ? vc.user_verses.last_practiced_at
         : undefined,
+      lastChunkSize: typeof vc.user_verses.last_chunk_size === 'number'
+        ? vc.user_verses.last_chunk_size
+        : undefined,
+      lastDifficulty: parseLastDifficulty(vc.user_verses.last_difficulty),
     }));
   } catch (e) {
     console.error('[STORAGE] Verse fetch error:', e);
@@ -673,6 +687,27 @@ export async function updateVerseProgress(
   }
 }
 
+/**
+ * Remember the study setup (chunk size + difficulty) the user chose for
+ * a verse. Preference write, fire-and-forget: callers don't surface
+ * failures — a lost write just means the setup screen falls back to
+ * defaults next time.
+ */
+export async function updateVerseStudyPrefs(
+  id: string,
+  chunkSize: number,
+  difficulty: Difficulty
+): Promise<void> {
+  const { error } = await supabase
+    .from('user_verses')
+    .update({ last_chunk_size: chunkSize, last_difficulty: difficulty })
+    .eq('client_id', id);
+
+  if (error) {
+    console.error('[STORAGE] Failed to save study prefs:', error);
+  }
+}
+
 // ============ MASTERED VERSES ============
 
 /**
@@ -705,6 +740,10 @@ export async function getMasteredVerses(): Promise<SavedVerse[]> {
       lastPracticedAt: typeof v.last_practiced_at === 'string'
         ? v.last_practiced_at
         : undefined,
+      lastChunkSize: typeof v.last_chunk_size === 'number'
+        ? v.last_chunk_size
+        : undefined,
+      lastDifficulty: parseLastDifficulty(v.last_difficulty),
     }));
   } catch (e) {
     console.error('[STORAGE] Mastered verses fetch error:', e);

@@ -83,18 +83,16 @@ export default function StudySetupScreen() {
   // Calculate total verses in this passage
   const totalVerses = verse ? verse.verseEnd - verse.verseStart + 1 : 1;
 
-  // For an already-mastered verse, default to the toughest setup —
-  // Hard difficulty and the whole passage in one chunk — since the
-  // user is reviewing for retention, not first-time learning. Runs
-  // once after the verse loads; the user can still change either
-  // control afterward (defaultsApplied gate keeps it from fighting
-  // their choice on re-render).
+  // Restore the last setup the user chose for this verse (saved when
+  // a session starts). Falls back to easy / 1-verse chunks for a
+  // never-studied verse. Runs once after the verse loads; the
+  // defaultsApplied gate keeps it from fighting the user's choice on
+  // re-render. Chunk size is clamped in case the saved value exceeds
+  // this passage's verse count.
   useEffect(() => {
     if (!verse || defaultsApplied) return;
-    if (verse.progress?.hard?.completed === true) {
-      setDifficulty('hard');
-      setChunkSize(totalVerses);
-    }
+    if (verse.lastDifficulty) setDifficulty(verse.lastDifficulty);
+    if (verse.lastChunkSize) setChunkSize(Math.min(verse.lastChunkSize, totalVerses));
     setDefaultsApplied(true);
   }, [verse, defaultsApplied, totalVerses]);
 
@@ -128,9 +126,11 @@ export default function StudySetupScreen() {
   }, [verse]);
 
   const handleStartSession = () => {
-    if (!verse) return;
+    if (!verse || !id) return;
+    const effectiveChunkSize = Math.min(chunkSize, totalVerses);
+    useAppStore.getState().setVerseStudyPrefs(id, effectiveChunkSize, difficulty);
     // Session is at root level, outside tabs
-    router.push(`/session?id=${id}&difficulty=${difficulty}&chunkSize=${chunkSize}`);
+    router.push(`/session?id=${id}&difficulty=${difficulty}&chunkSize=${effectiveChunkSize}`);
   };
 
   const handleResetProgress = () => {
