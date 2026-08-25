@@ -70,7 +70,7 @@ interface UseStudySessionReturn {
   goToResults: () => void;
   viewResults: () => void;
   done: () => void;
-  saveAndExit: () => Promise<void>;
+  saveAndExit: () => void;
 
   // Recording result handler
   processRecording: (uri: string, durationMs: number) => Promise<{
@@ -307,7 +307,7 @@ export function useStudySession({
     router.back();
   }, []);
 
-  const saveAndExit = useCallback(async () => {
+  const saveAndExit = useCallback(() => {
     // Only save if at least one chunk completed AND not already fully completed
     // (full completion already saves in processRecording)
     if (completedChunks.size > 0 && !allChunksCompleted && verse && verseId && difficulty) {
@@ -317,12 +317,13 @@ export function useStudySession({
       );
       const partialScore = calculatePartialScore(chunks, completedChunks, alignmentsMap);
 
-      try {
-        await useAppStore.getState().updateVerseProgress(verseId, difficulty as StorageDifficulty, partialScore);
-      } catch (e) {
-        console.error('[STUDY] Failed to update progress:', e);
-        // Don't block exit on error
-      }
+      // Fire-and-forget: the Supabase round-trip must not block dismissal
+      // (awaiting it here froze the X button for the full network latency).
+      // Errors were already non-blocking, so visibility is unchanged.
+      useAppStore
+        .getState()
+        .updateVerseProgress(verseId, difficulty as StorageDifficulty, partialScore)
+        .catch((e) => console.error('[STUDY] Failed to update progress:', e));
 
       // Log session attempt (fire-and-forget)
       const wordCount = verse.text ? verse.text.split(/\s+/).filter(Boolean).length : undefined;

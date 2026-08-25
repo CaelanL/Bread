@@ -227,6 +227,10 @@ If the user closes mid-session with ≥1 chunk completed,
   attempt.
 - Mastery progression does **not** update on partial sessions —
   only full completions count.
+- The save is fire-and-forget: `router.back()` runs immediately and
+  the Supabase write completes in the background. Awaiting it froze
+  the X button for the full network round-trip. Failures are only
+  console-logged (same as before — exit was never blocked on error).
 
 > **Open question** for the human: 1 of 2 chunks done at 100% gives
 > a partial score of ~50%. Is that the intended behavior, or should
