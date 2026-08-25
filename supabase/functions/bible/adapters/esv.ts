@@ -33,7 +33,8 @@ function parseChapter(
     const textStart = startIndex + `[${verseNum}]`.length;
     const textEnd =
       i < matches.length - 1 ? matches[i + 1].startIndex : text.length;
-    const verseText = text.substring(textStart, textEnd).trim();
+    // Collapse interior newlines/indentation from poetry formatting
+    const verseText = text.substring(textStart, textEnd).replace(/\s+/g, " ").trim();
     verses[verseNum] = verseText;
   }
 
@@ -89,7 +90,7 @@ export const esvAdapter: BibleAdapter = {
     }
 
     const data = await response.json();
-    const text = data.passages?.[0]?.trim();
+    const text = data.passages?.[0]?.replace(/\s+/g, " ").trim();
 
     if (!text) {
       throw new Error("Verse not found");
