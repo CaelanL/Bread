@@ -124,9 +124,13 @@ scroll-away, and unmount, the same teardown paths as the recorder.
 timer always fires first; if Soniox ever cuts the stream, that's a
 stream failure → batch fallback scores the full file.)
 
-The screen owns the recorder, the live-session ref, the waveform data
-ref, and the recording-state useState. The hook owns everything
-else. All live-transcription network I/O (token mint + WebSocket)
+The screen owns the recorder, the live-session ref, the waveform
+levels (a Reanimated shared value — bars are computed from the PCM
+stream at 25ms RMS windows and animate entirely on the UI thread, so
+recording causes zero React re-renders), and the recording-state
+useState. The hook owns everything else. The screen also prewarms the
+auth session on mount so the first mic press never pays a lazy token
+refresh in front of the Soniox key mint. All live-transcription network I/O (token mint + WebSocket)
 lives in `lib/transcription/live-session.ts`, never in the screen.
 
 ### 5. Scoring
@@ -137,8 +141,10 @@ In `processRecording()` on the hook:
 1. actualText = chunks[currentIndex].text       // ground truth
 2. transcript acquisition (provider-agnostic seam):
      liveSession present → cleanedTranscription = liveSession.finish(3s timeout)
-       // waits a 150ms flush grace for trailing PCM, sends end-of-audio,
-       // collects final tokens — measured ~250ms total
+       // waits a 50ms flush grace for trailing PCM (iOS emits the last
+       // chunk before stopRecording resolves; Android's async post
+       // needs the small hedge), sends end-of-audio, collects final
+       // tokens — ~150ms total
      no liveSession, or finish() rejects for ANY reason
        → POST audio + actualText → process-recording edge function
        → { transcription, cleanedTranscription, cleaningUsed }
@@ -161,12 +167,24 @@ model differences between `stt-rt-v5` (live) and `stt-async-v5`
 is deliberately NO live/incremental scoring: alignment is local and
 sub-millisecond, so the transcript is the only latency.
 
-`alignTranscription` (`lib/align.ts`) tokenizes both strings, lowercases
-and strips outer punctuation (keeps internal apostrophes), then uses
-`diffWords` to produce `AlignmentWord[]` with status `'correct' |
-'close' | 'missing' | 'added'`. Currently `'close'` is never produced
-— the scoring formula accounts for it (with a 0.5 weight) for future
-synonym support.
+`alignTranscription` (`lib/align.ts`) tokenizes both strings —
+splitting on whitespace and after em/en dashes, lowercasing, dropping
+apostrophes and hyphens (possessive vs plural and hyphenation are
+acoustically identical, so "eagle's" must match a transcribed
+"eagles"), folding vocative "O" to "oh", stripping outer punctuation,
+and dropping punctuation-only tokens. Transcript-side hesitation
+fillers (um/uh/hmm — but NOT "ah" or "er", which occur in scripture)
+are dropped. The guiding principle: never penalize a difference the
+ASR cannot hear. It then
+uses `diffArrays` over the normalized token arrays (so diff parts map
+1:1 to tokens; string-based `diffWords` used to split inside words at
+dashes/apostrophes and desync the token walk), with a substitution
+post-pass that matches split/joined compounds by concatenation
+("for ever" ↔ "forever" — 390 occurrences in KJV — "to morrow" ↔
+"tomorrow", "forty-two" ↔ "forty two"), to produce
+`AlignmentWord[]` with status `'correct' | 'close' | 'missing' |
+'added'`. Currently `'close'` is never produced — the scoring formula
+accounts for it (with a 0.5 weight) for future synonym support.
 
 ### 6. Score aggregation
 
@@ -233,7 +251,9 @@ retry > peek > original.
 ### 8. End of session — mastery progression
 
 When all chunks complete, `updateVerseProgress(verseId, difficulty,
-finalScore, /* fullSession */ true)` runs in the Zustand store:
+finalScore, /* fullSession */ true)` runs in the Zustand store
+(fire-and-forget — the results screen shows immediately; a failed
+write surfaces as a toast, matching `saveAndExit`):
 
 1. Update `progress[difficulty].bestAccuracy` and
    `progress[difficulty].completed = (finalScore >= 90)`.
