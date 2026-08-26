@@ -33,6 +33,10 @@ As of **2026-08-16**:
   until 1.2.0 (or later) is the live store version.
 - Remaining: OTA loop verification (JS-only merge → update lands on
   a device), then graduation.
+- **2026-08-25:** version bumped to **1.3.0** on PR #46 (study prefs +
+  alignment/waveform/perf batch) — intended as the next store build.
+  Whether 1.2.0/build 14 cleared review is not knowable from the repo;
+  check App Store Connect before submitting.
 
 ## Problem
 
