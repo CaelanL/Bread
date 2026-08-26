@@ -17,26 +17,22 @@
 > already happened once: an agent read the unchecked boxes below and
 > concluded the pipeline had never run, days after its first build).
 
-As of **2026-08-16**:
+As of **2026-08-25**:
 
 - **Pipeline is LIVE.** GitHub repo linked (EAS dashboard,
   2026-08-15) and ASC API key configured (`eas credentials`,
   2026-08-15) — both interactive steps, no repo artifact.
 - **First workflow run: SUCCESS** (2026-08-15, 8 min) — built
-  **1.2.0 / build 14** and auto-submitted it. Currently **in App
-  Store review**; store users are still on 1.1.1 / build 13.
-- **⚠️ The OTA path is INERT for store users until 1.2.0 is
-  released.** Build 13 has no expo-updates runtime and can never
-  receive an update; build 14 isn't on users' devices yet. A JS-only
-  merge today publishes an OTA that only TestFlight installs of
-  build 14 receive. Do not assume a merged JS fix has reached users
-  until 1.2.0 (or later) is the live store version.
+  **1.2.0 / build 14** and auto-submitted it.
+- **1.2.0 / build 14 is LIVE on the App Store** (confirmed by Caelan,
+  2026-08-25). **The OTA path is now ARMED for store users**: build 14
+  ships the expo-updates runtime, so JS-only merges to main reach
+  store users over the air (second cold start after publish).
+- **1.3.0** bumped on PR #46 (study prefs + alignment/waveform/perf
+  batch). The version bump changes the native fingerprint, so merging
+  triggers a full build + auto-submit rather than an OTA.
 - Remaining: OTA loop verification (JS-only merge → update lands on
   a device), then graduation.
-- **2026-08-25:** version bumped to **1.3.0** on PR #46 (study prefs +
-  alignment/waveform/perf batch) — intended as the next store build.
-  Whether 1.2.0/build 14 cleared review is not knowable from the repo;
-  check App Store Connect before submitting.
 
 ## Problem
 
