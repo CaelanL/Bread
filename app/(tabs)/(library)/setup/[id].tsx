@@ -83,18 +83,24 @@ export default function StudySetupScreen() {
   // Calculate total verses in this passage
   const totalVerses = verse ? verse.verseEnd - verse.verseStart + 1 : 1;
 
-  // For an already-mastered verse, default to the toughest setup —
-  // Hard difficulty and the whole passage in one chunk — since the
-  // user is reviewing for retention, not first-time learning. Runs
-  // once after the verse loads; the user can still change either
-  // control afterward (defaultsApplied gate keeps it from fighting
-  // their choice on re-render).
+  // Restore the last setup the user chose for this verse (saved when
+  // a session starts). A mastered verse with nothing saved yet (all
+  // pre-migration-021 masteries) falls back to the review setup —
+  // Hard, whole passage — because engraved reviews only qualify on
+  // Hard; defaulting to Easy would silently stall the review loop.
+  // Everything else falls back to easy / 1-verse chunks. Runs once
+  // after the verse loads; the defaultsApplied gate keeps it from
+  // fighting the user's choice on re-render. Saved chunk size is
+  // clamped in case it exceeds this passage's verse count.
   useEffect(() => {
     if (!verse || defaultsApplied) return;
-    if (verse.progress?.hard?.completed === true) {
-      setDifficulty('hard');
-      setChunkSize(totalVerses);
-    }
+    const mastered = verse.progress?.hard?.completed === true;
+    setDifficulty(verse.lastDifficulty ?? (mastered ? 'hard' : 'easy'));
+    setChunkSize(
+      verse.lastChunkSize != null
+        ? Math.min(verse.lastChunkSize, totalVerses)
+        : mastered ? totalVerses : 1,
+    );
     setDefaultsApplied(true);
   }, [verse, defaultsApplied, totalVerses]);
 
@@ -125,10 +131,24 @@ export default function StudySetupScreen() {
           .finally(() => setTextLoading(false));
       }
     }
-  }, [verse]);
+    // Keyed on the verse *reference*, not the object: saving study
+    // prefs swaps the verse's identity in the store, and re-running
+    // this effect then flashes the text loader over already-loaded
+    // text (visible as a flicker when starting a session).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verse?.id]);
+
+  // Persist the setup whenever the user changes it, so prefs stick
+  // even without starting a session. The store action no-ops when
+  // values are unchanged.
+  const savePrefs = (nextChunkSize: number, nextDifficulty: Difficulty) => {
+    if (!id) return;
+    useAppStore.getState().setVerseStudyPrefs(id, nextChunkSize, nextDifficulty);
+  };
 
   const handleStartSession = () => {
-    if (!verse) return;
+    if (!verse || !id) return;
+    savePrefs(chunkSize, difficulty);
     // Session is at root level, outside tabs
     router.push(`/session?id=${id}&difficulty=${difficulty}&chunkSize=${chunkSize}`);
   };
@@ -291,7 +311,10 @@ export default function StudySetupScreen() {
                     styles.segment,
                     difficulty === level && { backgroundColor: 'rgba(176, 141, 87, 0.9)' },
                   ]}
-                  onPress={() => setDifficulty(level)}
+                  onPress={() => {
+                    setDifficulty(level);
+                    savePrefs(chunkSize, level);
+                  }}
                 >
                   <View style={styles.segmentHeader}>
                     <Text
@@ -347,7 +370,10 @@ export default function StudySetupScreen() {
                 <IconSymbol name="chevron.right" size={14} color={colors.icon} />
               </Pressable>
               <Pressable
-                onPress={() => setChunkSize(totalVerses)}
+                onPress={() => {
+                  setChunkSize(totalVerses);
+                  savePrefs(totalVerses, difficulty);
+                }}
                 style={[
                   styles.chunkAllButton,
                   {
@@ -407,7 +433,10 @@ export default function StudySetupScreen() {
         visible={chunkModalOpen}
         totalVerses={totalVerses}
         initialChunkSize={chunkSize}
-        onSave={setChunkSize}
+        onSave={(size) => {
+          setChunkSize(size);
+          savePrefs(size, difficulty);
+        }}
         onClose={() => setChunkModalOpen(false)}
       />
     </View>

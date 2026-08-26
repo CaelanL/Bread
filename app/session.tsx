@@ -16,6 +16,7 @@ import {
   isResultsPage,
   maskDisplayWords,
 } from '@/lib/study-chunks';
+import { getAuthToken } from '@/lib/api/client';
 import { showErrorToast } from '@/lib/toast';
 import {
   startLiveTranscription,
@@ -79,7 +80,6 @@ export default function StudySessionScreen() {
   // Recording state (kept local due to animation coupling)
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [transcribing, setTranscribing] = useState(false);
-  const [waveformTrigger, setWaveformTrigger] = useState(0);
   const [exitingChunks, setExitingChunks] = useState<Set<number>>(new Set());
   // Per-chunk visibility override driven by the header reveal/hide button.
   // Cosmetic only; scoring always uses chunk.text. Absence = mode default.
@@ -93,7 +93,11 @@ export default function StudySessionScreen() {
   const recordingGenRef = useRef(0);
   const liveSessionRef = useRef<LiveTranscriptionSession | null>(null);
   const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const waveformDataRef = useRef<number[]>([]);
+  // Bar levels live in a shared value so the waveform animates on the
+  // UI thread without re-rendering this screen (10x/sec while recording)
+  const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
+  // Meter ballistics state: fast attack, slow release (kills ripple)
+  const smoothedLevelRef = useRef(0);
 
   // Animation values
   const recordingTabY = useSharedValue(RECORDING_BAR_HEIGHT + 60);
@@ -120,6 +124,12 @@ export default function StudySessionScreen() {
     }
   }, [transcribing]);
 
+  // Warm the auth session so the first mic press doesn't pay a lazy
+  // token refresh serially in front of the Soniox key mint
+  useEffect(() => {
+    getAuthToken().catch(() => {});
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -143,7 +153,7 @@ export default function StudySessionScreen() {
     liveSessionRef.current?.abort();
     liveSessionRef.current = null;
     clearCapTimer();
-    waveformDataRef.current = [];
+    waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
     if (recordingActiveRef.current) {
       recordingActiveRef.current = false;
       return stopRecording().catch(() => {});
@@ -167,7 +177,7 @@ export default function StudySessionScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     recordingGenRef.current++;
     clearCapTimer();
-    waveformDataRef.current = [];
+    waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
 
     const liveSession = liveSessionRef.current;
     liveSessionRef.current = null;
@@ -222,9 +232,9 @@ export default function StudySessionScreen() {
   // Waveform level computed from the PCM chunks directly (RMS → dBFS),
   // instead of the library's analysis events — enableProcessing would
   // make the hook dispatch a state update per 50ms event, re-rendering
-  // this whole screen twice a tick. Two bars per 100ms chunk keeps the
-  // old 50ms visual density at half the render rate.
-  const pushWaveformBar = useCallback((pcm: Uint8Array, start: number, end: number) => {
+  // this whole screen twice a tick. Four bars per 100ms chunk (25ms
+  // windows) go straight into the shared value; no React render at all.
+  const computeBarLevel = useCallback((pcm: Uint8Array, start: number, end: number) => {
     let sumSquares = 0;
     let count = 0;
     for (let i = start; i + 1 < end; i += 2) {
@@ -233,16 +243,12 @@ export default function StudySessionScreen() {
       sumSquares += sample * sample;
       count++;
     }
-    if (count === 0) return;
+    if (count === 0) return null;
     const rms = Math.sqrt(sumSquares / count) / 32768;
     const dB = 20 * Math.log10(Math.max(rms, 1e-6));
     const minDb = -26;
     const maxDb = -6;
-    const normalized = Math.max(0, Math.min(1, (dB - minDb) / (maxDb - minDb)));
-    waveformDataRef.current.push(normalized);
-    if (waveformDataRef.current.length > WAVEFORM_SAMPLES) {
-      waveformDataRef.current = waveformDataRef.current.slice(-WAVEFORM_SAMPLES);
-    }
+    return Math.max(0, Math.min(1, (dB - minDb) / (maxDb - minDb)));
   }, []);
 
   const handleAudioStream = useCallback(async (event: AudioDataEvent) => {
@@ -250,12 +256,27 @@ export default function StudySessionScreen() {
     const pcm = base64ToUint8Array(event.data);
     liveSessionRef.current?.feedAudio(pcm);
     if (recordingActiveRef.current) {
-      const half = (pcm.length >> 2) << 1; // even byte boundary
-      pushWaveformBar(pcm, 0, half);
-      pushWaveformBar(pcm, half, pcm.length);
-      setWaveformTrigger((t) => t + 1);
+      const quarter = (pcm.length >> 3) << 1; // even byte boundary
+      const bars: number[] = [];
+      for (let q = 0; q < 4; q++) {
+        const start = q * quarter;
+        const end = q === 3 ? pcm.length : (q + 1) * quarter;
+        const level = computeBarLevel(pcm, start, end);
+        if (level !== null) {
+          // Fast attack / slow release: peaks land instantly, but the
+          // level decays smoothly instead of flickering bar-to-bar
+          const prev = smoothedLevelRef.current;
+          const alpha = level > prev ? 0.75 : 0.25;
+          const smoothed = prev + alpha * (level - prev);
+          smoothedLevelRef.current = smoothed;
+          bars.push(smoothed);
+        }
+      }
+      if (bars.length > 0) {
+        waveformLevels.value = [...waveformLevels.value.slice(bars.length), ...bars];
+      }
     }
-  }, [pushWaveformBar]);
+  }, [computeBarLevel, waveformLevels]);
 
   const handleMicPress = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -312,8 +333,8 @@ export default function StudySessionScreen() {
       // Show recording bar
       recordingTabY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
 
-      waveformDataRef.current = [];
-      setWaveformTrigger(0);
+      waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
+      smoothedLevelRef.current = 0;
 
       setRecordingState('recording');
     } catch (error) {
@@ -685,8 +706,7 @@ export default function StudySessionScreen() {
       {/* Recording Bar */}
       <RecordingBar
         isProcessing={transcribing}
-        waveformDataRef={waveformDataRef}
-        waveformTrigger={waveformTrigger}
+        waveformLevels={waveformLevels}
         animatedStyle={recordingTabStyle}
         spinnerStyle={spinnerStyle}
         onCancel={handleCancel}

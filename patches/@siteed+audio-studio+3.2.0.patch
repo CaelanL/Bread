@@ -1,0 +1,36 @@
+diff --git a/node_modules/@siteed/audio-studio/build/cjs/events.js b/node_modules/@siteed/audio-studio/build/cjs/events.js
+index 53325c7..877a508 100644
+--- a/node_modules/@siteed/audio-studio/build/cjs/events.js
++++ b/node_modules/@siteed/audio-studio/build/cjs/events.js
+@@ -18,7 +18,6 @@ function addAudioAnalysisListener(listener) {
+ }
+ function addRecordingInterruptionListener(listener) {
+     // Add debug logging
+-    console.debug('Adding recording interruption listener');
+     const subscription = emitter.addListener('onRecordingInterrupted', // Make sure this matches the native event name
+     (event) => {
+         console.debug('Recording interruption event received:', event);
+diff --git a/node_modules/@siteed/audio-studio/build/esm/events.js b/node_modules/@siteed/audio-studio/build/esm/events.js
+index d9e470a..eb0c907 100644
+--- a/node_modules/@siteed/audio-studio/build/esm/events.js
++++ b/node_modules/@siteed/audio-studio/build/esm/events.js
+@@ -10,7 +10,6 @@ export function addAudioAnalysisListener(listener) {
+ }
+ export function addRecordingInterruptionListener(listener) {
+     // Add debug logging
+-    console.debug('Adding recording interruption listener');
+     const subscription = emitter.addListener('onRecordingInterrupted', // Make sure this matches the native event name
+     (event) => {
+         console.debug('Recording interruption event received:', event);
+diff --git a/node_modules/@siteed/audio-studio/src/events.ts b/node_modules/@siteed/audio-studio/src/events.ts
+index bb2554b..fa9bb36 100644
+--- a/node_modules/@siteed/audio-studio/src/events.ts
++++ b/node_modules/@siteed/audio-studio/src/events.ts
+@@ -49,7 +49,6 @@ export function addRecordingInterruptionListener(
+     listener: (event: RecordingInterruptionEvent) => void
+ ): EventSubscription {
+     // Add debug logging
+-    console.debug('Adding recording interruption listener')
+ 
+     const subscription = emitter.addListener<RecordingInterruptionEvent>(
+         'onRecordingInterrupted', // Make sure this matches the native event name

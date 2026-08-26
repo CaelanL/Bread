@@ -49,14 +49,14 @@ const STATUS_COLORS = {
     border: 'rgba(34, 197, 94, 0.2)',
   },
   missing: {
-    text: '#ef4444',
-    bg: 'rgba(239, 68, 68, 0.1)',
-    border: 'rgba(239, 68, 68, 0.2)',
-  },
-  added: {
     text: '#f59e0b',
     bg: 'rgba(245, 158, 11, 0.1)',
     border: 'rgba(245, 158, 11, 0.2)',
+  },
+  added: {
+    text: '#ef4444',
+    bg: 'rgba(239, 68, 68, 0.1)',
+    border: 'rgba(239, 68, 68, 0.2)',
   },
 };
 
@@ -287,12 +287,12 @@ const styles = StyleSheet.create({
   },
   // Word styles matching ResultCard
   missingWord: {
+    color: '#f59e0b',
+    textDecorationLine: 'underline',
+  },
+  addedWord: {
     color: '#ef4444',
     textDecorationLine: 'line-through',
     opacity: 0.7,
-  },
-  addedWord: {
-    color: '#f59e0b',
-    textDecorationLine: 'underline',
   },
 });

@@ -42,11 +42,14 @@ interface SonioxMessage {
 // bounds a stalled connect; overflow fails the session → batch fallback.
 const MAX_BUFFER_SECONDS = 15;
 
-// The recorder's trailing PCM chunk can arrive on the JS thread after
-// stopRecording() resolves; waiting one chunk-interval before sending
-// end-of-audio keeps the last word out of a race. Soniox ignores audio
-// after the end frame, so losing this race would clip the tail.
-const FLUSH_GRACE_MS = 150;
+// Small hedge between finish() and sending end-of-audio. Note: the
+// trailing PCM chunk emitted during native stopRecording() never
+// reaches feedAudio anyway — handleSubmit nulls liveSessionRef before
+// stopRecording, so the live path always drops the final ≤100ms of
+// audio (the m4a keeps it; batch fallback doesn't). If that tail ever
+// matters, feed through the captured liveSession until finish()
+// instead of the nulled ref — then this grace becomes load-bearing.
+const FLUSH_GRACE_MS = 50;
 
 class LiveSession implements LiveTranscriptionSession {
   state: LiveSessionState = 'connecting';

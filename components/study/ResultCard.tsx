@@ -108,7 +108,7 @@ function Word({ item, textColor }: { item: AlignmentWord; textColor: string }) {
       return <Text style={{ color: textColor }}>{item.word}</Text>;
 
     case 'missing':
-      // Red + strikethrough + slight opacity (word user should have said)
+      // Amber + underline (word user should have said)
       return (
         <Text style={styles.missingWord}>
           {item.word}
@@ -116,7 +116,7 @@ function Word({ item, textColor }: { item: AlignmentWord; textColor: string }) {
       );
 
     case 'added':
-      // Amber + underline (word user said but shouldn't have)
+      // Red + strikethrough + slight opacity (word user said but shouldn't have)
       return (
         <Text style={styles.addedWord}>
           {item.word}
@@ -327,16 +327,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 26,
   },
-  // Missing: red + strikethrough + opacity (word user should have said)
+  // Missing: amber + underline (word user should have said)
   missingWord: {
+    color: '#f59e0b',
+    textDecorationLine: 'underline',
+  },
+  // Added: red + strikethrough + opacity (word user said but shouldn't have)
+  addedWord: {
     color: '#ef4444',
     textDecorationLine: 'line-through',
     opacity: 0.7,
-  },
-  // Added: amber + underline (word user said but shouldn't have)
-  addedWord: {
-    color: '#f59e0b',
-    textDecorationLine: 'underline',
   },
   retryBanner: {
     flexDirection: 'row',

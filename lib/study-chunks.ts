@@ -107,7 +107,10 @@ function seededRandom(seed: number): () => number {
  * @param seed - Numeric seed for deterministic offset (0 or 1)
  */
 export function applyDifficulty(text: string, difficulty: Difficulty, seed: number = 0): DisplayWord[] {
-  const words = text.split(' ');
+  // Split on all whitespace — cached ESV poetry contains interior newlines,
+  // and a literal-space split would emit empty tokens that shift the medium
+  // mask parity and render as stray zero-width underlines.
+  const words = text.split(/\s+/).filter(Boolean);
 
   if (difficulty === 'easy') {
     return words.map(word => ({ text: word, isBlank: false }));

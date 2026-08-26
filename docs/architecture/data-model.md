@@ -6,7 +6,7 @@
 > directly.
 
 The schema lives in `supabase/migrations/` (numbered sequentially,
-001–013). The migrations are the source of truth — this doc explains
+001–021). The migrations are the source of truth — this doc explains
 the shape and the *why*.
 
 ## Tables overview
@@ -55,7 +55,9 @@ all.
 ### `user_verses`
 
 Migration: `002_user_data.sql` (created), `005_user_verses_no_text.sql`
-(text column dropped)
+(text column dropped), `016_sort_and_last_practiced.sql`
+(`last_practiced_at`), `021_verse_study_prefs.sql` (`last_chunk_size`,
+`last_difficulty`)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -68,6 +70,9 @@ Migration: `002_user_data.sql` (created), `005_user_verses_no_text.sql`
 | `verse_end` | INT | equal to `verse_start` for single verses |
 | `version` | TEXT | `ESV` \| `KJV` \| `NLT` \| `NIV` \| `NKJV` |
 | `progress` | JSONB | shape below |
+| `last_practiced_at` | TIMESTAMPTZ | nullable; last completed session (any difficulty); cleared on progress reset |
+| `last_chunk_size` | INT | nullable; last chunk size chosen on the setup screen |
+| `last_difficulty` | TEXT | nullable; `easy` \| `medium` \| `hard`; last difficulty chosen on the setup screen |
 | `deleted_at` | TIMESTAMPTZ | soft delete |
 | `created_at` | TIMESTAMPTZ | |
 | `updated_at` | TIMESTAMPTZ | auto-updated |
@@ -116,6 +121,24 @@ cross-client safety during the App Store rollout window — old clients
 still write it, the new client read-fallbacks from it
 (`passCount := months?.length ?? 0`) but never writes it. A follow-up
 cleanup migration drops it once all live clients have updated.
+
+**Study prefs** (`last_chunk_size`, `last_difficulty`, migration 021):
+the setup screen's last-used values, written fire-and-forget on every
+setup edit and on session start (`setVerseStudyPrefs` store action →
+`updateVerseStudyPrefs` in `lib/storage/`, no-op when unchanged) and
+restored on next open.
+They live outside the `progress` JSONB deliberately: progress writes
+are whole-object read-modify-write through `parseProgress` (which
+strips unknown keys), so old clients would clobber a JSONB key, and
+Reset Progress would wipe it. As separate columns they survive both —
+a progress reset intentionally keeps the study prefs. One
+`user_verses` row per reference means the prefs are shared across all
+collections containing the verse. These columns replaced the old
+mastered-verse setup default (hard + whole passage in one chunk),
+which survives only as the setup screen's fallback for a mastered
+verse whose prefs are still NULL (all pre-021 masteries) — engraved
+reviews only qualify on Hard, so defaulting those to easy would
+silently stall the review loop.
 
 ### `verse_collections`
 

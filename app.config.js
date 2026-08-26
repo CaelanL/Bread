@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Bread",
     slug: "biblemem",
-    version: "1.2.0",
+    version: "1.3.0",
     // OTA updates (EAS Update). fingerprint policy: a hash of the native
     // project decides update compatibility, so JS-only merges ship OTA
     // and native changes force a store build. See
