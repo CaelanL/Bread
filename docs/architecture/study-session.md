@@ -97,14 +97,23 @@ User taps mic
       // buffers PCM fed before the socket is ready, flushes on open.
       // Any failure → state 'failed', silently; batch path takes over.
   → startRecording({ 16kHz mono pcm_16bit, compressed m4a output,
-      onAudioStream → feedAudio(base64→bytes),
-      onAudioAnalysis → waveform dB (50ms cadence) })
+      onAudioStream → waveform bars (RMS of the PCM chunk) })
+      // The live feed is a separate, screen-lifetime subscription on
+      // the module's 'AudioData' event → feedAudio(base64→bytes). It
+      // bypasses the hook's onAudioStream, which the hook nulls when
+      // stopRecording resolves — possibly before the trailing chunk is
+      // processed.
   → animate recording bar in
   → haptic Medium
 
 User taps submit
   → clear the 5-minute cap timer
   → recording = stopRecording()
+      // liveSessionRef stays set through processRecording: native
+      // stop emits the trailing ≤100ms PCM chunk, but it can be
+      // processed on JS after this resolve (iOS: Normal- vs
+      // Immediate-priority tasks; Android: main-thread hop), and
+      // clearing the ref early clipped the last word
   → uri = recording.compression.compressedFileUri (m4a)
   → session.processRecording(uri, durationMs, liveSession)  // hook owns from here
   → animate recording bar out
