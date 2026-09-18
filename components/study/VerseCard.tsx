@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Dimensions,
   Pressable,
+  useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
@@ -35,13 +36,13 @@ interface InlineWordProps {
   underlineColor: string;
 }
 
-// Renders a single word as an inline Text span inside the parent paragraph
-// Text. Blanks use textDecorationLine for the underline so it stays bonded
-// to the glyph instead of an absolutely-positioned sibling that desyncs.
+// Draw the blank independently of the glyph and animate only the glyph.
+// Native text underlines skip around hyphens and descenders, making one hidden
+// word look like multiple blanks.
 function InlineWord({ word, index, revealed, fast, textColor, underlineColor }: InlineWordProps) {
   const opacity = useSharedValue(revealed || !word.isBlank ? 1 : 0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (revealed && word.isBlank) {
       // Manual peek reveals run at 2x speed; completion reveals keep
       // the original leisurely stagger.
@@ -49,8 +50,10 @@ function InlineWord({ word, index, revealed, fast, textColor, underlineColor }: 
         index * (fast ? STAGGER_DELAY / 2 : STAGGER_DELAY),
         withTiming(1, { duration: fast ? 100 : 200 })
       );
+    } else if (word.isBlank) {
+      opacity.value = 0;
     }
-  }, [revealed]);
+  }, [fast, index, opacity, revealed, word.isBlank]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: word.isBlank ? opacity.value : 1,
@@ -59,19 +62,24 @@ function InlineWord({ word, index, revealed, fast, textColor, underlineColor }: 
   const showUnderline = word.isBlank && !revealed;
 
   return (
-    <Animated.Text
-      style={[
-        word.isBlank && styles.blankWord,
-        showUnderline && {
-          textDecorationLine: 'underline',
-          textDecorationColor: underlineColor,
-        },
-        { color: showUnderline ? 'transparent' : textColor },
-        animatedStyle,
-      ]}
-    >
-      {word.text}
-    </Animated.Text>
+    <View style={styles.inlineWord}>
+      <Animated.Text
+        style={[
+          styles.wordText,
+          word.isBlank && styles.blankWord,
+          { color: textColor },
+          animatedStyle,
+        ]}
+      >
+        {word.text}
+      </Animated.Text>
+      {showUnderline && (
+        <View
+          pointerEvents="none"
+          style={[styles.blankUnderline, { backgroundColor: underlineColor }]}
+        />
+      )}
+    </View>
   );
 }
 
@@ -103,6 +111,7 @@ export function VerseCard({
   onToggleVisibility,
 }: VerseCardProps) {
   const colorScheme = useColorScheme();
+  const { fontScale } = useWindowDimensions();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
@@ -183,21 +192,19 @@ export function VerseCard({
               </Text>
             </View>
           ) : (
-            <Text style={styles.chunkText}>
+            <View style={[styles.chunkText, { columnGap: 5 * fontScale }]}>
               {chunk.displayWords.map((word, i) => (
-                <React.Fragment key={i}>
-                  {i > 0 && <Text>{' '}</Text>}
-                  <InlineWord
-                    word={word}
-                    index={i}
-                    revealed={revealed}
-                    fast={revealFast}
-                    textColor={colors.text}
-                    underlineColor={underlineColor}
-                  />
-                </React.Fragment>
+                <InlineWord
+                  key={i}
+                  word={word}
+                  index={i}
+                  revealed={revealed}
+                  fast={revealFast}
+                  textColor={colors.text}
+                  underlineColor={underlineColor}
+                />
               ))}
-            </Text>
+            </View>
           )}
         </ScrollView>
       </View>
@@ -254,11 +261,25 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   chunkText: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  inlineWord: {
+    position: 'relative',
+  },
+  wordText: {
     fontSize: 19,
     lineHeight: 30,
   },
   blankWord: {
     fontWeight: '600',
+  },
+  blankUnderline: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 1,
   },
   hardModeContainer: {
     alignItems: 'center',
