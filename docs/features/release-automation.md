@@ -17,7 +17,7 @@
 > already happened once: an agent read the unchecked boxes below and
 > concluded the pipeline had never run, days after its first build).
 
-As of **2026-08-25**:
+As of **2026-09-18**:
 
 - **Pipeline is LIVE.** GitHub repo linked (EAS dashboard,
   2026-08-15) and ASC API key configured (`eas credentials`,
@@ -31,6 +31,13 @@ As of **2026-08-25**:
 - **1.3.0** bumped on PR #46 (study prefs + alignment/waveform/perf
   batch). The version bump changes the native fingerprint, so merging
   triggers a full build + auto-submit rather than an OTA.
+- **1.3.0 / build 16 was approved.** PR #47 initially produced build 17
+  without changing the marketing version; App Store Connect rejected the
+  upload because the 1.3.0 train was closed. Build 17 is consumed but was not
+  submitted.
+- **1.3.1** is the corrective patch version for PR #47 (study-session
+  scoring, blank rendering, and live audio-tail fixes). EAS remote
+  auto-increment will produce build 18 and auto-submit it.
 - Remaining: OTA loop verification (JS-only merge → update lands on
   a device), then graduation.
 
@@ -73,7 +80,7 @@ free tier hard-stops instead of billing.
       Rationale: appVersion policy breaks if we forget to bump version
       on a native change; fingerprint makes incompatible updates
       "extremely unlikely". [Runtime versions](https://docs.expo.dev/eas-update/runtime-versions.md)
-- [ ] **One store release after setup** — OTA capability only exists in
+- [x] **One store release after setup** — OTA capability only exists in
       binaries built with expo-updates. Build 13 can never receive
       updates. This gates everything. *(1.2.0 / build 14 built +
       submitted 2026-08-15 — check this box when it's released.)*
