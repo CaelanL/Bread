@@ -19,7 +19,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseVerseIntoChunks } from '../study-chunks';
+import { applyDifficulty, parseVerseIntoChunks } from '../study-chunks';
 import type { SavedVerse } from '../storage';
 
 // Structurally faithful Psalm 103:1-14 ESV shapes (poetry newlines kept)
@@ -98,5 +98,30 @@ describe('parseVerseIntoChunks — multi-verse range (Psalm 103:1-14)', () => {
     assert.equal(chunks.length, 14);
     assert.equal(wordCount(chunks[0].text), wordCount(COMBINED));
     assert.ok(chunks.slice(1).every((c) => wordCount(c.text) === 0));
+  });
+});
+
+describe('applyDifficulty — one display token per logical word', () => {
+  it('does not split words containing hyphens, descenders, or punctuation', () => {
+    const words = applyDifficulty('seventy-two saying, subject', 'hard');
+
+    assert.deepEqual(words, [
+      { text: 'seventy-two', isBlank: true },
+      { text: 'saying,', isBlank: true },
+      { text: 'subject', isBlank: true },
+    ]);
+  });
+
+  it('keeps the medium mask deterministic for a session seed', () => {
+    const text = 'one two three four five six';
+
+    assert.deepEqual(
+      applyDifficulty(text, 'medium', 0),
+      applyDifficulty(text, 'medium', 0)
+    );
+    assert.notDeepEqual(
+      applyDifficulty(text, 'medium', 0),
+      applyDifficulty(text, 'medium', 1)
+    );
   });
 });

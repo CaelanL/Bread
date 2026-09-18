@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
+    "test": "tsx --test lib/__tests__/*.test.ts lib/store/__tests__/*.test.ts",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -59,6 +60,7 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "patch-package": "^8.0.1",
+    "tsx": "4.23.13",
     "typescript": "~5.9.2"
   },
   "private": true
