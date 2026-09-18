@@ -79,6 +79,16 @@ is `0` or `1` chosen randomly at session start
 
 `displayWords` is built once and never re-computed on render.
 
+Each `DisplayWord` is also the rendering unit. In Medium mode, a hidden word
+keeps its natural measured width but its glyph is transparent and an opaque
+bottom line is drawn by the surrounding word container. The line is not a
+native text underline: underlines break around hyphens and descenders on iOS,
+which made one word such as `seventy-two`, `saying`, or `subject` look like
+multiple blanks. Reveal animation changes only glyph opacity; re-hiding resets
+that opacity before the next paint so the answer cannot flash. Inter-word
+spacing scales with the device font scale so accessibility text sizing keeps
+the paragraph's spacing and wrapping proportional.
+
 ### 4. Recording
 
 `app/session.tsx` owns the recorder lifecycle via
@@ -97,14 +107,23 @@ User taps mic
       // buffers PCM fed before the socket is ready, flushes on open.
       // Any failure → state 'failed', silently; batch path takes over.
   → startRecording({ 16kHz mono pcm_16bit, compressed m4a output,
-      onAudioStream → feedAudio(base64→bytes),
-      onAudioAnalysis → waveform dB (50ms cadence) })
+      onAudioStream → waveform bars (RMS of the PCM chunk) })
+      // The live feed is a separate, screen-lifetime subscription on
+      // the module's 'AudioData' event → feedAudio(base64→bytes). It
+      // bypasses the hook's onAudioStream, which the hook nulls when
+      // stopRecording resolves — possibly before the trailing chunk is
+      // processed.
   → animate recording bar in
   → haptic Medium
 
 User taps submit
   → clear the 5-minute cap timer
   → recording = stopRecording()
+      // liveSessionRef stays set through processRecording: native
+      // stop emits the trailing ≤100ms PCM chunk, but it can be
+      // processed on JS after this resolve (iOS: Normal- vs
+      // Immediate-priority tasks; Android: main-thread hop), and
+      // clearing the ref early clipped the last word
   → uri = recording.compression.compressedFileUri (m4a)
   → session.processRecording(uri, durationMs, liveSession)  // hook owns from here
   → animate recording bar out
@@ -176,12 +195,21 @@ and dropping punctuation-only tokens. Transcript-side hesitation
 fillers (um/uh/hmm — but NOT "ah" or "er", which occur in scripture)
 are dropped. The guiding principle: never penalize a difference the
 ASR cannot hear. It then
-uses `diffArrays` over the normalized token arrays (so diff parts map
-1:1 to tokens; string-based `diffWords` used to split inside words at
-dashes/apostrophes and desync the token walk), with a substitution
-post-pass that matches split/joined compounds by concatenation
-("for ever" ↔ "forever" — 390 occurrences in KJV — "to morrow" ↔
-"tomorrow", "forty-two" ↔ "forty two"), to produce
+groups standard English integer and ordinal spans into canonical comparison
+units before calling `diffArrays`. Digit and written forms therefore compare by
+exact value and kind (`72` ↔ `seventy-two`, `17th` ↔ `seventeenth`) while the
+alignment result still emits the saved translation's original wording. The
+parser accepts contemporary cardinal and ordinal grammar through billions,
+including valid comma grouping, hyphenated number words, and conventional
+optional `and`. It fails closed for malformed syntax, mismatched values or
+kinds, article/colloquial forms, and archaic forms such as `threescore`.
+
+The diff runs over comparison units (so diff parts map 1:1 to units;
+string-based `diffWords` used to split inside words at dashes/apostrophes and
+desync the token walk), with a substitution post-pass that matches only
+alphabetic split/joined compounds by concatenation ("for ever" ↔ "forever" —
+390 occurrences in KJV — "to morrow" ↔ "tomorrow"). Digits deliberately do
+not use this fallback, so `72` does not match `7 2`. The final output is
 `AlignmentWord[]` with status `'correct' | 'close' | 'missing' |
 'added'`. Currently `'close'` is never produced — the scoring formula
 accounts for it (with a 0.5 weight) for future synonym support.

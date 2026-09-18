@@ -28,6 +28,7 @@ import {
   AudioStudioModule,
   type AudioDataEvent,
 } from '@siteed/audio-studio';
+import { LegacyEventEmitter } from 'expo-modules-core';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -180,9 +181,9 @@ export default function StudySessionScreen() {
     waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
 
     const liveSession = liveSessionRef.current;
-    liveSessionRef.current = null;
 
     if (!recordingActiveRef.current) {
+      liveSessionRef.current = null;
       liveSession?.abort();
       setRecordingState('idle');
       return;
@@ -192,6 +193,10 @@ export default function StudySessionScreen() {
       setTranscribing(true);
 
       recordingActiveRef.current = false;
+      // liveSessionRef stays set through processRecording: the
+      // recorder's trailing PCM chunk can land on the JS queue after
+      // this resolve (see the live-feed subscription), and clearing the
+      // ref first dropped it — clipping the last word
       const recording = await stopRecording();
       const durationMs = recording.durationMs ?? 0;
       // Compressed (m4a) output is the batch-fallback upload, matching
@@ -217,6 +222,10 @@ export default function StudySessionScreen() {
       hideRecordingBar(() => setTranscribing(false));
       Alert.alert('Error', `Recording failed: ${error}`);
       setRecordingState('idle');
+    } finally {
+      if (liveSessionRef.current === liveSession) {
+        liveSessionRef.current = null;
+      }
     }
   }, [clearCapTimer, hideRecordingBar, session, stopRecording]);
 
@@ -251,10 +260,28 @@ export default function StudySessionScreen() {
     return Math.max(0, Math.min(1, (dB - minDb) / (maxDb - minDb)));
   }, []);
 
+  // Live feed subscribes to the native stream directly rather than via
+  // the hook's onAudioStream: the hook nulls its callback when
+  // stopRecording resolves, and the recorder's trailing PCM chunk
+  // (emitted inside native stop) can be processed after that resolve —
+  // on iOS the resolve is an Immediate-priority task and the chunk is
+  // Normal; on Android the chunk hops through the main thread first.
+  // This listener outlives the stop, and the session's 50ms flush
+  // grace covers that lag.
+  useEffect(() => {
+    // Same emitter + event the library's own hook listens on (its
+    // addAudioEventListener isn't exported from the package root)
+    const emitter = new LegacyEventEmitter(AudioStudioModule);
+    const subscription = emitter.addListener<{ encoded?: string }>('AudioData', (event) => {
+      if (!event.encoded) return;
+      liveSessionRef.current?.feedAudio(base64ToUint8Array(event.encoded));
+    });
+    return () => subscription.remove();
+  }, []);
+
   const handleAudioStream = useCallback(async (event: AudioDataEvent) => {
     if (typeof event.data !== 'string') return;
     const pcm = base64ToUint8Array(event.data);
-    liveSessionRef.current?.feedAudio(pcm);
     if (recordingActiveRef.current) {
       const quarter = (pcm.length >> 3) << 1; // even byte boundary
       const bars: number[] = [];
