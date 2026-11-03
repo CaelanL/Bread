@@ -1,2 +1,2 @@
-[mcp_servers.supabase]
+[mcp_servers.supabase-bible]
 url = "https://mcp.supabase.com/mcp?project_ref=bhvvagvnmoxpjgfffgpl&read_only=true"
