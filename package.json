@@ -82,6 +82,12 @@
   "private": true,
   "kit": {
     "prodProjectRef": "bhvvagvnmoxpjgfffgpl",
+    "restoredMigrations": [
+      "010_add_word_count.sql",
+      "0101_popular_verses.sql",
+      "011_user_stats_cron.sql",
+      "012_analytics_functions.sql"
+    ],
     "envFile": ".env.local",
     "envNames": {
       "API_URL": "EXPO_PUBLIC_SUPABASE_URL",

@@ -43,7 +43,9 @@ function newFiles() {
   if (!base.ok) die('Could not find origin/main. Run `git fetch origin main`.');
   const added = run('git', ['diff', '--name-only', '--no-renames', '--diff-filter=A', base.out.trim(), '--', MIGRATIONS]).out;
   const untracked = run('git', ['ls-files', '--others', '--exclude-standard', '--', MIGRATIONS]).out;
-  return `${added}\n${untracked}`.split('\n').filter(Boolean).sort();
+  // kit.restoredMigrations: renamed files prod already ran, so they aren't new. Empty once they're on main.
+  const restored = kit.restoredMigrations ?? [];
+  return `${added}\n${untracked}`.split('\n').filter((f) => f && !restored.includes(basename(f))).sort();
 }
 
 function filesMissingOnProd() {

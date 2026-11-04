@@ -143,7 +143,8 @@ function prodMigrations() {
 function newMigrationFiles() {
   const base = git('merge-base', 'origin/main', 'HEAD').out;
   return git('diff', '--name-only', '--no-renames', '--diff-filter=A', base, 'HEAD', '--', MIGRATIONS).out
-    .split('\n').filter(Boolean).sort();
+    // kit.restoredMigrations: renamed files prod already ran. They are never re-dated.
+    .split('\n').filter((f) => f && !(kit.restoredMigrations ?? []).includes(basename(f))).sort();
 }
 
 // Files keep their order: everything from the first out-of-date file onward gets a new time.
