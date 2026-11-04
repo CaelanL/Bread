@@ -45,7 +45,8 @@ app-example
 /android
 
 # Claude
-.claude/
+.claude/*
+!.claude/settings.json
 CLAUDE.md
 
 # Supabase
