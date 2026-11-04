@@ -303,7 +303,7 @@ async function confirmVercel(sha) {
   return `Deploy live: ${link}`;
 }
 
-// UNVERIFIED on a real run: fields read from eas-cli's source (id, status, gitCommitHash; jobs[].type, logURL).
+// Fields checked against real runs (id, status, gitCommitHash; jobs[].type, logURL). Waiting on a live run hasn't been tried.
 async function confirmEas(sha, workflow) {
   const eas = (...args) => run('npx', ['eas-cli', ...args]);
   const done = await poll(`npx eas-cli workflow:runs --workflow ${workflow}`, () => {
@@ -314,7 +314,7 @@ async function confirmEas(sha, workflow) {
   });
   const view = parseJson(eas('workflow:view', done.id, '--json', '--non-interactive').out);
   const link = view?.logURL ?? `EAS workflow run ${done.id}`;
-  const submitted = view?.jobs?.some((j) => String(j.type).toLowerCase() === 'submit' && j.status === 'SUCCESS');
+  const submitted = view?.jobs?.some((j) => j.type === 'SUBMISSION' && j.status === 'SUCCESS');
   return submitted ? `Submitted to the App Store: ${link}` : `Deploy live: ${link}`;
 }
 

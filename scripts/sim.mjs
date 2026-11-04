@@ -78,9 +78,9 @@ function takeLock() {
 // ---------- native fingerprint
 
 function currentFingerprint() {
-  // 4608 = the default skips (512) + the config's extra section (4096). app.config.js puts this folder's
-  // Supabase URL in extra, so without it the hash changes per worktree with no native change.
-  const out = must('npx', ['@expo/fingerprint', 'fingerprint:generate', '--source-skips', '4608']);
+  // 5120 = package.json scripts (1024) + the config's extra section (4096), and eas.json is ignored. None of these
+  // change what's in the installed build, and extra holds this folder's Supabase URL, which differs per worktree.
+  const out = must('npx', ['@expo/fingerprint', 'fingerprint:generate', '--source-skips', '5120', '--ignore-path', 'eas.json']);
   const hash = JSON.parse(out).hash;
   if (!hash) die('Could not read the native fingerprint.');
   return hash;
