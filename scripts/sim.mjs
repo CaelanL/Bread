@@ -167,7 +167,7 @@ async function shot(args) {
   const keep = args.includes('--keep');
   const asIndex = args.indexOf('--as');
   const as = asIndex >= 0 ? args[asIndex + 1] : null;
-  const routes = args.filter((a, i) => a !== '--keep' && i !== asIndex && i !== asIndex + 1);
+  const routes = args.filter((a, i) => a !== '--keep' && (asIndex < 0 || (i !== asIndex && i !== asIndex + 1)));
   if (!routes.length && !keep) die('Usage: npm run sim -- shot <route> [<route>...] [--keep]');
   takeLock();
   checkFingerprint(); // before booting: a rebuild message boots nothing
