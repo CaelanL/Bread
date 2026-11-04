@@ -2,7 +2,7 @@
 // See the app's screens without Xcode. Expo apps only. Needs "sim" in package.json "kit":
 //   "sim": { "name": "<short app name>", "scheme": "<URL scheme>" }
 //
-//   npm run sim -- shot <route> [<route>...] [--keep]   screenshots to .expo/sim-shots/
+//   npm run sim -- shot <route> [<route>...] [--keep] [--as <seed user>]   screenshots to .expo/sim-shots/
 //   npm run sim -- stop                                 stops Metro and the device
 //   npm run sim -- install                              installs the latest simulator build
 //
@@ -165,7 +165,9 @@ function stopAll() {
 
 async function shot(args) {
   const keep = args.includes('--keep');
-  const routes = args.filter((a) => a !== '--keep');
+  const asIndex = args.indexOf('--as');
+  const as = asIndex >= 0 ? args[asIndex + 1] : null;
+  const routes = args.filter((a, i) => a !== '--keep' && i !== asIndex && i !== asIndex + 1);
   if (!routes.length && !keep) die('Usage: npm run sim -- shot <route> [<route>...] [--keep]');
   takeLock();
   checkFingerprint(); // before booting: a rebuild message boots nothing
@@ -179,7 +181,7 @@ async function shot(args) {
   await sleep(SETTLE_MS);
   mkdirSync(SHOTS, { recursive: true });
   for (const route of routes) {
-    openUrl(`${kit.sim.scheme}://dev-sign-in?next=${encodeURIComponent(route)}`); 
+    openUrl(`${kit.sim.scheme}://dev-sign-in?next=${encodeURIComponent(route)}${as ? `&as=${encodeURIComponent(as)}` : ''}`); 
     await sleep(SETTLE_MS);
     const file = join(SHOTS, `${fileName(route)}.png`);
     must('xcrun', ['simctl', 'io', 'booted', 'screenshot', file]);
