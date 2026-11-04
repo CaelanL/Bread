@@ -1,3 +1,5 @@
+create extension if not exists pg_cron with schema extensions;
+
 -- Popular Ranges: Track most memorized verse ranges across all users
 -- Precomputed table updated by cron job
 --

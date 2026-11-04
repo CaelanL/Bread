@@ -153,6 +153,7 @@ export default function ResetPasswordScreen() {
               styles.button,
               { backgroundColor: buttonBg },
               loading && { opacity: 0.7 },
+              // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
               pressed && !loading && { opacity: 0.8, transform: [{ scale: 0.98 }] },
             ]}
             onPress={handleResetPassword}
@@ -192,6 +193,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 72,
     height: 72,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',

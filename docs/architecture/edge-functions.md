@@ -194,7 +194,7 @@ supabase functions deploy transcription-token
 Local development:
 
 ```
-supabase functions serve --env-file ./supabase/.env.local
+supabase functions serve --env-file ./supabase/functions/.env
 ```
 
 The Supabase CLI version checked in is 2.78.1 (per the

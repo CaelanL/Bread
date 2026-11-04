@@ -184,6 +184,7 @@ export default function SignUpScreen() {
               styles.button,
               { backgroundColor: buttonBg },
               loading && { opacity: 0.7 },
+              // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
               pressed && !loading && { opacity: 0.8, transform: [{ scale: 0.98 }] },
             ]}
             onPress={handleSignUp}

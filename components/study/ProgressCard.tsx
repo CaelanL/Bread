@@ -166,7 +166,7 @@ export function ProgressCard({ progress }: ProgressCardProps) {
           })()}
           {isEngraved && (
             <Text style={[styles.tagline, { color: goldColor }]}>
-              "I have hidden your word in my heart"
+              &quot;I have hidden your word in my heart&quot;
             </Text>
           )}
         </View>
@@ -241,11 +241,13 @@ const styles = StyleSheet.create({
   barTrack: {
     width: '100%',
     height: 6,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 3,
     overflow: 'hidden',
   },
   barFill: {
     height: '100%',
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 3,
   },
   callout: {

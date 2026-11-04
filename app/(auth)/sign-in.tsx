@@ -141,6 +141,7 @@ export default function SignInScreen() {
               styles.button,
               { backgroundColor: buttonBg },
               loading && { opacity: 0.7 },
+              // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
               pressed && !loading && { opacity: 0.8, transform: [{ scale: 0.98 }] },
             ]}
             onPress={handleSignIn}
@@ -165,7 +166,7 @@ export default function SignInScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: colors.icon }]}>
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
           </Text>
           <Pressable
             style={({ pressed }) => pressed && { opacity: 0.7 }}

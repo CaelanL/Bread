@@ -231,6 +231,7 @@ class LiveSession implements LiveTranscriptionSession {
 
   private fail(reason: string): void {
     if (this.state === 'failed' || this.state === 'closed') return;
+    // eslint-disable-next-line no-console -- routine fallback, not a problem; console.warn would raise a LogBox in dev
     console.log(`[LIVE] falling back to batch: ${reason}`);
     this.state = 'failed';
     this.teardown();

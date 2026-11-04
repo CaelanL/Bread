@@ -1,5 +1,6 @@
 import { DueCountPill } from '@/components/library/DueCountPill';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import type { SymbolViewProps } from 'expo-symbols';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
@@ -163,7 +164,7 @@ export function SwipeableCollectionCard({
                   ]}
                 >
                   <IconSymbol
-                    name={collection.icon || (collection.isDefault ? 'heart.fill' : 'folder.fill')}
+                    name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : 'folder.fill')}
                     size={24}
                     color={collection.iconColor || (collection.isDefault ? primaryColor : colors.icon)}
                   />

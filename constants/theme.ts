@@ -9,6 +9,20 @@ import { Platform } from 'react-native';
 export const authAccent = '#dbe2d1';  // bird color - for text, borders
 export const authButton = '#3a3a3a';  // dark grey - for buttons
 
+// Standard UI values. eslint.config.mjs rejects other radii, durations and press scales.
+export const Radius = { xs: 4, sm: 8, md: 10, lg: 12, xl: 14, xxl: 16, xxxl: 20, huge: 24, full: 999 } as const;
+export const Motion = {
+  pressScale: 0.96,
+  pressMs: 150,
+  exitMs: 150,
+  staggerMs: 100,
+  easing: [0.2, 0, 0, 1],
+} as const;
+export const Shadows = {
+  border: '0px 0px 0px 1px rgba(0,0,0,0.06), 0px 1px 2px -1px rgba(0,0,0,0.06), 0px 2px 4px 0px rgba(0,0,0,0.04)',
+  borderHover: '0px 0px 0px 1px rgba(0,0,0,0.08), 0px 1px 2px -1px rgba(0,0,0,0.08), 0px 2px 4px 0px rgba(0,0,0,0.06)',
+} as const;
+
 export const Colors = {
   light: {
     // Core

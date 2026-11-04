@@ -83,6 +83,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 80,
     height: 80,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 40,
     backgroundColor: 'rgba(239,68,68,0.15)',
     justifyContent: 'center',

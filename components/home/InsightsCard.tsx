@@ -84,6 +84,7 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     opacity: 0.8,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     transform: [{ scale: 0.99 }],
   },
   content: {

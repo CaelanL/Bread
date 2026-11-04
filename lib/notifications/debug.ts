@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- dev tools run from the console; printing is what they do */
 /**
  * __DEV__-only debug helpers exposed to the global console.
  *

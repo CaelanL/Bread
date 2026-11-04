@@ -63,8 +63,9 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(auth)';
     const isResetPassword = segments[0] === 'reset-password';
+    const isDevSignIn = segments[0] === 'dev-sign-in';
 
-    if (!isAuthenticated && !inAuthGroup && !isResetPassword) {
+    if (!isAuthenticated && !inAuthGroup && !isResetPassword && !isDevSignIn) {
       // Not authenticated and not on auth screen - redirect to sign in
       router.replace('/(auth)/sign-in');
     } else if (isAuthenticated && inAuthGroup) {

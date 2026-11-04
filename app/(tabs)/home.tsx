@@ -27,11 +27,13 @@ function SkeletonCard({ isDark }: { isDark: boolean }) {
       Animated.sequence([
         Animated.timing(pulseAnim, {
           toValue: 1,
+          // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
           duration: 800,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 0.4,
+          // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
           duration: 800,
           useNativeDriver: true,
         }),
@@ -265,6 +267,7 @@ const styles = StyleSheet.create({
     minHeight: 180,
   },
   skeletonLine: {
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 6,
   },
   skeletonHeader: {

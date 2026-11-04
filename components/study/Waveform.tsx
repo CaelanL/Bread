@@ -26,6 +26,7 @@ function Bar({ levels, index }: WaveformProps & { index: number }) {
     const curved = Math.pow(levels.value[index] ?? 0, 0.6);
     return {
       height: withTiming(BASE_HEIGHT + (MAX_HEIGHT - BASE_HEIGHT) * curved, {
+        // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
         duration: 130,
         easing: Easing.linear,
       }),
@@ -77,6 +78,7 @@ const styles = StyleSheet.create({
     // regardless of screen width.
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.85)',
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 1,
   },
 });

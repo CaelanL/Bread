@@ -1,3 +1,10 @@
+# PAUSED for one release (Bread#51): this merge ships no App Store build and no
+# OTA update. The build, submit and update jobs are removed on purpose.
+# The next Bread release MUST put them back, on its branch, with:
+#   git restore --source=7787992 -- .eas/workflows/deploy.yml
+# Don't use git revert: the release squash-merges, so that would undo the whole repo kit.
+# Until then, step 7 of `npm run release` says "Deploy live" but nothing reaches phones.
+
 # Deploy to production on every push to main.
 #
 # Fingerprint routing (see docs/features/release-automation.md):
@@ -29,28 +36,3 @@ jobs:
     params:
       fingerprint_hash: ${{ needs.fingerprint.outputs.ios_fingerprint_hash }}
       profile: production
-
-  build_ios:
-    name: Build iOS
-    needs: [get_ios_build]
-    if: ${{ !needs.get_ios_build.outputs.build_id }}
-    type: build
-    params:
-      platform: ios
-      profile: production
-
-  submit_ios_build:
-    name: Submit iOS Build
-    needs: [build_ios]
-    type: submit
-    params:
-      build_id: ${{ needs.build_ios.outputs.build_id }}
-
-  publish_ios_update:
-    name: Publish iOS update
-    needs: [get_ios_build]
-    if: ${{ needs.get_ios_build.outputs.build_id }}
-    type: update
-    params:
-      branch: production
-      platform: ios

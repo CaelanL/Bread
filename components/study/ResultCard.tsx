@@ -76,10 +76,12 @@ function getStatusColors(status: ResultStatus, isDark: boolean) {
  */
 const customEntering = () => {
   'worklet';
+  // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
   const animConfig = { duration: 400, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) };
   return {
     initialValues: {
       opacity: 0,
+      // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
       transform: [{ translateY: 30 }, { scale: 0.95 }],
     },
     animations: {
@@ -214,7 +216,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
           <View style={styles.retryBanner}>
             <IconSymbol name="arrow.counterclockwise" size={12} color={colors.icon} />
             <Text style={[styles.retryBannerText, { color: colors.icon }]}>
-              Retries don't affect your score
+              Retries don&apos;t affect your score
             </Text>
           </View>
         )}
@@ -263,7 +265,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
             <AlignmentDisplay alignment={alignment} textColor={colors.text} />
           ) : transcription ? (
             <Text style={[styles.transcriptionText, { color: colors.text }]}>
-              "{transcription}"
+              &quot;{transcription}&quot;
             </Text>
           ) : null}
         </ScrollView>
@@ -352,6 +354,7 @@ const styles = StyleSheet.create({
   closeWord: {
     color: '#f59e0b',
     backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 2,
     paddingHorizontal: 2,
   },

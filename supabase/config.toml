@@ -1,22 +1,26 @@
 # Supabase CLI configuration
 # https://supabase.com/docs/guides/cli/config
 
+project_id = "biblemem"
+
 [api]
 enabled = true
-port = 54321
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 54322
-shadow_port = 54320
 major_version = 17
+
+# Local only. Migration 017 needs this secret to exist. Prod has its own.
+[db.vault]
+cron_secret = "local-only-not-a-secret"
 
 [studio]
 enabled = true
-port = 54323
-api_url = "http://127.0.0.1"
+
+[analytics]
+enabled = false
 
 [auth]
 enabled = true
@@ -52,3 +56,9 @@ verify_jwt = false
 # threat model from bible/process-recording, same gateway-bypass.
 [functions.send-notifications]
 verify_jwt = false
+
+[experimental]
+stack = true
+
+[local.services]
+default = { version = "bundled" }

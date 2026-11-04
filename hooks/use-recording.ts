@@ -46,7 +46,7 @@ export function useRecording({ onRecordingComplete }: UseRecordingOptions): UseR
   const [waveformTrigger, setWaveformTrigger] = useState(0);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const meteringRef = useRef<NodeJS.Timeout | null>(null);
+  const meteringRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waveformDataRef = useRef<number[]>([]);
 
   // Animation values
@@ -65,6 +65,7 @@ export function useRecording({ onRecordingComplete }: UseRecordingOptions): UseR
   useEffect(() => {
     if (transcribing) {
       spinnerRotation.value = withRepeat(
+        // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
         withTiming(360, { duration: 1000, easing: Easing.linear }),
         -1,
         false
@@ -99,6 +100,7 @@ export function useRecording({ onRecordingComplete }: UseRecordingOptions): UseR
   const hideRecordingBar = useCallback((onComplete?: () => void) => {
     recordingTabY.value = withTiming(
       RECORDING_BAR_HEIGHT + 60,
+      // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
       { duration: 250, easing: Easing.in(Easing.cubic) },
       (finished) => {
         if (finished && onComplete) {

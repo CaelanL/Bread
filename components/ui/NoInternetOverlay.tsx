@@ -22,6 +22,7 @@ export function NoInternetOverlay() {
         <Pressable
           style={({ pressed }) => [
             styles.button,
+            // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
             pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
           ]}
           onPress={checkConnection}
