@@ -46,7 +46,7 @@ export function useRecording({ onRecordingComplete }: UseRecordingOptions): UseR
   const [waveformTrigger, setWaveformTrigger] = useState(0);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const meteringRef = useRef<NodeJS.Timeout | null>(null);
+  const meteringRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waveformDataRef = useRef<number[]>([]);
 
   // Animation values

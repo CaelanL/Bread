@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 export function useCountUp(target: number): number {
   const [displayValue, setDisplayValue] = useState(0);
   const rafRef = useRef<number | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // Clear any existing animation
