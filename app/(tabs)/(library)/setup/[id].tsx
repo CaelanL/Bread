@@ -478,6 +478,7 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 42,
     paddingHorizontal: 24,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 21,
     minWidth: 180,
     shadowColor: '#000',
@@ -586,6 +587,7 @@ const styles = StyleSheet.create({
   difficultyDot: {
     width: 7,
     height: 7,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 3.5,
   },
   segmentSubtext: {

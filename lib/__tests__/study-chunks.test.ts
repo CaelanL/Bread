@@ -19,7 +19,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDifficulty, parseVerseIntoChunks } from '../study-chunks';
+import { applyDifficulty, calculateFinalScore, parseVerseIntoChunks, type AlignmentWord } from '../study-chunks';
 import type { SavedVerse } from '../storage';
 
 // Structurally faithful Psalm 103:1-14 ESV shapes (poetry newlines kept)
@@ -124,4 +124,31 @@ describe('applyDifficulty — one display token per logical word', () => {
       applyDifficulty(text, 'medium', 1)
     );
   });
+});
+
+describe('calculateFinalScore around the 90% pass line', () => {
+  const words = (counts: Record<string, number>): AlignmentWord[] =>
+    Object.entries(counts).flatMap(([status, n]) =>
+      Array.from({ length: n }, () => ({ status }) as AlignmentWord),
+    );
+  const score = (...chunks: AlignmentWord[][]) =>
+    calculateFinalScore(new Map(chunks.map((chunk, i) => [i, chunk])));
+
+  const cases: [string, AlignmentWord[][], number][] = [
+    ['all correct', [words({ correct: 10 })], 100],
+    ['exactly 90%', [words({ correct: 9, missing: 1 })], 90],
+    ['just under 90%', [words({ correct: 89, missing: 11 })], 89],
+    ['89.5% rounds up to 90', [words({ correct: 179, missing: 21 })], 90],
+    ['89.4% rounds down to 89', [words({ correct: 447, missing: 53 })], 89],
+    ['an added word counts against the score', [words({ correct: 9, added: 1 })], 90],
+    ['two added words drop below 90', [words({ correct: 9, added: 2 })], 82],
+    ['a close word counts half', [words({ correct: 8, close: 2 })], 90],
+    ['counted across chunks, not averaged', [words({ correct: 10 }), words({ correct: 8, missing: 2 })], 90],
+    ['empty alignment scores 0', [[]], 0],
+    ['no chunks scores 0', [], 0],
+  ];
+
+  for (const [name, chunks, expected] of cases) {
+    it(name, () => assert.equal(score(...chunks), expected));
+  }
 });

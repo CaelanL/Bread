@@ -3,15 +3,29 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
-    "test": "tsx --test lib/__tests__/*.test.ts lib/store/__tests__/*.test.ts",
+    "start": "node scripts/db.mjs guard && expo start",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"lib/**/*.test.ts\"",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "clean-kjv": "node ./scripts/clean-kjv.js",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "check:fast": "npm run typecheck && npm run lint && npm test && node scripts/check-migrations.mjs && node scripts/check-repo.mjs",
+    "check": "npm run check:fast && npm run db:reset && npm run test:db && npm run db:types -- --check",
+    "db:start": "node scripts/db.mjs start",
+    "db:stop": "node scripts/db.mjs stop",
+    "db:reset": "node scripts/db.mjs reset",
+    "db:env": "node scripts/db.mjs env",
+    "db:status": "node scripts/db.mjs status",
+    "db:types": "node scripts/db.mjs types",
+    "db:destroy": "node scripts/db.mjs destroy",
+    "test:db": "supabase test db",
+    "doctor": "node scripts/doctor.mjs",
+    "release": "node scripts/release.mjs",
+    "sim": "node scripts/sim.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/playfair-display": "^0.4.2",
@@ -60,8 +74,31 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "patch-package": "^8.0.1",
+    "squawk-cli": "2.70.0",
+    "supabase": "2.122.0",
     "tsx": "4.23.13",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "kit": {
+    "prodProjectRef": "bhvvagvnmoxpjgfffgpl",
+    "envFile": ".env.local",
+    "envNames": {
+      "API_URL": "EXPO_PUBLIC_SUPABASE_URL",
+      "ANON_KEY": "EXPO_PUBLIC_SUPABASE_ANON_KEY"
+    },
+    "libDirs": [
+      "lib"
+    ],
+    "docsStrict": false,
+    "deployFunctions": true,
+    "deploy": {
+      "type": "eas-workflow",
+      "workflow": "deploy.yml"
+    },
+    "sim": {
+      "name": "bread",
+      "scheme": "com.biblemem"
+    }
+  }
 }

@@ -288,6 +288,7 @@ const styles = StyleSheet.create({
   hardModeIcon: {
     width: 64,
     height: 64,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',

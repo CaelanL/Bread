@@ -292,6 +292,7 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width: 80,
     height: 80,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',

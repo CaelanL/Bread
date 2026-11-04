@@ -15,19 +15,36 @@ interface JwtPayload {
   is_anonymous?: boolean;
 }
 
-// Public key from Supabase JWKS - update if you rotate JWT signing keys
-// Last updated: 2025-12-22, Key ID: 55eb77c6-b625-411d-9a4f-d58ec8eb91a9
-const PUBLIC_KEY_JWK = {
-  kty: "EC",
-  crv: "P-256",
-  x: "87xM-IKCdbYdw01eWMOCVfcm0pxV3k_v-fok-VU7lEE",
-  y: "yYGkYaARJrfqFGLYCJmh_HVqrSnCwlRA5NFfOFn6phk",
-};
-
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 
-// Cache imported CryptoKey (import is fast but no need to repeat)
-let cachedKey: CryptoKey | null = null;
+interface Jwk extends JsonWebKey {
+  kid?: string;
+}
+
+// Keys from the project's JWKS, cached per worker. A token signed with an
+// unknown kid refetches, so rotating the signing keys needs no deploy.
+const cachedKeys = new Map<string, CryptoKey>();
+
+async function fetchSigningKeys(): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`);
+  if (!res.ok) {
+    throw new Error(`JWKS fetch failed: ${res.status}`);
+  }
+  const { keys } = (await res.json()) as { keys: Jwk[] };
+  for (const jwk of keys) {
+    if (jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.kid) continue;
+    cachedKeys.set(
+      jwk.kid,
+      await crypto.subtle.importKey(
+        "jwk",
+        jwk,
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["verify"]
+      )
+    );
+  }
+}
 
 /**
  * Base64url decode
@@ -45,23 +62,18 @@ function base64urlDecode(str: string): Uint8Array {
 }
 
 /**
- * Get signing key (imports hardcoded public key on first call)
+ * Get the signing key for a token's kid (fetches JWKS when it isn't cached)
  */
-async function getSigningKey(): Promise<CryptoKey> {
-  if (cachedKey) {
-    return cachedKey;
+async function getSigningKey(kid: string): Promise<CryptoKey> {
+  if (!cachedKeys.has(kid)) {
+    await fetchSigningKeys();
   }
 
-  // Import the hardcoded public key
-  cachedKey = await crypto.subtle.importKey(
-    "jwk",
-    PUBLIC_KEY_JWK,
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["verify"]
-  );
-
-  return cachedKey;
+  const key = cachedKeys.get(kid);
+  if (!key) {
+    throw new Error(`Unknown signing key: ${kid}`);
+  }
+  return key;
 }
 
 /**
@@ -91,7 +103,7 @@ export async function verifyJwt(req: Request): Promise<AuthUser | null> {
     }
 
     // Get the signing key
-    const key = await getSigningKey();
+    const key = await getSigningKey(header.kid);
 
     // Verify signature (ES256 uses SHA-256)
     const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);

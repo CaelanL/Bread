@@ -161,7 +161,7 @@ export function AlignmentHelpModal({ visible, onClose }: AlignmentHelpModalProps
                 <ExampleAlignment textColor={colors.text} />
               </View>
               <Text style={[styles.exampleCaption, { color: colors.icon }]}>
-                In this example, you said "earth" instead of "world", then stopped reciting after "Son".
+                In this example, you said &quot;earth&quot; instead of &quot;world&quot;, then stopped reciting after &quot;Son&quot;.
               </Text>
             </View>
 

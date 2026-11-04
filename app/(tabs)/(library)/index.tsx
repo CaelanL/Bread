@@ -34,7 +34,7 @@ function CollectionCard({
   collection: Collection;
   index: number;
   onPress: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
 }) {
   const isMastered = collection.id === MASTERED_COLLECTION_ID;
   const isInProgress = collection.id === IN_PROGRESS_COLLECTION_ID;

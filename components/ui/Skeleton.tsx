@@ -20,11 +20,13 @@ export function Skeleton({ width = '100%' as const, height = 20, borderRadius = 
       Animated.sequence([
         Animated.timing(opacity, {
           toValue: 0.7,
+          // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
           duration: 800,
           useNativeDriver: true,
         }),
         Animated.timing(opacity, {
           toValue: 0.3,
+          // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
           duration: 800,
           useNativeDriver: true,
         }),

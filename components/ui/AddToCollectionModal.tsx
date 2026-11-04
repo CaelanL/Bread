@@ -1,8 +1,10 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import type { SymbolViewProps } from 'expo-symbols';
 import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import type { VerseData } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import type { BibleVersion } from '@/lib/storage';
 import { useAppStore, useCollections } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { BlurView } from 'expo-blur';
@@ -20,7 +22,7 @@ import {
 interface AddToCollectionModalProps {
   visible: boolean;
   verse: VerseData | null;
-  version: string;
+  version: BibleVersion;
   onClose: () => void;
   onSuccess?: () => void;
 }
@@ -145,7 +147,7 @@ export function AddToCollectionModal({
                 >
                   <View style={styles.collectionInfo}>
                     <IconSymbol
-                      name={collection.icon || 'folder.fill'}
+                      name={(collection.icon as SymbolViewProps['name']) || 'folder.fill'}
                       size={20}
                       color={collection.iconColor || accentColor}
                     />

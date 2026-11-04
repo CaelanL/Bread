@@ -67,6 +67,7 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     height: RECORDING_BAR_HEIGHT,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 28,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -97,6 +98,7 @@ const styles = StyleSheet.create({
   barSubmitButton: {
     width: 44,
     height: 44,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',

@@ -116,6 +116,7 @@ export default function StudySessionScreen() {
   useEffect(() => {
     if (transcribing) {
       spinnerRotation.value = withRepeat(
+        // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
         withTiming(360, { duration: 1000, easing: Easing.linear }),
         -1,
         false
@@ -165,6 +166,7 @@ export default function StudySessionScreen() {
   const hideRecordingBar = useCallback((onComplete?: () => void) => {
     recordingTabY.value = withTiming(
       RECORDING_BAR_HEIGHT + 60,
+      // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
       { duration: 250, easing: Easing.in(Easing.cubic) },
       (finished) => {
         if (finished && onComplete) {
@@ -756,12 +758,14 @@ const styles = StyleSheet.create({
     height: 4,
     marginHorizontal: 20,
     marginTop: 8,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressSegment: {
     flex: 1,
     marginHorizontal: 1,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 2,
   },
   chunkContainer: {
@@ -783,6 +787,7 @@ const styles = StyleSheet.create({
   micButton: {
     width: 72,
     height: 72,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
@@ -795,6 +800,7 @@ const styles = StyleSheet.create({
   retryButton: {
     width: 52,
     height: 52,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
@@ -804,6 +810,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 24,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 28,
     gap: 8,
   },
@@ -839,6 +846,7 @@ const styles = StyleSheet.create({
   scoreCircle: {
     width: 140,
     height: 140,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 70,
     borderWidth: 6,
     justifyContent: 'center',

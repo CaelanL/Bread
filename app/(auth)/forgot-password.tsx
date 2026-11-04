@@ -89,7 +89,7 @@ export default function ForgotPasswordScreen() {
           </Pressable>
           <Text style={[styles.title, { color: colors.text }]}>Reset Password</Text>
           <Text style={[styles.subtitle, { color: colors.icon }]}>
-            Enter your email and we'll send you a link to reset your password
+            Enter your email and we&apos;ll send you a link to reset your password
           </Text>
         </View>
 
@@ -127,6 +127,7 @@ export default function ForgotPasswordScreen() {
               styles.button,
               { backgroundColor: buttonBg },
               loading && { opacity: 0.7 },
+              // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
               pressed && !loading && { opacity: 0.8, transform: [{ scale: 0.98 }] },
             ]}
             onPress={handleResetPassword}
@@ -230,6 +231,7 @@ const styles = StyleSheet.create({
   successIcon: {
     width: 96,
     height: 96,
+    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
     borderRadius: 48,
     justifyContent: 'center',
     alignItems: 'center',
