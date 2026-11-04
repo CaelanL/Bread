@@ -6,13 +6,8 @@
 //   npm run sim -- stop                                 stops Metro and the device
 //   npm run sim -- install                              installs the latest simulator build
 //
-// NOT RUN YET. This file was written with no simulator test. Confirm each UNVERIFIED spot on first use,
-// then remove its comment:
-//   1. The dev-client URL: <scheme>://expo-development-client/?url=<metro url>
-//   2. SETTLE_MS: whether a fixed wait is long enough for a screen to settle.
-//   3. `npx @expo/fingerprint .`: command name and the "hash" field in its JSON.
-//   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags, and that it installs on DEVICE.
-//   5. The <scheme>://dev-sign-in?next=<route> route, which the app itself must add.
+// The app must add a <scheme>://dev-sign-in?next=<route> route. Still unproven:
+//   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags are right per --help; that it installs on DEVICE is not run.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -24,8 +19,9 @@ import { fileURLToPath } from 'node:url';
 
 const MAX_SIMS = 1;
 const DEVICE = 'iPhone 16 Pro';
-const SETTLE_MS = 5000; // UNVERIFIED (2)
+const SETTLE_MS = 5000;
 const METRO_TIMEOUT_MS = 120_000;
+const BUNDLE_TIMEOUT_MS = 300_000;
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const kit = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).kit ?? {};
@@ -82,7 +78,9 @@ function takeLock() {
 // ---------- native fingerprint
 
 function currentFingerprint() {
-  const out = must('npx', ['@expo/fingerprint', '.']); // UNVERIFIED (3)
+  // 4608 = the default skips (512) + the config's extra section (4096). app.config.js puts this folder's
+  // Supabase URL in extra, so without it the hash changes per worktree with no native change.
+  const out = must('npx', ['@expo/fingerprint', 'fingerprint:generate', '--source-skips', '4608']);
   const hash = JSON.parse(out).hash;
   if (!hash) die('Could not read the native fingerprint.');
   return hash;
@@ -138,6 +136,17 @@ async function startMetro() {
   return die(`Metro didn't start. See ${LOG}`);
 }
 
+// A screenshot taken before this shows the "Bundling 53%" banner, not the app.
+async function waitForBundle() {
+  const deadline = Date.now() + BUNDLE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (/Bundled \d+ms/.test(readFileSync(LOG, 'utf8'))) return;
+    await sleep(1000);
+  }
+  stopAll();
+  die(`The app didn't finish bundling. See ${LOG}`);
+}
+
 const openUrl = (url) => must('xcrun', ['simctl', 'openurl', 'booted', url]);
 const fileName = (route) => route.replace(/^\/+|\/+$/g, '').replace(/[^A-Za-z0-9_-]+/g, '-') || 'home';
 
@@ -160,13 +169,17 @@ async function shot(args) {
   if (!routes.length && !keep) die('Usage: npm run sim -- shot <route> [<route>...] [--keep]');
   takeLock();
   checkFingerprint(); // before booting: a rebuild message boots nothing
+  // Starts the stack if needed and rewrites the env file, then refuses a non-local database.
+  must(process.execPath, ['scripts/db.mjs', 'start']);
+  must(process.execPath, ['scripts/db.mjs', 'guard']);
   bootDevice();
   const port = await startMetro();
-  openUrl(`${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}`)}`); // UNVERIFIED (1)
+  openUrl(`${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}?disableOnboarding=1`)}`);
+  await waitForBundle();
   await sleep(SETTLE_MS);
   mkdirSync(SHOTS, { recursive: true });
   for (const route of routes) {
-    openUrl(`${kit.sim.scheme}://dev-sign-in?next=${encodeURIComponent(route)}`); // UNVERIFIED (5)
+    openUrl(`${kit.sim.scheme}://dev-sign-in?next=${encodeURIComponent(route)}`); 
     await sleep(SETTLE_MS);
     const file = join(SHOTS, `${fileName(route)}.png`);
     must('xcrun', ['simctl', 'io', 'booted', 'screenshot', file]);
@@ -185,7 +198,7 @@ function stopCommand() {
 function install() {
   takeLock();
   bootDevice();
-  const r = run('npx', ['eas-cli', 'build:run', '-p', 'ios', '--profile', 'simulator', '--latest'], { stdio: 'inherit' }); // UNVERIFIED (4)
+  const r = run('npx', ['eas-cli', 'build:run', '-p', 'ios', '--profile', 'simulator', '--latest'], { stdio: 'inherit' }); // unproven (4)
   if (!r.ok) die('Install failed. See the output above.');
   writeFileSync(FINGERPRINT, JSON.stringify({ fingerprint: currentFingerprint() }));
   console.log('Simulator build installed.');
