@@ -1,6 +1,8 @@
 # PAUSED for one release (Bread#51): this merge ships no App Store build and no
 # OTA update. The build, submit and update jobs are removed on purpose.
-# The next Bread release MUST put them back: git revert the commit that added this note.
+# The next Bread release MUST put them back, on its branch, with:
+#   git restore --source=7787992 -- .eas/workflows/deploy.yml
+# Don't use git revert: the release squash-merges, so that would undo the whole repo kit.
 # Until then, step 7 of `npm run release` says "Deploy live" but nothing reaches phones.
 
 # Deploy to production on every push to main.
