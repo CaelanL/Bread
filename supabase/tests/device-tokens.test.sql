@@ -2,7 +2,7 @@
 -- Uses the seed logins. All writes roll back.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(6);
+select plan(9);
 
 select set_config('test.reader_a', (select id::text from auth.users where email = 'reader-a@example.test'), true);
 select set_config('test.reader_b', (select id::text from auth.users where email = 'reader-b@example.test'), true);
@@ -27,6 +27,21 @@ select is(
   0,
   'Reader A has no row left, so A''s reminders no longer reach the phone'
 );
+
+-- The access rules sign-out relies on, on a second token: only the owner sees or deletes a row.
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.reader_a'), true);
+select public.register_device_token('ExponentPushToken[a-only]', 'ios');
+
+select set_config('request.jwt.claim.sub', current_setting('test.reader_b'), true);
+select is((select count(*)::int from public.device_tokens where expo_token = 'ExponentPushToken[a-only]'), 0, 'Reader B cannot see reader A''s token');
+with d as (delete from public.device_tokens where expo_token = 'ExponentPushToken[a-only]' returning 1)
+select is(count(*)::int, 0, 'Reader B''s delete leaves reader A''s token') from d;
+
+select set_config('request.jwt.claim.sub', current_setting('test.reader_a'), true);
+with d as (delete from public.device_tokens where expo_token = 'ExponentPushToken[a-only]' returning 1)
+select is(count(*)::int, 1, 'Reader A''s delete removes their token, as sign-out does') from d;
+reset role;
 
 select ok(not has_function_privilege('anon', 'public.register_device_token(text,text)', 'EXECUTE'), 'anon cannot execute register_device_token');
 
