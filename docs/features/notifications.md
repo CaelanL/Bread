@@ -194,8 +194,10 @@ a local-only `cron_secret` in Vault so 017 can apply.
     that account's pushes until someone signs in on it.
   - Delete succeeds but logout fails: the user stays signed in with no row, and gets no
     reminders until the next background-to-active sync.
-  - A registration that starts during the logout call, from a foreground event, can put the row
-    back. One already in flight when `signOut` starts skips its upsert.
+  - A registration whose upsert is sent before the logout call starts can put the row back (on
+    a first registration the delete also finds no cached token). One still fetching its token
+    skips its upsert, and one that starts during the logout call waits for it and sees no
+    session.
 - **Signing out on one device ends that account's sessions on its other devices.**
   `supabase.auth.signOut()` uses the default global scope, so the other devices lose their
   session at the next refresh without running `signOut`, and keep their rows. Pushes reach only
