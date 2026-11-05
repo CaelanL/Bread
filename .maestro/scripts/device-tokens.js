@@ -1,6 +1,10 @@
 // Fails unless each seed reader's device_tokens rows on the local DB match EXPECT,
 // e.g. "reader-a 1, reader-b 0". Signs in as each reader, so RLS shows only their own rows.
-// API_URL and ANON_KEY come from `npm run sim -- flow`.
+// API_URL and ANON_KEY come from `npm run sim -- flow`. Refuses anything but a local API_URL,
+// so a direct `maestro test` can't send the seed logins elsewhere.
+const host = (API_URL.match(/^https?:\/\/([^:/]+)/) || [])[1];
+if (host !== '127.0.0.1' && host !== 'localhost') throw new Error('device_tokens: API_URL must be local, got ' + API_URL);
+
 function count(reader) {
   const session = json(http.post(API_URL + '/auth/v1/token?grant_type=password', {
     headers: { apikey: ANON_KEY, 'Content-Type': 'application/json' },
