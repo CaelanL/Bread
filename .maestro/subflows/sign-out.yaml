@@ -1,0 +1,15 @@
+# Signs out from the Settings tab and waits for the Sign In screen.
+appId: com.caelanliu.biblemem
+---
+- tapOn:
+    id: "tab-settings"
+# Sign Out sits under the tab bar until scrolled to the middle.
+- scrollUntilVisible:
+    element:
+      id: "sign-out"
+    centerElement: true
+- tapOn:
+    id: "sign-out"
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 30000

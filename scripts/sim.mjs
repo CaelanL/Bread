@@ -3,6 +3,7 @@
 //   "sim": { "name": "<short app name>", "scheme": "<URL scheme>" }
 //
 //   npm run sim -- shot <route> [<route>...] [--keep] [--as <seed user>]   screenshots to .expo/sim-shots/
+//   npm run sim -- flow <file|all> [--keep]             runs Maestro flows from .maestro/, output to .expo/sim-shots/flows/
 //   npm run sim -- stop                                 stops Metro and the device
 //   npm run sim -- install                              installs the latest simulator build
 //
@@ -10,10 +11,10 @@
 //   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags are right per --help; that it installs on DEVICE is not run.
 
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +32,8 @@ const LOCK = join(CACHE, `${kit.sim.name}-sim.lock`);
 const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim.json`);
 const LOG = join(root, '.expo/sim-metro.log');
 const SHOTS = join(root, '.expo/sim-shots');
+const FLOWS = join(root, '.maestro');
+const FLOW_OUT = join(SHOTS, 'flows');
 
 function die(message) {
   console.error(message);
@@ -78,20 +81,21 @@ function takeLock() {
 // ---------- native fingerprint
 
 function currentFingerprint() {
-  // 5120 = package.json scripts (1024) + the config's extra section (4096), and eas.json is ignored. None of these
-  // change what's in the installed build, and extra holds this folder's Supabase URL, which differs per worktree.
-  const out = must('npx', ['@expo/fingerprint', 'fingerprint:generate', '--source-skips', '5120', '--ignore-path', 'eas.json']);
+  // 7168 = package.json scripts (1024) + .gitignore (2048) + the config's extra section (4096), and eas.json is ignored.
+  // None of these change what's in the installed build, and extra holds this folder's Supabase URL, which differs per worktree.
+  const out = must('npx', ['@expo/fingerprint', 'fingerprint:generate', '--source-skips', '7168', '--ignore-path', 'eas.json']);
   const hash = JSON.parse(out).hash;
   if (!hash) die('Could not read the native fingerprint.');
   return hash;
 }
 
 // The first run records today's fingerprint: the installed build matches it (nothing native changed since).
+// Saved as `native`, since the older `fingerprint` key also hashed .gitignore.
 function checkFingerprint() {
   const now = currentFingerprint();
-  const saved = readJson(FINGERPRINT)?.fingerprint;
+  const saved = readJson(FINGERPRINT)?.native;
   if (!saved) {
-    writeFileSync(FINGERPRINT, JSON.stringify({ fingerprint: now }));
+    writeFileSync(FINGERPRINT, JSON.stringify({ native: now }));
     return;
   }
   if (saved !== now) {
@@ -163,12 +167,8 @@ function stopAll() {
 
 // ---------- commands
 
-async function shot(args) {
-  const keep = args.includes('--keep');
-  const asIndex = args.indexOf('--as');
-  const as = asIndex >= 0 ? args[asIndex + 1] : null;
-  const routes = args.filter((a, i) => a !== '--keep' && (asIndex < 0 || (i !== asIndex && i !== asIndex + 1)));
-  if (!routes.length && !keep) die('Usage: npm run sim -- shot <route> [<route>...] [--keep]');
+// Boots everything and opens the app, bundled. Returns the dev client URL.
+async function startApp() {
   takeLock();
   checkFingerprint(); // before booting: a rebuild message boots nothing
   // Starts the stack if needed and rewrites the env file, then refuses a non-local database.
@@ -176,9 +176,20 @@ async function shot(args) {
   must(process.execPath, ['scripts/db.mjs', 'guard']);
   bootDevice();
   const port = await startMetro();
-  openUrl(`${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}?disableOnboarding=1`)}`);
+  const devClientUrl = `${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}?disableOnboarding=1`)}`;
+  openUrl(devClientUrl);
   await waitForBundle();
   await sleep(SETTLE_MS);
+  return devClientUrl;
+}
+
+async function shot(args) {
+  const keep = args.includes('--keep');
+  const asIndex = args.indexOf('--as');
+  const as = asIndex >= 0 ? args[asIndex + 1] : null;
+  const routes = args.filter((a, i) => a !== '--keep' && (asIndex < 0 || (i !== asIndex && i !== asIndex + 1)));
+  if (!routes.length && !keep) die('Usage: npm run sim -- shot <route> [<route>...] [--keep]');
+  await startApp();
   mkdirSync(SHOTS, { recursive: true });
   for (const route of routes) {
     openUrl(`${kit.sim.scheme}://dev-sign-in?next=${encodeURIComponent(route)}${as ? `&as=${encodeURIComponent(as)}` : ''}`); 
@@ -188,6 +199,40 @@ async function shot(args) {
     console.log(file);
   }
   if (!keep) stopAll();
+}
+
+function findMaestro() {
+  if (run('maestro', ['--version']).ok) return 'maestro';
+  const local = join(homedir(), '.maestro/bin/maestro');
+  if (existsSync(local)) return local;
+  return die('Maestro is not installed. Install it with: curl -fsSL "https://get.maestro.mobile.dev" | bash');
+}
+
+// The app's public Supabase URL and anon key, so a flow can check the local DB as a seed user.
+function publicEnv() {
+  const values = {};
+  for (const line of readFileSync(join(root, kit.envFile ?? '.env.local'), 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m) values[m[1]] = m[2];
+  }
+  return Object.entries(kit.envNames ?? {}).flatMap(([name, envName]) => ['-e', `${name}=${values[envName] ?? ''}`]);
+}
+
+async function flow(args) {
+  const keep = args.includes('--keep');
+  const [target] = args.filter((a) => a !== '--keep');
+  if (!target) die('Usage: npm run sim -- flow <file|all> [--keep]');
+  const path = target === 'all' ? FLOWS : resolve(existsSync(target) ? target : join(FLOWS, target.endsWith('.yaml') ? target : `${target}.yaml`));
+  if (!existsSync(path)) die(`No flow at ${path}`);
+  const maestro = findMaestro();
+  const devClientUrl = await startApp();
+  rmSync(FLOW_OUT, { recursive: true, force: true });
+  mkdirSync(FLOW_OUT, { recursive: true });
+  const r = run(maestro, ['test', path, '--test-output-dir', FLOW_OUT, '-e', `DEV_CLIENT_URL=${devClientUrl}`, ...publicEnv()], { stdio: 'inherit' });
+  if (!keep) stopAll();
+  for (const file of readdirSync(FLOW_OUT, { recursive: true }).filter((f) => f.endsWith('.png')).sort()) console.log(join(FLOW_OUT, file));
+  if (!r.ok) die(`Flow failed: ${target}. Maestro's report and screenshots are in ${FLOW_OUT}`);
+  console.log(`Flow passed: ${target}`);
 }
 
 function stopCommand() {
@@ -202,12 +247,13 @@ function install() {
   bootDevice();
   const r = run('npx', ['eas-cli', 'build:run', '-p', 'ios', '--profile', 'simulator', '--latest'], { stdio: 'inherit' }); // unproven (4)
   if (!r.ok) die('Install failed. See the output above.');
-  writeFileSync(FINGERPRINT, JSON.stringify({ fingerprint: currentFingerprint() }));
+  writeFileSync(FINGERPRINT, JSON.stringify({ native: currentFingerprint() }));
   console.log('Simulator build installed.');
 }
 
 const [command, ...args] = process.argv.slice(2);
 if (command === 'shot') await shot(args);
+else if (command === 'flow') await flow(args);
 else if (command === 'stop') stopCommand();
 else if (command === 'install') install();
-else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | stop | install');
+else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <file|all> [--keep] | stop | install');

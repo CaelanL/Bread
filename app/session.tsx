@@ -637,6 +637,7 @@ export default function StudySessionScreen() {
               <Pressable
                 style={[styles.micButton, { backgroundColor: buttonBg }]}
                 onPress={handleMicPress}
+                testID="mic-button"
               >
                 <IconSymbol name="mic.fill" size={32} color={colors.white} />
               </Pressable>

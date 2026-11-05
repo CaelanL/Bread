@@ -24,6 +24,7 @@ export default function TabLayout() {
         name="home"
         options={{
           title: 'Home',
+          tabBarButtonTestID: 'tab-home',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
@@ -31,6 +32,7 @@ export default function TabLayout() {
         name="(library)"
         options={{
           title: 'Library',
+          tabBarButtonTestID: 'tab-library',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="books.vertical.fill" color={color} />,
         }}
       />
@@ -38,6 +40,7 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: 'Settings',
+          tabBarButtonTestID: 'tab-settings',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
           tabBarBadge: settingsBadge ? '1' : undefined,
         }}

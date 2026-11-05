@@ -35,6 +35,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 - `npm run check` before calling anything done; `npm run check:fast` while iterating. `npm test` — unit tests alone.
 - `npm run doctor` when the local setup breaks.
 - `npm run sim -- shot <route> [--as <seed user>]` — screenshots of the local app in the simulator, to `.expo/sim-shots/`. Each area doc's "Browser checks" list runs this way, since Bread has no browser flows.
+- `npm run sim -- flow <name|all>` — runs the Maestro flows in `.maestro/` (taps, typing, iOS permission prompts) against the local DB. Prints pass or fail and the screenshots, under `.expo/sim-shots/flows/`. Flows change local data, and `npm run db:reset` restores the seed. Needs Maestro (`curl -fsSL "https://get.maestro.mobile.dev" | bash`).
 - Local seed users are described at the top of `supabase/seed.sql`. They exist only on local databases.
 - Supabase CLI: run `direnv exec . supabase <cmd>` from agent shells, so it gets `SUPABASE_ACCESS_TOKEN` from `.envrc`. Never run `supabase login`. Never print or commit `.envrc`.
 
@@ -44,7 +45,8 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 - A migration that destroys data needs `-- destructive-ok: <what>, approved by <name> <date>`.
 - This repo is public. No secrets, logins, real user data or account details in tracked files.
 - Living docs: no status lines; edit in place, no dated sections; each fact in one doc, others link to it; decisions in "## Decisions" at the bottom of the doc they're about; cite files and symbols, not line numbers; update the docs in the same PR as the code.
-- TypeScript and lint don't prove a feature works. A change to anything user-facing needs a look on the simulator with `npm run sim`, and recording or push need a person on a real device. Say which was done.
+- TypeScript and lint don't prove a feature works. A change to anything user-facing needs a look on the simulator with `npm run sim` (`shot` to look, `flow` to tap through), and recording or push need a person on a real device. Say which was done.
+- Agents never use computer use (Mac screenshots, clicks) to test Bread. Simulator checks go through `npm run sim -- flow`; a missing tap path gets a new flow in `.maestro/`.
 
 **Invariants.** Breaking these causes silent data loss, licensing violations or broken core flows.
 1. All Supabase writes live in `lib/`, never in components or screens. Exception: auth calls in `lib/auth/context.tsx`. See `docs/architecture/sync-and-storage.md`.

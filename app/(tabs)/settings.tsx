@@ -360,7 +360,7 @@ export default function SettingsScreen() {
               <IconSymbol name="chevron.right" size={16} color={colors.icon} />
             </SettingsRow>
           </Pressable>
-          <Pressable onPress={handleSignOut} disabled={signingOut}>
+          <Pressable onPress={handleSignOut} disabled={signingOut} testID="sign-out">
             <View
               style={[
                 styles.row,

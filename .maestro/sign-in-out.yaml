@@ -1,0 +1,17 @@
+# Sign in through the real form, see the account in Settings, sign out.
+appId: com.caelanliu.biblemem
+name: sign-in-out
+---
+- runFlow: subflows/open-app.yaml
+- takeScreenshot: sign-in-out-1-sign-in
+- runFlow:
+    file: subflows/sign-in.yaml
+    env:
+      EMAIL: reader-b@example.test
+- tapOn:
+    id: "tab-settings"
+- assertVisible: ".*reader-b@example.test.*"
+- takeScreenshot: sign-in-out-2-settings
+- runFlow: subflows/sign-out.yaml
+- assertVisible: "Email"
+- takeScreenshot: sign-in-out-3-signed-out

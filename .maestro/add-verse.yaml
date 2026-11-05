@@ -1,0 +1,30 @@
+# reader-b adds Ruth 1:1 to My Verses, then deletes it again. Needs the local `bible` function serving ESV.
+appId: com.caelanliu.biblemem
+name: add-verse
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)
+- tapOn: ".*My Verses.*"
+- waitForAnimationToEnd
+# A failed earlier run can leave the verse behind.
+- runFlow:
+    when:
+      visible: ".*Ruth 1:1 • ESV.*"
+    file: subflows/delete-ruth.yaml
+- extendedWaitUntil:
+    visible: "No verses yet"
+    timeout: 20000
+- tapOn: ".*Add Verse"
+- tapOn: "Ruth, Forward"
+- tapOn: "1"
+- extendedWaitUntil:
+    visible: "Ruth 1"
+    timeout: 20000
+- tapOn: "1  .*"
+- takeScreenshot: add-verse-1-selected
+- tapOn: "Add Verse 1"
+- extendedWaitUntil:
+    visible: ".*Ruth 1:1 • ESV.*"
+    timeout: 20000
+- takeScreenshot: add-verse-2-added
+- runFlow: subflows/delete-ruth.yaml

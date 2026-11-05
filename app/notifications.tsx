@@ -431,6 +431,7 @@ export default function NotificationsScreen() {
                   <ActivityIndicator size="small" color={colors.tint} />
                 ) : (
                   <Switch
+                    testID="notifications-switch"
                     value={isGranted && draft.masterEnabled}
                     onValueChange={handleMasterToggle}
                     trackColor={{ false: colors.borderLight, true: colors.primary }}

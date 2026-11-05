@@ -1,0 +1,36 @@
+# reader-a turns reminders on, signs out, reader-b signs in and turns them on.
+# The device's push token row moves from A to B (docs/features/notifications.md).
+appId: com.caelanliu.biblemem
+name: account-switch
+---
+- runFlow: subflows/open-app.yaml
+- runFlow:
+    file: subflows/sign-in.yaml
+    env:
+      EMAIL: reader-a@example.test
+- runFlow:
+    file: subflows/turn-on-reminders.yaml
+    env:
+      SHOT_PREFIX: account-switch-1-reader-a
+- runScript:
+    file: scripts/device-tokens.js
+    env:
+      EXPECT: reader-a 1, reader-b 0
+- runFlow: subflows/sign-out.yaml
+- takeScreenshot: account-switch-2-signed-out
+- runScript:
+    file: scripts/device-tokens.js
+    env:
+      EXPECT: reader-a 0, reader-b 0
+- runFlow:
+    file: subflows/sign-in.yaml
+    env:
+      EMAIL: reader-b@example.test
+- runFlow:
+    file: subflows/turn-on-reminders.yaml
+    env:
+      SHOT_PREFIX: account-switch-3-reader-b
+- runScript:
+    file: scripts/device-tokens.js
+    env:
+      EXPECT: reader-a 0, reader-b 1

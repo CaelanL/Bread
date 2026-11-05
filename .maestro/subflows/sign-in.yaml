@@ -1,0 +1,23 @@
+# Signs in as EMAIL from the Sign In screen and waits for the tabs.
+appId: com.caelanliu.biblemem
+env:
+  PASSWORD: password123 # local seed users only, see supabase/seed.sql
+---
+- tapOn: "Email"
+- inputText: ${EMAIL}
+- tapOn: "Password"
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn: "Sign In"
+- extendedWaitUntil:
+    notVisible: "Sign In"
+    timeout: 60000
+- waitForAnimationToEnd
+# The reminders card covers the tabs on a first sign-in.
+- tapOn:
+    text: "Maybe later"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "tab-settings"
+    timeout: 30000

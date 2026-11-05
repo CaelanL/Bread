@@ -1,0 +1,28 @@
+# reader-a starts a Medium practice session on Psalm 23:1-3 and taps the mic, up to the iOS
+# microphone prompt. Recording itself needs a person on a real device.
+appId: com.caelanliu.biblemem
+name: practice-session
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fsetup%2Fseed-psalm-23-1-3
+- extendedWaitUntil:
+    visible: "Start session.*"
+    timeout: 20000
+- tapOn: "Medium.*"
+- takeScreenshot: practice-session-1-setup
+- tapOn: "Start session.*"
+- extendedWaitUntil:
+    visible:
+      id: "mic-button"
+    timeout: 30000
+- assertVisible: "Verse 1"
+- takeScreenshot: practice-session-2-session
+- tapOn:
+    id: "mic-button"
+- extendedWaitUntil:
+    visible: "Don’t Allow|Don't Allow"
+    timeout: 30000
+- takeScreenshot: practice-session-3-mic-prompt
+- tapOn: "Don’t Allow|Don't Allow"
+- assertVisible: "Permission required"
+- tapOn: "OK"
