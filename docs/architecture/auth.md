@@ -203,3 +203,8 @@ check, the database refuses the write.
   Supabase Auth — refresh tokens are per-session.
 - **Password lengths differ.** Sign-up and reset ask for 8 characters,
   Settings asks for 6.
+
+## Browser checks
+
+- `npm run sim -- flow sign-in-out`: reader-b signs in through the form, Settings shows
+  `reader-b@example.test`, Sign Out returns to the Sign In screen.

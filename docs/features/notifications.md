@@ -223,6 +223,7 @@ a local-only `cron_secret` in Vault so 017 can apply.
 - `npm run sim -- shot /notifications --as reader-a`: grey Save. With permission not yet granted, the switch is off, it reads "Tap to allow review reminders", and no source sections show.
 - `npm run sim -- shot /settings --as reader-a`: the Notifications row reads "Off".
 - Tap path on the simulator: Settings, Notifications, turn the switch on, allow. Reviews show Daily and 9:00 AM, the nudge shows Every Monday and 6:00 PM, and Save stays grey until you edit.
+- `npm run sim -- flow account-switch`: reader-a turns reminders on and Maestro taps Allow, then signs out, then reader-b signs in and turns them on. The flow checks local `device_tokens` as each reader after each step: A 1 and B 0, then 0 and 0, then 0 and 1. The Simulator gets a real Expo push token.
 - Real device, with a mastered verse due: set the review time to the next 5-minute mark, Save, lock. A "Review time" push arrives on that minute, and tapping it opens Mastered.
 
 ## Decisions

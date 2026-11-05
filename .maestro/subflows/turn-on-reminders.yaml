@@ -1,0 +1,38 @@
+# From the tabs: Settings, Notifications, switch on if it's off, Save if it's enabled, back to Settings.
+# Taps Allow if iOS asks.
+appId: com.caelanliu.biblemem
+---
+- tapOn:
+    id: "tab-settings"
+- tapOn: "notifications, Notifications.*"
+- extendedWaitUntil:
+    visible:
+      id: "notifications-switch"
+    timeout: 20000
+# The switch reads "0" when off. With permission granted and no saved prefs it's already on.
+- runFlow:
+    when:
+      visible:
+        id: "notifications-switch"
+        text: "0"
+    commands:
+      - tapOn:
+          id: "notifications-switch"
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - takeScreenshot: ${SHOT_PREFIX}-ios-permission-prompt
+      - tapOn: "Allow"
+- extendedWaitUntil:
+    visible: "Pause without losing your setup"
+    timeout: 20000
+- takeScreenshot: ${SHOT_PREFIX}-reminders-on
+# Save stays grey after turning on with no other edit (notifications.md, Sharp edges).
+- tapOn:
+    text: "Save"
+    enabled: true
+    optional: true
+- tapOn:
+    text: "Back, Settings"
+    optional: true

@@ -1,0 +1,12 @@
+# Fresh app on the Sign In screen, loaded from this folder's Metro. Every permission is
+# unset, so the real iOS prompts show.
+appId: com.caelanliu.biblemem
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: unset
+- openLink: ${DEV_CLIENT_URL}
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 120000
