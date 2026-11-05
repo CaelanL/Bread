@@ -96,7 +96,7 @@
     "libDirs": [
       "lib"
     ],
-    "docsStrict": false,
+    "docsStrict": true,
     "deployFunctions": true,
     "deploy": {
       "type": "eas-workflow",

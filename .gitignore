@@ -47,7 +47,6 @@ app-example
 # Claude
 .claude/*
 !.claude/settings.json
-CLAUDE.md
 
 # Supabase
 supabase/.temp/

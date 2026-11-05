@@ -1,10 +1,5 @@
 # Bible Versions
 
-> **Status: Living document.** Update when a version is added or
-> removed, or when the user's selection mechanism changes. Read
-> before touching `lib/settings.ts`, the version selector in
-> Settings, or the `version` parameter on any API call.
-
 For the cache and adapter pipeline behind the scenes, see
 `docs/architecture/bible-api-and-caching.md`.
 
@@ -15,17 +10,13 @@ Five versions, defined in `lib/settings.ts`:
 | Code | Name | Source |
 |---|---|---|
 | ESV | English Standard Version | Crossway API |
-| KJV | King James Version | Bundled JSON (1769 ed., public domain) — works offline |
 | NLT | New Living Translation | API.Bible |
 | NIV | New International Version | API.Bible |
 | NKJV | New King James Version | API.Bible |
+| KJV | King James Version | Bundled JSON (1769 ed., public domain) — works offline |
 
-> **Heads up:** the README lists only ESV/NLT/KJV. The code (and the
-> Settings UI) supports all five. README is stale.
-
-CSB was supported earlier and was removed in commit `06ae8fe`. Don't
-re-introduce CSB without re-adding the API.Bible ID and re-checking
-licensing.
+Don't re-introduce CSB without re-adding the API.Bible ID and
+re-checking licensing.
 
 ## Where the user's selection lives
 
@@ -46,11 +37,13 @@ Selectors:
 - `useAppStore(s => s.bibleVersion)` — read
 - `useAppStore.getState().setBibleVersion(version)` — write
 
-The version selector lives on the Settings tab.
+The version selector lives on the Settings tab. The add-verse screen
+(`app/(tabs)/(library)/add.tsx`) also lists `BIBLE_VERSIONS`.
 
 ## Propagation
 
-The selected version flows through every Bible read:
+The selected version flows through every network Bible read (KJV
+stops at `fetchVerse` / `fetchChapter`, see "Bundled vs fetched"):
 
 ```
 User selects "NIV" in Settings
@@ -74,15 +67,18 @@ If you add a new version, every one of these needs an entry:
 | File | What to update |
 |---|---|
 | `lib/settings.ts` | `BibleVersion` type, `BIBLE_VERSIONS` array, display info (name) |
-| `lib/api/bible.ts` | `BibleVersion` type alias if separately defined |
+| `lib/api/bible.ts` | its own `BibleVersion` type |
+| `lib/storage/index.ts` | its own `BibleVersion` type |
+| `lib/store/index.ts` | the version list `hydrate` validates the saved setting against |
 | `supabase/functions/bible/index.ts` | `adapters` registry — pick existing adapter or write a new one |
 | `supabase/functions/bible/adapters/apibible.ts` | If using API.Bible: add Bible ID to `BIBLE_IDS` |
 | `supabase/functions/bible/adapters/esv.ts` | Only if it's a new ESV-API-served version (unlikely) |
-| Settings UI | Likely auto-renders from `BIBLE_VERSIONS` — verify |
+| Settings and add-verse UI | Render from `BIBLE_VERSIONS`, nothing to do |
 
 If using a brand-new external API, write a new adapter implementing
-the `BibleAdapter` contract (see bible-api-and-caching.md) and
-register it in the `adapters` map.
+the `BibleAdapter` contract (see
+`docs/architecture/bible-api-and-caching.md`) and register it in the
+`adapters` map.
 
 ## Per-user vs global
 
@@ -94,28 +90,14 @@ register it in the `adapters` map.
   version forever (relevant for streak / mastery progression).
 - **Global VOTM**: `verse_of_month` has no version column. The
   client renders the VOTM in the user's *current* `bibleVersion`.
-  Mastery counting for VOTM ignores version — see
-  `docs/architecture/home-and-votm.md`.
+  Mastery checks for VOTM ignore version — see
+  `docs/features/home.md`.
 
 ## Bundled vs fetched
 
-KJV is bundled (`assets/bible/kjv-1769.json`, ~4.5 MB) and served
-client-side. KJV reads never hit the network, never increment the
-rate limiter, never populate `verse_cache`. The integration is in
-`fetchVerse` / `fetchChapter` (`lib/api/bible.ts`) — they
-short-circuit to the local resolver in `lib/bible/kjv-bundle.ts`
-when `version === "KJV"`.
-
-The other four versions (ESV, NLT, NIV, NKJV) are licensed and go
-through the network path. See `bible-api-and-caching.md`.
-
-The bundled file went through one-time preprocessing
-(`scripts/clean-kjv.js`) to:
-- Strip italicized-supplied-word brackets (`[is]` → `is`, keeping
-  the words since they're required for English grammar)
-- Strip leading `#` paragraph markers
-- Rename keys from `Solomon's Song` to `Song of Solomon` to match
-  the canonical name used everywhere else in the codebase
+KJV is bundled and served client-side. The other four versions (ESV,
+NLT, NIV, NKJV) are licensed and go through the network path. Both are
+in `docs/architecture/bible-api-and-caching.md`.
 
 ## Missing-verse handling
 
@@ -129,8 +111,7 @@ modern editions). Current behavior:
 - There is no version-aware verse-count override.
 
 This is a real limitation worth knowing about, especially for NIV
-where some verses are footnoted out. Listed in
-`docs/architecture/bible-api-and-caching.md` sharp edges.
+where some verses are footnoted out.
 
 ## Invariants
 
@@ -140,8 +121,13 @@ where some verses are footnoted out. Listed in
    (`user_verses.version`).** Don't migrate it across versions
    based on the user's current selection — that would invalidate
    `session_attempts` history for that verse.
-3. **`get_votm_mastery_count` ignores version on purpose.** Mastering
-   John 3:16 in NLT counts the same as ESV.
+3. **VOTM mastery ignores version on purpose.** Mastering John 3:16
+   in NLT counts the same as ESV. `hasUserMasteredVOTM` and
+   `getVOTMMasteryCount` take no version.
 4. **If you add a version, update every site listed above in the
-   same PR.** Forgetting the adapter registry is a 500 in
-   production.
+   same PR.** Forgetting the adapter registry is a 400 on every read
+   of that version.
+
+## Decisions
+
+- 2026-02-15 · CSB removed (commit `06ae8fe`) · The commit gives no reason, so re-check licensing before bringing it back.
