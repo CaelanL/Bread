@@ -10,10 +10,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { supabase } from '@/lib/api/client';
 import { deleteDeviceToken, upsertDeviceToken } from './api';
 import { getPermissionStatus } from './permissions';
 
 const CACHED_TOKEN_KEY = 'notifications_cached_expo_token';
+
+// Bumped by unregisterDeviceToken, so a registration already in flight
+// when sign-out deletes the row doesn't put it back.
+let unregisterCount = 0;
+
+async function sessionUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
+}
 
 /**
  * Register or refresh the device token. Idempotent — UPSERT on the
@@ -26,6 +36,10 @@ const CACHED_TOKEN_KEY = 'notifications_cached_expo_token';
  * is best-effort and runs on foreground/auth events.
  */
 export async function registerDeviceToken(): Promise<string | null> {
+  const startCount = unregisterCount;
+  const userId = await sessionUserId();
+  if (!userId) return null;
+
   const status = await getPermissionStatus();
   if (status !== 'granted' && status !== 'provisional') {
     return null;
@@ -45,6 +59,11 @@ export async function registerDeviceToken(): Promise<string | null> {
     token = result.data;
   } catch (err) {
     console.error('[notifications] getExpoPushTokenAsync threw', err);
+    return null;
+  }
+
+  // Signed out, switched account or unregistered while the token was fetched.
+  if (unregisterCount !== startCount || (await sessionUserId()) !== userId) {
     return null;
   }
 
@@ -73,6 +92,7 @@ export async function clearCachedToken(): Promise<void> {
  * when permission is denied.
  */
 export async function unregisterDeviceToken(): Promise<void> {
+  unregisterCount += 1;
   const cached = await getCachedToken();
   if (!cached) return;
   await deleteDeviceToken(cached);
