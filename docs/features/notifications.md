@@ -60,9 +60,12 @@ The stamp stops double sends on the repeated hour at DST fall-back and on cron o
 Created in `supabase/migrations/017_notification_system.sql`, with in-progress cadence
 from `019_in_progress_cadence.sql`. Schema is in `docs/architecture/data-model.md`.
 
-**`device_tokens`** has one row per device. `UNIQUE(expo_token)` is on the token alone,
-so an upsert moves the row to whoever signed in. A compound key with `user_id` would let
-two rows exist for one device, and User A's references would reach User B.
+**`device_tokens`** has one row per device, owned by the account signed in on it.
+`UNIQUE(expo_token)` is on the token alone: a compound key with `user_id` would let two
+rows exist for one device, and User A's references would reach User B. The client writes
+through `register_device_token` (`20261105210000_register_device_token.sql`), a
+`SECURITY DEFINER` upsert as `auth.uid()`, because RLS makes a direct upsert onto another
+user's row fail. Tested in `supabase/tests/device-tokens.test.sql`.
 
 **`notification_preferences`** has one row per user. These CHECKs are load-bearing:
 
@@ -110,19 +113,21 @@ are in `docs/architecture/edge-functions.md`.
 | `api.ts` | Every client read and write of the two tables (invariant 1). Also `defaultPreferences`, which must match the migration defaults |
 | `preferences.ts` | `usePrefsStore`, cached in AsyncStorage. The server wins on `hydrate`. `patch` is optimistic with rollback |
 | `permissions.ts` | `getPermissionStatus`, `requestPermission`, `openOsSettings`. `provisional` counts as granted |
-| `tokens.ts` | `registerDeviceToken`, with a local cache of the last token |
+| `tokens.ts` | `registerDeviceToken`, which upserts on every call; `unregisterDeviceToken`, which deletes the row of the cached last token |
 | `foreground.ts`, `deep-links.ts` | `syncForegroundState`; `registerDeepLinkHandler`, `replayColdStartTap` |
 | `uxFlags.ts`, `useSettingsBadge.ts` | Card and badge flags, device-local and kept across sign-out |
 | `debug.ts` | `installDevTools`. No "fire now" helper, since it would bundle the cron secret |
 
 Prefs are per account. `app/_layout.tsx` hydrates them and runs `syncForegroundState` on
 sign-in, runs the sync again on each background-to-active change, and clears the cache on
-sign-out. Its `setNotificationHandler` turns everything off, so a push arriving while the
+sign-out. `signOut` in `lib/auth/context.tsx` calls `unregisterDeviceToken` first, while
+RLS still lets it delete the row. If that fails or the app dies first, the next sign-in on
+the device takes the row over. Its `setNotificationHandler` turns everything off, so a push arriving while the
 app is open shows nothing.
 
 `syncForegroundState`, in order:
 
-1. If `denied`, delete this device's token row and the local cache.
+1. If `denied`, call `unregisterDeviceToken`.
 2. If granted or provisional, call `registerDeviceToken`. If that returned a token and no
    prefs row is loaded, insert defaults. This covers enabling from iOS Settings.
 3. If a row is loaded and the device timezone differs, update `timezone`.
@@ -180,12 +185,9 @@ a local-only `cron_secret` in Vault so 017 can apply.
 
 ## Sharp edges
 
-- **The token cache breaks account switching on one device.** `registerDeviceToken` skips the
-  upsert when the token equals the cached one, and sign-out never calls `clearCachedToken`. If
-  User B signs in where User A was, the row stays on A: A's reminders reach this device and B
-  gets none. For the same reason, a row deleted on the server isn't recreated while the cache
-  holds that token.
-- **Sign-out keeps the token row.** A signed-out device keeps receiving that account's pushes.
+- **A failed sign-out delete leaves the row.** If `unregisterDeviceToken` fails (offline) or the
+  app dies before it runs, the signed-out device keeps that account's pushes until someone signs
+  in on it. A session that ends without `signOut`, such as a failed refresh, never deletes it.
 - **No catch-up and no retry.** The match needs the exact minute. If cron misses it, or every
   token fails, nothing goes out until the next scheduled day. A 2:30 AM time doesn't fire on
   the spring-forward day. A weekly nudge skipped by the 24h gate waits a week.
@@ -215,7 +217,8 @@ a local-only `cron_secret` in Vault so 017 can apply.
 - 2026-04-28 · Taps land on a list, and pushes are suppressed while the app is open · Auto-start is intrusive, and a reminder isn't useful inside the app.
 - 2026-04-29 · One digest per user from the server, through Expo Push and per-minute `pg_cron` · Per-verse local notifications hit the iOS pending cap, and only a server push has a body that's accurate when it fires.
 - 2026-04-29 · Two sources, no re-engagement push · In-progress covers users with something to do. Anything else is marketing.
-- 2026-04-29 · `UNIQUE(expo_token)` alone · A compound key lets one user's verses reach another. The token cache currently undercuts this; see Sharp edges.
+- 2026-04-29 · `UNIQUE(expo_token)` alone · A compound key lets one user's verses reach another.
 - 2026-04-29 · Earliest selectable time is 1:00 AM · Product call, enforced by the schema.
 - 2026-04-29 · Match in TypeScript, loading all enabled rows · Simple at this size. Move to a `SECURITY DEFINER` RPC at a few thousand rows.
 - 2026-04-30 · In-progress gets the same cadence picker as reviews · UI parity. Column defaults keep the Monday behavior for rows that never choose.
+- 2026-11-05 · A device's token belongs to the account signed in on it now: `register_device_token` takes the row on every sync, and sign-out deletes it · RLS blocked the client upsert from moving another user's row, and the cache skipped it anyway. The server-side takeover still works if the app dies mid sign-out. One RPC per foreground is cheap at Bread's size.

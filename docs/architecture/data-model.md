@@ -253,6 +253,7 @@ incrementally — the cron is the only writer.
 | `update_popular_ranges()` | fn (SECURITY DEFINER) | rebuilds `popular_ranges` |
 | `update_user_stats()` | fn (SECURITY DEFINER) | refreshes `user_stats` |
 | `delete_own_account()` | fn (SECURITY DEFINER) | deletes the caller across all tables in safe order |
+| `register_device_token(token, platform)` | fn (SECURITY DEFINER) | upserts a `device_tokens` row as the caller, taking it from any other user; see `docs/features/notifications.md` |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
 | `verse_cache_stats` | view | per-version cache stats |
@@ -388,9 +389,10 @@ would call a hosted URL.
 
 **Tests.** `npm run test:db` runs the pgTAP files in `supabase/tests/`:
 `catalog.test.sql` (every public table has RLS on; no `SECURITY DEFINER`
-function is open to clients unless allowlisted) and `access.test.sql`
+function is open to clients unless allowlisted), `access.test.sql`
 (one reader can't read or write another's data, with known bugs as
-todos).
+todos) and `device-tokens.test.sql` (a shared phone's token row goes
+to the last account to register it).
 
 **Prod.** Migrations reach prod only through `npm run release`, which
 also re-dates new files to sort after prod's newest. See
