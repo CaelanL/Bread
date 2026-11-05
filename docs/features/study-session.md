@@ -225,9 +225,7 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - **Exiting while transcribing.** `processRecording` isn't cancelled. If the
   in-flight chunk was the last, `saveAndExit` writes a partial attempt and the
   finished call writes a second, full one. Otherwise the result is dropped.
-- **Partial scores can mark mastery.** Withholding `fullSession` only gates the
-  engraved step. A partial new best still sets `bestAccuracy`, and `completed` at 90
-  or more, so on Hard a long passage with one short chunk left can reach Mastered.
+- **Partial scores can mark mastery.** See `docs/features/review.md`.
 - **Partial scores read low.** One of two equal chunks at 100% saves about 50%.
 - **Empty chunks.** A keyed map missing a verse gives a chunk with empty `text`,
   which the batch path rejects, so the chunk can't complete. The fetch layer must

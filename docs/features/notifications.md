@@ -191,8 +191,7 @@ a local-only `cron_secret` in Vault so 017 can apply.
   the spring-forward day. A weekly nudge skipped by the 24h gate waits a week.
 - **Revoking permission in iOS Settings doesn't change `master_enabled`.** The cron still
   matches, then logs `skipped-empty` once the token row is gone. Settings reads "Off" anyway.
-- **The digest skips soft-deleted mastered verses, but the app doesn't.** The Mastered list and
-  `useDueCounts` include them, so the app can show more due verses than the digest.
+- **The digest and the due pill can disagree.** See `docs/features/review.md`.
 - **An invalid timezone skips the user** until the client fixes it on the next foreground. The
   SQL helper `local_time_in_tz`, with its UTC fallback, exists but nothing calls it.
 - **Enabling with no edits can't Save.** With no row, the draft already has master on, so

@@ -11,7 +11,7 @@ column and type, see the generated `supabase/database.types.ts`.
 | `usage_daily` | per-user | Free/Supporter rate-limit counters (transcribe seconds, evaluate count, Bible fetch count) |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
-| `verse_cache` | shared | Server-side Bible text cache, max 500 verses per version, LRU evicted (licensing) |
+| `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits, see `docs/architecture/bible-api-and-caching.md` |
 | `app_config` | shared | Key/value settings for the stats cron (`stats_min_words`, `stats_cron_schedule`) |
 | `user_collections` | per-user | User's collections, soft-deletable, identified by `(user_id, client_id)` |
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
@@ -94,7 +94,7 @@ Indexes:
   hard:     { bestAccuracy: number | null, completed: boolean },
   engraved: {
     completed:       boolean,           // passCount >= 10 (sticky)
-    passCount:       number,            // monotonic; advances per on-time review
+    passCount:       number,            // monotonic; advances per due review, on-time or overdue
     lifetimeReviews: number,            // includes early/locked qualifying reviews
     nextDueAt:       string | null,     // ISO UTC
     lastReviewedAt:  string | null,     // ISO UTC of last qualifying session
@@ -159,8 +159,8 @@ policies and revoked `anon` and `authenticated`, the same for
 `app_config` and the `verse_cache_stats` view (now `security_invoker`).
 Edge functions reach them with the service role, which bypasses both.
 
-Capped at 500 rows per version (ESV/NLT licensing); the edge function
-evicts on insert, see `docs/architecture/bible-api-and-caching.md`.
+Licensing limits, eviction and its known gaps are in
+`docs/architecture/bible-api-and-caching.md`.
 
 The SQL helpers are defined but the edge function doesn't call them:
 - `get_verse_cache_count(version)` → row count for a version
@@ -256,7 +256,7 @@ incrementally — the cron is the only writer.
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
 | `verse_cache_stats` | view | per-version cache stats |
-| `get_votm_mastery_count(book, chapter, vs, ve)` | **MISSING** | client calls it, no migration defines it — see `docs/features/home.md` |
+| `get_votm_mastery_count(book, chapter, vs, ve)` | **MISSING** | see `docs/features/home.md` |
 
 `pg_cron` jobs: `update-popular-ranges` (every 12h), `update-user-stats`
 (every 6h), `send-notifications` (every minute, through `pg_net`) and
@@ -398,13 +398,9 @@ also re-dates new files to sort after prod's newest. See
 
 ## Sharp edges
 
-- `get_votm_mastery_count` is called from `lib/api/votm.ts` but no
-  migration defines it. `getVOTMMasteryCount` logs the error and
-  returns 0.
-- `get_current_streak` and `get_total_time_studied` take any user's
-  id, and clients can run `update_popular_ranges` and
-  `update_user_stats`. All four are known-bug todos in
-  `supabase/tests/access.test.sql`.
+- `get_votm_mastery_count` has no definition: see
+  `docs/features/home.md`.
+- Access gaps in the stats functions: see `docs/features/insights.md`.
 - Function `search_path` is unset on most functions, which Supabase
   Security Advisor flags (low risk).
 - `get_tier_and_usage`, the RPC behind `getTierAndUsage` in

@@ -26,7 +26,7 @@ GET /functions/v1/bible
         │
         ▼
 ┌──────────────────────────────────────┐
-│  Layer 2: Postgres verse_cache table │  500 rows per version, LRU
+│  Layer 2: Postgres verse_cache table │  LRU eviction
 │  supabase/functions/bible/cache.ts   │  bumps last_used_at on read
 └──────────────────────────────────────┘
         │ miss
@@ -73,14 +73,15 @@ Two rules, both from the Psalm 103 bug (see Decisions):
   granularity. This is what makes overlapping ranges share storage
   (John 3:16-18 and John 3:17-20 share rows 17–18).
 - LRU: `last_used_at` is bumped fire-and-forget on every read.
-  When the per-version row count would exceed 500, oldest rows by
-  `last_used_at` are evicted before insert (`evictOldestVerses`, which
-  queries the table directly and doesn't use the SQL helpers).
+  `cacheVerse` and `cacheChapter` call `evictOldestVerses` before
+  insert. It picks the oldest rows by `last_used_at`, queries the table
+  directly and doesn't use the SQL helpers. Eviction has known gaps,
+  see Sharp edges.
 - Completeness validation: a chapter is "fully cached" only when
   the row count for `(book, chapter, version)` reaches the expected
   count from `verse-counts.ts`. A partial chapter returns null and
   triggers a re-fetch. Ranges check for every verse in the range.
-- The 500-per-version cap exists because of ESV/NLT licensing.
+- The 500-per-version figure comes from ESV/NLT licensing.
 
 ### Layer 3 — adapters
 
@@ -145,7 +146,7 @@ fetchVerse("John 3:16", "ESV")
         HIT  → bump last_used_at, return with cached: true
         MISS ↓
     esvAdapter.fetchVerse("John 3:16", "ESV")
-    cacheVerse(...) → evict if at the cap, upsert into verse_cache
+    cacheVerse(...) → eviction step, then upsert into verse_cache
     return { reference, version, text, verses: { 16: text }, cached: false }
   → session verseCache set per verse
 ```
@@ -191,7 +192,7 @@ fetchChapter("John", 3, "ESV")
         HIT  → return all 36 verses
         MISS ↓
     esvAdapter.fetchChapter("John 3", "ESV", 36)
-    cacheChapter(...) → LRU evict if total > 500, then upsert
+    cacheChapter(...) → eviction step, then upsert
     return { reference, version, verses: {1..36}, cached: false }
   → setChapterInSession also fills verseCache per verse
 ```
@@ -305,8 +306,8 @@ unrelated to KJV serving.
 
 **Invariant 2: verse text is NEVER stored in `user_verses`.** The
 `text` column was dropped in migration 005 to comply with ESV/NLT
-licensing. Verse text only lives in `verse_cache` (server, max 500 per
-version, LRU evicted) and the in-memory session cache, plus the KJV
+licensing. Verse text only lives in `verse_cache` (server, see Layer 2) and the
+in-memory session cache, plus the KJV
 bundle, which is public domain. If you find yourself adding a `text`
 field to a user-owned table, stop. The optional `text` and `verses` on
 the `SavedVerse` type are filled in memory and never written.
@@ -330,20 +331,16 @@ Also:
 - **Rate limit fires *before* the cache check.** Cache hits still
   count. Don't move the rate limit after the cache check to "save
   quota" — that defeats per-user fairness.
-- **LRU eviction happens at insert time, not lazily.** Don't
-  assume the DB cache can hold unbounded rows.
+- **Eviction belongs at insert time, not lazily.** Keep it in the
+  insert path. Its known gaps are under Sharp edges.
 - **Verse-count validation is the only completeness signal.** Use
   `getExpectedVerseCount`; don't guess from response length.
 
 ## Sharp edges
 
-- **Eviction looks broken when caching chapters and ranges.**
-  `evictOldestVerses` is called with the book and chapter to exclude,
-  and builds `query.not("and", "(book.eq...)")`. `not()` takes three
-  arguments, so the filter comes out malformed and its result isn't
-  checked. `cacheChapter` would then upsert without evicting, and a
-  version could pass 500 rows. `cacheVerse` passes no exclusion, so
-  single-verse caching isn't affected.
+- **Eviction of cached verses has known gaps.** Read
+  `evictOldestVerses` in `supabase/functions/bible/cache.ts` before
+  relying on it or changing cache behavior.
 - A version with intentionally missing verses fails the completeness
   check and re-fetches every time. See
   `docs/architecture/bible-versions.md`.

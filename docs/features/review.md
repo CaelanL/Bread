@@ -162,7 +162,7 @@ Review state lives in the `progress` column, so it follows the row. Delete rules
 - **A failed save behaves differently by path.** A failed full-session write shows a toast. A failed early-exit write only logs to the console. Neither retries. Quitting right after the results appear can lose the write. See `docs/architecture/sync-and-storage.md`.
 - **Two devices can drift by one.** Writes are last-write-wins and each device checks its own copy of `nextDueAt`. Two reviews can both count, or one can overwrite the other.
 - **The pill and the push can disagree.** `useDueCounts` includes soft-deleted mastered verses. `loadDueVerses` filters `deleted_at` out. The pill can show verses that the digest never mentions.
-- **Reset on a soft-deleted mastered verse leaves stale state.** `resetVerseProgress` looks only in `verses`, so it doesn't see the verse as mastered and leaves it in `masteredVerses` with the old progress. The server row is wiped, and the verse disappears on the next fetch.
+- **Reset on a soft-deleted mastered verse leaves stale state.** See `docs/features/library.md`.
 - **Unused code.** `useReviewState`, `dueVersesFor`, `lockedVersesFor` and `useReviewMaxIntervalDays` have no callers in the app. `dueCount` in `app/(tabs)/(library)/[id].tsx` is computed and never rendered. Don't assume a change to them reaches a screen.
 
 ## Browser checks
