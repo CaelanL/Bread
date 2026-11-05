@@ -160,25 +160,15 @@ export async function updatePreferences(patch: Partial<NotificationPreferences>)
 }
 
 /**
- * UPSERT a device token. UNIQUE(expo_token) on the table makes
- * ownership transfer atomic — if a different user previously had this
- * token, their row's user_id flips to the current user (privacy: no
- * ghost-pushes).
+ * UPSERT a device token as the signed-in user, through an RPC because
+ * RLS blocks a direct upsert onto another user's row. If someone else
+ * signed in on this device before, their row becomes this user's.
  */
 export async function upsertDeviceToken(expoToken: string): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-  const { error } = await supabase
-    .from(TOKENS_TABLE)
-    .upsert(
-      {
-        user_id: user.id,
-        expo_token: expoToken,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        last_seen_at: new Date().toISOString(),
-      },
-      { onConflict: 'expo_token' },
-    );
+  const { error } = await supabase.rpc('register_device_token', {
+    p_expo_token: expoToken,
+    p_platform: Platform.OS === 'ios' ? 'ios' : 'android',
+  });
   if (error) {
     console.error('[notifications] upsertDeviceToken', error);
     return false;

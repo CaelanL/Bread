@@ -2,23 +2,24 @@
  * Expo push-token registration and refresh.
  *
  * Token is per-device. Calling getExpoPushTokenAsync without permission
- * throws — gate every call on a `granted`/`provisional` status. Caching
- * the most-recent token in AsyncStorage lets foreground refresh skip
- * the upsert when the token hasn't rotated.
+ * throws — gate every call on a `granted`/`provisional` status. The
+ * last registered token is cached in AsyncStorage so sign-out and a
+ * revoked permission can delete its row.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { upsertDeviceToken } from './api';
+import { deleteDeviceToken, upsertDeviceToken } from './api';
 import { getPermissionStatus } from './permissions';
 
 const CACHED_TOKEN_KEY = 'notifications_cached_expo_token';
 
 /**
  * Register or refresh the device token. Idempotent — UPSERT on the
- * server handles repeat calls. Cached token check lets us skip the
- * roundtrip when nothing changed.
+ * server handles repeat calls. It always upserts, even for an unchanged
+ * token, because the signed-in user may have changed since the last
+ * call, or the row may have been deleted on the server.
  *
  * Returns the token on success, null otherwise (no permission, fetch
  * failed, etc.). Errors are logged, not thrown — token registration
@@ -47,12 +48,6 @@ export async function registerDeviceToken(): Promise<string | null> {
     return null;
   }
 
-  const cached = await AsyncStorage.getItem(CACHED_TOKEN_KEY);
-  if (cached === token) {
-    // Already registered server-side and unchanged. Skip.
-    return token;
-  }
-
   const ok = await upsertDeviceToken(token);
   if (!ok) {
     // Server upsert failed; don't cache so we'll retry next foreground.
@@ -67,7 +62,19 @@ export async function getCachedToken(): Promise<string | null> {
   return AsyncStorage.getItem(CACHED_TOKEN_KEY);
 }
 
-/** Clear the cached token. Used by sign-out. Does NOT touch the server. */
+/** Clear the cached token. Does NOT touch the server. */
 export async function clearCachedToken(): Promise<void> {
   await AsyncStorage.removeItem(CACHED_TOKEN_KEY);
+}
+
+/**
+ * Delete this device's token row and the cache, so the current user's
+ * pushes stop reaching it. Runs on sign-out (while still signed in) and
+ * when permission is denied.
+ */
+export async function unregisterDeviceToken(): Promise<void> {
+  const cached = await getCachedToken();
+  if (!cached) return;
+  await deleteDeviceToken(cached);
+  await clearCachedToken();
 }
