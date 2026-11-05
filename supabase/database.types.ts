@@ -286,6 +286,9 @@ isOneToOne: false
 "local_time_in_tz":
 { Args: { "tz": string }; Returns: string
                            },
+"register_device_token":
+{ Args: { "p_expo_token": string,"p_platform": string }; Returns: undefined
+                           },
 "update_popular_ranges":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },

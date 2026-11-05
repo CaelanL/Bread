@@ -2,29 +2,44 @@
  * Expo push-token registration and refresh.
  *
  * Token is per-device. Calling getExpoPushTokenAsync without permission
- * throws — gate every call on a `granted`/`provisional` status. Caching
- * the most-recent token in AsyncStorage lets foreground refresh skip
- * the upsert when the token hasn't rotated.
+ * throws — gate every call on a `granted`/`provisional` status. The
+ * last registered token is cached in AsyncStorage so sign-out and a
+ * revoked permission can delete its row.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { upsertDeviceToken } from './api';
+import { supabase } from '@/lib/api/client';
+import { deleteDeviceToken, upsertDeviceToken } from './api';
 import { getPermissionStatus } from './permissions';
 
 const CACHED_TOKEN_KEY = 'notifications_cached_expo_token';
 
+// Bumped by unregisterDeviceToken, so a registration already in flight
+// when sign-out deletes the row doesn't put it back.
+let unregisterCount = 0;
+
+async function sessionUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
+}
+
 /**
  * Register or refresh the device token. Idempotent — UPSERT on the
- * server handles repeat calls. Cached token check lets us skip the
- * roundtrip when nothing changed.
+ * server handles repeat calls. It always upserts, even for an unchanged
+ * token, because the signed-in user may have changed since the last
+ * call, or the row may have been deleted on the server.
  *
  * Returns the token on success, null otherwise (no permission, fetch
  * failed, etc.). Errors are logged, not thrown — token registration
  * is best-effort and runs on foreground/auth events.
  */
 export async function registerDeviceToken(): Promise<string | null> {
+  const startCount = unregisterCount;
+  const userId = await sessionUserId();
+  if (!userId) return null;
+
   const status = await getPermissionStatus();
   if (status !== 'granted' && status !== 'provisional') {
     return null;
@@ -47,10 +62,9 @@ export async function registerDeviceToken(): Promise<string | null> {
     return null;
   }
 
-  const cached = await AsyncStorage.getItem(CACHED_TOKEN_KEY);
-  if (cached === token) {
-    // Already registered server-side and unchanged. Skip.
-    return token;
+  // Signed out, switched account or unregistered while the token was fetched.
+  if (unregisterCount !== startCount || (await sessionUserId()) !== userId) {
+    return null;
   }
 
   const ok = await upsertDeviceToken(token);
@@ -67,7 +81,20 @@ export async function getCachedToken(): Promise<string | null> {
   return AsyncStorage.getItem(CACHED_TOKEN_KEY);
 }
 
-/** Clear the cached token. Used by sign-out. Does NOT touch the server. */
+/** Clear the cached token. Does NOT touch the server. */
 export async function clearCachedToken(): Promise<void> {
   await AsyncStorage.removeItem(CACHED_TOKEN_KEY);
+}
+
+/**
+ * Delete this device's token row and the cache, so the current user's
+ * pushes stop reaching it. Runs on sign-out (while still signed in) and
+ * when permission is denied.
+ */
+export async function unregisterDeviceToken(): Promise<void> {
+  unregisterCount += 1;
+  const cached = await getCachedToken();
+  if (!cached) return;
+  await deleteDeviceToken(cached);
+  await clearCachedToken();
 }

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/api/client';
+import { unregisterDeviceToken } from '@/lib/notifications/tokens';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -129,6 +130,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async (): Promise<void> => {
+    // Before signing out: RLS lets only this user delete their row.
+    // Best-effort; if it fails, the next sign-in on this device takes the row.
+    await unregisterDeviceToken().catch((e) => {
+      console.error('[auth] unregisterDeviceToken', e);
+    });
     await supabase.auth.signOut();
   };
 

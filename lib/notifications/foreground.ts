@@ -18,14 +18,9 @@
  * subsequent foregrounds.
  */
 
-import {
-  registerDeviceToken,
-  clearCachedToken,
-  getCachedToken,
-} from './tokens';
+import { registerDeviceToken, unregisterDeviceToken } from './tokens';
 import { getPermissionStatus } from './permissions';
 import {
-  deleteDeviceToken,
   updateLastForegroundedAt,
   updateTimezone,
 } from './api';
@@ -45,13 +40,9 @@ export async function syncForegroundState(): Promise<void> {
   if (status === 'denied') {
     // User revoked externally. Belt-and-suspenders alongside server-
     // side DeviceNotRegistered: delete the row, clear local cache.
-    const cached = await getCachedToken();
-    if (cached) {
-      await deleteDeviceToken(cached);
-      await clearCachedToken();
-    }
+    await unregisterDeviceToken();
   } else if (status === 'granted' || status === 'provisional') {
-    // UPSERT token (no-op if cached token unchanged).
+    // UPSERT token as the signed-in user, every time.
     const token = await registerDeviceToken();
 
     // If permission was just granted via iOS Settings (post a prior

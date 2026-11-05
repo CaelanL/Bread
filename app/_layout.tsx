@@ -104,9 +104,8 @@ function RootLayoutNav() {
       } else {
         useAppStore.getState().clear();
 
-        // Clear local notification cache. Server-side device_tokens
-        // row stays — ownership transfers via UPSERT when the next
-        // user signs in (UNIQUE(expo_token)).
+        // Clear local notification cache. signOut deletes this device's
+        // token row; otherwise the next sign-in here takes it over.
         try {
           await usePrefsStore.getState().clear();
         } catch {

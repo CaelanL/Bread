@@ -38,6 +38,7 @@ select is(
           ('delete_own_account()'), -- the client calls it; it only ever acts on auth.uid()
           ('get_current_streak(uuid,integer)'), -- the client calls it; known bug in access.test.sql: it takes any user's id
           ('get_total_time_studied(uuid)'), -- same as above
+          ('register_device_token(text,text)'), -- the client calls it; it only ever writes rows for auth.uid()
           ('update_popular_ranges()'), -- cron only; known bug in access.test.sql: clients can call it too
           ('update_user_stats()') -- same as above
         ) as allowlist(sig)

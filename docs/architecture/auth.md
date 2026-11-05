@@ -99,7 +99,9 @@ someone else.
 ### Sign out
 
 ```
-signOut() → supabase.auth.signOut()
+signOut() → unregisterDeviceToken() — this device's push token row
+  deleted while still signed in (docs/features/notifications.md)
+  → supabase.auth.signOut()
   → AsyncStorage tokens removed
   → AuthProvider session cleared, isAuthenticated goes false
   → effect in app/_layout.tsx:
