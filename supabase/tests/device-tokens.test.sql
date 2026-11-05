@@ -2,7 +2,7 @@
 -- Uses the seed logins. All writes roll back.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(5);
+select plan(6);
 
 select set_config('test.reader_a', (select id::text from auth.users where email = 'reader-a@example.test'), true);
 select set_config('test.reader_b', (select id::text from auth.users where email = 'reader-b@example.test'), true);
@@ -27,6 +27,8 @@ select is(
   0,
   'Reader A has no row left, so A''s reminders no longer reach the phone'
 );
+
+select ok(not has_function_privilege('anon', 'public.register_device_token(text,text)', 'EXECUTE'), 'anon cannot execute register_device_token');
 
 set local role anon;
 select set_config('request.jwt.claim.sub', '', true);

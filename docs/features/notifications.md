@@ -120,10 +120,12 @@ are in `docs/architecture/edge-functions.md`.
 
 Prefs are per account. `app/_layout.tsx` hydrates them and runs `syncForegroundState` on
 sign-in, runs the sync again on each background-to-active change, and clears the cache on
-sign-out. `signOut` in `lib/auth/context.tsx` calls `unregisterDeviceToken` first, while
-RLS still lets it delete the row. If that fails or the app dies first, the next sign-in on
-the device takes the row over. Its `setNotificationHandler` turns everything off, so a push arriving while the
+sign-out. Its `setNotificationHandler` turns everything off, so a push arriving while the
 app is open shows nothing.
+
+`signOut` in `lib/auth/context.tsx` calls `unregisterDeviceToken` first, while RLS still lets
+it delete the row. If that fails or the app dies first, the next sign-in on the device takes
+the row over.
 
 `syncForegroundState`, in order:
 

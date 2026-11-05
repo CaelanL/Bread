@@ -42,7 +42,7 @@ export async function syncForegroundState(): Promise<void> {
     // side DeviceNotRegistered: delete the row, clear local cache.
     await unregisterDeviceToken();
   } else if (status === 'granted' || status === 'provisional') {
-    // UPSERT token (no-op if cached token unchanged).
+    // UPSERT token as the signed-in user, every time.
     const token = await registerDeviceToken();
 
     // If permission was just granted via iOS Settings (post a prior
