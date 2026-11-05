@@ -187,9 +187,19 @@ a local-only `cron_secret` in Vault so 017 can apply.
 
 ## Sharp edges
 
-- **A failed sign-out delete leaves the row.** If `unregisterDeviceToken` fails (offline) or the
-  app dies before it runs, the signed-out device keeps that account's pushes until someone signs
-  in on it. A session that ends without `signOut`, such as a failed refresh, never deletes it.
+- **Sign-out and the token row can end up out of step.** `signOut` deletes the row, then calls
+  `supabase.auth.signOut()`, which keeps the session on any error that isn't a 401, 403 or 404.
+  - Offline, both fail: the user stays signed in, and the next foreground sync re-registers.
+  - Delete fails but logout succeeds, or the app dies in between: the signed-out device keeps
+    that account's pushes until someone signs in on it.
+  - Delete succeeds but logout fails: the user stays signed in with no row, and gets no
+    reminders until the next background-to-active sync.
+  - A registration that starts during the logout call, from a foreground event, can put the row
+    back. One already in flight when `signOut` starts skips its upsert.
+- **Signing out on one device ends that account's sessions on its other devices.**
+  `supabase.auth.signOut()` uses the default global scope, so the other devices lose their
+  session at the next refresh without running `signOut`, and keep their rows. Pushes reach only
+  that account's own devices, and a sign-in by someone else there takes the row over.
 - **No catch-up and no retry.** The match needs the exact minute. If cron misses it, or every
   token fails, nothing goes out until the next scheduled day. A 2:30 AM time doesn't fire on
   the spring-forward day. A weekly nudge skipped by the 24h gate waits a week.
