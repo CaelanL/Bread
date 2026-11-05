@@ -1,223 +1,103 @@
-# Insights and Streaks
+# Insights
 
-> **Status: Living document.** Update when an insight is added, when
-> a SQL function or cron schedule changes, or when streak logic
-> moves. Read before touching `app/(tabs)/insights.tsx`,
-> `hooks/use-streak.ts`, `lib/api/analytics.ts`, or analytics-related
-> SQL functions.
+The Insights screen shows the user's activity and the verses most people have mastered. Some numbers come from the store, some from SQL on demand, and two from tables that cron rebuilds.
 
-The Insights screen surfaces the user's activity: streak, time
-studied, verses mastered, in progress, and globally popular verse
-ranges. Most of the heavy computation happens in Postgres — either
-on demand (streak, time studied) or precomputed via cron (user_stats,
-popular_ranges).
+The screen is `app/(tabs)/insights.tsx`, a tab with `href: null`. Users reach it from `InsightsCard` on Home (`docs/features/home.md`). Engraved and review rules are in `docs/features/review.md`. Table shapes are in `docs/architecture/data-model.md`.
 
-The Insights tab itself is `href: null` (hidden) — users reach it
-from the InsightsCard on the Home tab.
+## Screen and sources
 
-## Data sources
+Top to bottom:
 
-| Insight | Source | Computed where |
+| Section | Source | Computed |
 |---|---|---|
-| Streak (consecutive days) | `session_attempts` | SQL function `get_current_streak`, called on demand |
-| Total time studied | `session_attempts.recording_duration_ms` | SQL function `get_total_time_studied` |
-| Verses mastered | `user_verses.progress.hard.completed` | Zustand selector `useInsightsStats` |
-| Verses in progress | `user_verses.progress` | Zustand selector |
-| Average time to master | `user_stats.avg_time_per_word_ms × 23` | Cron-precomputed (every 6 hours), only for users with 600+ mastered words |
-| Most popular verse ranges (global) | `popular_ranges` | Cron-precomputed (every 12 hours) |
-| Most-memorized books (per user) | `user_verses` | Zustand selector |
+| Verses Mastered | `useInsightsStats` | Store: `masteredVerses.length` |
+| Verses In Progress | `useInsightsStats` | Store: `isInProgressVerse` predicate, deduped by verse id |
+| Practice Streak | `useStreak`, `getCurrentStreak` | SQL on demand: `get_current_streak` |
+| Time Studied | `getTotalTimeStudied` | SQL on demand: `get_total_time_studied` |
+| Time to Master Verse | `getAvgTimeToMaster` | `user_stats`, rebuilt every 6 hours |
+| Your Most Memorized Books | `useMostMemorizedBooks` | Store: top 5 books over `masteredVerses` |
+| Popular Verses | `getPopularRanges(10)` | `popular_ranges`, rebuilt every 12 hours |
+
+`lib/api/analytics.ts` and `lib/api/popular-verses.ts` hold the API calls. Time stats and popular ranges load when the screen mounts and on pull to refresh.
+
+## Mastered and in progress
+
+Mastered counts `masteredVerses`, which is fetched with no `deleted_at` filter. Soft-deleted verses still count, because mastery is permanent. What masters a verse is in `docs/features/review.md`.
+
+In progress uses the same `isInProgressVerse` predicate as `useInProgressVerses`, so this number always equals the In Progress collection in the Library. The push source `loadInProgressVerses` mirrors it on the server. Change them together.
 
 ## Streak
 
-Function: `get_current_streak(p_user_id UUID, p_tz_offset_min INT)`
-(`supabase/migrations/012_analytics_functions.sql.done`).
+`get_current_streak(p_user_id, p_tz_offset_min)` in `supabase/migrations/012_analytics_functions.sql`:
 
-Logic:
+1. Shifts every `session_attempts.created_at` by the offset from the client's `getTimezoneOffset()`.
+2. Takes the distinct local dates, newest first.
+3. Returns 0 if the newest date is neither today nor yesterday.
+4. Counts back through consecutive days until a gap.
 
-1. Convert all `session_attempts.created_at` to the user's local
-   timezone using the offset parameter.
-2. Get the distinct dates with at least one attempt.
-3. Order desc.
-4. If the most recent date is **not** today or yesterday → return 0
-   (streak broken).
-5. Walk backwards counting consecutive days until a gap.
-
-A streak day = at least one `session_attempts` row of any
-difficulty, any verse, any score. It's not "completed today" — it's
-"practiced today."
-
-Client hook: `useStreak()` in `hooks/use-streak.ts`. It calls the
-RPC with `new Date().getTimezoneOffset()` so the calculation
-matches the user's local day.
+A streak day is any logged attempt: any difficulty, any verse, any score, full or partial.
 
 ## Time studied
 
-Function: `get_total_time_studied(p_user_id UUID)` (migration 012).
+`get_total_time_studied` sums `session_attempts.recording_duration_ms`, treating nulls as nothing. It includes partial attempts. `formatTimeStudied` shows `Xh Ym` under 100 hours and `X.Xh` above.
 
-```sql
-SELECT COALESCE(SUM(recording_duration_ms), 0)::BIGINT
-FROM session_attempts
-WHERE user_id = p_user_id;
-```
+## Time to master a verse
 
-Includes every attempt — partial early-exit attempts as well as
-complete sessions. Returns milliseconds; client converts to a
-human-readable string (e.g. "2h 14m").
+`getAvgTimeToMaster` reads `user_stats.avg_time_per_word_ms` and multiplies by 23, the word count taken as one verse. With no value it returns null and the card shows `--`.
 
-`recording_duration_ms` is nullable; old rows may not have it. The
-SUM treats NULLs as zero.
+The `update-user-stats` cron job runs `update_user_stats()` at `0 */6 * * *` (`supabase/migrations/011_user_stats_cron.sql`). It works only from `session_attempts`:
 
-## Verses mastered / in progress
+- **`total_words_mastered`:** the sum of `word_count` over each verse's first Hard attempt at 90 or more, per range and version.
+- **`avg_time_per_word_ms`:** for each of those verses, all recording time up to that attempt divided by `word_count`, then averaged. Attempts with a null `word_count` don't count.
+- **The threshold:** the average is written only when `total_words_mastered` reaches `stats_min_words` in `app_config`, default 600. Below that it is too noisy.
 
-Computed client-side from the Zustand store —
-`useInsightsStats()` selector in `lib/store/index.ts`.
+## Popular Verses
 
-```ts
-versesMastered = unique verses where progress.hard.completed === true
-versesInProgress = unique verses where any progress.bestAccuracy is non-null
-                   AND progress.hard.completed === false
-```
+`popular_ranges` is a global table anyone can read. Only `update_popular_ranges()` fills it.
 
-The dedup is by verse `id`, because a verse can be in multiple
-collections. Soft-deleted mastered verses count toward
-`versesMastered` (mastery is permanent).
+- **Mastered only.** Migration 015 (`supabase/migrations/015_popular_verses_mastered_only.sql`) redefined the function to count rows where `progress.hard.completed` is true.
+- **Soft-deleted but mastered verses count.** The query has no `deleted_at` filter, on purpose.
+- **Refresh every 12 hours.** The `update-popular-ranges` cron job runs at `0 */12 * * *` (`supabase/migrations/0101_popular_verses.sql`). Each run truncates and rebuilds.
+- **Lag.** The table can trail reality by up to 12 hours. A newly mastered verse doesn't appear until the next pass. A reset verse keeps its contribution until then.
+- **Sub-ranges.** Each mastered row adds to every sub-range. Mastering John 3:1-16 counts toward 3:1, 3:1-2, and so on through 3:16. Each user adds at most 1 per range.
+- **Any version.** Rows group by book, chapter and verse range, so versions combine.
+- **Top 1000 kept, top 10 shown.** The section is hidden when the table is empty.
 
-The "in progress" count is sourced from the same `isInProgressVerse`
-predicate as the Library `useInProgressVerses()` selector that
-populates the In Progress virtual collection. The two counts are
-guaranteed equal — same predicate, same dedup.
+Tapping a row opens `VerseExpandModal` with the text in the user's current version, fetched by `getVerseText`. Its add button opens `AddToCollectionModal`, and it is hidden if the user already has that exact range in any version.
 
-## Engraved status
+## Logging attempts
 
-Engraved is **no longer** a 4-consecutive-month streak. It's now a
-spaced-repetition milestone: a verse is engraved once
-`progress.engraved.passCount >= 10` (see `ENGRAVED_THRESHOLD` in
-`lib/store/review-config.ts`). Engraving is permanent — failing or
-skipping a review never un-engraves. See
-`docs/architecture/study-session.md` step 8 and
-`docs/features/review-system.md` for the full algorithm.
+`logSessionAttempt` in `lib/api/analytics.ts` inserts one `session_attempts` row. `hooks/use-study-session.ts` calls it when a session finishes, and on early exit if at least one chunk is done. Leaving with no chunk done logs nothing.
 
-## Average time to master
+## Rules
 
-Source: `user_stats.avg_time_per_word_ms`. Multiplied by 23 (the
-target word count for "one verse") in `getAvgTimeToMaster`
-(`lib/api/analytics.ts`).
-
-The cron `update_user_stats()` runs every 6 hours
-(migration 011) and:
-
-1. Skips users with fewer than 600 words mastered (the metric is
-   noisy below that).
-2. For each qualifying user, looks at every mastered verse:
-   - Find the first attempt that hit ≥90% on Hard.
-   - Sum `recording_duration_ms` of all attempts up to and
-     including that mastery attempt.
-   - Divide by `word_count` for that verse → ms per word.
-3. Average across all mastered verses → `avg_time_per_word_ms`.
-
-Returns `null` for users below the threshold. The UI shows "—" in
-that case.
-
-## Most popular verse ranges
-
-Function: `update_popular_ranges()` (migration 010), runs every
-12 hours.
-
-Generates **every sub-range** of every active or soft-deleted user
-verse:
-
-```sql
-INSERT INTO popular_ranges (book, chapter, verse_start, verse_end, user_count)
-SELECT book, chapter, s, e, COUNT(DISTINCT user_id)
-FROM user_verses,
-     LATERAL generate_series(verse_start, verse_end) AS s,
-     LATERAL generate_series(verse_start, verse_end) AS e
-WHERE e >= s
-GROUP BY book, chapter, s, e
-ORDER BY COUNT(DISTINCT user_id) DESC
-LIMIT 1000;
-```
-
-So if any user has John 3:1-16, that contributes a row for
-3:1, 3:1-2, 3:1-3, ..., 3:1-16, 3:2, 3:2-3, etc.
-
-Public-readable. Service-role only writes. Top 1000 retained.
-
-The Insights tab "Popular Verses" section reads the top 10 (with
-`user_count`) and shows them as tappable rows that open a verse
-preview + add-to-collection flow.
-
-## Most-memorized books (per user)
-
-Selector: `useMostMemorizedBooks()` in the store. Iterates the
-user's `masteredVerses`, groups by `book`, returns the top 5 by
-count. Fully client-side — no SQL.
-
-## Logging session attempts
-
-`logSessionAttempt(...)` in `lib/api/analytics.ts`. Inserts one
-row per session completion (or partial early exit) with:
-
-```ts
-{
-  book, chapter, verse_start, verse_end, version,
-  difficulty, chunk_size, accuracy, recording_duration_ms, word_count
-}
-```
-
-User ID comes from `ensureAuth()`. Fire-and-forget — no error
-toast on failure (this is one of the known sharp edges; see below).
-
-## Insights screen layout
-
-`app/(tabs)/insights.tsx`:
-
-- Stat cards: Day streak, Total time studied, Verses mastered,
-  Verses in progress, Average time to master.
-- Popular Verses section: top 10 from `popular_ranges`.
-- Most-memorized books: top 5 from selector.
-
-The InsightsCard on Home (`components/home/InsightsCard.tsx`) is a
-slim version showing day streak + a couple of counts as a shortcut
-to the full tab.
-
-## Invariants
-
-1. **Streak is in any-difficulty `session_attempts`, not
-   "completed today."** A practice attempt counts even if the score
-   was low. Don't change this without product input — users build
-   streaks by showing up, not by succeeding.
-2. **`session_attempts` is append-only** (RLS allows INSERT/SELECT
-   only). Don't try to UPDATE or DELETE attempts as a "fix."
-3. **Mastered count comes from `progress.hard.completed`** in the
-   Zustand store, not from a SQL aggregate. The store is the
-   source of truth at runtime.
-4. **`avg_time_per_word_ms` only exists for users with ≥600 mastered
-   words.** UI must handle null.
-5. **`popular_ranges` is global and includes soft-deleted verses
-   on purpose** — see migration 010 comment.
-6. **Streak uses the user's local timezone offset.** Don't query
-   `created_at` directly without applying the offset; you'll
-   miscount around midnight.
+1. **A streak day means practiced, not passed.** Any attempt counts. Don't change this without a product decision.
+2. **`session_attempts` is append-only for clients.** RLS allows SELECT and INSERT only. Don't try to fix data with an update. Rows stay after a verse is deleted, and only `delete_own_account()` removes them.
+3. **The mastered count comes from the store,** not a SQL aggregate.
+4. **`avg_time_per_word_ms` can be null.** The UI must handle it.
+5. **`popular_ranges` is global and counts soft-deleted mastered verses on purpose.**
+6. **Streak dates need the client's offset.** Don't query `created_at` for local days without it.
 
 ## Sharp edges
 
-- **`logSessionAttempt` is fire-and-forget.** Network failure =
-  silently lost analytics. No queue, no toast. Streaks and time
-  studied undercount when offline. Worth fixing but currently
-  intentional.
-- **Streak edge case**: DST transitions and timezone changes can
-  in theory miscount around the boundary day. The function uses
-  `tz_offset_min` so it's correct at the moment of the call, but
-  if a user travels and offset changes, history may shift.
-- **Popular ranges are 12 hours stale.** A spike in adoption of
-  John 3:16 won't show up until the next cron tick.
-- **Soft-deleted verses still inflate popular ranges** until the
-  next cron rebuild.
-- **`avg_time_per_word_ms` is hard-coded to multiply by 23 for the
-  "average time to master a verse" display.** If your average
-  verse word count differs significantly from 23, the displayed
-  number is misleading.
-- **No back-fill of `word_count`.** Old `session_attempts` rows
-  have null `word_count` and are excluded from the user_stats
-  computation.
+- **Attempts are lost silently when offline.** `logSessionAttempt` only logs errors to the console. There is no queue, retry or toast, so streak and time studied undercount.
+- **The streak can go stale on screen.** `useStreak` fetches on mount. `InsightsCard` refreshes it on Home's pull to refresh, but pull to refresh on Insights reloads only time stats and ranges, never the streak. Neither screen refetches on focus, so a finished session isn't reflected until one of those happens.
+- **The offset applies to all history.** `get_current_streak` shifts every attempt by today's offset. After a DST change or travel, an attempt near midnight can move to another date and change the count.
+- **Two meanings of "mastered".** The Mastered card reads `progress`. `user_stats` reads attempts, including partial ones, per version, and a reset doesn't undo them. Stats can count a verse the card no longer does.
+- **23 words is a fixed guess.** The figure misleads for someone memorizing much longer or shorter passages.
+- **Popular Verses can look repetitive.** Sub-ranges of one long passage fill rows, and ties have no set order, because both the cron query and `getPopularRanges` sort only by `user_count`.
+- **Stats functions are open too wide.** `get_current_streak` and `get_total_time_studied` accept any user's id. Clients can also run `update_popular_ranges()` and `update_user_stats()`. `supabase/tests/access.test.sql` tracks both as known bugs.
+
+## Browser checks
+
+Run these on a freshly reset local database. Seed attempts are dated from the reset, so the streak falls to 0 two days later.
+
+- `npm run sim -- shot /insights --as reader-a`: 1 mastered, 1 in progress, "5 days", Time Studied "4m", Time to Master `--`, John (1) under books. Popular Verses is hidden, since the seed adds no ranges.
+- `npm run sim -- shot /insights --as reader-b`: 0 and 0, "0 days" with "Start practicing to build your streak!", and "No verses memorized yet".
+- By hand: on Home tap the insights card, and the Insights screen opens. Tap the info icon on Time to Master Verse and the formula modal shows "× 23".
+
+## Decisions
+
+- 2026-01-01 · Show time to master only from 600 mastered words · The average is noisy below that.
+- 2026-01-16 · Streak and time studied run as SQL functions · The client doesn't have to fetch every attempt.
+- 2026-04-28 · `popular_ranges` counts mastered verses only, soft-deleted included · "Popular" means memorized, not just added, and mastery is permanent.

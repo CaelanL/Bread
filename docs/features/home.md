@@ -1,190 +1,76 @@
 # Home and Verse of the Month
 
-> **Status: Living document.** Update when the Home tab content
-> changes or when the VOTM mechanism (table, image, mastery count)
-> changes. Read before touching `app/(tabs)/home.tsx`,
-> `components/home/`, `lib/api/votm.ts`, or migrations 007/008.
-
-The Home tab is the app's landing page. It shows the **Verse of the
-Month** (a global monthly challenge) and a slim **InsightsCard**
-shortcut to the full Insights tab.
-
-## Layout
-
-`app/(tabs)/home.tsx`:
-
-```
-┌─────────────────────────────────┐
-│ App header                      │
-│                                 │
-│ ┌─────────────────────────────┐ │
-│ │ Verse of the Month          │ │
-│ │ [Optional cover image]      │ │
-│ │ Reference + verse text      │ │
-│ │ "X people have memorized"   │ │
-│ │ "Start" or "Mastered ✓"     │ │
-│ └─────────────────────────────┘ │
-│                                 │
-│ ┌─────────────────────────────┐ │
-│ │ InsightsCard                │ │
-│ │ Streak + counts → Insights  │ │
-│ └─────────────────────────────┘ │
-└─────────────────────────────────┘
-```
-
-Default tab — set via `unstable_settings.anchor: 'home'` in
-`(tabs)/_layout.tsx`.
-
-## VOTM data flow
-
-```
-home.tsx mount or bibleVersion change
-  │
-  ▼
-getCurrentVOTM()                              [lib/api/votm.ts]
-  yearMonth = new Date YYYY-MM (local time)
-  SELECT * FROM verse_of_month WHERE year_month = yearMonth
-  → returns one row or null
-  │
-  ▼
-Parallel:
-  ├── getVOTMMasteryCount(votm)              [calls RPC get_votm_mastery_count]
-  ├── hasUserMasteredVOTM(votm)              [SELECT 1 FROM user_verses ...]
-  └── getVerseText(votm, defaultVersion)     [Bible API — see bible-api-and-caching.md]
-  │
-  ▼
-Render VOTMCard with combined data
-```
-
-Loading state: skeleton placeholder. No-VOTM state: "Check back next
-month!" message.
-
-## `verse_of_month` table
-
-Migration: `007_verse_of_month.sql` + `008_votm_image.sql`.
-
-| Column | Notes |
-|---|---|
-| `id` | UUID PK |
-| `year_month` | TEXT, format `"YYYY-MM"`, unique |
-| `book`, `chapter`, `verse_start`, `verse_end` | The reference |
-| `image_url` | TEXT, nullable — optional cover image |
-| `created_at` | |
-
-RLS: SELECT for anyone (anon and authenticated). No
-INSERT/UPDATE/DELETE policy — admin populates via the Supabase
-dashboard or service-role API.
-
-**The VOTM has no version column.** It's rendered in the user's
-current `bibleVersion`. Mastery counts ignore version too — see
-below.
-
-## Mastery counting
-
-The VOTMCard shows "X people have memorized this verse." Source:
-
-```ts
-getVOTMMasteryCount(votm)
-  → supabase.rpc('get_votm_mastery_count', {
-      p_book, p_chapter, p_verse_start, p_verse_end
-    })
-  → returns number
-```
-
-**The `get_votm_mastery_count` SQL function is referenced but not
-defined in any migration.** This is a real bug — calling it from
-the running app will throw at runtime. Until a migration defines
-it, the count won't render and the home screen will likely show an
-error toast or skip the count.
-
-The expected definition (per `lib/api/votm.ts` usage):
-
-```sql
-CREATE OR REPLACE FUNCTION get_votm_mastery_count(
-  p_book TEXT, p_chapter INT, p_verse_start INT, p_verse_end INT
-) RETURNS INT
-LANGUAGE SQL STABLE
-AS $$
-  SELECT COUNT(DISTINCT user_id)::INT
-  FROM user_verses
-  WHERE book = p_book
-    AND chapter = p_chapter
-    AND verse_start = p_verse_start
-    AND verse_end = p_verse_end
-    AND (progress->'hard'->>'completed')::boolean = true;
-$$;
-```
-
-(Version-agnostic on purpose — mastering John 3:16 in any
-translation counts.)
-
-## "Has the user mastered it?"
-
-```ts
-hasUserMasteredVOTM(votm)
-  → supabase
-      .from('user_verses')
-      .select('id')
-      .eq(book, chapter, verse_start, verse_end)
-      .eq('progress->hard->>completed', 'true')
-      .limit(1)
-      .maybeSingle()
-  → boolean
-```
-
-Same range-only matching, version-agnostic.
-
-## VOTM image
-
-`image_url` (added in migration 008) is an optional cover image
-for the month. When present, `VOTMCard` renders it as a background
-with an overlay; text switches to white for contrast. When absent,
-it's a normal text card.
-
-The image lives in Supabase Storage (a bucket like `votm-images`,
-referenced in the migration comment). The URL is whatever URL the
-admin enters when creating the row.
-
-## Components
+Home is the first tab. It shows the Verse of the Month (VOTM), a global monthly challenge, and `InsightsCard`, a shortcut to the Insights screen.
 
 | File | Purpose |
 |---|---|
-| `components/home/VOTMCard.tsx` | The big VOTM card with image, text, mastery count |
-| `components/home/InsightsCard.tsx` | Slim insights shortcut (streak + counts) |
-| `app/(tabs)/home.tsx` | Composes the two cards |
+| `app/(tabs)/home.tsx` | Loads VOTM data and composes the screen |
+| `components/home/VOTMCard.tsx` | The VOTM card |
+| `components/home/InsightsCard.tsx` | Streak, mastered and in-progress counts. Tap opens `/insights` |
+| `lib/api/votm.ts` | `getCurrentVOTM`, `getVOTMMasteryCount`, `hasUserMasteredVOTM` |
 
-## Tapping the VOTM card
+What those numbers mean is in `docs/features/insights.md`.
 
-Navigates to the verse-add flow (or the setup screen if already
-saved) so the user can start memorizing it. The exact target
-depends on whether the verse is already in the user's collections.
+## Loading
 
-## Invariants
+`fetchVOTM` in `home.tsx` runs on mount and whenever `bibleVersion` changes. Pull to refresh runs it too, along with the store's `refresh()` and the card's streak refresh.
 
-1. **VOTM is keyed by `year_month` in `"YYYY-MM"` format**, computed
-   from the user's local clock. Don't switch to UTC without
-   thinking through the rollover hour.
-2. **VOTM has no version dimension.** The reference is what's
-   global; the rendered translation follows the user's current
-   `bibleVersion`. Mastery counts cross versions.
-3. **`verse_of_month` is admin-write only.** No client should ever
-   try to insert. RLS doesn't have an INSERT policy at all.
-4. **`get_votm_mastery_count` must remain version-agnostic.** Don't
-   add a version filter — that defeats the "everyone working on the
-   same verse" framing.
+1. `getCurrentVOTM` builds `YYYY-MM` from the device's local clock and selects that row from `verse_of_month`.
+2. If there is a row, `getVOTMMasteryCount` and `hasUserMasteredVOTM` run in parallel.
+3. `getVerseText` then fetches the text in the user's current version. See `docs/architecture/bible-api-and-caching.md`.
+
+The skeleton stays up until all of that finishes. If there is no row, Home shows "No verse of the month yet." and "Check back soon!". If the text fails, Home shows a toast and the card reads "Unable to load verse text".
+
+## `verse_of_month`
+
+Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added in `008_votm_image.sql`.
+
+- `year_month` is unique text like `2026-11`.
+- A row holds a reference: book, chapter, verse start and end. There is no version column.
+- Anyone can read it, signed in or not. No write policy exists, so rows are added with the service role.
+
+`image_url` is free-form text. The bucket line in migration 008 is a comment, so no migration creates a storage bucket.
+
+## The card
+
+- **Text.** Three lines at most, in the user's `bibleVersion`, with the version shown beside the reference.
+- **Image.** With `image_url`, `expo-image` draws it behind a dark overlay and the text turns white.
+- **Count.** "N people have mastered", from `getVOTMMasteryCount`.
+- **User status.** One of these, in this order:
+
+| Condition | Shows |
+|---|---|
+| `hasUserMasteredVOTM` is true: a row of theirs with the same range and `hard.completed`, in any version, soft-deleted included | "Mastered" |
+| The same range is in `verses`, in any version | "In Library" |
+| Otherwise | "Add to Library" button |
+
+**Tapping.** The card opens `VerseExpandModal`. It does not start a session. "Add to Library" on the card, or the add button in the modal, opens `AddToCollectionModal`.
+
+## Rules
+
+1. **VOTM is keyed by `year_month` from the local clock.** Don't switch to UTC without working through the rollover hour.
+2. **VOTM has no version.** The reference is global, and the translation follows the user's setting.
+3. **Mastery checks ignore version.** Everyone is working on the same verse, so any function behind the count must not filter by version.
+4. **`verse_of_month` is admin-write only.** No client should insert.
 
 ## Sharp edges
 
-- **`get_votm_mastery_count` SQL function is missing.** The client
-  calls it but no migration defines it. This will throw at runtime
-  the moment a user opens Home with a VOTM in place. Add a
-  migration before relying on the count.
-- **No fallback if the user's selected version doesn't have the
-  verse.** `getVerseText` will return whatever the version
-  produces; an empty result will render an empty card.
-- **No image-URL validation.** If the admin enters a broken URL,
-  the card silently falls back to text-only.
-- **No "tomorrow's VOTM" preview.** The query is `year_month =
-  current month` only. Around midnight on the last day of the
-  month there's a brief window where the new VOTM hasn't loaded
-  yet.
+- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it with `p_book`, `p_chapter`, `p_verse_start` and `p_verse_end`, but no file in `supabase/` defines it, including `supabase/migrations/` and `supabase/database.types.ts`. On a database built from the migrations the call errors, `getVOTMMasteryCount` logs it and returns 0, and the card reads "0 people have mastered". Nothing throws. The client's untyped `SupabaseClient` means typecheck can't catch it. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
+- **A failed load looks like no verse.** `getCurrentVOTM` returns null on any error, so a network failure shows "No verse of the month yet."
+- **Home doesn't refetch on focus.** After mastering the VOTM, the status stays "In Library" until pull to refresh. An app left open across a month boundary keeps the old verse the same way.
+- **A broken image URL leaves unreadable text.** The card has no `onError` and no fallback. With `image_url` set it also drops its background color, so white text sits on the page background.
+- **A slow text fetch holds up the whole card.** The skeleton waits for the text, so the card's own text spinner never shows on a normal load.
+
+## Browser checks
+
+The seed adds no `verse_of_month` row.
+
+- `npm run sim -- shot /home --as reader-a`: the "No verse of the month yet." card, and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
+- `npm run sim -- shot /home --as reader-b`: the same empty VOTM card, and an insights card with 0 day streak, 0 mastered, 0 in progress.
+- Add a local `verse_of_month` row for the current month, then `npm run sim -- shot /home --as reader-a`: the VOTM card with reference, text and "0 people have mastered" (the missing function).
+- By hand, with that row: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
+
+## Decisions
+
+- 2025-12-24 · VOTM stores a reference with no version · The challenge is the verse, and users read it in their own translation.
+- 2026-01-20 · The count goes through an RPC · RLS stops a client counting other users' rows. The function it calls never reached a migration.

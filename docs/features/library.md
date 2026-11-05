@@ -1,267 +1,251 @@
-# Library and Collections
+# Library
 
-> **Status: Living document.** Update when collection or verse
-> CRUD semantics change, when the verse-add gesture changes, or
-> when swipe actions change. Read before touching
-> `app/(tabs)/(library)/`, `components/library/`, or any
-> `lib/storage/` collection/verse function.
+The Library tab is where users organize saved verses. One verse can belong to many
+collections. Two more collections, Mastered and In Progress, are computed in the
+client and have no database row.
 
-The Library tab is where users organize their saved verses. The
-data model is many-to-many: one verse can belong to multiple
-collections. The deletion semantics are nuanced — see below.
-
-## Data model
-
-Three tables (full schema in
-`docs/architecture/data-model.md`):
+## Data
 
 ```
-user_collections (id, user_id, name, is_default, deleted_at)
-       ↑
-       │ collection_id
-       │
-verse_collections (verse_id, collection_id, added_at)   ← junction
-       │
-       │ verse_id
-       ↓
-user_verses (id, user_id, book, chapter, verse_start, verse_end,
-             version, progress, deleted_at)
+user_collections ←─ verse_collections ─→ user_verses
+                     (verse_id, collection_id, added_at)
 ```
 
-A verse stored once, referenced from many collections. Deleting a
-collection removes its junction rows; deleting a verse from a
-collection removes the junction (and possibly the verse itself —
-see deletion semantics below).
+Full schema is in `docs/architecture/data-model.md`. Three things matter here:
+
+- **IDs in the app are `client_id`s, not UUIDs.** `Collection.id`, `SavedVerse.id` and
+  the `[id]` route param are all `client_id`. The store looks up the server UUID for
+  each write.
+- **`state.verses` has one entry per collection membership.** `fetchVerses` queries
+  through the junction, so a verse in two collections appears twice with the same
+  `id` and different `collectionId`. Its `createdAt` is the junction's `added_at`.
+  Dedupe by `id` when you count verses.
+- **`state.masteredVerses` is a separate list.** `fetchMasteredVerses` reads
+  `user_verses` directly with no `deleted_at` filter, so it includes soft-deleted
+  rows. Here `createdAt` is the row's `created_at`.
 
 ## Routes
 
-| Route | Purpose |
+| Route (`app/(tabs)/(library)/`) | Purpose |
 |---|---|
-| `(tabs)/(library)/index.tsx` | Library list — collections + their verses |
-| `(tabs)/(library)/[id].tsx` | Collection detail — verses in this collection |
-| `(tabs)/(library)/add.tsx` | Create new collection |
-| `(tabs)/(library)/add/[book]/[chapter].tsx` | Pick verses to add (from a chapter) |
-| `(tabs)/(library)/setup/[id].tsx` | Pre-session: pick difficulty + chunk size |
+| `index.tsx` | Collection list, with pull to refresh. The + opens `AddCollectionModal` |
+| `[id].tsx` | One collection: search, sort pill, verse list, + to add |
+| `add.tsx` | Pick a version, book and chapter. Passes `collectionId` along |
+| `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
+| `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
 
-## The "My Verses" default collection
+Collections and verses open by `client_id`, so `/(tabs)/(library)/mastered` works the
+same as a real collection. Notification taps use that path
+(`docs/features/notifications.md`).
 
-- Constant: `DEFAULT_COLLECTION_ID = 'my-verses'` in `lib/store/index.ts`.
-- Server row has `is_default: true`.
-- **Cannot be deleted.** Three layers of guard:
-  1. UI: `SwipeableCollectionCard` disables swipe when `isDefault`.
-  2. Store: `deleteCollection(id)` returns early if `id === DEFAULT_COLLECTION_ID`.
-  3. (No server-side guard. The first two are enough in practice.)
-- Auto-created if missing: when `addVerse()` is called without a
-  collection, it creates "My Verses" if none exists.
+## Collections
 
-## The "Mastered" virtual collection
+The list comes from `fetchCollections` in `lib/store/index.ts`: active rows by
+`created_at` ascending, with Mastered and In Progress inserted right after the
+default collection. There's no UI to reorder or rename collections.
 
-- Constant: `MASTERED_COLLECTION_ID = 'mastered'`.
-- **No row exists in `user_collections`.** It's a client-side
-  synthesis.
-- Populated by `fetchMasteredVerses()` — pulls verses where
-  `progress->hard->completed = true`, regardless of `deleted_at`.
-- Cannot be deleted (no-op in store).
-- Cannot be added to directly (mastery is the only way in).
-- The Mastered detail screen has a `due-first` sort option (added by
-  the review-system feature) that sorts by ascending
-  `daysUntilDue` so verses that are due for SR review rise to the
-  top. Selectable from the existing sort cycle:
-  Recent → A-Z → Mastery → Due first.
+**My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
-## The "In Progress" virtual collection
+- It's created lazily, by `addVerse` or by `updateCollectionSort`, with `created_at`
+  at the epoch so it sorts first. Until then `fetchCollections` adds a local
+  `DEFAULT_COLLECTION`.
+- It can't be deleted. `SwipeableCollectionCard` disables swipe when `canDelete` is
+  false, and the store's `deleteCollection` returns early. There's no server guard.
+- `addVerse` falls back to it if the requested collection isn't found.
 
-- Constant: `IN_PROGRESS_COLLECTION_ID = 'in-progress'`.
-- **No row exists in `user_collections`.** Client-side synthesis,
-  parallel to Mastered.
-- Populated by `useInProgressVerses()` — any verse with non-null
-  `bestAccuracy` on any difficulty AND `!hard.completed`, deduped
-  by verse id. Lenient: any practice puts the verse in progress.
-- Hidden from the Library list when the count is zero.
-- Cannot be deleted, cannot be added to directly, swipe-to-delete
-  on individual verses is disabled (verses live in real
-  collections; this is just a view).
-- Does **not** participate in SR scheduling — In Progress means
-  "still learning," distinct from Mastered's "needs review."
-- The Insights "Verses in progress" count and the Library
-  In Progress collection size are sourced from the same
-  `isInProgressVerse` predicate; they are guaranteed equal.
+**Mastered** has the ID `mastered` (`MASTERED_COLLECTION_ID`).
 
-> **If you query `user_collections` and use the result in client
-> code, remember to inject the virtual `mastered` and (when
-> `useInProgressVerses().length > 0`) `in-progress` entries.**
-> Both are added in `getCollections()` in `lib/storage/index.ts`
-> and `fetchCollections` in `lib/store/index.ts`.
+- It holds verses where `progress.hard.completed` is true, including soft-deleted ones.
+- Mastery is the only way in. `isVirtual` removes the + button, and
+  `AddToCollectionModal` filters virtual collections out.
+- Swipe is disabled on its rows. The only way out is Reset Progress on the setup
+  screen.
+- The list row shows `DueCountPill` from `useDueCounts`. Due and engraved rules are in
+  `docs/features/review.md`.
 
-## Adding a verse — multi-select gesture
+**In Progress** has the ID `in-progress` (`IN_PROGRESS_COLLECTION_ID`).
 
-`app/(tabs)/(library)/add/[book]/[chapter].tsx` is one of the most
-sophisticated gesture surfaces in the app. The flow:
-
-1. **Long press (≥250ms)** on a verse → start range selection,
-   haptic feedback.
-2. **Drag** while held → extend the selection range. Auto-scrolls
-   when near edges.
-3. **Quick tap (<250ms)**:
-   - If nothing selected → single-verse selection.
-   - If something selected → deselect all.
-4. **Touch move >10px** during the long-press wait window → cancels
-   the long press (treated as a scroll, not a selection).
-5. Selection state: `selectionStart` and `selectionEnd` (verse
-   numbers). The selection is always contiguous.
-6. **Add button** calls `handleAddVerses()` which iterates the
-   range and calls `useAppStore.addVerse(...)` for each verse.
-
-This isn't accidental complexity — it's how a user grabs "John
-3:16-18" in a single fluid motion. Don't simplify it without a
-real reason.
-
-## Verse `addVerse` semantics
-
-Where the heavy lifting lives — `lib/store/index.ts` →
-`lib/storage/index.ts`:
-
-```
-addVerse(verse, collectionId, version)
-  │
-  ├── Check if a row already exists for
-  │   (user_id, book, chapter, verse_start, verse_end, version)
-  │
-  ├── If exists AND active:
-  │     ensure junction row in verse_collections (upsert)
-  │     update Zustand
-  │
-  ├── If exists AND soft-deleted:
-  │     restore (clear deleted_at)
-  │     ensure junction row
-  │     update Zustand
-  │
-  └── If not exists:
-        insert new user_verses row
-        insert junction row
-        update Zustand
-```
-
-The unique index on `user_verses` is partial
-(`WHERE deleted_at IS NULL`), so a soft-deleted row doesn't block
-a re-add. The storage layer detects the existing soft-deleted row
-and restores it instead of inserting a duplicate.
-
-## Verse deletion semantics
-
-The trickiest logic in the data layer. From a collection's UI,
-deleting a verse means:
-
-```
-deleteVerse(verseId, collectionId)
-  │
-  ├── Remove junction (verse_collections row for this collection)
-  │
-  ├── If verse is in OTHER collections:
-  │     Done. Verse stays active in those.
-  │
-  ├── If verse is in NO other collections AND mastered (progress.hard.completed):
-  │     Soft-delete (set deleted_at = NOW()).
-  │     Verse stays in the `mastered` virtual collection forever.
-  │
-  └── If verse is in NO other collections AND NOT mastered:
-        Hard-delete (DELETE FROM user_verses).
-        Junction rows cascade.
-        session_attempts rows survive (no FK).
-```
-
-The UI `SwipeableVerseCard.tsx` shows a context-aware confirmation:
-
-| Situation | Action label | What happens |
-|---|---|---|
-| In other collections | "Remove from collection" | Junction-only delete |
-| Mastered, only here | "Remove from collection" | Soft-delete; stays in Mastered |
-| Not mastered, only here | "Delete verse" | Hard-delete |
-| In Mastered collection view | (swipe disabled) | — |
-
-The Mastered collection itself never lets you swipe-delete — you
-can't un-master a verse from there. To actually remove a mastered
-verse, the user has to use `resetVerseProgress()` from the verse
-detail page (which clears `progress.hard.completed`, demoting it
-out of Mastered).
-
-## Collection deletion
-
-```
-deleteCollection(id)
-  │
-  ├── Block if id === DEFAULT_COLLECTION_ID or MASTERED_COLLECTION_ID
-  │
-  ├── Soft-delete user_collections row (set deleted_at)
-  │
-  └── For each verse in this collection:
-        Apply the deleteVerse logic above
-        (some get soft-deleted, some hard-deleted, some just lose this junction)
-```
-
-The user sees one swipe action; behind the scenes it can fan out
-to many writes. If any partway fails, the local state is rolled
-back optimistically — but the server state may be partially
-applied.
+- It holds verses matching `isInProgressVerse`: any non-null `bestAccuracy` on any
+  difficulty, and not mastered on Hard. `useInProgressVerses` dedupes by `id`.
+- The Insights count uses the same predicate, so the two match
+  (`docs/features/insights.md`).
+- The push nudge mirrors it on the server, and the two must change together
+  (`docs/features/notifications.md`).
+- `index.tsx` hides the row when the count is zero. `fetchCollections` always includes
+  it, so check for it before you assume the store's list is what's on screen.
+- It has no + button and no swipe. Verses live in real collections, and this is a view.
+- It isn't part of review scheduling.
 
 ## Sorting
 
-Collection detail (`[id].tsx`) sorts verses *locally* — sort order
-is not persisted:
+The pill on `[id].tsx` cycles through the options in `cycleSort`, in
+`lib/store/library-sort.ts`. Only Mastered has Due first.
 
-- **Recent** (default): by `createdAt` descending.
-- **A–Z**: by `formatVerseReference()` alphabetically.
-- **Mastery**: highest difficulty completed first
-  (engraved > hard > medium > easy > none).
-
-Collections themselves display in `created_at` order from the DB.
-There's no UI to reorder collections.
-
-## Components
-
-| File | Purpose |
+| Sort | Order (`sortVerses`) |
 |---|---|
-| `components/library/CollectionCard.tsx` | One collection in the Library list |
-| `components/library/SwipeableCollectionCard.tsx` | Wraps CollectionCard with swipe-to-delete |
-| `components/library/SwipeableVerseCard.tsx` | Verse row with swipe-left delete |
-| `components/library/VerseList.tsx` | Verse list inside a collection |
-| (others — see `components/library/`) | Add modal, filter chips, etc. |
+| Recent | `lastPracticedAt` newest first. Never-practiced verses come after, by `createdAt` newest first |
+| A-Z | `formatVerseReference` with `localeCompare` |
+| Mastery | Engraved, then Hard, Medium, Easy, none |
+| Due first | `daysUntilDue` ascending, then `createdAt` newest first |
+
+`useCollectionSort` picks the sort by collection ID. It's saved per collection:
+
+| Collection | Saved in | Default |
+|---|---|---|
+| Real collections | `user_collections.sort_preference`, so it follows the account | `recent` |
+| Mastered | AsyncStorage `library_sort_mastered`, this device only | `due-first` |
+| In Progress | AsyncStorage `library_sort_in_progress`, this device only | `recent` |
+
+`setCollectionSort` updates the store first. For a real collection, a failed write
+rolls back and shows a toast. `updateCollectionSort` creates the My Verses row if it
+doesn't exist yet, so a preference set before the first verse survives a restart. The
+two AsyncStorage values survive sign-out, because `clear` doesn't touch them.
+`parseSortPreference` treats an unknown value as no preference.
+
+**`last_practiced_at`** (migration `016_sort_and_last_practiced.sql`) is per verse. The
+store's `updateVerseProgress` writes it on every completed session, full or partial,
+whether or not the score improved. Practicing a verse floats it under Recent in every
+collection it's in. `resetVerseProgress` clears it. The column was never backfilled.
+
+Sorting and search run in JS on the in-memory list, with no database index. Search on
+`[id].tsx` is `filterVerses` in `lib/search.ts`, which matches a book prefix, then
+chapter and verse.
+
+## Adding a verse
+
+`add.tsx` is a book and chapter list with a version picker. The chapter screen loads
+with `fetchChapter`, and the user selects one continuous range:
+
+1. **Long press, 250 ms.** Starts a selection, with a haptic.
+2. **Drag while held.** Extends the range. It auto-scrolls within 60 points of the edge.
+3. **Moving more than 10 points during the wait.** Cancels the long press, so it scrolls
+   instead.
+4. **Quick tap.** With nothing selected it selects one verse. With a selection it clears
+   the selection.
+5. **Add.** `handleAddVerses` makes one `addVerse` call with `verseStart` and `verseEnd`,
+   so a range is a single saved verse. Then it returns to the collection, or to the
+   Library if none was given.
+
+This gesture is how someone grabs John 3:16-18 in one motion. It depends on timing,
+distance thresholds and auto-scroll together, so test on a device after any change.
+
+`AddToCollectionModal`, on Home and Insights, also goes through `addVerse`.
+
+`addVerse` in `lib/store/index.ts` looks for a row with the same user, book, chapter,
+range and version, including soft-deleted ones:
+
+| Existing row | What happens |
+|---|---|
+| Active | Upsert the junction row, ignoring duplicates |
+| Soft-deleted | Clear `deleted_at`, then upsert the junction row. Progress comes back |
+| None | Insert the verse with `DEFAULT_PROGRESS`, then the junction row |
+
+Verse identity is the partial unique index `idx_user_verses_unique_verse` from
+`006_verse_collections_junction.sql`, on active rows only. The restore path is what
+stops duplicates, so a soft-deleted row never blocks a re-add.
+
+## Versions and KJV offline
+
+The version is part of a saved verse's identity, so John 3:16 in ESV and in KJV are two
+verses. The add screens start from the user's Bible version and can switch.
+
+KJV is public domain and ships in the app, so reading a saved KJV verse needs no network
+and costs no API quota. Other versions need a connection unless already cached. Only
+reading is offline: saving verses and recording progress still need the network
+(invariant 10, `docs/architecture/sync-and-storage.md`). The bundle itself is in
+`docs/architecture/bible-api-and-caching.md`.
+
+## Deleting a verse
+
+`deleteVerse(id, collectionId)` in the store removes the verse from the store first, then:
+
+1. Removes the junction row for this collection.
+2. If other collections still hold the verse, stops.
+3. If none do and the verse is mastered, soft-deletes it. It stays in Mastered.
+4. If none do and it isn't mastered, hard-deletes it. Junction rows cascade.
+   `session_attempts` rows survive, since they have no foreign key to the verse.
+
+A failed lookup or junction delete restores the local list and rethrows. A failure
+writing step 3 or 4 is only logged.
+
+`SwipeableVerseCard` picks its confirmation text from the same facts, using
+`collectionCount` from `[id].tsx`:
+
+| Situation | Title | Result |
+|---|---|---|
+| In other collections | Remove from collection? | Only this junction row goes |
+| Only here, mastered | Remove from collection? | Soft delete, stays in Mastered |
+| Only here, not mastered | Delete verse? | Hard delete, progress is lost |
+
+## Deleting a collection
+
+The store's `deleteCollection` returns early for My Verses. It then finds the row and,
+for each verse, applies the same rule as above: remove the junction, and soft-delete or
+hard-delete if no other collection holds it. Last it sets `deleted_at` on the collection
+and updates local state. The virtual collections never get here, because the card
+disables their swipe. If they did, the row lookup would throw `Collection not found`.
+
+One swipe can fan out to many writes, one verse at a time, with no transaction and no
+optimistic update.
+
+## Reset progress
+
+`resetVerseProgress(id)` in the store sets `progress` to `DEFAULT_PROGRESS` and clears
+`last_practiced_at`. It's reached from Reset Progress on `setup/[id].tsx`. It's the only
+way a verse leaves Mastered.
 
 ## Invariants
 
-1. **Verse uniqueness is `(user_id, book, chapter, verse_start,
-   verse_end, version)`** — partial-unique on active rows. Don't
-   try to add a row that violates this.
-2. **The default collection cannot be deleted.** Three guard layers
-   in the UI / store. Don't add bypasses.
-3. **The Mastered collection is virtual.** No DB row, no
-   `collection_id` you can store anywhere. It's synthesized in
-   `getCollections()` and only contains verses where
-   `progress.hard.completed = true`.
-4. **Mastery is permanent unless explicitly reset.** Soft-delete
-   on a mastered verse keeps it in Mastered. Only
-   `resetVerseProgress` removes it.
-5. **Verse deletion logic depends on `progress.hard.completed`.**
-   If `progress` is malformed for some reason, you'll hard-delete
-   a mastered verse. The default-progress shape in
-   `lib/store/index.ts` is the contract.
-6. **Junction-table writes go through `lib/storage/`.** Don't
-   insert into `verse_collections` directly from a component.
+1. Verse identity is user, book, chapter, range and version, unique among active rows.
+2. My Verses can't be deleted. Don't add a bypass.
+3. Mastered and In Progress have no row. Code that expects every collection ID to map to
+   `user_collections` breaks on them, so check `isVirtual` or the ID constants.
+4. Mastery lasts until reset. Removing a mastered verse from every collection keeps it in
+   Mastered.
+5. Delete logic branches on `progress.hard.completed`. `DEFAULT_PROGRESS` and
+   `parseProgress` in `lib/storage/index.ts` define the shape, and a malformed `progress`
+   would hard-delete a mastered verse.
+6. Screens don't write `verse_collections` or the other Library tables directly. Go through
+   the store actions (invariant 1, `docs/architecture/sync-and-storage.md`).
 
 ## Sharp edges
 
-- **Re-adding a soft-deleted verse restores the original row.**
-  This is intentional (preserves mastery) but can be confusing —
-  the "new" verse already has progress.
-- **A collection-delete is a fan-out write.** Partial failure is
-  possible. Optimistic rollback exists locally but the server can
-  end up half-applied.
-- **`mastered` and `in-progress` are client-side only.** If you
-  write code expecting every collection ID to map to a
-  `user_collections` row, you'll blow up on either of them.
-- **Multi-select gesture is fragile.** It uses long-press timing,
-  drag distance thresholds, and auto-scroll. Don't refactor
-  carelessly.
-- **No reordering.** Verses sort locally, not persistently.
-  Collections show in DB order. Adding reordering means a new
-  `position` column.
+- **`lib/storage` and `lib/sync` hold older copies.** `deleteCollection`, `deleteVerse` and
+  `saveVerse` in `lib/storage/index.ts` are only called from `lib/sync`, and the app imports
+  nothing from `lib/sync`. The older `deleteCollection` moves verses to My Verses, which is
+  the opposite of what the store does. Use the store actions.
+- **Adding a verse already in the collection duplicates it locally.** `addVerse` always
+  prepends to `verses`, even when the junction upsert did nothing. The verse shows twice,
+  with a duplicate list key, until the next fetch. Restored verses also lose
+  `lastPracticedAt` in that local entry until then.
+- **Reset on a soft-deleted mastered verse doesn't update the Mastered list.**
+  `resetVerseProgress` works out `wasMastered` from `verses` alone, and such a verse is only
+  in `masteredVerses`. It stays listed with old progress until the next fetch. After that the
+  row stays soft-deleted, in no list, until the user re-adds it.
+- **A failed collection delete can leave partial writes.** The per-verse writes don't check
+  errors. Only the final collection update throws, and by then verses may already be gone
+  while the local state is unchanged.
+- **Re-adding a soft-deleted verse restores it.** That's intended, because it preserves
+  mastery, but a "new" verse can arrive with progress.
+- **The chapter screen needs a connection even for KJV.** `[chapter].tsx` checks `NetInfo`
+  before `fetchChapter` and shows "No Internet Connection", although KJV could load from the
+  bundle.
+- **A-Z isn't numeric.** `localeCompare` on the reference puts John 10 before John 3.
+- **The empty hint never shows.** `index.tsx` renders it at `collections.length <= 1`, but My
+  Verses and Mastered are always present once hydrated.
+
+## Browser checks
+
+- `npm run sim -- shot '/(tabs)/(library)' --as reader-a`: My Verses, Mastered with a "1 due" pill, In Progress, and Psalms.
+- `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
+- `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
+- Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery. Then +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
+
+## Decisions
+
+- 2026-04-27 · Sort is per collection, not one global setting · The user preferred it that way, and the database cost is small.
+- 2026-04-27 · Real collections save sort in the database, virtual ones in AsyncStorage · Virtual collections have no row to hold it.
+- 2026-04-28 · Recent means last practiced, stored on `user_verses.last_practiced_at` · Joining `session_attempts` on every render is too slow, and `engraved.lastReviewedAt` doesn't cover unmastered verses.
+- 2026-04-28 · `last_practiced_at` is per verse, not per collection, with no backfill · Per collection would thread `collectionId` through the study loop and needs a special case for virtual collections. Verses float as they're practiced.
+- 2026-04-28 · Never-practiced verses sort after practiced ones · Recently practiced work floats to the top, and new verses queue below.
+- 2026-04-28 · Mastered defaults to Due first, and every other collection to Recent · Due first is the useful view for reviewing.

@@ -1,9 +1,5 @@
 # Theming and UI
 
-> **Status: Living document.** Update when color tokens, font system,
-> or design-system primitives change. Read before adding a new
-> component, screen, or icon, or before changing any color/font.
-
 The app supports light and dark mode (system-following by default,
 user-overridable). Theming is built on `useColorScheme()` returning
 the active scheme and `Colors[scheme]` from `constants/theme.ts`
@@ -31,6 +27,10 @@ Defined in `constants/theme.ts`.
 | `error` | `#ef4444` | error status |
 | `tabIconDefault` | `#8a8a8a` | inactive tab icons |
 | `tabIconSelected` | `#b08d57` | active tab icons |
+| `icon` | `#6b6b6b` | default icon color |
+| `primaryLight` | `rgba(176,141,87,0.12)` | tinted accent background |
+| `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
+| `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 
 ### Dark mode
 
@@ -47,10 +47,22 @@ Defined in `constants/theme.ts`.
 | `success` / `warning` / `error` | same as light | status colors are theme-agnostic by design |
 | `tabIconDefault` | `#6b6b6b` | |
 | `tabIconSelected` | `#c9a962` | |
+| `icon` | `#9a9a9a` | |
+| `primaryLight` | `rgba(201,169,98,0.15)` | |
+| `overlay` | `rgba(0,0,0,0.6)` | |
 
 Status colors (`success`, `warning`, `error`) are intentionally the
 same in both modes — they carry semantic meaning and shouldn't
 shift with theme.
+
+Auth screens always use `Colors.dark`, with `authAccent` and
+`authButton` from the same file.
+
+## Radius, motion and shadows
+
+`constants/theme.ts` also exports `Radius`, `Motion` and `Shadows`.
+`eslint.config.mjs` rejects radii, durations and press scales outside
+those values, so `npm run lint` catches a stray one.
 
 ## Fonts
 
@@ -58,10 +70,10 @@ shift with theme.
 are no global size/weight tokens; per-component sizes are defined in
 each file's `StyleSheet.create`.
 
-| Platform | System | Serif | Rounded | Mono |
+| Platform | `sans` | `serif` | `rounded` | `mono` |
 |---|---|---|---|---|
 | iOS | `system-ui` | `ui-serif` | `ui-rounded` | `ui-monospace` |
-| Android | `normal` | `serif` | (fallback) | `monospace` |
+| Android | `normal` | `serif` | `normal` | `monospace` |
 | Web | full system stack | full serif stack | full rounded stack | full mono stack |
 
 A few common sizes from `themed-text.tsx`:
@@ -73,8 +85,8 @@ A few common sizes from `themed-text.tsx`:
 - `link`: 16px / line-height 30 / `colors.primary`
 
 Playfair Display (`@expo-google-fonts/playfair-display`) is loaded
-as a custom font in `app/_layout.tsx` — used for verse text and
-specific brand moments.
+as a custom font in `app/(auth)/sign-in.tsx`, the only screen that
+uses it.
 
 ## Color scheme detection
 
@@ -95,7 +107,17 @@ export function useColorScheme() {
 - Persisted across sign-out (it's a device preference, not a user
   preference).
 
+`hooks/use-color-scheme.web.ts` replaces this on web and follows the
+system only, so the Settings override doesn't apply there.
+
 ## The theming convention
+
+**Invariant 8: theming uses `useColorScheme()` + `Colors[scheme]`, NOT
+`ThemedText`/`ThemedView`.** Despite the names, those abstractions are
+barely used. The actual convention is to call `useColorScheme()` in
+each component and pull tokens from `constants/theme.ts`. Hardcoded hex
+is only acceptable for status colors (error/success/warning) and the
+offline/error-boundary system overlays.
 
 ```tsx
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -113,15 +135,12 @@ export function MyComponent() {
 }
 ```
 
-This is the convention used by ~95% of the codebase.
-
-> **Important:** `ThemedText` and `ThemedView` exist
-> (`components/themed-text.tsx`, `themed-view.tsx`) but are
-> **aspirational, not enforced**. Only ~13 sites use them; over 200
-> use raw `<Text>` / `<View>` with `colors` pulled from
-> `useColorScheme`. Don't rewrite existing components to use
-> ThemedText. For new components, use the `useColorScheme + Colors`
-> pattern shown above so you stay consistent with the codebase.
+`ThemedText` and `ThemedView` (`components/themed-text.tsx`,
+`themed-view.tsx`) are used only by Expo template leftovers:
+`app/modal.tsx`, `app/(tabs)/explore.tsx`,
+`components/parallax-scroll-view.tsx` and
+`components/ui/collapsible.tsx`. Don't rewrite existing components to
+use them.
 
 ## `useThemeColor` hook
 
@@ -143,13 +162,14 @@ occasionally in components that need single-color overrides.
 Hardcoded hex values are acceptable in two cases:
 
 1. **System overlays that intentionally ignore theme**:
-   `ErrorBoundary` (always dark on red), `NoInternetOverlay`
-   (always dark blue with white text). These are critical UI that
+   `ErrorBoundary` (always dark with a red icon), `NoInternetOverlay`
+   (always blue with white text). These are critical UI that
    shouldn't depend on the theme system being healthy.
 2. **Status colors** (error red, success green, warning amber) when
    used semantically — they're the same across themes anyway.
 
-Anywhere else, pull from `colors`.
+Anywhere else, pull from `colors`. A number of older components still
+have hex literals; don't copy them.
 
 ## `components/ui/` — design-system primitives
 
@@ -192,13 +212,16 @@ on Android / web.
 
 ## Haptics
 
-Used sparingly. Always gated to iOS:
+Used sparingly. The convention is to gate them to iOS:
 
 ```ts
 if (process.env.EXPO_OS === 'ios') {
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 }
 ```
+
+`HapticTab` follows it. The study and add-verse screens call `Haptics`
+without the check, so they also fire on Android.
 
 | Interaction | Style |
 |---|---|
@@ -207,7 +230,9 @@ if (process.env.EXPO_OS === 'ios') {
 | Recording start/stop | `impactAsync(Medium)` |
 | Chunk completion | `impactAsync(Light)` |
 
-Don't add haptics to every Pressable — it loses meaning.
+Use `impactAsync` for taps and recording state transitions,
+`selectionAsync` for selection. Don't add haptics to every Pressable —
+it loses meaning.
 
 ## Style patterns
 
@@ -224,28 +249,20 @@ Don't add haptics to every Pressable — it loses meaning.
 
 ## Invariants
 
-1. **Use `useColorScheme()` + `Colors[scheme]` for all theme-aware
-   colors.** Don't hardcode hex except for status colors and
-   intentional system overlays.
-2. **Don't reach for `ThemedText`/`ThemedView`** for new code —
-   the codebase convention is `useColorScheme()` + raw `<Text>` /
-   `<View>` with `colors`.
-3. **Static styles → `StyleSheet.create` at module level.** Dynamic
+Invariant 8 is above. Also:
+
+1. **Static styles → `StyleSheet.create` at module level.** Dynamic
    theme/state styles → inline. Don't mix.
-4. **Reusable UI primitives go in `components/ui/`.** Don't roll a
+2. **Reusable UI primitives go in `components/ui/`.** Don't roll a
    new button or modal in a feature folder.
-5. **New icons require a `MAPPING` entry** in
+3. **New icons require a `MAPPING` entry** in
    `components/ui/icon-symbol.tsx` for Android/web. iOS works
    automatically with valid SF Symbol names.
-6. **Haptics gated to iOS only.** Don't drop the
+4. **New haptics are gated to iOS.** Use the
    `EXPO_OS === 'ios'` guard.
 
 ## Sharp edges
 
-- **`ThemedText` / `ThemedView` adoption is patchy.** Components
-  vary on usage. Don't try to "fix" this in a sweep — it's a
-  multi-file touch with no functional benefit. Just match what's
-  already in the file you're editing.
 - **`SwipeableVerseCard.tsx` has hardcoded bronze RGBA values**
   (e.g. `rgba(176,141,87,0.25)`) that should ideally come from a
   derived theme token. Not a bug, but a candidate for cleanup.

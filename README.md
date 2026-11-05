@@ -15,7 +15,7 @@ Three difficulty levels control how much of the verse you can see:
 - **Medium** — half the words hidden
 - **Hard** — no words visible (pure recall)
 
-Completing on Hard means you've **mastered** the verse. Master it once a month for four consecutive months and it becomes **engraved**.
+Completing on Hard means you've **mastered** the verse. Mastered verses come back for spaced review, and passing 10 of those reviews makes a verse **engraved**.
 
 ## Features
 

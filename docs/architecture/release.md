@@ -1,180 +1,80 @@
-# Feature: Release Automation (EAS Workflows + EAS Update)
+# Release
 
-> **Status:** `building`
-> **Author:** Caelan (research by agent, 2026-08-15, all claims fetched
-> from live Expo docs — sources inline)
-> **Created:** 2026-08-15
-> **Shipped:** —
+How a change gets from a branch to phones. Three things reach prod, on three clocks: migrations and edge functions go live as soon as `npm run release` applies them, JavaScript reaches installed apps over the air, and native changes wait for App Store review. Migration rules for that gap: `docs/architecture/data-model.md`.
 
-## Current state
+## `npm run release`
 
-> ⚠️ **Agents: this block is the source of truth for pipeline state,
-> and much of that state lives OUTSIDE the repo** (EAS dashboard,
-> App Store Connect, interactive CLI). It cannot be reconstructed from
-> git. If you change the pipeline, complete a dashboard/CLI step, or
-> learn a release shipped, UPDATE THIS BLOCK in the same PR — a stale
-> block sends the next agent to exactly the wrong conclusion (it
-> already happened once: an agent read the unchecked boxes below and
-> concluded the pipeline had never run, days after its first build).
+`scripts/release.mjs` is the only path to prod. `.claude/settings.json` and `.codex/rules/release.rules` block `gh pr merge`, pushing to `main` and `supabase db push` for agents. Any failing step stops the rest and says what to do. It is safe to rerun.
 
-As of **2026-09-18**:
+| Step | What it does |
+|---|---|
+| 1 | Merges `origin/main` into the branch |
+| 2 | `npm run check` |
+| 3 | `scripts/check-migrations.mjs --strict`: a destructive migration needs its `-- destructive-ok:` line |
+| 4 | Re-dates new migration files older than prod's newest, rebuilds locally if it did, pushes the branch |
+| 5 | Waits for CI (`.github/workflows/ci.yml`), applies migrations to prod, deploys changed edge functions |
+| 6 | Squash-merges the PR, deletes the remote branch |
+| 7 | Waits for the EAS workflow run on the merge commit (`confirmEas`) and reports it |
 
-- **Pipeline is LIVE.** GitHub repo linked (EAS dashboard,
-  2026-08-15) and ASC API key configured (`eas credentials`,
-  2026-08-15) — both interactive steps, no repo artifact.
-- **First workflow run: SUCCESS** (2026-08-15, 8 min) — built
-  **1.2.0 / build 14** and auto-submitted it.
-- **1.2.0 / build 14 is LIVE on the App Store** (confirmed by Caelan,
-  2026-08-25). **The OTA path is now ARMED for store users**: build 14
-  ships the expo-updates runtime, so JS-only merges to main reach
-  store users over the air (second cold start after publish).
-- **1.3.0** bumped on PR #46 (study prefs + alignment/waveform/perf
-  batch). The version bump changes the native fingerprint, so merging
-  triggers a full build + auto-submit rather than an OTA.
-- **1.3.0 / build 16 was approved.** PR #47 initially produced build 17
-  without changing the marketing version; App Store Connect rejected the
-  upload because the 1.3.0 train was closed. Build 17 is consumed but was not
-  submitted.
-- **1.3.1** is the corrective patch version for PR #47 (study-session
-  scoring, blank rendering, and live audio-tail fixes). EAS remote
-  auto-increment will produce build 18 and auto-submit it.
-- Remaining: OTA loop verification (JS-only merge → update lands on
-  a device), then graduation.
+- A change to `supabase/functions/_shared/` redeploys every function (`changedFunctions`).
+- `--dry-run` runs steps 1-4, which do commit and push, then step 5 as `db push --dry-run`, then stops.
+- On `main`, it runs steps 1, 2, 3 and 5 only, to catch prod up. It deploys no functions there: it stops and lists any with commits newer than their deployed version (`checkFunctionsCatchUp`).
+- A lock in the git common dir lets one release run at a time across worktrees.
+- Settings live in `kit` in `package.json`: `prodProjectRef`, `deployFunctions`, `deploy`, `restoredMigrations`.
+- Prod access uses `SUPABASE_ACCESS_TOKEN`, from the environment or from `.envrc` through direnv.
 
-## Problem
+## The deploy workflow
 
-Releases are fully manual: merge to main, then (sometimes weeks later)
-remember to run `eas build --platform ios --profile production`, then
-manually submit in App Store Connect. Result: main sat 10 weeks ahead
-of prod (peek/reveal merged 2026-07-09, still unshipped 2026-08-15).
-Most of Bread's changes are JS-only session-UX polish that could reach
-users in minutes instead of days.
+`.eas/workflows/deploy.yml` runs on EAS on every push to `main`. It is the Expo docs' deploy-to-production example, iOS jobs only.
 
-## Solution
+- A `fingerprint` job hashes the native project.
+- `get_ios_build` looks for a production build with that hash.
+- A match means the change is JS-only: `publish_ios_update` publishes an OTA update to the `production` branch.
+- No match means a native change: `build_ios` builds, and `submit_ios_build` submits to App Store Connect.
 
-Two composable pieces:
+**The workflow is paused.** The `build_ios`, `submit_ios_build` and `publish_ios_update` jobs are removed from the file, so a merge ships no build and no OTA update, and step 7 still prints "Deploy live". To end the pause, on the branch of the release that should ship:
 
-1. **EAS Update (OTA)** — JS-only changes ship over the air, no App
-   Store review. Users get them on the second cold start after publish.
-2. **EAS Workflows** — on push to `main`, a fingerprint check decides:
-   native change → full build + submit; JS-only change → publish OTA
-   update. One yaml, zero manual steps.
+```
+git restore --source=7787992 -- .eas/workflows/deploy.yml
+```
 
-Bread qualifies comfortably for the free tier: 15 iOS builds/mo,
-60 CI/CD min/mo, OTA to 1K MAU (we have ~5 users). No overage risk —
-free tier hard-stops instead of billing.
-[Pricing](https://expo.dev/pricing) ·
-[Billing FAQ](https://docs.expo.dev/billing/faq/)
+Don't use `git revert`: the release squash-merges, so that would undo the whole commit that paused it. Edit this section when the jobs return.
 
-## Requirements
+## What can ship over the air
 
-### Must have
+- `runtimeVersion` uses the `fingerprint` policy (`app.config.js`), so an update only reaches binaries with the same native hash.
+- OTA can carry JS fixes, copy, styling, layouts and JS-layer assets such as the bundled KJV JSON.
+- OTA can't carry native code or dependency changes, permission changes, or Expo SDK upgrades. Those need a new binary.
+- Store policy still applies. Changes to the app's behavior need review, and the next native build bakes in all merged JS.
+- `checkAutomatically` stays at its default, `ON_LOAD`, so users typically get an update on the second cold start.
+- Roll back with `eas update:rollback`, to the previous update or to the build's embedded bundle.
+- A binary built before `expo-updates` was added can never receive an update.
 
-- [x] `expo-updates` installed (`~29.0.19`, SDK-54-pinned) +
-      `updates.url`/`runtimeVersion` added to app.config.js manually
-      (dynamic config — `eas update:configure` can't write it) +
-      `channel: "production"` on the production build profile.
-      [Getting started](https://docs.expo.dev/eas-update/getting-started/)
-- [x] `runtimeVersion` policy set to **`fingerprint`** explicitly (do
-      not trust the configure default — docs don't specify it).
-      Rationale: appVersion policy breaks if we forget to bump version
-      on a native change; fingerprint makes incompatible updates
-      "extremely unlikely". [Runtime versions](https://docs.expo.dev/eas-update/runtime-versions.md)
-- [x] **One store release after setup** — OTA capability only exists in
-      binaries built with expo-updates. Build 13 can never receive
-      updates. This gates everything. *(1.2.0 / build 14 built +
-      submitted 2026-08-15 — check this box when it's released.)*
-- [x] GitHub repo linked to EAS project — done 2026-08-15 via the EAS
-      dashboard (interactive; no repo artifact).
-      [Get started](https://docs.expo.dev/eas/workflows/get-started.md)
-- [x] App Store Connect API key configured — verified 2026-08-15 via
-      `eas credentials --platform ios` (was already set up from earlier
-      manual submits; interactive, no repo artifact).
-      [Submit iOS](https://docs.expo.dev/submit/ios.md)
-- [x] `ascAppId` in eas.json submit profile (6757946016 — confirmed,
-      the first workflow submit succeeded against it).
-- [x] `.eas/workflows/deploy.yml` using the docs'
-      **deploy-to-production** example verbatim as the base:
-      fingerprint → existing build with matching hash? → OTA update :
-      build + submit. iOS jobs only.
-      [Example](https://docs.expo.dev/eas/workflows/examples/deploy-to-production.md)
-- [x] Remote version source + autoIncrement in eas.json — was already
-      in place (EAS manages buildNumber 11/12/13), as was
-      `ascAppId: 6757946016`.
-      [App versions](https://docs.expo.dev/build-reference/app-versions/)
+## Versions
 
-### Nice to have
+- `eas.json` has `appVersionSource: "remote"` and `autoIncrement` on the `production` profile, so EAS owns the build number. `ios.buildNumber` in `app.config.js` is ignored.
+- `version` in `app.config.js` is the marketing version, and it changes the fingerprint, so bumping it routes that merge to a build.
+- App Store Connect rejects an upload whose marketing version's train is closed, and the build number is used up anyway. Bump `version` before any native change that follows an approved release.
+- `eas.json` profiles: `development`, `simulator` (`npm run sim -- install`), `preview`, `production` (channel `production`).
 
-- [ ] Staged rollout for OTA updates (`rollout_percentage` on the
-      update job). Overkill at 5 users; note for later.
-      [Rollouts](https://docs.expo.dev/eas-update/rollouts.md)
+## What lives outside the repo
 
-### Explicitly out of scope
+These were interactive steps with no repo artifact, so git can't show them:
 
-- Android release automation (Android isn't shipped today; the docs
-  example includes symmetric jobs to add later).
-- E2E tests in the workflow.
-- Preview/PR channels — production channel only for now.
+- The GitHub repo is linked to the EAS project in the EAS dashboard. The GitHub app only delivers events; workflows run on EAS.
+- The App Store Connect API key is configured through `eas credentials --platform ios`. `ascAppId` is in `eas.json`.
 
-## Hard rules (from docs, not opinions)
+Which build and version is live on the App Store is in App Store Connect, not here.
 
-- **Cannot ship OTA:** native code/dependency changes, permission
-  changes, Expo SDK upgrades, "anything that requires a new app binary".
-  **Can ship OTA:** JS fixes, copy, styling, layouts — and the bundled
-  KJV JSON (it's a JS-layer asset).
-  [Intro table](https://docs.expo.dev/eas-update/introduction.md)
-- **Store policy:** updates must follow App Store guidelines —
-  "changes to your app's behavior need to be reviewed." Pattern the
-  docs bless: ship the fix OTA, follow up with a store build that
-  bakes it in. Our fingerprint workflow does this naturally (next
-  native change rebuilds with all JS included).
-- **Delivery timing:** `checkAutomatically` defaults to ON_LOAD;
-  users typically get the update on the **second** cold start.
-  [expo-updates SDK](https://docs.expo.dev/versions/latest/sdk/updates/)
-- **Rollback exists:** `eas update:rollback` (to previous update or to
-  the build's embedded bundle). [Rollbacks](https://docs.expo.dev/eas-update/rollbacks/)
-- Workflows limitations: no shared configs, no matrix builds; yaml
-  lives in-repo but runs on EAS infra (GitHub app only delivers
-  events). [Limitations](https://docs.expo.dev/eas/workflows/limitations.md)
+## Limits
 
-## Setup order (each step verifiable)
+- iOS only. Android isn't shipped, and the Expo example has matching jobs to add when it is.
+- Production channel only: no preview or PR channels, no staged OTA rollout.
+- No end-to-end tests in the workflow.
+- EAS workflows have no shared configs and no matrix builds.
 
-1. `npx expo install expo-updates` → `eas update:configure` → set
-   fingerprint policy → verify app.config.js/eas.json diffs match docs.
-2. Link GitHub repo in EAS project settings. Verify: dashboard shows
-   the repo connected.
-3. `eas credentials --platform ios` → ASC API key. Verify:
-   `eas submit` works non-interactively on a test.
-4. Write `.eas/workflows/deploy.yml` (docs example, iOS jobs only).
-5. Ship the gating store build (next version — includes expo-updates
-   runtime + whatever's merged). Manual submit OK this one time, or
-   let the new workflow do it as its first run.
-6. After App Store approval: test the OTA path — trivial JS change to
-   main → workflow publishes update → verify on device (two cold
-   starts) without a store release.
+## Decisions
 
-## Open Questions
-
-- Whether a `build` job inside a workflow consumes a build credit,
-  workflow minutes, or both — docs never state it explicitly. At our
-  scale it doesn't matter; flagged for accuracy.
-- SDK 54: docs are SDK-57-era; no SDK-54-specific caveats found, but
-  not positively confirmed. `expo install` pins the compatible
-  expo-updates version automatically.
-
-## Decisions Log
-
-| Date | Decision | Reasoning |
-|---|---|---|
-| 2026-08-15 | fingerprint runtimeVersion policy | Safest against forgotten version bumps; same hash drives the workflow's build-vs-OTA routing |
-| 2026-08-15 | Base the workflow on the docs' deploy-to-production example verbatim | Verified current (July 2026 revision); less to get wrong than hand-rolling |
-| 2026-08-15 | iOS only | Android not shipped; example has symmetric jobs to add later |
-
-## Graduation Checklist
-
-- [ ] New Tier 2 doc or section: release pipeline (where the yaml
-      lives, how fingerprint routing works, how to rollback)
-- [ ] CLAUDE.md: note that merges to main auto-deploy (changes the
-      "migrations ship before client" calculus — client JS now ships in
-      minutes too, so invariant #11's rollout-window reasoning applies
-      mainly to native/store builds)
+- 2026-08-15 · `fingerprint` runtime version policy · Safest against a forgotten version bump, and the same hash drives the build-or-OTA routing.
+- 2026-08-15 · Base the workflow on the Expo deploy-to-production example, not a hand-rolled one · Less to get wrong.
+- 2026-08-15 · iOS only · Android isn't shipped.

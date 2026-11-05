@@ -1,23 +1,22 @@
 # Edge Functions
 
-> **Status: Living document.** Update when an edge function is added,
-> when shared utilities change, or when an external API integration
-> changes. Read before touching `supabase/functions/`.
-
 Edge functions are Deno scripts running on Supabase infrastructure.
 They handle the things that need a server — secrets, rate limiting,
-external API calls, and atomic operations on shared tables.
+external API calls, and writes to shared tables.
 
-There are two production functions: `bible` and `process-recording`.
-Shared code lives in `_shared/`.
+There are four functions: `bible`, `process-recording`,
+`transcription-token` and `send-notifications`. Shared code lives in
+`_shared/`.
 
 ## Functions
 
 ```
 supabase/functions/
 ├── _shared/
-│   ├── auth.ts          ← JWT verification (verifyJwt)
-│   └── usage.ts         ← Tier lookup + usage metering (subscriptions, usage_daily)
+│   ├── auth.ts          ← User auth (verifyJwt, getAuthUser), admin client, tier lookup
+│   ├── cors.ts          ← CORS headers and preflight
+│   ├── errors.ts        ← Standard error responses
+│   └── usage.ts         ← Usage metering (usage_daily)
 ├── bible/
 │   ├── index.ts         ← HTTP entry point
 │   ├── cache.ts         ← verse_cache reads/writes + LRU eviction
@@ -26,11 +25,16 @@ supabase/functions/
 │   └── adapters/
 │       ├── types.ts     ← BibleAdapter contract
 │       ├── esv.ts       ← Crossway ESV API
-│       └── apibible.ts  ← API.Bible for KJV/NLT/NIV/NKJV
+│       └── apibible.ts  ← API.Bible for NLT/NIV/NKJV
 ├── process-recording/
 │   └── index.ts         ← Soniox upload, polling, optional GPT cleaning
-└── transcription-token/
-    └── index.ts         ← Mints temp Soniox keys for live streaming
+├── transcription-token/
+│   └── index.ts         ← Mints temp Soniox keys for live streaming
+└── send-notifications/
+    ├── index.ts         ← Cron entry point
+    ├── push.ts          ← Expo Push client
+    ├── types.ts
+    └── sources/         ← One module per notification source
 ```
 
 ## `bible`
@@ -48,8 +52,9 @@ here:
 
 ## `process-recording`
 
-The transcription endpoint for the study session. **Transcribes
-only — does not score.**
+The batch transcription endpoint for the study session. **Transcribes
+only — does not score.** The client side and when each path runs are
+in `docs/features/transcription.md`.
 
 ```
 POST /functions/v1/process-recording
@@ -65,10 +70,11 @@ POST /functions/v1/process-recording
    on any client parses unchanged)
 4. Upload audio to Soniox async API (model stt-async-v5)
    - actualVerse passed as context for accuracy
-5. Poll Soniox until transcription completes (1s interval, up to 90
-   polls)
-6. Record usage_daily.transcribe_seconds (analytics only — the
-   quota gate was removed; nothing returns 429 anymore)
+5. Poll Soniox until transcription completes (every 250ms for the
+   first 3s, then every 1s, up to a 90s deadline)
+6. Record usage_daily.transcribe_seconds without blocking the
+   response (EdgeRuntime.waitUntil). Analytics only — the quota gate
+   was removed; nothing returns 429 anymore
 7. Optionally run GPT-5-mini cleaning pass
    - CLEANING_ENABLED is HARDCODED FALSE right now
 8. Stream the JSON payload
@@ -80,14 +86,17 @@ POST /functions/v1/process-recording
 
 The actual scoring (alignment + accuracy %) happens **on the
 device** in `lib/align.ts` and `hooks/use-study-session.ts` — not
-here. This function is just the audio → text bridge.
+here. This function is just the audio → text bridge. A null transcript
+from silent audio comes back as an empty string, so the client scores
+0 instead of erroring.
 
 ### `actualVerse` as Soniox context
 
 Soniox accepts a `context` parameter that primes the recognizer
-with the expected text. Passing the verse text noticeably improves
-accuracy on rare/biblical words (e.g. "Selah", "Beelzebub"). Don't
-remove this without trade-off analysis.
+with the expected text, along with `domain` and `topic` hints. Passing
+the verse text noticeably improves accuracy on rare/biblical words
+(e.g. "Selah", "Beelzebub"). Don't remove this without trade-off
+analysis.
 
 ### Cleaning pass
 
@@ -108,15 +117,16 @@ Don't enable without product input.
 Mints short-lived Soniox temporary API keys so the client can stream
 audio **directly** to Soniox's real-time WebSocket during recording
 (`lib/transcription/live-session.ts`) — the edge function never
-touches audio bytes. See `docs/features/live-transcription.md`.
+touches audio bytes. See `docs/features/transcription.md`.
 
 ```
 POST /functions/v1/transcription-token
   Headers: Authorization: Bearer <supabase JWT>
   Body: none
 
-200 → { apiKey, expiresAt, websocketUrl, model }
+200 → { apiKey, expiresAt, websocketUrl, model: "stt-rt-v5" }
 403 → { error: "LIVE_DISABLED" }   ← the kill switch
+500 → Soniox not configured or the mint failed
 ```
 
 - **Kill switch**: unless the `LIVE_TRANSCRIPTION_ENABLED` secret is
@@ -132,39 +142,51 @@ POST /functions/v1/transcription-token
   never break recitation scoring.
 - Old clients never call it; purely additive.
 
+## `send-notifications`
+
+Called by `pg_cron` every minute through `pg_net`. It takes no user
+JWT: it compares the bearer token in constant time against the
+`cron_secret` in Vault, read through the `get_cron_secret()` RPC and
+re-read once on a mismatch so rotation works. Then it runs each
+notification source in turn. See `docs/features/notifications.md`.
+
 ## `_shared/auth.ts`
 
-Exports `verifyJwt(req)` which:
+All functions set `verify_jwt = false` in `supabase/config.toml`, so
+the gateway doesn't check tokens and each function checks its own.
 
-1. Extracts `Authorization: Bearer <token>` from the request.
-2. Verifies the JWT with Supabase's auth helpers.
-3. Returns the user ID, or throws 401.
-
-Every function call goes through this first.
+- `verifyJwt(req)` verifies an ES256 token locally against the
+  project's JWKS (keys cached per worker) and returns the user, or
+  `null`. Used by `process-recording` and `transcription-token`.
+- `getAuthUser(req)` asks Supabase Auth with the user's token, a
+  network call. Used by `bible`.
+- `getAdminClient()` is the service-role client that bypasses RLS.
+- `getUserTier(userId)` reads `subscriptions`. No row or an expired
+  one means `free`.
 
 ## `_shared/usage.ts`
 
-Exports `checkAndIncrementBibleUsage(userId)` and the equivalent
-for transcription:
+`checkAndIncrementBibleUsage(userId)`:
 
-1. Look up user's tier via `getUserTier(userId)` — checks
-   `subscriptions` table. Defaults to `free`.
+1. Look up user's tier via `getUserTier(userId)`.
 2. Look up today's usage in `usage_daily` (one row per
    `user_id × date`).
 3. If under limit → increment and allow.
-4. If over → return `{ allowed: false, used, limit, resetsAt }`.
+4. If over → `{ allowed: false, used, limit }`, and the function
+   answers with `rateLimitResponse`, which adds `resetsAt`.
 
 Tier limits:
 
-| Counter | Free | Supporter |
-|---|---|---|
-| `bible_fetch_count` | 100/day | 10,000/day |
-| `transcribe_seconds` | (limit defined here) | (limit defined here) |
-| `evaluate_count` | (legacy — see file) | |
+| Counter | Free | Supporter | Enforced? |
+|---|---|---|---|
+| `bible_fetch_count` | 100/day | 10,000/day | yes |
+| `transcribe_seconds` | 300/day | 3,600/day | no, recorded only |
+| `evaluate_count` | 20/day | 500/day | no, legacy |
 
 `evaluate_count` is from the era when scoring was an OpenAI call.
 Keep the column for now (existing rows reference it) but new code
-shouldn't increment it.
+shouldn't increment it. The only call left is in the disabled cleaning
+path.
 
 ## Secrets
 
@@ -176,20 +198,27 @@ Edge functions need:
 - `LIVE_TRANSCRIPTION_ENABLED` — `"true"` enables the
   `transcription-token` endpoint; anything else (or unset) is the
   live-transcription kill switch
+- `EXPO_ACCESS_TOKEN` — Expo Push, for `send-notifications`
 - `OPENAI_API_KEY` — only if GPT cleaning is re-enabled
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — to read/write
   `verse_cache`, `usage_daily`, `subscriptions` past RLS
+- `SUPABASE_ANON_KEY` — for `getAuthUser`'s user-token client
 
 These are set via `supabase secrets set ...` and never appear in
-the client bundle.
+the client bundle. `cron_secret` lives in Vault instead; locally,
+`supabase/config.toml` provides a throwaway value.
 
 ## Deployment
 
-```
-supabase functions deploy bible
-supabase functions deploy process-recording
-supabase functions deploy transcription-token
-```
+Functions deploy through `npm run release`, never by hand.
+`deployFunctions` in `scripts/release.mjs` deploys each function whose
+folder changed against `origin/main`, or all of them if `_shared/`
+changed. It runs because `kit.deployFunctions` is true in
+`package.json`. See `docs/architecture/release.md`.
+
+They go live right after step 5, before the client, so old clients
+must keep working. See "Migration safety" in
+`docs/architecture/data-model.md`.
 
 Local development:
 
@@ -197,20 +226,25 @@ Local development:
 supabase functions serve --env-file ./supabase/functions/.env
 ```
 
-The Supabase CLI version checked in is 2.78.1 (per the
-installed binary).
-
 ## Invariants
 
-1. **Every edge function call starts with `verifyJwt(req)`.** No
-   public endpoints. Even rate limiting depends on having a user ID.
+**Invariant 9: the service role key must never reach the client.**
+It's used only in edge functions. The anon key is what the app ships
+with, and RLS enforces ownership via `auth.uid() = user_id`. Leaking
+the service role key effectively voids all RLS.
+
+Also:
+
+1. **Every edge function authenticates before anything else.** No
+   open endpoints: `verifyJwt` or `getAuthUser` for user-facing
+   functions, the cron secret for `send-notifications`. Even rate
+   limiting depends on having a user ID.
 2. **Use the service role key inside edge functions, the anon key
-   in the client.** Don't accidentally use the anon key inside an
-   edge function — it would re-trigger RLS where you don't want it
-   to.
+   in the client.** Don't accidentally use the anon key for shared
+   tables inside an edge function — it would re-trigger RLS where you
+   don't want it to.
 3. **Rate-limit before doing real work.** The check is cheap, the
-   work (external API call, Soniox poll) is expensive. Order
-   matters.
+   work (external API call) is expensive. Order matters.
 4. **`process-recording` does not score.** It transcribes. Scoring
    is on the device. If you find yourself adding accuracy logic
    here, stop and reconsider — moving it server-side is a real
@@ -222,6 +256,9 @@ installed binary).
    streamed heartbeat exists because iOS kills a socket after ~60s
    without data; if you restructure the function, keep bytes
    flowing while Soniox works.
+7. **Keep `process-recording`'s request and response shape.** Old
+   clients still call it, and any client falls back to it when live
+   transcription isn't available.
 
 ## Sharp edges
 
@@ -231,10 +268,12 @@ installed binary).
 - **Soniox polling can take up to ~90 seconds.** The response
   heartbeat keeps clients alive through it, but the Supabase
   runtime wall-clock (~150s) still bounds the whole request.
+- **`usage_daily` increments aren't atomic.** `incrementUsage` reads
+  then writes, so concurrent requests can undercount.
 - **`transcription_locks` table is orphaned.** The table and its
   cleanup function exist in the schema, but no code ever acquires
-  a lock (this doc used to claim otherwise). The only double-submit
-  guard is the client UI disabling the mic while transcribing.
+  a lock. The only double-submit guard is the client UI disabling the
+  mic while transcribing.
 - **No retry logic on external API failures.** If ESV / API.Bible
   / Soniox returns 5xx, the function returns 500 to the client
   with no automatic retry.
@@ -242,4 +281,14 @@ installed binary).
   OpenAI call). Still in the schema; don't read it.
 - **No version-aware verse counts** — adapters log a warning when
   the parsed count doesn't match VERSE_COUNTS, but don't fail or
-  fall back. See bible-api-and-caching.md sharp edges.
+  fall back. See `docs/architecture/bible-versions.md`.
+- **`_shared/usage.ts` has unused helpers.** `getTierAndUsage` calls
+  an RPC no migration defines, and the transcription and evaluation
+  checks have no callers.
+
+## Decisions
+
+- 2025-12-19 · Scoring moved to the device, `process-recording` only transcribes · No LLM in the scoring path. The GPT cleaning code stays behind a hardcoded `false`.
+- 2025-12-23 · Quota check removed from `process-recording`, usage still recorded · Limits can come back on the server without an app update.
+- 2026-08-24 · `process-recording` streams heartbeat spaces every 10s · Long recordings tripped the client's ~60s idle timeout. Leading whitespace is valid JSON, so old clients parse unchanged.
+- 2026-08-25 · Live transcription gated by a server-side kill switch, batch path kept · A secret flip needs no deploy or store release, and any failure falls back to batch.
