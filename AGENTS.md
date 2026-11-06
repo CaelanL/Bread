@@ -30,7 +30,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Release, EAS, OTA | `docs/architecture/release.md` |
 
 ## Run and check
-- `npm start` — the app against the local DB; it refuses to start on a non-local database. `npm run ios`, `npm run android`, `npm run web`.
+- `npm start` — the app against the local DB; it refuses to start on a non-local database, and starts the local DB if it isn't answering. `npm run ios`, `npm run android`, `npm run web`.
 - `npm run db:start`, `db:stop`, `db:reset`, `db:status`, `db:env`, `db:types`, `db:destroy` — the local Supabase for this folder. `npm run test:db` — database tests alone.
 - `npm run check` before calling anything done; `npm run check:fast` while iterating. `npm test` — unit tests alone.
 - If the DB won't start, or anything else in the local setup breaks, run `npm run doctor`. Never start Docker or another runtime by hand.
