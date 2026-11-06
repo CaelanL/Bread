@@ -3,16 +3,16 @@
 // App-specific values come from package.json "kit". Never prints key values.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { networkInterfaces, release } from 'node:os';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { homedir, networkInterfaces, release } from 'node:os';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const kit = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).kit ?? {};
 const envFile = kit.envFile ?? '.env.local';
 const TYPES_FILE = 'supabase/database.types.ts';
-const STUCK = 'Stuck: environment broken. See the doctor output above.';
+const STUCK = 'Stuck: environment broken. See the doctor output above. Don\'t start Docker or another runtime by hand.';
 
 function die(message) {
   console.error(message);
@@ -36,7 +36,8 @@ function parseJson(text) {
 
 // `supabase start` prints the local keys in a table, so its output never goes out unfiltered.
 function show(r) {
-  const lines = `${r.out}\n${r.err}`.split('\n')
+  // The CLI's error JSON goes to stdout and its progress to stderr, so stdout comes last to survive the slice.
+  const lines = `${r.err}\n${r.out}`.split('\n')
     .filter((l) => l.trim() && !/^\s*│.*\b(key|secret|publishable)\b/i.test(l))
     .map((l) => l.replace(/\b(sb_[a-z]+_[\w-]+|eyJ[\w.-]+)/g, '***'));
   console.error(lines.slice(-30).join('\n'));
@@ -49,6 +50,19 @@ function runtime() {
   if (process.platform === 'darwin' && process.arch === 'arm64' && parseInt(release(), 10) >= 23) return 'native';
   return 'docker';
 }
+
+// Docker Desktop's tools, including the credential helper image pulls need, aren't always on PATH.
+if (process.platform === 'darwin' && runtime() === 'docker') {
+  process.env.PATH = ['/Applications/Docker.app/Contents/Resources/bin', join(homedir(), '.docker/bin'), process.env.PATH].join(delimiter);
+}
+
+// Codex shells set LC_ALL=C.UTF-8, which macOS doesn't have, and Postgres's initdb then fails ("invalid locale settings").
+// The doctor has the same check.
+const hasLocale = (value) => !value || value === 'C' || value === 'POSIX' || existsSync(`/usr/share/locale/${value}`);
+const missingLocales = () => (process.platform === 'darwin'
+  ? Object.keys(process.env).filter((name) => (name === 'LANG' || name.startsWith('LC_')) && !hasLocale(process.env[name]))
+  : []);
+for (const name of missingLocales()) process.env[name] = 'en_US.UTF-8';
 
 function isRunning() {
   const r = supabase('stack', 'status', '--output-format', 'json');
@@ -99,7 +113,7 @@ function start() {
     if (!r.ok) {
       show(r);
       console.log('Start failed. Running the doctor.');
-      run(process.execPath, ['scripts/doctor.mjs', '--local'], { stdio: 'inherit' });
+      run(process.execPath, ['scripts/doctor.mjs', '--local'], { stdio: 'inherit', env: { ...process.env, KIT_DB_START_ERROR: `${r.out}\n${r.err}` } });
       r = once();
       if (!r.ok) { show(r); die(STUCK); }
       if (hasPendingMigrations()) die(STUCK);
@@ -171,9 +185,21 @@ function env(args = []) {
 
   const target = join(root, envFile);
   const example = join(root, kit.envExample ?? '.env.example');
+  setAsideNonLocalEnv();
   const current = existsSync(target) ? readFileSync(target, 'utf8') : existsSync(example) ? readFileSync(example, 'utf8') : '';
   writeFileSync(target, setLines(current, values));
   console.log(`Wrote ${envFile}: ${Object.keys(values).join(', ')}`);
+}
+
+// A file that points at a hosted database holds real settings. Keep it whole; don't mix it with local values.
+function setAsideNonLocalEnv() {
+  const url = parseEnv(envFile)[kit.envNames.API_URL];
+  if (!url || isLocalUrl(url)) return;
+  let backup = `${envFile}.before-kit`;
+  for (let n = 2; existsSync(join(root, backup)); n++) backup = `${envFile}.before-kit-${n}`;
+  renameSync(join(root, envFile), join(root, backup));
+  console.log(`Your ${envFile} pointed at a database that isn't on this computer, so it wasn't changed: it's now ${backup}, kept as it was.`);
+  console.log(`A new ${envFile} is being made from ${kit.envExample ?? '.env.example'}. If you need a setting from the old file, copy that one line across, but never its Supabase lines.`);
 }
 
 function status() {
@@ -181,6 +207,7 @@ function status() {
   console.log(`API: ${s.API_URL}`);
   console.log(`DB: ${s.DB_URL}`);
   console.log(`Studio: ${s.STUDIO_URL}`);
+  console.log(`Mail: ${s.MAILPIT_URL}`);
 }
 
 function types(args = []) {
@@ -198,22 +225,37 @@ function types(args = []) {
   console.log(`Wrote ${TYPES_FILE}`);
 }
 
-function isLocalHost(host) {
+function isLocalUrl(url) {
+  let host = '';
+  try { host = new URL(url).hostname; } catch { return false; }
   return host === '127.0.0.1' || host === 'localhost' || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
 }
 
 // Same order as the app: the shell's env wins, then the env file, then .env.
-function guard() {
-  const effective = { ...parseEnv('.env'), ...parseEnv(envFile), ...process.env };
-  let host = '';
-  try { host = new URL(effective[kit.envNames?.API_URL]).hostname; } catch { /* missing or not a URL */ }
-  if (!isLocalHost(host)) die('This points at a non-local database. Run `npm run db:start`.');
+const effectiveEnv = () => ({ ...parseEnv('.env'), ...parseEnv(envFile), ...process.env });
+
+// A stopped database, or one that came back on another port, doesn't answer: the site loads but sign-in fails.
+async function answers(url) {
+  try { return (await fetch(new URL('/auth/v1/health', url), { signal: AbortSignal.timeout(5000) })).ok; } catch { return false; }
+}
+
+async function guard() {
+  const effective = effectiveEnv();
+  if (!isLocalUrl(effective[kit.envNames?.API_URL])) die('This points at a non-local database. Run `npm run db:start`.');
+  if (/^[sr]k_live_/.test(effective.STRIPE_SECRET_KEY ?? '')) die(`STRIPE_SECRET_KEY in ${envFile} is a live key. Use a test key (sk_test_...) or leave it blank.`);
   if (effective.RESEND_API_KEY && !effective.EMAIL_DEV_RECIPIENT) {
     die(`RESEND_API_KEY is set but EMAIL_DEV_RECIPIENT isn't, so local email could reach real people. Set EMAIL_DEV_RECIPIENT in ${envFile}.`);
+  }
+  if (await answers(effective[kit.envNames.API_URL])) return;
+  console.log('The local database isn\'t answering. Running `npm run db:start`.');
+  start();
+  if (!(await answers(effectiveEnv()[kit.envNames.API_URL]))) {
+    run(process.execPath, ['scripts/doctor.mjs', '--local'], { stdio: 'inherit' });
+    die(STUCK);
   }
 }
 
 const [command, ...args] = process.argv.slice(2);
 const commands = { start, stop, destroy, reset, env: () => env(args), status, types: () => types(args), guard };
 if (!commands[command]) die('Usage: node scripts/db.mjs start|stop|destroy|reset|env|status|types|guard');
-commands[command]();
+await commands[command]();
