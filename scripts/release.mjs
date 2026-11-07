@@ -4,6 +4,7 @@
 //   5 migrate prod      6 merge the PR   7 confirm the deploy
 // --dry-run: steps 1-4 (these do commit and push the branch), step 5 as `db push --dry-run`, then stops.
 // On main: steps 1, 2, 3, 5 only ("catch up prod").
+// Each step 7 wait (the deploy, then the site) stops after 15 minutes (75 for EAS). After that, rerun: a merged branch skips straight to step 7.
 //
 // Not verified on a real project when written (no prod was touched while building the kit).
 // Check these on each repo's first dry run:
@@ -21,7 +22,8 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const kit = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).kit ?? {};
 const bin = join(root, 'node_modules/.bin/supabase');
-const REF_FILE = join(root, 'supabase/.temp/project-ref');
+const TEMP_DIR = join(root, 'supabase/.temp');
+const REF_FILE = join(TEMP_DIR, 'project-ref');
 const LINK_FILE = join(root, 'supabase/.link.json');
 const LOCK = join(root, 'supabase/supabase.lock');
 const MIGRATIONS = 'supabase/migrations';
@@ -29,7 +31,10 @@ const FUNCTIONS = 'supabase/functions';
 const LOCK_POLL_MS = 10_000;
 const POLL_MS = 15_000;
 const CI_APPEAR_MS = 5 * 60_000;
-const DEPLOY_TIMEOUT_MS = 30 * 60_000;
+// Bread's EAS runs have taken 52 minutes. KIT_DEPLOY_MINUTE_MS shortens the minute, for tests.
+const DEPLOY_WAIT_MINUTES = { 'eas-workflow': 75 };
+const DEPLOY_MINUTE_MS = Number(process.env.KIT_DEPLOY_MINUTE_MS) || 60_000;
+let deployMinutes = 15;
 
 // `npm run release --dry-run` doesn't reach argv: npm keeps the flag and sets npm_config_dry_run.
 const dryRun = process.argv.includes('--dry-run') || process.env.npm_config_dry_run === 'true';
@@ -38,7 +43,7 @@ const dryRun = process.argv.includes('--dry-run') || process.env.npm_config_dry_
 
 function run(cmd, args, options = {}) {
   const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...options });
-  return { ok: r.status === 0, out: (r.stdout ?? '').trim(), err: (r.stderr ?? r.error?.message ?? '').trim() };
+  return { ok: r.status === 0, status: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? r.error?.message ?? '').trim() };
 }
 
 const show = (cmd, args) => run(cmd, args, { stdio: 'inherit' });
@@ -111,8 +116,10 @@ function linkedRefs() {
 }
 const isLinkedToProd = () => {
   const refs = linkedRefs();
-  return refs.length > 0 && refs.every((ref) => ref === kit.prodProjectRef);
+  return refs.length > 0 && refs.every((ref) => ref === kit.prodProjectRef) && !hasOldLink();
 };
+// A project-ref with no .link.json came from a CLI older than stack mode. It breaks prod reads even when its ref is right.
+const hasOldLink = () => existsSync(REF_FILE) && !existsSync(LINK_FILE);
 
 function ensureLinked() {
   if (!kit.prodProjectRef) stop('package.json has no kit.prodProjectRef.');
@@ -122,6 +129,7 @@ function ensureLinked() {
   if (!isLinkedToProd()) {
     // `supabase link` also records prod's versions and a timestamp in supabase.lock, which would dirty the tree. Nothing uses them (services are bundled).
     const lock = existsSync(LOCK) ? readFileSync(LOCK) : null;
+    if (hasOldLink()) rmSync(TEMP_DIR, { recursive: true, force: true });
     const r = linked(['link', '--project-ref', kit.prodProjectRef]);
     if (lock) writeFileSync(LOCK, lock);
     if (!r.ok || !isLinkedToProd()) stop(`could not link to ${kit.prodProjectRef}: ${r.err}`);
@@ -265,12 +273,13 @@ function merge(branch, sha) {
 
 // ---------- step 7: confirm the deploy
 
-async function poll(link, check) {
-  const deadline = Date.now() + DEPLOY_TIMEOUT_MS;
+// Each wait gets its own limit, so a green deploy whose site is slow isn't reported as "not seen".
+async function poll(link, check, what = 'deploy not seen') {
+  const deadline = Date.now() + deployMinutes * DEPLOY_MINUTE_MS;
   for (;;) {
     const result = await check();
     if (result) return result;
-    if (Date.now() > deadline) stop(`deploy not confirmed: check ${link}`);
+    if (Date.now() > deadline) stop(`${what} after ${deployMinutes} minutes. The merge already happened.`, `check Vercel/EAS (${link}), then rerun; the rerun only checks the deploy.`);
     await sleep(POLL_MS);
   }
 }
@@ -298,7 +307,7 @@ async function confirmVercel(sha) {
   if (kit.prodUrl) {
     const live = await poll(kit.prodUrl, async () => {
       try { return (await fetch(kit.prodUrl)).status === 200; } catch { return false; }
-    });
+    }, `deployed, but ${kit.prodUrl} isn't answering`);
     if (!live) stop(`${kit.prodUrl} isn't answering.`);
   }
   return `Deploy live: ${link}`;
@@ -321,6 +330,7 @@ async function confirmEas(sha, workflow) {
 
 async function confirmDeploy(sha) {
   const deploy = kit.deploy ?? {};
+  deployMinutes = DEPLOY_WAIT_MINUTES[deploy.type] ?? 15;
   if (deploy.type === 'github-actions') return confirmGithubActions(sha, deploy.workflow);
   if (deploy.type === 'vercel-git') return confirmVercel(sha);
   if (deploy.type === 'eas-workflow') return confirmEas(sha, deploy.workflow);
@@ -332,6 +342,7 @@ async function confirmDeploy(sha) {
 async function main() {
   const branch = git('branch', '--show-current').out;
   if (!branch) stop('not on a branch.', 'check out your feature branch or main.');
+  if (!gh('auth', 'status').ok) stop('the GitHub CLI isn\'t set up.', 'install it (cli.github.com), run `gh auth login`, then rerun.');
   const onMain = branch === 'main';
 
   await takeLock(branch);
@@ -367,9 +378,9 @@ async function main() {
   step(3, 'Destructive changes need the OK line');
   ensureLinked();
   const strictArgs = onMain ? ['--strict', '--prod'] : ['--strict'];
-  if (!show(process.execPath, ['scripts/check-migrations.mjs', ...strictArgs]).ok) {
-    stop('a destructive migration has no OK line.', 'ask for the OK, add the `-- destructive-ok:` line, rerun.');
-  }
+  const destructive = show(process.execPath, ['scripts/check-migrations.mjs', ...strictArgs]);
+  if (destructive.status === 1) stop('a destructive migration has no OK line.', 'ask for the OK, add the `-- destructive-ok:` line, rerun.');
+  if (!destructive.ok) stop('the migration check could not run.', 'read the line above, fix it, rerun.');
   passed(3);
 
   if (!onMain) {

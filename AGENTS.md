@@ -30,13 +30,13 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Release, EAS, OTA | `docs/architecture/release.md` |
 
 ## Run and check
-- `npm start` — the app against the local DB; it refuses to start on a non-local database. `npm run ios`, `npm run android`, `npm run web`.
+- `npm start` — the app against the local DB; it refuses to start on a non-local database, and starts the local DB if it isn't answering. `npm run ios`, `npm run android`, `npm run web`.
 - `npm run db:start`, `db:stop`, `db:reset`, `db:status`, `db:env`, `db:types`, `db:destroy` — the local Supabase for this folder. `npm run test:db` — database tests alone.
 - `npm run check` before calling anything done; `npm run check:fast` while iterating. `npm test` — unit tests alone.
-- `npm run doctor` when the local setup breaks.
+- If the DB won't start, or anything else in the local setup breaks, run `npm run doctor`. Never start Docker or another runtime by hand.
 - `npm run sim -- shot <route> [--as <seed user>]` — screenshots of the local app in the simulator, to `.expo/sim-shots/`. Each area doc's "Browser checks" list runs this way, since Bread has no browser flows.
 - `npm run sim -- flow <name|all>` — runs the Maestro flows in `.maestro/` (taps, typing, iOS permission prompts) against the local DB. Prints pass or fail and the screenshots, under `.expo/sim-shots/flows/`. Flows change local data, and `npm run db:reset` restores the seed. Needs Maestro (`curl -fsSL "https://get.maestro.mobile.dev" | bash`).
-- Local seed users are described at the top of `supabase/seed.sql`. They exist only on local databases.
+- Local seed users are described at the top of `supabase/seed.sql`. They exist only on local databases. Before giving Caelan a login, sign in with it.
 - Supabase CLI: run `direnv exec . supabase <cmd>` from agent shells, so it gets `SUPABASE_ACCESS_TOKEN` from `.envrc`. Never run `supabase login`. Never print or commit `.envrc`.
 
 ## Rules
