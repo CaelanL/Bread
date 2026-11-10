@@ -41,7 +41,7 @@ export function RecordingBar({
       ) : (
         <View style={styles.recordingBarContent}>
           {/* Cancel button */}
-          <Pressable onPress={onCancel} style={styles.barCancelButton}>
+          <Pressable onPress={onCancel} style={styles.barCancelButton} accessibilityLabel="Discard recording" testID="discard-recording">
             <IconSymbol name="xmark" size={22} color="rgba(255,255,255,0.8)" />
           </Pressable>
 
@@ -49,7 +49,7 @@ export function RecordingBar({
           <Waveform levels={waveformLevels} />
 
           {/* Submit button */}
-          <Pressable onPress={onSubmit} style={styles.barSubmitButton}>
+          <Pressable onPress={onSubmit} style={styles.barSubmitButton} accessibilityLabel="Submit recording" testID="submit-recording">
             <IconSymbol name="checkmark" size={24} color="#fff" />
           </Pressable>
         </View>

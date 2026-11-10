@@ -21,8 +21,8 @@ import { showErrorToast } from '@/lib/toast';
 import {
   startLiveTranscription,
   base64ToUint8Array,
-  type LiveTranscriptionSession,
 } from '@/lib/transcription/live-session';
+import { createRecordingControls, type RecordingState } from '@/lib/transcription/recording-controls';
 import {
   useAudioRecorder,
   AudioStudioModule,
@@ -48,11 +48,8 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withRepeat,
-  runOnJS,
   Easing,
 } from 'react-native-reanimated';
-
-type RecordingState = 'idle' | 'recording';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -77,23 +74,18 @@ export default function StudySessionScreen() {
     difficulty: difficulty ?? 'easy',
     chunkSize,
   });
+  const { currentIndex, setCurrentIndex } = session;
 
-  // Recording state (kept local due to animation coupling)
-  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
-  const [transcribing, setTranscribing] = useState(false);
-  const [exitingChunks, setExitingChunks] = useState<Set<number>>(new Set());
+  const [recordingState, setRecordingState] = useState<RecordingState>({ phase: 'idle' });
+  const [recorder] = useState(() => createRecordingControls(setRecordingState));
+  const transcribing = recordingState.phase === 'submitting';
+  const barVisible = recordingState.phase === 'recording' || transcribing;
+  const closingRef = useRef(false);
   // Per-chunk visibility override driven by the header reveal/hide button.
   // Cosmetic only; scoring always uses chunk.text. Absence = mode default.
   const [hideModes, setHideModes] = useState<Map<number, HideMode>>(new Map());
 
   const { startRecording, stopRecording } = useAudioRecorder();
-  // The hook's isRecording lags a render; teardown paths need a sync answer
-  const recordingActiveRef = useRef(false);
-  // Bumped by every teardown; a mic press whose startRecording resolves
-  // under a stale generation was torn down mid-start and must not go live
-  const recordingGenRef = useRef(0);
-  const liveSessionRef = useRef<LiveTranscriptionSession | null>(null);
-  const capTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bar levels live in a shared value so the waveform animates on the
   // UI thread without re-rendering this screen (10x/sec while recording)
   const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
@@ -132,113 +124,46 @@ export default function StudySessionScreen() {
     getAuthToken().catch(() => {});
   }, []);
 
-  // Cleanup on unmount
+  useEffect(() => () => { void recorder.cancel(); }, [recorder]);
+
   useEffect(() => {
-    return () => {
-      teardownRecording();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const clearCapTimer = useCallback(() => {
-    if (capTimerRef.current) {
-      clearTimeout(capTimerRef.current);
-      capTimerRef.current = null;
-    }
-  }, []);
-
-  // Shared teardown for every non-submit exit: cancel, scroll-away,
-  // unmount, failed start. Closes the live socket (stops billing),
-  // invalidates any in-flight startRecording, and stops the recorder.
-  const teardownRecording = useCallback((): Promise<unknown> => {
-    recordingGenRef.current++;
-    liveSessionRef.current?.abort();
-    liveSessionRef.current = null;
-    clearCapTimer();
-    waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
-    if (recordingActiveRef.current) {
-      recordingActiveRef.current = false;
-      return stopRecording().catch(() => {});
-    }
-    return Promise.resolve();
-  }, [clearCapTimer, stopRecording]);
-
-  const hideRecordingBar = useCallback((onComplete?: () => void) => {
-    recordingTabY.value = withTiming(
-      RECORDING_BAR_HEIGHT + 60,
+    recordingTabY.value = barVisible
+      ? withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) })
       // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-      { duration: 250, easing: Easing.in(Easing.cubic) },
-      (finished) => {
-        if (finished && onComplete) {
-          runOnJS(onComplete)();
-        }
-      }
-    );
-  }, []);
+      : withTiming(RECORDING_BAR_HEIGHT + 60, { duration: 250, easing: Easing.in(Easing.cubic) });
+  }, [barVisible, recordingTabY]);
 
   const handleSubmit = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    recordingGenRef.current++;
-    clearCapTimer();
-    waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
-
-    const liveSession = liveSessionRef.current;
-
-    if (!recordingActiveRef.current) {
-      liveSessionRef.current = null;
-      liveSession?.abort();
-      setRecordingState('idle');
-      return;
+    if (!recorder.isRecording()) return;
+    if (process.env.EXPO_OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-
+    const peekedChunks = session.getPeekedChunks();
     try {
-      setTranscribing(true);
-
-      recordingActiveRef.current = false;
-      // liveSessionRef stays set through processRecording: the
-      // recorder's trailing PCM chunk can land on the JS queue after
-      // this resolve (see the live-feed subscription), and clearing the
-      // ref first dropped it — clipping the last word
-      const recording = await stopRecording();
-      const durationMs = recording.durationMs ?? 0;
-      // Compressed (m4a) output is the batch-fallback upload, matching
-      // the frozen process-recording contract; primary WAV is disabled
-      const uri = recording.compression?.compressedFileUri ?? recording.fileUri;
-
-      // A missing file only matters if there's no live transcript to
-      // finalize — the live path never reads the file
-      if (!uri && !liveSession) {
-        throw new Error('No recording URI');
-      }
-
-      setRecordingState('idle');
-
-      await session.processRecording(uri, durationMs, liveSession ?? undefined);
-
-      // Hide bar after processing
-      hideRecordingBar(() => setTranscribing(false));
+      await recorder.submit((submission) => (
+        session.processRecording(submission, peekedChunks.has(submission.index))
+      ));
     } catch (error) {
-      // Covers failures before the hook took ownership (idempotent)
-      liveSession?.abort();
       console.error('Recording submission failed:', error);
-      hideRecordingBar(() => setTranscribing(false));
       Alert.alert('Error', `Recording failed: ${error}`);
-      setRecordingState('idle');
-    } finally {
-      if (liveSessionRef.current === liveSession) {
-        liveSessionRef.current = null;
-      }
     }
-  }, [clearCapTimer, hideRecordingBar, session, stopRecording]);
+  }, [recorder, session]);
 
-  // Latest-closure ref for the cap timer: the timer arms at record-start
-  // and fires up to 5 minutes later, so calling the captured handleSubmit
-  // directly would submit with stale session state (retry/peek flags
-  // committed after record-start would be missed).
+  // The cap submits the latest render's session state, just like the check button.
   const handleSubmitRef = useRef(handleSubmit);
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   });
+
+  useEffect(() => {
+    if (recordingState.phase !== 'recording') return;
+    const timer = setTimeout(() => {
+      if (!recorder.isRecording()) return;
+      showErrorToast('5 minute limit reached — scoring what you recited.');
+      void handleSubmitRef.current();
+    }, MAX_RECORDING_MS);
+    return () => clearTimeout(timer);
+  }, [recorder, recordingState]);
 
   // Waveform level computed from the PCM chunks directly (RMS → dBFS),
   // instead of the library's analysis events — enableProcessing would
@@ -276,15 +201,15 @@ export default function StudySessionScreen() {
     const emitter = new LegacyEventEmitter(AudioStudioModule);
     const subscription = emitter.addListener<{ encoded?: string }>('AudioData', (event) => {
       if (!event.encoded) return;
-      liveSessionRef.current?.feedAudio(base64ToUint8Array(event.encoded));
+      recorder.feedAudio(base64ToUint8Array(event.encoded));
     });
     return () => subscription.remove();
-  }, []);
+  }, [recorder]);
 
   const handleAudioStream = useCallback(async (event: AudioDataEvent) => {
     if (typeof event.data !== 'string') return;
     const pcm = base64ToUint8Array(event.data);
-    if (recordingActiveRef.current) {
+    if (recorder.isRecording()) {
       const quarter = (pcm.length >> 3) << 1; // even byte boundary
       const bars: number[] = [];
       for (let q = 0; q < 4; q++) {
@@ -305,99 +230,62 @@ export default function StudySessionScreen() {
         waveformLevels.value = [...waveformLevels.value.slice(bars.length), ...bars];
       }
     }
-  }, [computeBarLevel, waveformLevels]);
+  }, [computeBarLevel, recorder, waveformLevels]);
 
-  const handleMicPress = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleMicPress = useCallback(async (index: number, isRetry: boolean) => {
+    const chunk = session.chunks[index];
+    if (!chunk || index !== session.currentIndex || closingRef.current) return;
 
     try {
-      const { granted } = await AudioStudioModule.requestPermissionsAsync();
-      if (!granted) {
-        Alert.alert('Permission required', 'Please allow microphone access to record.');
-        return;
-      }
-
-      // Background live stream: PCM fed from the first callback is
-      // buffered while the token mint + socket connect complete. Any
-      // failure (kill switch, offline, drop) leaves the batch path to
-      // score the file — never surfaced to the user.
-      const chunkText = session.chunks[session.currentIndex]?.text;
-      liveSessionRef.current?.abort();
-      liveSessionRef.current = chunkText ? startLiveTranscription(chunkText) : null;
-
-      const gen = recordingGenRef.current;
-      await startRecording({
-        sampleRate: 16000,
-        channels: 1,
-        encoding: 'pcm_16bit',
-        interval: 100,
-        // m4a for the batch-fallback upload (frozen contract); no WAV
-        output: {
-          primary: { enabled: false },
-          compressed: { enabled: true, format: 'aac' },
+      const result = await recorder.start(index, isRetry, {
+        async requestPermission() {
+          if (process.env.EXPO_OS === 'ios') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          }
+          return (await AudioStudioModule.requestPermissionsAsync()).granted;
         },
-        ios: {
-          audioSession: {
-            category: 'PlayAndRecord',
-            mode: 'Default',
-            categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth'],
-          },
+        openLive: () => startLiveTranscription(chunk.text),
+        start() {
+          waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
+          smoothedLevelRef.current = 0;
+          return startRecording({
+            sampleRate: 16000,
+            channels: 1,
+            encoding: 'pcm_16bit',
+            interval: 100,
+            // m4a for the batch-fallback upload (frozen contract); no WAV
+            output: {
+              primary: { enabled: false },
+              compressed: { enabled: true, format: 'aac' },
+            },
+            ios: {
+              audioSession: {
+                category: 'PlayAndRecord',
+                mode: 'Default',
+                categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth'],
+              },
+            },
+            onAudioStream: handleAudioStream,
+          });
         },
-        onAudioStream: handleAudioStream,
+        stop: stopRecording,
       });
-      if (recordingGenRef.current !== gen) {
-        // Torn down (scroll-away, unmount, cancel) while the native
-        // start was in flight — don't leave the mic hot
-        stopRecording().catch(() => {});
-        return;
+      if (result === 'denied') {
+        Alert.alert('Permission required', 'Please allow microphone access to record.');
       }
-      recordingActiveRef.current = true;
-
-      capTimerRef.current = setTimeout(() => {
-        capTimerRef.current = null;
-        showErrorToast('5 minute limit reached — scoring what you recited.');
-        handleSubmitRef.current();
-      }, MAX_RECORDING_MS);
-
-      // Show recording bar
-      recordingTabY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
-
-      waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
-      smoothedLevelRef.current = 0;
-
-      setRecordingState('recording');
     } catch (error) {
-      teardownRecording();
       console.error('Failed to start recording:', error);
       Alert.alert('Error', 'Failed to start recording');
     }
-  }, [session.chunks, session.currentIndex, startRecording, stopRecording, teardownRecording, handleAudioStream]);
+  }, [handleAudioStream, recorder, session.chunks, session.currentIndex, startRecording, stopRecording, waveformLevels]);
 
-  const handleCancel = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    hideRecordingBar();
-
-    // Closes the socket (stops billing); the recitation is discarded
-    // unscored, unstored — cancel stays a complete no-op. Awaited so an
-    // immediate re-record can't overlap the stopping mic session.
-    await teardownRecording();
-
-    setRecordingState('idle');
-  }, [hideRecordingBar, teardownRecording]);
-
-  const handleRetry = useCallback((index: number) => {
-    setExitingChunks((prev) => new Set([...prev, index]));
-  }, []);
-
-  const handleExitComplete = useCallback((index: number) => {
-    setExitingChunks((prev) => {
-      const next = new Set(prev);
-      next.delete(index);
-      return next;
-    });
-    session.retryChunk(index);
-    handleMicPress();
-  }, [session, handleMicPress]);
+  const handleCancel = useCallback(() => {
+    if (!recorder.isRecording()) return;
+    if (process.env.EXPO_OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    void recorder.cancel();
+  }, [recorder]);
 
   // Reveal/hide button. Easy cycles show → some → all → show (cosmetic).
   // Medium/Hard toggles reveal (show) ↔ original mask; the first reveal
@@ -405,6 +293,7 @@ export default function StudySessionScreen() {
   const isEasy = (difficulty ?? 'easy') === 'easy';
 
   const handleToggleVisibility = useCallback((index: number) => {
+    if (recorder.isSubmitting()) return;
     Haptics.selectionAsync();
     setHideModes((prev) => {
       const next = new Map(prev);
@@ -425,21 +314,20 @@ export default function StudySessionScreen() {
     if (!isEasy) {
       session.peekChunk(index);
     }
-  }, [isEasy, session]);
+  }, [isEasy, recorder, session]);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems.length > 0) {
         const index = viewableItems[0].index;
-        if (index !== null && index !== session.currentIndex) {
+        if (index !== null && index !== currentIndex) {
           // Cancel any active recording when scrolling away
-          teardownRecording();
-          setRecordingState('idle');
-          session.setCurrentIndex(index);
+          void recorder.cancel();
+          setCurrentIndex(index);
         }
       }
     },
-    [session.currentIndex, session.setCurrentIndex, teardownRecording]
+    [recorder, currentIndex, setCurrentIndex]
   );
 
   const viewabilityConfig = {
@@ -509,21 +397,16 @@ export default function StudySessionScreen() {
 
     // Regular chunk
     const isCompleted = session.completedChunks.has(index);
-    const isRetrying = session.retryingChunks.has(index);
-    const isExiting = exitingChunks.has(index);
+    const isRetrying = recordingState.phase !== 'idle' && recordingState.phase !== 'stopping' &&
+      recordingState.index === index && recordingState.isRetry;
     const result = session.getChunkResult(index);
     const retryResult = session.getRetryResult(index);
-
-    // When retrying, show mic instead of result. When retry result exists, show that.
-    const showMic = (!isCompleted || isRetrying) && !retryResult;
-    // Keep result card visible during exit animation
-    const showResult = (isCompleted && !isRetrying) || isExiting;
-
-    // Resolve the reveal/hide override for this chunk. Completion wins:
-    // a finished chunk always shows its text, whatever the toggle said.
-    const hideMode = hideModes.get(index);
-    const isPeeked = session.peekedChunks.has(index);
     const peekResult = session.getPeekResult(index);
+    const displayResult = retryResult ?? peekResult ?? result;
+    const scoredDisplayResult = peekResult ?? result;
+
+    // Completion wins over the chunk's visibility override, except during Retry.
+    const hideMode = hideModes.get(index);
     // Effective display words + revealed flag. Absent override = the
     // chunk's original mask (preserves Medium's seeded 50% / Hard blanks).
     let displayChunk = item;
@@ -563,8 +446,8 @@ export default function StudySessionScreen() {
           {/* Score badge on top of verse card when completed. For a
               peeked chunk, show the real recited score (the scored 0
               lives only in the session total, explained on the card). */}
-          {isCompleted && (isPeeked ? peekResult : result) && (() => {
-            const badgeScore = (isPeeked ? peekResult! : result!).score;
+          {isCompleted && scoredDisplayResult && (() => {
+            const badgeScore = scoredDisplayResult.score;
             return (
               <View style={[styles.scoreBadgeRow]}>
                 <View style={[styles.scoreBadgeInline, {
@@ -589,54 +472,29 @@ export default function StudySessionScreen() {
             memoryPlaceholder={memoryPlaceholder}
             visibilityIcon={wordsCurrentlyShown ? 'eye' : 'eye.slash'}
             onToggleVisibility={
-              isCompleted ? undefined : () => handleToggleVisibility(index)
+              isCompleted || transcribing ? undefined : () => handleToggleVisibility(index)
             }
           />
 
-          {/* Result card. Priority: retry > peek > original. A peeked
-              chunk shows the REAL recited score (peekResult) with a
-              "won't count" banner — the scored 0 lives only in
-              chunkResults and feeds the session total. */}
-          {showResult && retryResult && (
+          {isCompleted && !isRetrying && displayResult && (
             <ResultCard
-              score={retryResult.score}
-              alignment={retryResult.alignment}
-              transcription={retryResult.transcription}
-              isRetry
-              exiting={isExiting}
-              onExitComplete={() => handleExitComplete(index)}
-            />
-          )}
-          {showResult && !retryResult && isPeeked && peekResult && (
-            <ResultCard
-              score={peekResult.score}
-              alignment={peekResult.alignment}
-              transcription={peekResult.transcription}
-              isPeeked
-              exiting={isExiting}
-              onExitComplete={() => handleExitComplete(index)}
-            />
-          )}
-          {showResult && !retryResult && !isPeeked && result && (
-            <ResultCard
-              score={result.score}
-              alignment={result.alignment}
-              transcription={result.transcription}
-              exiting={isExiting}
-              onExitComplete={() => handleExitComplete(index)}
+              score={displayResult.score}
+              alignment={displayResult.alignment}
+              transcription={displayResult.transcription}
+              isRetry={!!retryResult}
+              isPeeked={!!peekResult}
             />
           )}
         </View>
 
         <View style={styles.controlsContainer}>
-          {/* Mic button — first attempt or retry */}
-          {recordingState === 'idle' &&
-            !transcribing &&
-            showMic &&
+          {(recordingState.phase === 'idle' || recordingState.phase === 'starting') &&
+            !isCompleted &&
             session.currentIndex === index && (
               <Pressable
                 style={[styles.micButton, { backgroundColor: buttonBg }]}
-                onPress={handleMicPress}
+                onPress={() => handleMicPress(index, false)}
+                disabled={recordingState.phase !== 'idle'}
                 testID="mic-button"
               >
                 <IconSymbol name="mic.fill" size={32} color={colors.white} />
@@ -650,17 +508,16 @@ export default function StudySessionScreen() {
               so showing it would be misleading: user would retry,
               see a higher score, and the saved progress would still
               reflect the original attempt. */}
-          {recordingState === 'idle' &&
-            !transcribing &&
+          {recordingState.phase === 'idle' &&
             isCompleted &&
-            !isRetrying &&
-            !isExiting &&
             session.currentIndex === index && (
               <View style={styles.controlsRow}>
                 {session.chunks.length > 1 && (
                   <Pressable
                     style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
-                    onPress={() => handleRetry(index)}
+                    onPress={() => handleMicPress(index, true)}
+                    accessibilityLabel="Retry"
+                    testID="retry-button"
                   >
                     <IconSymbol name="arrow.counterclockwise" size={22} color={colors.text} />
                   </Pressable>
@@ -689,7 +546,9 @@ export default function StudySessionScreen() {
         leftButton={{
           icon: 'xmark',
           onPress: () => {
-            // Save progress (if any) and exit
+            if (closingRef.current) return;
+            closingRef.current = true;
+            void recorder.cancel();
             session.saveAndExit();
           },
         }}
@@ -723,7 +582,7 @@ export default function StudySessionScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        scrollEnabled={(recordingState === 'idle' && !transcribing) || session.showResults}
+        scrollEnabled={recordingState.phase === 'idle' || session.showResults}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({
