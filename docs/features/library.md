@@ -46,6 +46,7 @@ follow saved positions, then creation time and client ID. New collections append
 Long-press a custom collection for Rename, Reorder and Delete. Rename prefills
 `AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
 actions to move up or down. Each drop saves the order, with rollback on failure.
+Tap Done to return to opening collections by tapping their rows.
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 

@@ -143,6 +143,7 @@ export default function LibraryScreen() {
   };
 
   const handleCollectionPress = (collection: Collection) => {
+    if (editing) return;
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 

@@ -137,6 +137,19 @@ async function getCurrentUserId(): Promise<string> {
   return user.id;
 }
 
+let accountGeneration = 0;
+
+async function getCollectionWriteSession(generation: number) {
+  const result = await supabase.auth.getSession().catch((error: unknown) => {
+    if (generation === accountGeneration) throw error;
+    return null;
+  });
+  if (!result || generation !== accountGeneration) return null;
+  if (result.error) throw result.error;
+  if (!result.data.session) throw new Error('Not authenticated');
+  return result.data.session;
+}
+
 type VerseRow = Database['public']['Tables']['user_verses']['Row'];
 type VerseMembershipRow = { user_verses: VerseRow; added_at: string };
 
@@ -181,6 +194,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchCollections: async () => {
     if (get().collectionOrderSaving) return true;
+    const generation = accountGeneration;
     const previousCollections = get().collections;
     set({ collectionsLoading: true });
     try {
@@ -192,6 +206,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .order('created_at', { ascending: true })
         .order('client_id', { ascending: true });
 
+      if (generation !== accountGeneration) return false;
       if (error) {
         console.error('[STORE] Failed to fetch collections:', error);
         // Keep existing state, set error
@@ -222,6 +237,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       return true;
     } catch (e) {
+      if (generation !== accountGeneration) return false;
       console.error('[STORE] Collection fetch error:', e);
       // Keep existing state, set error
       set({ collectionsLoading: false, error: 'Failed to load collections' });
@@ -230,6 +246,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   fetchVerses: async () => {
+    const generation = accountGeneration;
     const previousVerses = get().verses;
     set({ versesLoading: true });
     try {
@@ -245,6 +262,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .order('added_at', { ascending: false })
         .overrideTypes<(VerseMembershipRow & { user_collections: { client_id: string } })[], { merge: false }>();
 
+      if (generation !== accountGeneration) return false;
       if (error) {
         console.error('[STORE] Failed to fetch verses:', error);
         // Keep existing state, set error
@@ -264,6 +282,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       return true;
     } catch (e) {
+      if (generation !== accountGeneration) return false;
       console.error('[STORE] Verse fetch error:', e);
       // Keep existing state, set error
       set({ versesLoading: false, error: 'Failed to load verses' });
@@ -272,6 +291,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   fetchMasteredVerses: async () => {
+    const generation = accountGeneration;
     set({ masteredLoading: true });
     try {
       // Fetch mastered verses directly from DB - NO deleted_at filter
@@ -282,6 +302,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .eq('progress->hard->completed', true)
         .order('updated_at', { ascending: false });
 
+      if (generation !== accountGeneration) return false;
       if (error) {
         console.error('[STORE] Failed to fetch mastered verses:', error);
         set({ masteredLoading: false });
@@ -304,6 +325,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ masteredVerses, masteredLoading: false });
       return true;
     } catch (e) {
+      if (generation !== accountGeneration) return false;
       console.error('[STORE] Mastered verses fetch error:', e);
       set({ masteredLoading: false });
       return false;
@@ -311,6 +333,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   hydrate: async () => {
+    const generation = accountGeneration;
     // Load settings from AsyncStorage (doesn't require auth)
     try {
       const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort] = await Promise.all([
@@ -347,20 +370,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('[STORE] Failed to load settings:', e);
     }
 
+    if (generation !== accountGeneration) return;
     let [collectionsOk, versesOk, masteredOk] = await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),
       get().fetchMasteredVerses(),
     ]);
+    if (generation !== accountGeneration) return;
 
     // Retry once after short delay if any fetch failed (handles auth propagation race)
     if (!collectionsOk || !versesOk || !masteredOk) {
       await new Promise((resolve) => setTimeout(resolve, 500));
+      if (generation !== accountGeneration) return;
       [collectionsOk, versesOk, masteredOk] = await Promise.all([
         collectionsOk ? true : get().fetchCollections(),
         versesOk ? true : get().fetchVerses(),
         masteredOk ? true : get().fetchMasteredVerses(),
       ]);
+      if (generation !== accountGeneration) return;
     }
 
     // Always mark as hydrated so UI can render (partial data is better than nothing)
@@ -463,21 +490,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   renameCollection: async (id, name) => {
+    const generation = accountGeneration;
     const trimmed = name.trim();
     const collection = get().collections.find((c) => c.id === id);
     if (!trimmed || !collection || collection.isDefault || collection.isVirtual) {
       throw new Error('Cannot rename this collection');
     }
 
-    const userId = await getCurrentUserId();
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) return;
     const { data, error } = await supabase.from('user_collections')
       .update({ name: trimmed })
-      .eq('user_id', userId)
+      .eq('user_id', session.user.id)
       .eq('client_id', id)
       .eq('is_default', false)
       .is('deleted_at', null)
       .select('name')
-      .single();
+      .single()
+      .setHeader('Authorization', `Bearer ${session.access_token}`);
+    if (generation !== accountGeneration) return;
     if (error) throw error;
 
     set((state) => ({
@@ -487,6 +518,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   reorderCollections: async (ids) => {
     if (get().collectionOrderSaving) return;
+    const generation = accountGeneration;
     const previous = get().collections;
     const custom = previous.filter((c) => !c.isDefault && !c.isVirtual);
     const byId = new Map(custom.map((c) => [c.id, c]));
@@ -498,15 +530,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     const collections = [...previous.filter((c) => c.isDefault || c.isVirtual), ...ordered];
     set({ collections, collectionOrderSaving: true });
     try {
-      const { error } = await supabase.rpc('reorder_collections', { collection_ids: ids });
+      const session = await getCollectionWriteSession(generation);
+      if (!session || generation !== accountGeneration) return;
+      const { error } = await supabase.rpc('reorder_collections', { collection_ids: ids })
+        .setHeader('Authorization', `Bearer ${session.access_token}`);
+      if (generation !== accountGeneration) return;
       if (error) throw error;
     } catch (error) {
+      if (generation !== accountGeneration) return;
       set((state) => ({
         collections: state.collections === collections ? previous : state.collections,
         collectionOrderSaving: false,
       }));
       await get().fetchCollections();
-      throw error;
+      if (generation === accountGeneration) throw error;
+      return;
     }
     set({ collectionOrderSaving: false });
   },
@@ -641,11 +679,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ VERSE ACTIONS ============
 
   copyVerseToCollection: async (verseId, collectionId) => {
+    const generation = accountGeneration;
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) return;
     const { data, error } = await supabase.rpc('copy_verse_to_collection', {
       verse_client_id: verseId,
       collection_client_id: collectionId,
     }).select('added_at,user_verses!inner(*)').single()
+      .setHeader('Authorization', `Bearer ${session.access_token}`)
       .overrideTypes<VerseMembershipRow, { merge: false }>();
+    if (generation !== accountGeneration) return;
     if (error) throw error;
 
     const copy = parseVerseMembership(data.user_verses, collectionId, data.added_at);
@@ -1061,6 +1104,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ RESET ============
 
   clear: () => {
+    accountGeneration++;
     set({
       collections: [],
       verses: [],

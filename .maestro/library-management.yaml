@@ -34,6 +34,10 @@ name: library-management
 - assertNotVisible: "Reorder My Verses"
 - assertNotVisible: "Reorder Mastered"
 - assertNotVisible: "Reorder In Progress"
+- tapOn: ".*Psalms, 1 verse.*"
+- assertVisible: Done
+- tapOn: ".*My Verses, 2 verses.*"
+- assertVisible: Done
 - takeScreenshot: library-3-edit
 - swipe:
     from:
