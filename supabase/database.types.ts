@@ -151,14 +151,14 @@ export type Database = {
                   ]
                 },"user_collections": {
                   Row: {
-                    "client_id": string,"created_at": string,"deleted_at": string | null,"id": string,"is_default": boolean,"name": string,"sort_preference": string | null,"updated_at": string,"user_id": string
+                    "client_id": string,"created_at": string,"deleted_at": string | null,"icon_key": string | null,"id": string,"is_default": boolean,"name": string,"sort_preference": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
+                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -282,6 +282,9 @@ isOneToOne: false
                            },
 "get_verse_cache_count":
 { Args: { "p_version": string }; Returns: number
+                           },
+"import_curated_collection":
+{ Args: { "p_catalog_id": string,"p_icon_key": string,"p_name": string,"p_passages": Json,"p_version": string }; Returns: string
                            },
 "local_time_in_tz":
 { Args: { "tz": string }; Returns: string

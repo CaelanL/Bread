@@ -7,6 +7,7 @@
 
 import { supabase } from '@/lib/api/client';
 import { ensureAuth } from '@/lib/api';
+import { isCollectionIconKey, type CollectionIconKey } from '@/lib/collections/icons';
 import { ENGRAVED_THRESHOLD } from '@/lib/store/review-config';
 
 // ============ TYPES ============
@@ -65,6 +66,7 @@ export interface Collection {
   isDefault: boolean;
   isVirtual?: boolean; // Virtual collections (like Mastered) can't be deleted or have verses manually added
   icon?: string; // SF Symbol name
+  iconKey?: CollectionIconKey;
   iconColor?: string; // Hex color for icon
   createdAt: number;
   sortPreference?: SortOption; // Per-collection sort, NULL = default
@@ -152,6 +154,24 @@ export function parseProgress(raw: unknown): VerseProgress {
     medium: p.medium ?? { bestAccuracy: null, completed: false },
     hard: p.hard ?? { bestAccuracy: null, completed: false },
     engraved: parseEngravedProgress(p.engraved),
+  };
+}
+
+export function parseCollectionRow(row: {
+  client_id: string;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+  sort_preference?: unknown;
+  icon_key?: unknown;
+}): Collection {
+  return {
+    id: row.client_id,
+    name: row.name,
+    isDefault: row.is_default,
+    createdAt: new Date(row.created_at).getTime(),
+    sortPreference: parseSortPreference(row.sort_preference),
+    iconKey: !row.is_default && isCollectionIconKey(row.icon_key) ? row.icon_key : undefined,
   };
 }
 

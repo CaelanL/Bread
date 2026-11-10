@@ -43,6 +43,7 @@ Migration: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
 | `name` | TEXT | |
 | `is_default` | BOOLEAN | `true` for the auto-created "My Verses" collection |
 | `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = client default |
+| `icon_key` | TEXT | nullable icon key |
 | `deleted_at` | TIMESTAMPTZ | soft delete; NULL = active |
 | `updated_at` | TIMESTAMPTZ | auto-updated by trigger `update_user_collections_updated_at` |
 
@@ -67,7 +68,7 @@ Migration: `002_user_data.sql` (created), `005_user_verses_no_text.sql`
 | `book` | TEXT | canonical name e.g. `"John"`, `"Psalms"` (not `"Psalm"`) |
 | `chapter`, `verse_start` | INT | |
 | `verse_end` | INT | equal to `verse_start` for single verses |
-| `version` | TEXT | `ESV` \| `KJV` \| `NLT` \| `NIV` \| `NKJV` |
+| `version` | TEXT | short uppercase version code |
 | `progress` | JSONB | shape below |
 | `last_practiced_at` | TIMESTAMPTZ | nullable; last session, full or partial, any difficulty; cleared on progress reset |
 | `last_chunk_size` | INT | nullable; last chunk size chosen on the setup screen |
@@ -248,6 +249,7 @@ incrementally — the cron is the only writer.
 | `get_verse_cache_count(version)` | fn | row count per version |
 | `evict_lru_verses(version, max, needed)` | fn | LRU eviction batch |
 | `upsert_verses(book, chapter, version, jsonb)` | fn | bulk verse upsert |
+| `import_curated_collection()` | authenticated invoker | atomic Library import |
 | `get_total_time_studied(user_id)` | fn (SECURITY DEFINER) | sums `recording_duration_ms` |
 | `get_current_streak(user_id, tz_offset_min)` | fn (SECURITY DEFINER) | counts consecutive practice days in user's TZ |
 | `update_popular_ranges()` | fn (SECURITY DEFINER) | rebuilds `popular_ranges` |

@@ -9,10 +9,13 @@
 import { ensureAuth } from '@/lib/api';
 import { getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
+import { importCollection } from '@/lib/collections/import';
+import type { CollectionIconKey } from '@/lib/collections/icons';
 import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
-import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress, parseSortPreference, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
+import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
+import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import {
@@ -99,7 +102,9 @@ interface AppState {
   setReviewMaxIntervalDays: (days: number) => Promise<void>;
 
   // Actions - Collections
-  addCollection: (name: string) => Promise<Collection>;
+  addCollection: (name: string, iconKey?: CollectionIconKey) => Promise<Collection>;
+  importCuratedCollection: (catalogId: string, version: BibleVersion) => Promise<{ collectionId: string; loaded: boolean }>;
+  setCollectionIcon: (id: string, iconKey: CollectionIconKey) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   setCollectionSort: (collectionId: string, sort: SortOption) => Promise<void>;
 
@@ -130,6 +135,38 @@ async function getCurrentUserId(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
   return user.id;
+}
+
+async function getCollectionSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Sign in to update your collections.');
+  return session;
+}
+
+async function assertCollectionAccount(userId: string) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user.id !== userId) throw new Error('Your account changed.');
+}
+
+type VerseRow = Database['public']['Tables']['user_verses']['Row'];
+
+function parseVerseMembership(
+  row: VerseRow,
+  collectionId: string,
+  addedAt: string,
+): SavedVerse {
+  return {
+    id: row.client_id,
+    collectionId,
+    book: row.book,
+    chapter: row.chapter,
+    verseStart: row.verse_start,
+    verseEnd: row.verse_end,
+    version: row.version as BibleVersion,
+    createdAt: new Date(addedAt).getTime(),
+    progress: parseProgress(row.progress),
+    ...parseVerseRowExtras(row),
+  };
 }
 
 // ============ STORE ============
@@ -171,13 +208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         return false;
       }
 
-      const collections: Collection[] = data.map((c) => ({
-        id: c.client_id,
-        name: c.name,
-        isDefault: c.is_default,
-        createdAt: new Date(c.created_at).getTime(),
-        sortPreference: parseSortPreference(c.sort_preference),
-      }));
+      const collections = data.map(parseCollectionRow);
 
       // Ensure default collection always exists
       const hasDefault = collections.some((c) => c.isDefault);
@@ -211,7 +242,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           user_verses!inner(*)
         `)
         .is('user_verses.deleted_at', null)
-        .order('added_at', { ascending: false });
+        .order('added_at', { ascending: false })
+        .overrideTypes<{
+          added_at: string;
+          user_collections: { client_id: string };
+          user_verses: VerseRow;
+        }[], { merge: false }>();
 
       if (error) {
         console.error('[STORE] Failed to fetch verses:', error);
@@ -221,18 +257,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       // Map junction rows to SavedVerse (one entry per collection membership)
-      const verses: SavedVerse[] = data.map((vc: any) => ({
-        id: vc.user_verses.client_id,
-        collectionId: vc.user_collections.client_id,
-        book: vc.user_verses.book,
-        chapter: vc.user_verses.chapter,
-        verseStart: vc.user_verses.verse_start,
-        verseEnd: vc.user_verses.verse_end,
-        version: vc.user_verses.version as BibleVersion,
-        createdAt: new Date(vc.added_at).getTime(),
-        progress: parseProgress(vc.user_verses.progress),
-        ...parseVerseRowExtras(vc.user_verses),
-      }));
+      const verses = data.map((vc) =>
+        parseVerseMembership(vc.user_verses, vc.user_collections.client_id, vc.added_at),
+      );
 
       set({ verses, versesLoading: false, error: null });
       return true;
@@ -402,7 +429,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ============ COLLECTION ACTIONS ============
 
-  addCollection: async (name: string) => {
+  addCollection: async (name, iconKey) => {
     const userId = await getCurrentUserId();
     const clientId = `collection-${Date.now()}`;
     const createdAt = new Date();
@@ -412,6 +439,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       client_id: clientId,
       name,
       is_default: false,
+      ...(iconKey ? { icon_key: iconKey } : {}),
       created_at: createdAt.toISOString(),
     });
 
@@ -424,6 +452,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: clientId,
       name,
       isDefault: false,
+      iconKey,
       createdAt: createdAt.getTime(),
     };
 
@@ -433,6 +462,50 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     return newCollection;
+  },
+
+  importCuratedCollection: async (catalogId, version) => {
+    const session = await getCollectionSession();
+    const { collectionId, row } = await importCollection(supabase, session, catalogId, version);
+    await assertCollectionAccount(session.user.id);
+    if (!row) return { collectionId, loaded: false };
+
+    const collection = parseCollectionRow(row);
+    const verses = row.verse_collections.map(({ user_verses, added_at }) =>
+      parseVerseMembership(user_verses, collection.id, added_at),
+    );
+    set((state) => ({
+      collections: state.collections.some(({ id }) => id === collection.id)
+        ? state.collections.map((current) => current.id === collection.id ? collection : current)
+        : [...state.collections, collection],
+      verses: [...verses, ...state.verses.filter(({ collectionId: id }) => id !== collection.id)],
+    }));
+    return { collectionId, loaded: true };
+  },
+
+  setCollectionIcon: async (id, iconKey) => {
+    const collection = get().collections.find((item) => item.id === id);
+    if (!collection || collection.isDefault || collection.isVirtual) {
+      throw new Error('This collection’s icon cannot be changed.');
+    }
+
+    const session = await getCollectionSession();
+    const { data, error } = await supabase
+      .from('user_collections')
+      .update({ icon_key: iconKey })
+      .eq('user_id', session.user.id)
+      .eq('client_id', id)
+      .eq('is_default', false)
+      .is('deleted_at', null)
+      .setHeader('Authorization', `Bearer ${session.access_token}`)
+      .select('icon_key')
+      .single();
+
+    if (error || !data) throw new Error('Could not save the collection icon. Try again.');
+    await assertCollectionAccount(session.user.id);
+    set((state) => ({
+      collections: state.collections.map((current) => current.id === id ? { ...current, iconKey } : current),
+    }));
   },
 
   deleteCollection: async (id: string) => {

@@ -155,6 +155,30 @@ reading is offline: saving verses and recording progress still need the network
 (invariant 10, `docs/architecture/sync-and-storage.md`). The bundle itself is in
 `docs/architecture/bible-api-and-caching.md`.
 
+## Curated collections
+
+`lib/collections/catalog.ts` holds short introductions and passage references.
+The first passage is the suggested starting point. Each import makes a personal
+collection in the selected translation. Adding it again opens the saved copy,
+including any changes the user made. A different translation creates a separate
+collection. Explicitly adding a deleted copy restores it.
+
+`importCuratedCollection` calls an atomic import and reads back only that
+collection. It reuses a saved verse with the same reference and translation, so
+progress and study preferences follow that verse into the new collection. If
+the import commits but the readback fails, the UI can ask the user to refresh.
+Retrying the import cannot duplicate it.
+
+Migration `20261110145300_curated_collection_import.sql` adds the import
+function and nullable icon key. It allows short uppercase version codes so
+the database accepts every translation Bread offers, including KJV, NIV
+and NKJV.
+
+`setCollectionIcon` saves a custom collection's icon to the account. The
+registry in `lib/collections/icons.ts` maps stable keys to symbols on each
+platform and defaults to the Bible icon for missing or unfamiliar keys. My
+Verses, Mastered and In Progress keep their built-in icons.
+
 ## Deleting a verse
 
 `deleteVerse(id, collectionId)` in the store removes the verse from the store first, then:

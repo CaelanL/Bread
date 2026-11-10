@@ -74,6 +74,7 @@ If you add a new version, every one of these needs an entry:
 | `supabase/functions/bible/adapters/apibible.ts` | If using API.Bible: add Bible ID to `BIBLE_IDS` |
 | `supabase/functions/bible/adapters/esv.ts` | Only if it's a new ESV-API-served version (unlikely) |
 | Settings and add-verse UI | Render from `BIBLE_VERSIONS`, nothing to do |
+| Curated collections | Verify each distinct reference in `lib/collections/catalog.ts` through `fetchVerse` in the new version. Check that every requested keyed verse is present. Record reference and availability only. |
 
 If using a brand-new external API, write a new adapter implementing
 the `BibleAdapter` contract (see

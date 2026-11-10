@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { VERSE_COUNTS } from '../../supabase/functions/bible/verse-counts';
 import { CURATED_COLLECTIONS } from './catalog';
-import { COLLECTION_ICONS, isCollectionIconKey, resolveCollectionIcon } from './icons';
+import { COLLECTION_ICONS, collectionSymbolFallback, isCollectionIconKey, resolveCollectionIcon } from './icons';
 
 test('curated collections contain distinct, short canonical references and original introductions', () => {
   assert.equal(CURATED_COLLECTIONS.length, 10);
@@ -39,4 +39,11 @@ test('missing or unfamiliar icon keys use the default collection icon', () => {
   for (const key of [undefined, null, '', 'future-icon', 'constructor']) {
     assert.equal(resolveCollectionIcon(key), COLLECTION_ICONS.book);
   }
+});
+
+test('older supported iOS releases have a fallback for newer collection symbols', () => {
+  assert.equal(collectionSymbolFallback('mountain.2', 15.1), 'terrain');
+  assert.equal(collectionSymbolFallback('mountain.2', 16), 'terrain');
+  assert.equal(collectionSymbolFallback('mountain.2', 16.1), undefined);
+  assert.equal(collectionSymbolFallback('book.closed', 15.1), undefined);
 });

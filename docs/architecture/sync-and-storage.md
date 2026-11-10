@@ -67,7 +67,9 @@ interface AppState {
   setColorMode: (mode) => Promise<void>;
   setBibleVersion: (v) => Promise<void>;
   setReviewMaxIntervalDays: (days) => Promise<void>;
-  addCollection: (name) => Promise<Collection>;
+  addCollection: (name, iconKey?) => Promise<Collection>;
+  importCuratedCollection: (catalogId, version) => Promise<{ collectionId: string; loaded: boolean }>;
+  setCollectionIcon: (id, iconKey) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
   setCollectionSort: (collectionId, sort) => Promise<void>;
   addVerse: (verse, collectionId, version) => Promise<SavedVerse>;
@@ -218,7 +220,7 @@ still fail without retry.
 
 Holds the shared types (`SavedVerse`, `Collection`, `VerseProgress`),
 `DEFAULT_PROGRESS`, the row parsers (`parseProgress`,
-`parseVerseRowExtras`, `parseSortPreference`), the virtual collection
+`parseVerseRowExtras`, `parseSortPreference`, `parseCollectionRow`), the virtual collection
 IDs, and `formatVerseReference`.
 
 The store calls two of its writes: `updateCollectionSort` and
