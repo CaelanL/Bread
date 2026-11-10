@@ -24,7 +24,7 @@ recording: the m4a file is always written, because the design is dual-path. The
 | Piece | File | Role |
 |---|---|---|
 | Recorder | `app/session.tsx`, `lib/transcription/recording-controls.ts` | Mic lifecycle, cap timer, waveform, live feed |
-| Recording control | `components/study/RecordingBar.tsx` | One gold surface for mic, Starting, Listening and Analyzing |
+| Recording control | `components/study/RecordingBar.tsx` | Mic, startup ring, waveform and analysis indicator |
 | Seam | `hooks/use-study-session.ts` (`processRecording`) | Picks the transcript, then aligns and scores |
 | Live client | `lib/transcription/live-session.ts` | `startLiveTranscription`, `LiveTranscriptionSession` |
 | Batch client | `lib/api/recording.ts` | `processRecording` upload to the edge function, same name as the seam |
@@ -40,18 +40,21 @@ kHz mono 16-bit PCM chunks every 100 ms.
 
 Tapping the mic in `handleMicPress`:
 
-1. Claims one recording attempt for the current chunk and shows Starting with
-   three dots as the mic widens into a pill. It asks for mic permission at once.
-   Further mic taps are ignored while that attempt owns the recorder.
+1. Claims one recording attempt for the current chunk and shows a loading ring
+   around the mic circle. It asks for mic permission at once. The X beside the
+   circle discards the attempt. Further mic taps are ignored while that attempt
+   owns the recorder.
 2. Calls `startLiveTranscription(chunk.text)`, which returns at once and connects
    in the background.
 3. Calls `startRecording`. If the attempt was discarded during permission, it
    never starts. If discarded during native start, it stops as soon as start
    resolves and keeps ownership until that stop finishes.
-4. Shows Listening with the real waveform and arms the cap timer once native
-   start resolves. A silent waveform still has the Listening label. The motion,
-   connection to Soniox and first PCM chunk do not gate capture or readiness.
-   With Reduce Motion enabled, the control fades in place.
+4. Morphs the circle into a slimmer pill with the waveform, discard and submit
+   actions, and arms the cap timer once native start resolves. The pill and its
+   actions signal readiness even in silence. VoiceOver announces Listening.
+   Motion, the connection to Soniox and the first PCM chunk do not gate capture
+   or readiness. With Reduce Motion enabled, the ring is still and the control
+   fades in place.
 
 PCM goes two places:
 
@@ -71,7 +74,7 @@ for a token refresh in front of the key mint.
 `handleSubmit` runs for the done button and the cap timer. The first call claims
 the submit, stops the recorder and hands the file and live session to the seam.
 The attempt keeps the live session through `processRecording` so the trailing
-chunk can still reach it. While transcribing, the same gold pill shows Analyzing.
+chunk can still reach it. While transcribing, the same pill shows a busy indicator.
 
 Discarding, paging away, and leaving the screen cancel the attempt. The recorder
 closes the live session and holds ownership until native cleanup finishes. A late
@@ -207,10 +210,10 @@ run takes the batch path until the secret is set for local functions.
 Recording needs a person and a real device. Local runs take the batch path unless the secret is set.
 
 - With live on: Library, a verse, Start session, mic, recite, check. The score appears almost at once, and the Metro log has no `[LIVE] falling back to batch` line.
-- With the secret unset: same taps. The Analyzing state runs longer, the log says `falling back to batch: token endpoint 403`, the score still appears, and no error shows.
+- With the secret unset: same taps. The analysis indicator stays visible longer, the log says `falling back to batch: token endpoint 403`, the score still appears, and no error shows.
 - Hold a recording past 5:00: the toast "5 minute limit reached — scoring what you recited." appears and a score follows, with no second submit.
-- Mic, then the X on the gold pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
-- Enable Reduce Motion in iOS Accessibility and relaunch Bread. The control fades in place while Starting and Listening still follow the native recorder.
+- Mic, then the X beside the mic or on the pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
+- Enable Reduce Motion in iOS Accessibility and relaunch Bread. The startup ring stays still and the control fades in place as native capture starts.
 
 ## Decisions
 

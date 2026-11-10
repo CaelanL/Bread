@@ -234,7 +234,7 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - `npm run sim -- shot "/(tabs)/(library)/setup/seed-john-3-16" --as reader-a`: Hard selected (mastered with nothing saved), no chunk row.
 - `npm run sim -- shot "/session?id=seed-psalm-23-1-3&difficulty=medium&chunkSize=1" --as reader-a`: "Verse 1" card with every other word as one unbroken blank, three progress segments, mic button. Needs the local `bible` function serving ESV.
 - `npm run sim -- flow practice-session`: reader-a opens Psalm 23:1-3 setup, picks Medium, taps Start session, sees "Verse 1" and the mic, taps the mic and gets the iOS microphone prompt. Don't Allow shows "Permission required" and dismissing it restores the mic.
-- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. Starting shows three dots during permission, then the gold pill shows Listening and a waveform even when the room is quiet. One recording starts on the double tap. Discard returns the gold mic to the same chunk.
+- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. The mic stays circular with a loading ring during permission, then becomes a slimmer pill with the waveform and actions once capture starts. One recording starts on the double tap. Discard returns the mic to the same chunk.
 - Real device, Medium, multi-verse: tap the eye, re-hide, recite, submit. The card shows the real score and "Revealed — this chunk won't count", and the final score treats those words as missing.
 
 ## Decisions

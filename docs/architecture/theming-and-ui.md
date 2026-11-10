@@ -17,7 +17,8 @@ Defined in `constants/theme.ts`.
 | `text` | `#1a1a1a` | primary text |
 | `background` | `#faf8f5` | screen background |
 | `tint` / `primary` | `#b08d57` | brand accent (bronze gold) |
-| `onPrimary` / `onPrimaryTint` | `#1a1a1a` / `rgba(26,26,26,0.12)` | ink and subtle action fill on gold, same in both modes |
+| `recordingControl` | `#987142` | bronze mic and waveform surface with white icons |
+| `recordingAction` | `rgba(0,0,0,0.10)` | submit action fill on bronze, same in both modes |
 | `card` | `#ffffff` | card surfaces |
 | `cardAlt` | `#f5f3f0` | secondary card surfaces |
 | `input` | `#f5f3f0` | input backgrounds |
@@ -41,6 +42,7 @@ Defined in `constants/theme.ts`.
 | `text` | `#f5f5f5` | |
 | `background` | `#1a1a1a` | |
 | `tint` / `primary` | `#c9a962` | brand (lighter for contrast) |
+| `recordingControl` | `#a8824c` | bronze mic and waveform surface with white icons |
 | `card` | `#242424` | |
 | `cardAlt` | `#2e2e2e` | |
 | `input` | `#2e2e2e` | |
@@ -231,6 +233,7 @@ without the check, so they also fire on Android.
 | Tab press | `impactAsync(Light)` (in `HapticTab`) |
 | Selection of a verse for adding | `selectionAsync()` |
 | Recording start/stop | `impactAsync(Medium)` |
+| Library long-press actions | `impactAsync(Light)` |
 | Chunk completion | `impactAsync(Light)` |
 
 Use `impactAsync` for taps and recording state transitions,

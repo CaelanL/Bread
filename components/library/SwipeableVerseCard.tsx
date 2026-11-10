@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -150,6 +151,9 @@ export function SwipeableVerseCard({
   };
 
   const handleCopy = () => {
+    if (process.env.EXPO_OS === 'ios') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     closeSwipe();
     onCopy();
   };

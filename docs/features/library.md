@@ -43,7 +43,8 @@ same as a real collection. Notification taps use that path
 `fetchCollections` pins My Verses, Mastered and In Progress. Custom collections
 follow saved positions, then creation time and client ID. New collections append.
 
-Long-press a custom collection for Rename, Reorder and Delete. Rename prefills
+Long-press a custom collection for Rename, Reorder and Delete. On iOS, one light
+haptic confirms the action opens. Rename prefills
 `AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
 actions to move up or down. Each drop saves the order, with rollback on failure.
 Tap Done to return to opening collections by tapping their rows.
@@ -150,7 +151,8 @@ stops duplicates, so a soft-deleted row never blocks a re-add.
 
 ## Copying a saved verse
 
-Long-press a verse for Copy to collection. Choose My Verses or a custom collection.
+Long-press a verse for Copy to collection. On iOS, one light haptic confirms
+the picker opens. Choose My Verses or a custom collection.
 Already added destinations are disabled. A failed copy keeps the picker open.
 
 `copyVerseToCollection` adds one membership for the existing verse, so it stays

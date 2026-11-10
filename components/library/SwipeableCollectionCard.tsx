@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { DueCountPill } from '@/components/library/DueCountPill';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -179,6 +180,9 @@ export function SwipeableCollectionCard({
 
   const openActions = (pageY: number) => {
     if (!isCustom || actionsDisabled) return;
+    if (process.env.EXPO_OS === 'ios') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     closeSwipe();
     setMenuTop(Math.min(pageY + 8, windowHeight - 180));
   };
