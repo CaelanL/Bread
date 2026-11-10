@@ -120,9 +120,9 @@ An eye button sits on each `VerseCard` until the chunk completes. Visibility
   `maskDisplayWords`, a cosmetic mask computed in render from
   `sessionSeed + verseNum`. "All" shows the Hard placeholder.
 
-A tainted chunk's attempt stores `buildAllMissingAlignment(chunk.text)` in
-`chunkResults`, so its words count as missing through the normal aggregator. The
-scorer has no peek case. The real recited result goes to `peekResults` for
+A tainted chunk's attempt stores `buildAllMissingAlignment(chunk.text)` as its
+scored alignment, so its words count as missing through the normal aggregator.
+The scorer has no peek case. The same chunk keeps the real recited result for
 display, with the banner "Revealed — this chunk won't count". Other chunks score
 normally. A reveal during recording counts. The submit tap captures the taint
 for the recorded chunk, and the eye is unavailable during analysis.
@@ -182,7 +182,7 @@ or more, and "Keep Practicing" below that. A help icon opens
 
 After a chunk completes, Retry starts another recording for that chunk as the
 result card fades. The recording attempt owns the retry state. A successful
-retry updates only `retryResults`, so the scored result in `chunkResults` stands.
+retry replaces only that chunk's practice result, so its scored result stands.
 Discarding, leaving the chunk or failing restores the previous result and
 controls. Retry is hidden on single-chunk sessions. The result card shows retry
 first, then peek, then the original.

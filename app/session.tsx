@@ -396,14 +396,9 @@ export default function StudySessionScreen() {
     }
 
     // Regular chunk
-    const isCompleted = session.completedChunks.has(index);
-    const isRetrying = recordingState.phase !== 'idle' && recordingState.phase !== 'stopping' &&
-      recordingState.index === index && recordingState.isRetry;
-    const result = session.getChunkResult(index);
-    const retryResult = session.getRetryResult(index);
-    const peekResult = session.getPeekResult(index);
-    const displayResult = retryResult ?? peekResult ?? result;
-    const scoredDisplayResult = peekResult ?? result;
+    const {
+      isCompleted, isRetrying, display, originalDisplay, isRetryResult, isPeeked, canContinue, canRetry,
+    } = session.getChunkReview(index, recordingState);
 
     // Completion wins over the chunk's visibility override, except during Retry.
     const hideMode = hideModes.get(index);
@@ -446,8 +441,8 @@ export default function StudySessionScreen() {
           {/* Score badge on top of verse card when completed. For a
               peeked chunk, show the real recited score (the scored 0
               lives only in the session total, explained on the card). */}
-          {isCompleted && scoredDisplayResult && (() => {
-            const badgeScore = scoredDisplayResult.score;
+          {originalDisplay && (() => {
+            const badgeScore = originalDisplay.score;
             return (
               <View style={[styles.scoreBadgeRow]}>
                 <View style={[styles.scoreBadgeInline, {
@@ -476,13 +471,13 @@ export default function StudySessionScreen() {
             }
           />
 
-          {isCompleted && !isRetrying && displayResult && (
+          {display && (
             <ResultCard
-              score={displayResult.score}
-              alignment={displayResult.alignment}
-              transcription={displayResult.transcription}
-              isRetry={!!retryResult}
-              isPeeked={!!peekResult}
+              score={display.score}
+              alignment={display.alignment}
+              transcription={display.transcription}
+              isRetry={isRetryResult}
+              isPeeked={isPeeked}
             />
           )}
         </View>
@@ -501,38 +496,29 @@ export default function StudySessionScreen() {
               </Pressable>
             )}
 
-          {/* Next + Retry buttons. Retry is hidden when there's only
-              one chunk — in that case the chunk's score *is* the
-              session score, but retry doesn't update it (chunkResults
-              is the source of truth, retryResults is display-only),
-              so showing it would be misleading: user would retry,
-              see a higher score, and the saved progress would still
-              reflect the original attempt. */}
-          {recordingState.phase === 'idle' &&
-            isCompleted &&
-            session.currentIndex === index && (
-              <View style={styles.controlsRow}>
-                {session.chunks.length > 1 && (
-                  <Pressable
-                    style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
-                    onPress={() => handleMicPress(index, true)}
-                    accessibilityLabel="Retry"
-                    testID="retry-button"
-                  >
-                    <IconSymbol name="arrow.counterclockwise" size={22} color={colors.text} />
-                  </Pressable>
-                )}
+          {canContinue && (
+            <View style={styles.controlsRow}>
+              {canRetry && (
                 <Pressable
-                  style={[styles.nextButton, { backgroundColor: buttonBg }]}
-                  onPress={session.goToNext}
+                  style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
+                  onPress={() => handleMicPress(index, true)}
+                  accessibilityLabel="Retry"
+                  testID="retry-button"
                 >
-                  <Text style={styles.nextButtonText}>
-                    {session.allChunksCompleted ? 'See Results' : 'Next'}
-                  </Text>
-                  <IconSymbol name="arrow.right" size={20} color={colors.white} />
+                  <IconSymbol name="arrow.counterclockwise" size={22} color={colors.text} />
                 </Pressable>
-              </View>
-            )}
+              )}
+              <Pressable
+                style={[styles.nextButton, { backgroundColor: buttonBg }]}
+                onPress={session.goToNext}
+              >
+                <Text style={styles.nextButtonText}>
+                  {session.allChunksCompleted ? 'See Results' : 'Next'}
+                </Text>
+                <IconSymbol name="arrow.right" size={20} color={colors.white} />
+              </Pressable>
+            </View>
+          )}
         </View>
       </View>
     );

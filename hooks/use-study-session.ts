@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FlatList } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -20,8 +20,9 @@ import {
 } from '@/lib/study-chunks';
 import { processRecording as processRecordingApi, logSessionAttempt } from '@/lib/api';
 import { showErrorToast } from '@/lib/toast';
-import type { RecordingSubmission } from '@/lib/transcription/recording-controls';
-import { scoreRecording, type ChunkResult } from '@/lib/transcription/score-recording';
+import { getChunkReview, saveChunkResult, scoredAlignments, type ChunkResults } from '@/lib/transcription/chunk-results';
+import type { RecordingState, RecordingSubmission } from '@/lib/transcription/recording-controls';
+import { scoreRecording } from '@/lib/transcription/score-recording';
 
 interface UseStudySessionOptions {
   verseId: string;
@@ -38,10 +39,7 @@ interface UseStudySessionReturn {
   completedChunks: Set<number>;
   showResults: boolean;
 
-  // Results per chunk
-  getChunkResult: (index: number) => ChunkResult | undefined;
-  getRetryResult: (index: number) => ChunkResult | undefined;
-  getPeekResult: (index: number) => ChunkResult | undefined;
+  getChunkReview: (index: number, recording: RecordingState) => ReturnType<typeof getChunkReview>;
 
   // Peek (reveal) state — a peeked chunk scores 0 (Medium/Hard only)
   getPeekedChunks: () => ReadonlySet<number>;
@@ -77,12 +75,9 @@ export function useStudySession({
   const [loading, setLoading] = useState(true);
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [completedChunks, setCompletedChunks] = useState<Set<number>>(new Set());
-  const [chunkResults, setChunkResults] = useState<Map<number, ChunkResult>>(new Map());
+  const [chunkResults, setChunkResults] = useState<ChunkResults>(new Map());
   const [showResults, setShowResults] = useState(false);
   const [totalRecordingDurationMs, setTotalRecordingDurationMs] = useState(0);
-  const [retryResults, setRetryResults] = useState<Map<number, ChunkResult>>(new Map());
-  const [peekResults, setPeekResults] = useState<Map<number, ChunkResult>>(new Map());
   const [sessionSeed, setSessionSeed] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
@@ -113,31 +108,16 @@ export function useStudySession({
   }, [verseId, difficulty, chunkSize]);
 
   // Computed values
+  const completedChunks = useMemo(() => new Set(chunkResults.keys()), [chunkResults]);
   const allChunksCompleted = completedChunks.size === chunks.length && chunks.length > 0;
 
   const listData: (Chunk | ResultsPageItem)[] = allChunksCompleted
     ? [...chunks, createResultsPageItem()]
     : chunks;
 
-  const finalScore = calculateFinalScore(
-    new Map(Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment]))
-  );
-
-  // Get result for a specific chunk
-  const getChunkResult = useCallback((index: number): ChunkResult | undefined => {
-    return chunkResults.get(index);
-  }, [chunkResults]);
-
-  // Get retry result for a specific chunk
-  const getRetryResult = useCallback((index: number): ChunkResult | undefined => {
-    return retryResults.get(index);
-  }, [retryResults]);
-
-  // Get the real recited result for a peeked chunk (display-only; the
-  // chunk's scored result in chunkResults is a forced 0)
-  const getPeekResult = useCallback((index: number): ChunkResult | undefined => {
-    return peekResults.get(index);
-  }, [peekResults]);
+  const finalScore = calculateFinalScore(scoredAlignments(chunkResults));
+  const readChunkReview = (index: number, recording: RecordingState) =>
+    getChunkReview(chunkResults, index, currentIndex, chunks.length, recording);
 
   const getPeekedChunks = useCallback(() => peekedChunksRef.current, []);
 
@@ -170,28 +150,12 @@ export function useStudySession({
     // Count only recitations that produced a transcript and were kept.
     setTotalRecordingDurationMs((prev) => prev + durationMs);
 
-    const { display, scored } = result;
-    if (!scored) {
-      setRetryResults((prev) => new Map(prev).set(index, display));
-      return;
-    }
+    const nextResults = saveChunkResult(chunkResults, index, result, isPeeked);
+    setChunkResults(nextResults);
 
-    if (isPeeked) {
-      setPeekResults((prev) => new Map(prev).set(index, display));
-    }
-    setChunkResults((prev) => new Map(prev).set(index, scored));
-
-    const newCompleted = new Set([...completedChunks, index]);
-    setCompletedChunks(newCompleted);
-
-    if (newCompleted.size === chunks.length && !savedAttemptRef.current) {
+    if (result.scored && nextResults.size === chunks.length && !savedAttemptRef.current) {
       savedAttemptRef.current = true;
-      // Calculate final score from ALL alignments
-      const allAlignments = new Map(
-        Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment])
-      );
-      allAlignments.set(index, scored.alignment);
-      const finalScoreValue = calculateFinalScore(allAlignments);
+      const finalScoreValue = calculateFinalScore(scoredAlignments(nextResults));
 
       // Update progress in Zustand store (writes to Supabase + updates
       // local state). Fire-and-forget like the saveAndExit and
@@ -223,8 +187,7 @@ export function useStudySession({
 
       setShowResults(true);
     }
-
-  }, [chunks, completedChunks, chunkResults, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
+  }, [chunks, chunkResults, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
 
   // Navigation actions
   const goToNext = useCallback(() => {
@@ -263,10 +226,7 @@ export function useStudySession({
     if (!savedAttemptRef.current && completedChunks.size > 0 && !allChunksCompleted && verse && verseId && difficulty) {
       savedAttemptRef.current = true;
       // Calculate partial score (treats uncompleted chunks as missing)
-      const alignmentsMap = new Map(
-        Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment])
-      );
-      const partialScore = calculatePartialScore(chunks, completedChunks, alignmentsMap);
+      const partialScore = calculatePartialScore(chunks, completedChunks, scoredAlignments(chunkResults));
 
       // Fire-and-forget: the Supabase round-trip must not block dismissal
       // (awaiting it here froze the X button for the full network latency).
@@ -302,9 +262,7 @@ export function useStudySession({
     currentIndex,
     completedChunks,
     showResults,
-    getChunkResult,
-    getRetryResult,
-    getPeekResult,
+    getChunkReview: readChunkReview,
     getPeekedChunks,
     peekChunk,
     sessionSeed,

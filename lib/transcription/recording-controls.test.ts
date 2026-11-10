@@ -1,8 +1,11 @@
 // lib-ok: Regression coverage for recorder ownership at the native boundary.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { calculateFinalScore } from '@/lib/study-chunks';
+import { getChunkReview, saveChunkResult, scoredAlignments, type ChunkResults } from './chunk-results';
 import type { LiveTranscriptionSession } from './live-session';
 import { createRecordingControls, type RecordingState } from './recording-controls';
+import { scoreRecording } from './score-recording';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -173,26 +176,91 @@ test('exiting during transcription invalidates only that retry', async () => {
   await recorder.cancel();
 });
 
-test('a denied, failed or discarded retry leaves the recorder usable', async () => {
-  const { recorder, states } = controls();
+test('an interrupted retry restores the prior result and controls without changing the original score', async () => {
+  let results: ChunkResults = new Map();
+  let recording: RecordingState = { phase: 'idle' };
+  let page = 0;
+  const recorder = createRecordingControls((state) => { recording = state; });
+  const review = () => getChunkReview(results, 0, page, 2, recording);
   const { capture } = audio();
-  assert.equal(await recorder.start(1, true, { ...capture, requestPermission: async () => false }), 'denied');
-  assert.deepEqual(states.at(-1), { phase: 'idle' });
-  await assert.rejects(recorder.start(1, true, {
+  const withTranscript = (finish: LiveTranscriptionSession['finish']) => ({
+    ...capture,
+    openLive: () => ({ ...capture.openLive(), finish }),
+  });
+  const submit = () => recorder.submit(async ({ index, isRetry, liveSession, isCurrent }) => {
+    const result = await scoreRecording({
+      text: 'be still',
+      isRetry,
+      isPeeked: false,
+      liveSession,
+      isCurrent,
+      async transcribeFile() { throw new Error('upload failed'); },
+    });
+    if (result && isCurrent()) results = saveChunkResult(results, index, result, false);
+  });
+
+  await recorder.start(0, false, withTranscript(async () => 'be'));
+  await submit();
+  const original = review().display;
+  assert.equal(original?.score, 50);
+  assert.equal(calculateFinalScore(scoredAlignments(results)), 50);
+  assert.equal(review().canRetry, true);
+
+  await recorder.start(0, true, capture);
+  await submit();
+  const priorRetry = review().display;
+  assert.equal(priorRetry?.score, 100);
+
+  function assertRestored() {
+    const restored = review();
+    assert.deepEqual(restored.originalDisplay, original);
+    assert.deepEqual(restored.display, priorRetry);
+    assert.equal(restored.isRetryResult, true);
+    assert.equal(restored.canContinue, true);
+    assert.equal(restored.canRetry, true);
+    assert.equal(calculateFinalScore(scoredAlignments(results)), 50);
+  }
+  assertRestored();
+
+  await recorder.start(0, true, capture);
+  assert.equal(review().display, undefined);
+  assert.equal(review().canRetry, false);
+  assert.equal(review().canContinue, false);
+  await recorder.cancel();
+  assertRestored();
+
+  assert.equal(await recorder.start(0, true, { ...capture, requestPermission: async () => false }), 'denied');
+  assertRestored();
+  await assert.rejects(recorder.start(0, true, {
     ...capture,
     start: async () => { throw new Error('native start failed'); },
   }), /native start failed/);
-  assert.deepEqual(states.at(-1), { phase: 'idle' });
-  await recorder.start(1, true, {
+  assertRestored();
+  await recorder.start(0, true, {
     ...capture,
     stop: async () => { throw new Error('native stop failed'); },
   });
-  await assert.rejects(recorder.submit(async () => assert.fail('no recording to score')), /native stop failed/);
-  assert.deepEqual(states.at(-1), { phase: 'idle' });
-  await recorder.start(1, true, capture);
-  await assert.rejects(recorder.submit(async () => { throw new Error('transcription failed'); }), /transcription failed/);
-  assert.deepEqual(states.at(-1), { phase: 'idle' });
-  await recorder.start(1, true, capture);
+  await assert.rejects(submit(), /native stop failed/);
+  assertRestored();
+  await recorder.start(0, true, withTranscript(async () => { throw new Error('socket closed'); }));
+  await assert.rejects(submit(), /upload failed/);
+  assertRestored();
+
+  const entered = deferred<void>();
+  const late = deferred<string>();
+  await recorder.start(0, true, withTranscript(() => {
+    entered.resolve();
+    return late.promise;
+  }));
+  const submitting = submit();
+  await entered.promise;
+  page = 1;
   await recorder.cancel();
-  assert.deepEqual(states.at(-1), { phase: 'idle' });
+  assert.equal(review().canContinue, false);
+  page = 0;
+  assertRestored();
+  late.resolve('still');
+  await submitting;
+  assertRestored();
+  assert.equal(getChunkReview(results, 0, 0, 1, recording).canRetry, false);
 });

@@ -12,6 +12,11 @@ export interface ChunkResult {
   alignment: AlignmentWord[];
 }
 
+export interface RecordingScore {
+  display: ChunkResult;
+  scored?: ChunkResult;
+}
+
 interface ScoreRecordingOptions {
   text: string;
   isRetry: boolean;
@@ -28,7 +33,7 @@ export async function scoreRecording({
   isCurrent,
   liveSession,
   transcribeFile,
-}: ScoreRecordingOptions) {
+}: ScoreRecordingOptions): Promise<RecordingScore | undefined> {
   const liveTranscript = await liveSession.finish(FINALIZE_TIMEOUT_MS).catch(() => null);
   liveSession.abort();
   if (!isCurrent()) return;
