@@ -33,8 +33,8 @@ Notification tables are covered in `docs/features/notifications.md`.
 
 ### `user_collections`
 
-Migration: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
-(`sort_preference`)
+Migrations: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
+(`sort_preference`), and `20261110152251_collection_management.sql` (`position`).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -43,6 +43,7 @@ Migration: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
 | `name` | TEXT | |
 | `is_default` | BOOLEAN | `true` for the auto-created "My Verses" collection |
 | `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = client default |
+| `position` | INTEGER | nullable custom collection order, assigned by `reorder_collections` |
 | `deleted_at` | TIMESTAMPTZ | soft delete; NULL = active |
 | `updated_at` | TIMESTAMPTZ | auto-updated by trigger `update_user_collections_updated_at` |
 

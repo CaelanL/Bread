@@ -54,6 +54,7 @@ export const Colors = {
     success: '#22c55e',
     warning: '#f59e0b',
     error: '#ef4444',
+    destructiveAction: '#c93636',
 
     // Utility
     shadow: '#000',
@@ -88,6 +89,7 @@ export const Colors = {
     success: '#22c55e',
     warning: '#f59e0b',
     error: '#ef4444',
+    destructiveAction: '#c93636',
 
     // Utility
     shadow: '#000',

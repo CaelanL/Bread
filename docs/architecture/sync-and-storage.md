@@ -53,6 +53,7 @@ interface AppState {
   // Lifecycle flags
   hydrated: boolean;
   collectionsLoading: boolean;
+  collectionOrderSaving: boolean;
   versesLoading: boolean;
   masteredLoading: boolean;
   error: string | null;
@@ -68,9 +69,12 @@ interface AppState {
   setBibleVersion: (v) => Promise<void>;
   setReviewMaxIntervalDays: (days) => Promise<void>;
   addCollection: (name) => Promise<Collection>;
+  renameCollection: (id, name) => Promise<void>;
+  reorderCollections: (ids) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
   setCollectionSort: (collectionId, sort) => Promise<void>;
   addVerse: (verse, collectionId, version) => Promise<SavedVerse>;
+  copyVerseToCollection: (verseId, collectionId) => Promise<void>;
   deleteVerse: (id, collectionId) => Promise<{ wasMastered: boolean }>;
   updateVerseProgress: (id, difficulty, accuracy, fullSession?) => Promise<void>;
   resetVerseProgress: (id) => Promise<void>;

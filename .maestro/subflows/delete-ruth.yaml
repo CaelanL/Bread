@@ -4,7 +4,8 @@ appId: com.caelanliu.biblemem
 - swipe:
     from: ".*Ruth 1:1 • ESV.*"
     direction: LEFT
-- tapOn: "trash, Delete"
+- tapOn:
+    id: swipe-delete
 - tapOn: "Delete" # the "Delete verse?" alert
 - extendedWaitUntil:
     visible: "No verses yet"

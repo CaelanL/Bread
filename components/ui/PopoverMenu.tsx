@@ -4,6 +4,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEffect, useRef } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -40,6 +41,8 @@ export function PopoverMenu({
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const pendingAction = useRef<(() => void) | null>(null);
+  const closing = useRef(false);
 
   useEffect(() => {
     if (visible) {
@@ -62,12 +65,25 @@ export function PopoverMenu({
     }
   }, [visible]);
 
-  const handleClose = () => {
+  const finishDismiss = () => {
+    const action = pendingAction.current;
+    pendingAction.current = null;
+    closing.current = false;
+    action?.();
+  };
+
+  const handleClose = (action?: () => void) => {
+    if (closing.current) return;
+    closing.current = true;
+    pendingAction.current = action ?? null;
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 100,
       useNativeDriver: true,
-    }).start(() => onClose());
+    }).start(() => {
+      onClose();
+      if (Platform.OS !== 'ios') finishDismiss();
+    });
   };
 
   const menuBg = isDark ? colors.cardAlt : colors.card;
@@ -78,9 +94,10 @@ export function PopoverMenu({
       visible={visible}
       transparent
       animationType="none"
-      onRequestClose={handleClose}
+      onRequestClose={() => handleClose()}
+      onDismiss={finishDismiss}
     >
-      <Pressable style={styles.overlay} onPress={handleClose}>
+      <Pressable accessible={false} style={styles.overlay} onPress={() => handleClose()}>
         <Animated.View
           style={[
             styles.menu,
@@ -100,11 +117,9 @@ export function PopoverMenu({
                   styles.menuItem,
                   pressed && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
                 ]}
-                onPress={() => {
-                  handleClose();
-                  // Small delay to let animation finish
-                  setTimeout(item.onPress, 100);
-                }}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+                onPress={() => handleClose(item.onPress)}
               >
                 {item.icon && (
                   <IconSymbol

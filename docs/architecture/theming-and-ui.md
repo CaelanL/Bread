@@ -26,6 +26,7 @@ Defined in `constants/theme.ts`.
 | `success` | `#22c55e` | success status |
 | `warning` | `#f59e0b` | warning status |
 | `error` | `#ef4444` | error status |
+| `destructiveAction` | `#c93636` | swipe-delete fill in both themes, with white text |
 | `tabIconDefault` | `#8a8a8a` | inactive tab icons |
 | `tabIconSelected` | `#b08d57` | active tab icons |
 | `icon` | `#6b6b6b` | default icon color |
@@ -185,6 +186,7 @@ have hex literals; don't copy them.
 | `VerseReferenceBadge.tsx` | "John 3:16 KJV" badge |
 | `VerseExpandModal.tsx` | Expanded verse text modal |
 | `AddToCollectionModal.tsx` | Pick collection(s) for a verse |
+| `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
 
 If you're building a new reusable primitive, add it here with a

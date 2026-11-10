@@ -1,6 +1,7 @@
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
+import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { getVerseText } from '@/lib/api/bible';
@@ -10,20 +11,16 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
-
-const DELETE_BUTTON_WIDTH = 80;
-const SWIPE_THRESHOLD = DELETE_BUTTON_WIDTH / 2;
 
 interface SwipeableVerseCardProps {
   verse: SavedVerse;
   onPress: () => void;
   onDelete: () => Promise<void>;
+  onCopy: () => void;
   disableSwipe?: boolean;
   /** Number of collections this verse is in (for accurate delete message) */
   collectionCount?: number;
@@ -33,6 +30,7 @@ export function SwipeableVerseCard({
   verse,
   onPress,
   onDelete,
+  onCopy,
   disableSwipe = false,
   collectionCount = 1,
 }: SwipeableVerseCardProps) {
@@ -68,33 +66,31 @@ export function SwipeableVerseCard({
   const highestDifficulty = getHighestDifficulty();
 
   const translateX = useSharedValue(0);
-  const itemHeight = useSharedValue<number | null>(null);
+  const swipeStart = useSharedValue(0);
   const debouncedPress = useDebouncedPress(onPress);
+  const closeSwipe = () => {
+    translateX.value = withTiming(0, { duration: Motion.pressMs });
+  };
 
   const panGesture = Gesture.Pan()
     .enabled(!disableSwipe)
     .activeOffsetX([-10, 10])
     .failOffsetY([-5, 5])
+    .onStart(() => {
+      swipeStart.value = translateX.value;
+    })
     .onUpdate((e) => {
-      // Only allow left swipe (negative values)
-      translateX.value = Math.min(0, Math.max(e.translationX, -DELETE_BUTTON_WIDTH));
+      translateX.value = Math.min(0, Math.max(swipeStart.value + e.translationX, -SWIPE_DELETE_DISTANCE));
     })
     .onEnd(() => {
-      if (translateX.value < -SWIPE_THRESHOLD) {
-        // Snap to reveal delete button
-        translateX.value = withSpring(-DELETE_BUTTON_WIDTH, { damping: 20 });
-      } else {
-        // Snap back to closed
-        translateX.value = withSpring(0, { damping: 20 });
-      }
+      translateX.value = withTiming(
+        translateX.value < -SWIPE_DELETE_DISTANCE / 2 ? -SWIPE_DELETE_DISTANCE : 0,
+        { duration: Motion.pressMs },
+      );
     });
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
-  }));
-
-  const deleteButtonStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, Math.abs(translateX.value) / SWIPE_THRESHOLD),
   }));
 
   const handleDelete = () => {
@@ -128,23 +124,16 @@ export function SwipeableVerseCard({
       {
         text: 'Cancel',
         style: 'cancel',
-        onPress: () => {
-          // Close swipe
-          translateX.value = withSpring(0, { damping: 20 });
-        },
+        onPress: closeSwipe,
       },
       {
         text: buttonText,
         style: 'destructive',
         onPress: async () => {
           try {
-            // Try to delete first
             await onDelete();
-            // Only animate out on success
-            translateX.value = withTiming(-500, { duration: 200 });
           } catch {
-            // On error, snap back to closed position
-            translateX.value = withSpring(0, { damping: 20 });
+            closeSwipe();
           }
         },
       },
@@ -154,23 +143,22 @@ export function SwipeableVerseCard({
   const handlePress = () => {
     // Close swipe if open, otherwise navigate
     if (translateX.value < -10) {
-      translateX.value = withSpring(0, { damping: 20 });
+      closeSwipe();
     } else {
       debouncedPress();
     }
+  };
+
+  const handleCopy = () => {
+    closeSwipe();
+    onCopy();
   };
 
   return (
     <Animated.View
       style={styles.container}
     >
-      {/* Delete button (behind card) */}
-      <Animated.View style={[styles.deleteButtonContainer, deleteButtonStyle]}>
-        <Pressable style={styles.deleteButton} onPress={handleDelete}>
-          <IconSymbol name="trash.fill" size={20} color={colors.white} />
-          <Text style={styles.deleteText}>Delete</Text>
-        </Pressable>
-      </Animated.View>
+      {!disableSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} />}
 
       {/* Swipeable card */}
       <GestureDetector gesture={panGesture}>
@@ -186,6 +174,15 @@ export function SwipeableVerseCard({
               },
             ]}
             onPress={handlePress}
+            onLongPress={handleCopy}
+            accessibilityActions={[
+              { name: 'copy', label: 'Copy to collection' },
+              ...(!disableSwipe ? [{ name: 'delete', label: 'Delete' }] : []),
+            ]}
+            onAccessibilityAction={(event) => {
+              if (event.nativeEvent.actionName === 'copy') handleCopy();
+              if (!disableSwipe && event.nativeEvent.actionName === 'delete') handleDelete();
+            }}
           >
             {/* Gold glow overlay when engraved */}
             {verse.progress.engraved?.completed && (
@@ -250,29 +247,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     borderRadius: 16,
-  },
-  deleteButtonContainer: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: DELETE_BUTTON_WIDTH,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ef4444', // Keep error red hardcoded for delete action
-    borderRadius: 16,
-  },
-  deleteButton: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    gap: 4,
-  },
-  deleteText: {
-    color: '#fff', // Always white on colored button
-    fontSize: 12,
-    fontWeight: '600',
   },
   card: {
     borderRadius: 16,

@@ -61,15 +61,6 @@ begin
     raise exception 'Sign in to copy a verse' using errcode = '42501';
   end if;
 
-  select v.id, v.deleted_at into source_id, source_deleted_at
-  from public.user_verses as v
-  where v.user_id = owner_id and v.client_id = verse_client_id
-  for no key update;
-
-  if source_id is null then
-    raise exception 'Verse not found' using errcode = '22023';
-  end if;
-
   if collection_client_id = 'my-verses' then
     insert into public.user_collections (user_id, client_id, name, is_default, created_at)
     values (owner_id, 'my-verses', 'My Verses', true, 'epoch')
@@ -85,6 +76,15 @@ begin
 
   if target_id is null then
     raise exception 'Collection not found' using errcode = '22023';
+  end if;
+
+  select v.id, v.deleted_at into source_id, source_deleted_at
+  from public.user_verses as v
+  where v.user_id = owner_id and v.client_id = verse_client_id
+  for no key update;
+
+  if source_id is null then
+    raise exception 'Verse not found' using errcode = '22023';
   end if;
 
   if source_deleted_at is not null then
