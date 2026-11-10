@@ -45,8 +45,15 @@ function run(cmd, args, options = {}) {
   return { ok: r.status === 0, out: r.stdout ?? '', err: r.stderr ?? r.error?.message ?? '' };
 }
 
+// Codex's allow rule for `npm run sim` matches only the plain command. Wrapped in pipes or redirects
+// it runs inside the sandbox, where simctl can't reach CoreSimulator.
+const SANDBOXED = /CoreSimulatorService connection became invalid/;
+
 function must(cmd, args) {
   const r = run(cmd, args);
+  if (!r.ok && SANDBOXED.test(r.err)) {
+    die("This shell's sandbox blocks the simulator. Run `npm run sim …` as a plain command (no pipes, redirects, `;` or `&&`) so the Codex allow rule applies, or ask to run it outside the sandbox.");
+  }
   if (!r.ok) die(`${cmd} ${args.join(' ')} failed: ${r.err.trim()}`);
   return r.out;
 }
