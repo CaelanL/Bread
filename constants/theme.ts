@@ -15,6 +15,7 @@ export const Motion = {
   pressScale: 0.96,
   pressMs: 150,
   exitMs: 150,
+  expandMs: 200,
   staggerMs: 100,
   easing: [0.2, 0, 0, 1],
 } as const;
@@ -35,6 +36,8 @@ export const Colors = {
 
     // Primary (bronze gold)
     primary: '#b08d57',           // Muted bronze/champagne gold
+    onPrimary: '#1a1a1a',
+    onPrimaryTint: 'rgba(26,26,26,0.12)',
     primaryLight: 'rgba(176,141,87,0.12)',
 
     // Surfaces
@@ -67,6 +70,8 @@ export const Colors = {
 
     // Primary (bronze gold - slightly lighter for dark)
     primary: '#c9a962',           // Brighter bronze for dark mode
+    onPrimary: '#1a1a1a',
+    onPrimaryTint: 'rgba(26,26,26,0.12)',
     primaryLight: 'rgba(201,169,98,0.15)',
 
     // Surfaces

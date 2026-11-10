@@ -17,6 +17,7 @@ Defined in `constants/theme.ts`.
 | `text` | `#1a1a1a` | primary text |
 | `background` | `#faf8f5` | screen background |
 | `tint` / `primary` | `#b08d57` | brand accent (bronze gold) |
+| `onPrimary` / `onPrimaryTint` | `#1a1a1a` / `rgba(26,26,26,0.12)` | ink and subtle action fill on gold, same in both modes |
 | `card` | `#ffffff` | card surfaces |
 | `cardAlt` | `#f5f3f0` | secondary card surfaces |
 | `input` | `#f5f3f0` | input backgrounds |

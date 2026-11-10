@@ -127,6 +127,7 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
       }
     },
 
+    canDiscard: () => current?.phase === 'starting' || current?.phase === 'recording',
     isRecording: () => current?.phase === 'recording',
     isSubmitting: () => current?.phase === 'submitting',
 

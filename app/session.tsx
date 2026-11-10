@@ -3,7 +3,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { WAVEFORM_SAMPLES } from '@/components/study/Waveform';
 import { VerseCard } from '@/components/study/VerseCard';
 import { ResultCard, getScoreColor } from '@/components/study/ResultCard';
-import { RecordingBar, RECORDING_BAR_HEIGHT } from '@/components/study/RecordingBar';
+import { RecordingBar } from '@/components/study/RecordingBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStudySession } from '@/hooks/use-study-session';
@@ -43,13 +43,7 @@ import {
   View,
   type ViewToken,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withRepeat,
-  Easing,
-} from 'react-native-reanimated';
+import { useSharedValue } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -79,7 +73,6 @@ export default function StudySessionScreen() {
   const [recordingState, setRecordingState] = useState<RecordingState>({ phase: 'idle' });
   const [recorder] = useState(() => createRecordingControls(setRecordingState));
   const transcribing = recordingState.phase === 'submitting';
-  const barVisible = recordingState.phase === 'recording' || transcribing;
   const closingRef = useRef(false);
   // Per-chunk visibility override driven by the header reveal/hide button.
   // Cosmetic only; scoring always uses chunk.text. Absence = mode default.
@@ -92,32 +85,6 @@ export default function StudySessionScreen() {
   // Meter ballistics state: fast attack, slow release (kills ripple)
   const smoothedLevelRef = useRef(0);
 
-  // Animation values
-  const recordingTabY = useSharedValue(RECORDING_BAR_HEIGHT + 60);
-  const spinnerRotation = useSharedValue(0);
-
-  const recordingTabStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: recordingTabY.value }],
-  }));
-
-  const spinnerStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${spinnerRotation.value}deg` }],
-  }));
-
-  // Spinner animation
-  useEffect(() => {
-    if (transcribing) {
-      spinnerRotation.value = withRepeat(
-        // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-        withTiming(360, { duration: 1000, easing: Easing.linear }),
-        -1,
-        false
-      );
-    } else {
-      spinnerRotation.value = 0;
-    }
-  }, [transcribing]);
-
   // Warm the auth session so the first mic press doesn't pay a lazy
   // token refresh serially in front of the Soniox key mint
   useEffect(() => {
@@ -125,13 +92,6 @@ export default function StudySessionScreen() {
   }, []);
 
   useEffect(() => () => { void recorder.cancel(); }, [recorder]);
-
-  useEffect(() => {
-    recordingTabY.value = barVisible
-      ? withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) })
-      // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-      : withTiming(RECORDING_BAR_HEIGHT + 60, { duration: 250, easing: Easing.in(Easing.cubic) });
-  }, [barVisible, recordingTabY]);
 
   const handleSubmit = useCallback(async () => {
     if (!recorder.isRecording()) return;
@@ -280,7 +240,7 @@ export default function StudySessionScreen() {
   }, [handleAudioStream, recorder, session.chunks, session.currentIndex, startRecording, stopRecording, waveformLevels]);
 
   const handleCancel = useCallback(() => {
-    if (!recorder.isRecording()) return;
+    if (!recorder.canDiscard()) return;
     if (process.env.EXPO_OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -483,19 +443,6 @@ export default function StudySessionScreen() {
         </View>
 
         <View style={styles.controlsContainer}>
-          {(recordingState.phase === 'idle' || recordingState.phase === 'starting') &&
-            !isCompleted &&
-            session.currentIndex === index && (
-              <Pressable
-                style={[styles.micButton, { backgroundColor: buttonBg }]}
-                onPress={() => handleMicPress(index, false)}
-                disabled={recordingState.phase !== 'idle'}
-                testID="mic-button"
-              >
-                <IconSymbol name="mic.fill" size={32} color={colors.white} />
-              </Pressable>
-            )}
-
           {canContinue && (
             <View style={styles.controlsRow}>
               {canRetry && (
@@ -578,12 +525,11 @@ export default function StudySessionScreen() {
         })}
       />
 
-      {/* Recording Bar */}
       <RecordingBar
-        isProcessing={transcribing}
+        phase={recordingState.phase}
+        showMic={currentIndex < session.chunks.length && !session.completedChunks.has(currentIndex)}
         waveformLevels={waveformLevels}
-        animatedStyle={recordingTabStyle}
-        spinnerStyle={spinnerStyle}
+        onStart={() => handleMicPress(currentIndex, false)}
         onCancel={handleCancel}
         onSubmit={handleSubmit}
       />
@@ -629,14 +575,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     alignItems: 'center',
     minHeight: 132,
-  },
-  micButton: {
-    width: 72,
-    height: 72,
-    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   controlsRow: {
     flexDirection: 'row',

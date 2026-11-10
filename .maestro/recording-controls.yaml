@@ -8,12 +8,16 @@ name: recording-controls
     visible:
       id: "mic-button"
     timeout: 30000
+- takeScreenshot: recording-controls-0-idle
 - tapOn:
     id: "mic-button"
+- extendedWaitUntil:
+    visible: "OK|Allow"
+    timeout: 15000
+- takeScreenshot: recording-controls-starting
 - tapOn: "OK|Allow"
 - extendedWaitUntil:
-    visible:
-      id: "discard-recording"
+    visible: "Listening"
     timeout: 15000
 - tapOn:
     id: "discard-recording"
@@ -24,9 +28,10 @@ name: recording-controls
 - doubleTapOn:
     id: "mic-button"
 - extendedWaitUntil:
-    visible:
-      id: "discard-recording"
+    visible: "Listening"
     timeout: 15000
+- assertVisible:
+    id: "submit-recording"
 - assertNotVisible: "Failed to start recording"
 - takeScreenshot: recording-controls-1-active
 - tapOn:
