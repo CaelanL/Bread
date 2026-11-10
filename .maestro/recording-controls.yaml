@@ -3,7 +3,12 @@ appId: com.caelanliu.biblemem
 name: recording-controls
 ---
 - runFlow: subflows/open-app.yaml
-- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fsession%3Fid%3Dseed-psalm-23-1-3%26difficulty%3Dmedium%26chunkSize%3D1
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fsetup%2Fseed-psalm-23-1-3
+- extendedWaitUntil:
+    visible: "Start session.*"
+    timeout: 20000
+- tapOn: "Medium.*"
+- tapOn: "Start session.*"
 - extendedWaitUntil:
     visible:
       id: "mic-button"
@@ -41,4 +46,5 @@ name: recording-controls
       id: "mic-button"
     timeout: 10000
 - assertVisible: "Verse 1"
+- assertNotVisible: "Listening"
 - takeScreenshot: recording-controls-2-discarded
