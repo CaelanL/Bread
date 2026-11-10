@@ -6,7 +6,10 @@ appId: com.caelanliu.biblemem
     direction: LEFT
 - tapOn:
     id: swipe-delete
-- tapOn: "Delete" # the "Delete verse?" alert
+- assertVisible: "Delete verse?"
+- tapOn:
+    text: Delete
+    below: "Delete verse?"
 - extendedWaitUntil:
     visible: "No verses yet"
     timeout: 20000
