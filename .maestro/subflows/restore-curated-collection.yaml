@@ -11,7 +11,16 @@ appId: com.caelanliu.biblemem
       - inputText: Reading list
       - tapOn: "Create Collection"
       - assertVisible: ".*Reading list.*0 verses.*"
+- waitForAnimationToEnd
+- assertVisible:
+    id: tab-library
+    selected: true
+- takeScreenshot: discovery-restore-before-edit
 - tapOn: Edit
+- extendedWaitUntil:
+    visible: Done
+    timeout: 10000
+- takeScreenshot: discovery-restore-editing
 - runFlow:
     when:
       visible:
