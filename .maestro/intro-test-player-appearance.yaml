@@ -1,0 +1,43 @@
+appId: com.caelanliu.biblemem
+name: intro-test-player-appearance
+onFlowComplete:
+  - openLink: com.biblemem://settings
+  - scrollUntilVisible:
+      element:
+        text: Light
+      direction: DOWN
+      timeout: 10000
+  - tapOn: Light
+  - tapOn:
+      id: tab-home
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-settings
+    timeout: 30000
+- runFlow:
+    file: subflows/intro-test-player-appearance.yaml
+    env:
+      THEME: Light
+- runFlow:
+    file: subflows/intro-test-player-appearance.yaml
+    env:
+      THEME: Dark
+- openLink: com.biblemem://home?introFixture=unavailable
+- scrollUntilVisible:
+    element:
+      id: intro-watch
+    direction: DOWN
+- assertNotVisible:
+    id: intro-video-modal
+- tapOn:
+    id: intro-watch
+- extendedWaitUntil:
+    visible: Video unavailable. Please try again later.
+    timeout: 20000
+- assertNotVisible:
+    id: intro-video-modal
+- takeScreenshot: direct-test-route-unavailable-after-manual
+- openLink: com.biblemem://home

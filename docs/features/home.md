@@ -118,7 +118,7 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 
 ## Encouragement video
 
-Home's Why memorize Scripture entry opens the credited official source when
+Home's provisional Why memorize Scripture entry opens the credited official source when
 `INTRO_VIDEO.playback` is unset. Activating in-app playback requires a rights-cleared
 asset and matching timed captions in `lib/intro/media.ts`; the stable intro ID does
 not change for a new cut, title or soundtrack. No third-party sermon is bundled.
@@ -150,8 +150,14 @@ background playback. Cleanup does not restore a guessed recording audio mode.
 sound-on, silent-switch, background/closed silence and recording afterward must be
 checked on a physical iPhone; simulator playback alone cannot establish them.
 
-For local development only, `/home?introFixture=sample` uses an original nine-second
-tone/video fixture; `introFixture=unavailable` exercises a failed source. Both need
+Local builds (`__DEV__` plus loopback/private-LAN Supabase) expose **Test video
+player** on Home. The labeled original nine-second tone/video uses manual replay,
+even after a claim. A tap waits for the fixture/preloader to mount and never reads
+or consumes intro eligibility. The official link stays separate. Route fixture
+changes clear the manual override; close preserves replay. Hosted/production
+builds have no test button.
+
+For local development only, `/home?introFixture=sample` uses the same fixture; `introFixture=unavailable` exercises a failed source. Both need
 `__DEV__` and a loopback/private-LAN Supabase URL. This guard does not loosen dev
 sign-in. Ordinary startup has no fixture. Metro includes the original 79 KB fixture asset in the production bundle, but the production guard never selects it; avoiding custom bundler configuration is the accepted size tradeoff. The server marker is shared by all devices
 for the same local account, so reset the disposable test stack before a fresh intro
@@ -180,6 +186,8 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. These checks use the local environment; the migration test rolls back all fixtures.
 - `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same actual artwork and reference; a placeholder cannot verify continuity.
+- `npm run sim -- flow intro-test-player-appearance`: Home entry/player in both themes and same-session unavailable link. No claim precondition; restores Light.
+- `npm run sim -- flow intro-test-player`: Home first tap/replay, no manual-test claim, then replay after a claim. Needs fresh verifier markers.
 - `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second automatic presentation, replay and unavailable/unset media.
 - On a separate fresh disposable stack, `npm run sim -- flow intro-modal-handoff` defers intro while each existing Home modal is visible and presents after native dismissal. It consumes both accounts' markers; reset before the other intro flows.
 - After `intro-video` has claimed reader-b's fixture, `npm run sim -- flow intro-interruption` checks native Control Center interruption, preserved pause/position, and background close. Physical iPhone verification is still required.

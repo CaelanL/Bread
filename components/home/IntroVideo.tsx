@@ -10,7 +10,7 @@ import { Colors, Fonts, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
 import { createIntroCoordinator } from '@/lib/intro/coordinator';
-import { canUseIntroFixture, introMediaForPreview } from '@/lib/intro/media';
+import { INTRO_VIDEO, canUseIntroFixture, introMediaForPreview } from '@/lib/intro/media';
 import { useUxFlagsStore } from '@/lib/notifications';
 import { useHydrated } from '@/lib/store';
 
@@ -30,13 +30,19 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
   const [modalOwner, setModalOwner] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [manualError, setManualError] = useState(false);
+  const [manualFixture, setManualFixture] = useState(false);
+  const [testRequested, setTestRequested] = useState<string | null>(null);
+  const canTest = canUseIntroFixture(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL);
+  const previewMode = manualFixture ? 'sample' : introFixture;
   const preload = useRef<Video>(null);
   const preparation = useRef(0);
   const media = useMemo(() => {
-    const fixture = canUseIntroFixture(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL) && introFixture === 'sample'
+    const fixture = canUseIntroFixture(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL) && previewMode === 'sample'
       ? require('@/assets/video/intro-fixture.mp4') : 0;
-    return introMediaForPreview(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL, introFixture, fixture);
-  }, [introFixture]);
+    return introMediaForPreview(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL, previewMode, fixture);
+  }, [previewMode]);
+  const entryMedia = manualFixture ? INTRO_VIDEO : media;
+  const entryPreparing = preparing && !manualFixture;
   const owner = `${session?.user.id ?? ''}:${media.id}:${media.playback ?? ''}`;
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
@@ -78,15 +84,24 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
     return () => listener.remove();
   }, []);
   useEffect(() => () => coordinator?.cancel(), [coordinator]);
+  useEffect(() => { setManualFixture(false); setTestRequested(null); }, [accountId, introFixture]);
   useEffect(() => {
     if (!focused || appState === 'background' || !hydrated || !accountId || blocked || !flagsHydrated || !q1Dismissed || q1Presented) coordinator?.cancel();
-    else if (appState === 'active') void coordinator?.attempt();
-  }, [focused, appState, hydrated, accountId, blocked, flagsHydrated, q1Dismissed, q1Presented, coordinator]);
+    else if (appState === 'active' && !manualFixture) void coordinator?.attempt();
+  }, [focused, appState, hydrated, accountId, blocked, flagsHydrated, q1Dismissed, q1Presented, manualFixture, coordinator]);
+
+  useEffect(() => {
+    if (!testRequested || testRequested !== accountId || !eligible || !coordinator) return;
+    setTestRequested(null);
+    void coordinator.replay().then((shown) => {
+      if (!shown && currentOwner.current === owner && eligibleRef.current) setManualError(true);
+    });
+  }, [testRequested, accountId, eligible, coordinator, owner]);
 
   const watch = async () => {
     setManualError(false);
-    if (!media.playback) {
-      try { await Linking.openURL(media.sourceUrl); }
+    if (!entryMedia.playback) {
+      try { await Linking.openURL(entryMedia.sourceUrl); }
       catch { setManualError(true); }
       return;
     }
@@ -102,19 +117,34 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
         </View>
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.text }]}>Why memorize Scripture?</Text>
-          <Text style={[styles.credit, { color: colors.icon }]}>{media.credit}</Text>
+          <Text style={[styles.credit, { color: colors.icon }]}>{entryMedia.credit}</Text>
         </View>
       </View>
       <Pressable
         testID="intro-watch"
         accessibilityRole="button"
-        disabled={preparing}
+        disabled={entryPreparing}
         onPress={() => void watch()}
-        style={({ pressed }) => [styles.watch, { opacity: preparing ? 0.6 : 1, backgroundColor: colors.cardAlt, transform: [{ scale: pressed && !preparing ? Motion.pressScale : 1 }] }]}
+        style={({ pressed }) => [styles.watch, { opacity: entryPreparing ? 0.6 : 1, backgroundColor: colors.cardAlt, transform: [{ scale: pressed && !entryPreparing ? Motion.pressScale : 1 }] }]}
       >
-        {preparing ? <ActivityIndicator color={colors.icon} size="small" /> : <IconSymbol name={media.playback ? 'play.fill' : 'arrow.up.right'} size={15} color={colors.text} />}
-        <Text style={[styles.watchText, { color: colors.text }]}>{preparing ? 'Preparing video…' : media.playback ? 'Watch video' : 'Watch on Desiring God'}</Text>
+        {entryPreparing ? <ActivityIndicator color={colors.icon} size="small" /> : <IconSymbol name={entryMedia.playback ? 'play.fill' : 'arrow.up.right'} size={15} color={colors.text} />}
+        <Text style={[styles.watchText, { color: colors.text }]}>{entryPreparing ? 'Preparing video…' : entryMedia.playback ? 'Watch video' : 'Watch on Desiring God'}</Text>
       </Pressable>
+      {canTest && (
+        <View style={styles.testEntry}>
+          <Text style={[styles.credit, { color: colors.icon }]}>Development · original nine-second video with a tone, not a sermon.</Text>
+          <Pressable
+            testID="intro-test-player"
+            accessibilityRole="button"
+            disabled={preparing || testRequested !== null || !eligible}
+            onPress={() => { setManualError(false); setManualFixture(true); setTestRequested(accountId ?? null); }}
+            style={({ pressed }) => [styles.watch, { backgroundColor: colors.cardAlt, opacity: preparing || testRequested !== null || !eligible ? 0.6 : 1, transform: [{ scale: pressed && !preparing && !testRequested && eligible ? Motion.pressScale : 1 }] }]}
+          >
+            <IconSymbol name="play.fill" size={15} color={colors.text} />
+            <Text style={[styles.watchText, { color: colors.text }]}>{testRequested || preparing ? 'Preparing test video…' : 'Test video player'}</Text>
+          </Pressable>
+        </View>
+      )}
       {manualError && <Text style={[styles.error, { color: colors.icon }]}>Video unavailable. Please try again later.</Text>}
       {media.playback !== null && session && (
         <Video key={`preload:${owner}`} ref={preload} style={styles.preloader} pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
@@ -134,5 +164,6 @@ const styles = StyleSheet.create({
   watch: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 16, borderRadius: Radius.full },
   watchText: { fontSize: 14, fontWeight: '600' },
   error: { fontSize: 13 },
+  testEntry: { gap: 8 },
   preloader: { position: 'absolute', width: 1, height: 1, opacity: 0 },
 });
