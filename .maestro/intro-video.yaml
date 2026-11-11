@@ -48,6 +48,47 @@ name: intro-video
 - assertVisible: Play video
 - takeScreenshot: intro-paused-replay
 - tapOn: Play video
+- extendedWaitUntil:
+    visible: Pause video
+    timeout: 10000
+- tapOn:
+    id: intro-video-surface
+- assertVisible: Play video
+- copyTextFrom:
+    id: intro-progress
+# A two-second drag on empty space above the headline; a paused clock must not move.
+- swipe:
+    start: 20%, 20%
+    end: 40%, 20%
+    duration: 2000
+- assertVisible:
+    id: intro-progress
+    text: ${maestro.copiedText}
+- takeScreenshot: intro-tap-paused
+- tapOn:
+    id: intro-video-surface
+- assertVisible: Pause video
+- extendedWaitUntil:
+    notVisible:
+      id: intro-progress
+      text: ${maestro.copiedText}
+    timeout: 5000
+- takeScreenshot: intro-tap-resumed
+- assertVisible:
+    id: intro-progress
+    text: 00:0[0-4]
+# The scrub track spans about 30-83% of the iPhone 16 Pro width at 65% height.
+- swipe:
+    start: 33%, 65%
+    end: 66%, 65%
+    duration: 1000
+- extendedWaitUntil:
+    visible:
+      id: intro-progress
+      text: 00:0[5-7]
+    timeout: 3000
+- assertVisible: Pause video
+- takeScreenshot: intro-scrubbed-forward
 - tapOn:
     id: intro-close
 - assertNotVisible:

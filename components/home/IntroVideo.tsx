@@ -68,7 +68,7 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
         if (request === preparation.current && currentOwner.current === owner) setPreparing(false);
       }
     },
-    configureAudio: () => Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: false, staysActiveInBackground: false }),
+    configureAudio: () => Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false }),
     show() { if (currentOwner.current === owner) setModalOwner(owner); },
     close() {
       if (currentOwner.current !== owner) return;

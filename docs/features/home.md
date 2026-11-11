@@ -119,51 +119,48 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 ## Encouragement video
 
 Home's provisional Why memorize Scripture entry opens the credited official source when
-`INTRO_VIDEO.playback` is unset. Activating in-app playback requires a rights-cleared
-asset and matching timed captions in `lib/intro/media.ts`; the stable intro ID does
-not change for a new cut, title or soundtrack. No third-party sermon is bundled.
+`INTRO_VIDEO.playback` is unset. In-app playback needs a rights-cleared
+asset and matching timed captions in `lib/intro/media.ts`; the intro ID stays stable
+across a new cut, title or soundtrack. No third-party sermon is bundled.
 
-`user_intro_presentations` uses `(user_id, intro_id)` as its key, a claim timestamp,
-and an account FK with ON DELETE CASCADE. Owner-only SELECT/INSERT policies and
+`user_intro_presentations` is keyed by `(user_id, intro_id)`, with a claim timestamp
+and an ON DELETE CASCADE account FK. Owner-only SELECT/INSERT policies and
 grants deny anonymous access and client UPDATE/DELETE. `claim_intro_presentation`
 is an authenticated invoker with an empty search path; insert-on-conflict returns
-true only for the winning insert.
+true only to the winner.
 
 `createIntroCoordinator` reads the account's presentation state, prepares media in
-a paused hidden native Video, configures audio, then atomically claims immediately
-before presenting. Native unload/load has a 15-second deadline; cancellation and stale guards block
-late presentation or cleanup of a newer request. Reads and claims snapshot the initiating session's token for each attempt. Same-account token refreshes do not replace the coordinator or close playback. Only a
-confirmed winning claim can autoplay; local absence, offline state, failed reads,
-failed preparation and lost claim acknowledgements never authorize presentation.
-A committed claim may consume the opportunity before a visible frame if focus is
-lost or playback later fails. Manual replay remains available and does not reset
-account eligibility. No writes are queued offline.
+a paused hidden native Video, configures audio, then claims atomically just
+before presenting. Native unload/load has a 15-second deadline; cancellation and stale guards stop
+late presentation or cleanup of a newer request. Each attempt's reads and claims use its session's token; same-account refreshes keep the coordinator and playback. Only a
+confirmed winning claim autoplays; local absence, offline, failed reads or preparation
+and lost claim acknowledgements never do. A committed claim may consume the chance
+before a visible frame if focus is lost or playback fails. Manual replay stays available
+without resetting eligibility. No writes are queued offline.
 
 The coordinator requires focused/active Home, completed hydration, settled reminder
-UX and no verse/collection modal. Home retains opened verse/picker content through
-metadata refresh and blocks intro until native dismissal. Q1's transient native
-presentation flag blocks an
-overlap through its actual dismissal; a stale reminder check rechecks dismissal
-before opening. Transient inactivity pauses playback in place and resumes only if it was playing; it blocks new automatic starts. Backgrounding, navigation, account changes and close unload the players. Audio starts with `playsInSilentModeIOS: false`, recording disabled and no
-background playback. Cleanup does not restore a guessed recording audio mode.
+UX and no verse/collection modal. Home keeps opened verse/picker content through
+metadata refresh and blocks intro until native dismissal. Q1's transient presentation
+flag blocks overlap until actual dismissal; a stale reminder check rechecks. Transient inactivity pauses in place, resumes only if it was playing, and blocks new automatic starts. Backgrounding, navigation, account changes and close unload the players. Audio sets `playsInSilentModeIOS: true` (sound with the silent switch on), no recording or
+background playback; the recorder sets its own mode on start, so cleanup restores none.
 
-`IntroVideoModal` exposes Close immediately, timed captions, pause and replay. Actual
-sound-on, silent-switch, background/closed silence and recording afterward must be
-checked on a physical iPhone; simulator playback alone cannot establish them.
+`IntroVideoModal` shows Close at once and timed captions. Tapping the video toggles pause
+with a fading glyph. Below it: a play/replay button, elapsed/total time and a 44-point scrub
+bar; a drag seeks exactly on release and keeps the play state (`lib/intro/scrub.ts`). Sound,
+silent switch, background/closed silence and recording afterward need a physical iPhone.
 
 Local builds (`__DEV__` plus loopback/private-LAN Supabase) expose **Test video
 player** on Home. The labeled original nine-second tone/video uses manual replay,
-even after a claim. A tap waits for the fixture/preloader to mount and never reads
-or consumes intro eligibility. The official link stays separate. Route fixture
-changes clear the manual override; close preserves replay. The preloader is keyed by account; one remounted per
-fixture rejected its first unload. Hosted/production
+even after a claim. A tap waits for the fixture/preloader to mount and never touches
+eligibility. The official link is separate. Route fixture
+changes clear the manual override; close preserves replay. The preloader is keyed by account; per-fixture remounts failed their first unload. Hosted/production
 builds have no test button.
 
 `/home?introFixture=sample` uses the same fixture; `introFixture=unavailable` uses
 a missing local file. Both share the test button's guard; dev sign-in restrictions
-stay intact. Ordinary startup has no fixture. Production bundles include the 79 KB fixture, which the guard never selects; that beats custom bundler configuration. The server marker is shared by all devices
-for the same local account, so reset the disposable test stack before a fresh intro
-flow rather than deleting markers through the client.
+stay intact. Ordinary startup has no fixture. Production bundles carry the unselected 79 KB fixture, not custom bundler config. The server marker is shared by every device
+on a local account, so reset the disposable stack before a fresh intro flow instead
+of deleting markers through the client.
 
 ## Rules
 
@@ -190,10 +187,10 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same actual artwork and reference; a placeholder cannot verify continuity.
 - `npm run sim -- flow intro-test-player-appearance`: Both themes and same-session unavailable link; no claim precondition, restores Light.
 - `npm run sim -- flow intro-test-player`: Home first tap/replay, no manual-test claim, then replay after a claim. Needs fresh verifier markers.
-- `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second automatic presentation, replay and unavailable/unset media.
-- On a separate fresh disposable stack, `npm run sim -- flow intro-modal-handoff` defers intro while each existing Home modal is visible and presents after native dismissal. It consumes both accounts' markers; reset before the other intro flows.
-- After `intro-video` has claimed reader-b's fixture, `npm run sim -- flow intro-interruption` checks native Control Center interruption, preserved pause/position, and background close. Physical iPhone verification is still required.
-- `npm run sim -- flow intro-after-reminders`: fresh UI sign-in, no intro claim while the reminder is visible, then autoplay after native reminder dismissal. Run before that account has claimed the fixture.
+- `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second autoplay, replay, tap pause/resume, scrub and unavailable/unset media.
+- On a separate fresh disposable stack, `npm run sim -- flow intro-modal-handoff` defers intro while each Home modal is visible and presents after native dismissal. It consumes both accounts' markers; reset before other intro flows.
+- After `intro-video` has claimed reader-b's fixture, `npm run sim -- flow intro-interruption` checks native Control Center interruption, preserved pause/position, and background close. Needs a physical iPhone too.
+- `npm run sim -- flow intro-after-reminders`: fresh UI sign-in, no intro claim while the reminder is visible, then autoplay after its native dismissal. Run before that account claims the fixture.
 - By hand: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
 
 ## Decisions
@@ -204,3 +201,4 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - 2026-11-10 · Monthly choices use a thirty-six-passage cycle and fill only missing months · Existing editorial selections and artwork remain authoritative.
 - 2026-11-10 · An account-wide atomic claim controls automatic intro presentation · Prefer suppressing an ambiguous attempt over surprising users twice; explicit replay remains available.
 - 2026-11-11 · Monthly art is plain public URLs · Signed URLs expire.
+- 2026-11-11 · Intro sound ignores the silent switch; scrubbing uses RN responders · A chosen video should just play; no new native module.

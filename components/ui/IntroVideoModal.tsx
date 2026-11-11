@@ -1,6 +1,7 @@
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -8,6 +9,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Fonts, Motion, Radius } from '@/constants/theme';
 import { createIntroInterruption } from '@/lib/intro/interruption';
 import { introCaption, type IntroMedia } from '@/lib/intro/media';
+import { playbackClock, playbackFraction, seekPosition } from '@/lib/intro/scrub';
 
 export function IntroVideoModal({ media, visible, inactive, onClose }: {
   media: IntroMedia;
@@ -37,10 +39,16 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
   const [loaded, setLoaded] = useState(false);
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [scrub, setScrub] = useState<number | null>(null);
+  const track = useRef({ left: 0, width: 0, target: null as number | null });
+  const [glyph, setGlyph] = useState<'play.fill' | 'pause.fill'>('pause.fill');
+  const glyphOpacity = useSharedValue(0);
+  const glyphStyle = useAnimatedStyle(() => ({ opacity: glyphOpacity.value }));
 
   useEffect(() => {
     if (visible) {
-      setPosition(0); setPlaying(false); setLoaded(false); setFinished(false); setError(false);
+      setPosition(0); setPlaying(false); setLoaded(false); setFinished(false); setError(false); setDuration(0); setScrub(null);
     } else {
       void player.current?.unloadAsync().catch(() => {});
     }
@@ -51,7 +59,7 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
     if (!active.current) return;
     if (status.isLoaded) {
       void interruption.current?.onPlaying(status.isPlaying).catch(() => {});
-      setLoaded(true); setPosition(status.positionMillis); setPlaying(status.isPlaying);
+      setLoaded(true); setPosition(status.positionMillis); setPlaying(status.isPlaying); setDuration(status.durationMillis ?? 0);
       if (status.didJustFinish) setFinished(true);
     } else if (status.error) setError(true);
   };
@@ -67,16 +75,39 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
         setError(false); setLoaded(false);
         await player.current?.unloadAsync();
         await player.current?.loadAsync(source, { shouldPlay: true });
-      } else if (finished) { setFinished(false); await player.current?.replayAsync(); }
+        return;
+      }
+      setGlyph(playing && !finished ? 'pause.fill' : 'play.fill');
+      glyphOpacity.value = withSequence(
+        withTiming(1, { duration: Motion.pressMs }),
+        withDelay(Motion.expandMs, withTiming(0, { duration: Motion.expandMs })),
+      );
+      if (finished) { setFinished(false); await player.current?.replayAsync(); }
       else if (playing) await player.current?.pauseAsync();
       else await player.current?.playAsync();
     } catch { setError(true); }
   };
+  const canScrub = loaded && !error && duration > 0;
+  const drag = (event: GestureResponderEvent) => {
+    track.current.target = seekPosition((event.nativeEvent.pageX - track.current.left) / track.current.width, duration);
+    setScrub(track.current.target);
+  };
+  const seek = async () => {
+    const target = track.current.target;
+    track.current.target = null;
+    if (target === null) return;
+    try {
+      await player.current?.setPositionAsync(target, { toleranceMillisBefore: 0, toleranceMillisAfter: 0 });
+      setPosition(target);
+      if (target < duration) setFinished(false);
+    } catch { /* The bar returns to the actual position. */ }
+    setScrub(null);
+  };
 
   if (!visible || !media.playback) return null;
   const source = typeof media.playback === 'number' ? media.playback : { uri: media.playback };
-  const seconds = Math.floor(position / 1000);
-  const time = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  const shown = scrub ?? position;
+  const fraction = `${playbackFraction(shown, duration) * 100}%` as const;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={close}>
@@ -90,38 +121,71 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
         </View>
         <View style={styles.main}>
           <Text style={[styles.headline, { color: colors.text }]}>{media.headline}</Text>
-          {media.fixture && <Text style={[styles.fixture, { color: colors.icon }]}>Development fixture · sound follows silent mode</Text>}
-          <View style={[styles.frame, { backgroundColor: colors.card }]}>
-            <Video
-              ref={player}
-              source={source}
-              style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              isLooping={false}
-              progressUpdateIntervalMillis={250}
-              onPlaybackStatusUpdate={onStatus}
-              onError={() => { if (active.current) setError(true); }}
-            />
-            {!loaded && !error && <ActivityIndicator color={colors.primary} />}
-          </View>
-          <Text testID="intro-caption" style={[styles.caption, { color: colors.text }]} accessibilityLiveRegion="polite">
-            {error ? 'This video could not load. You can close it or try replaying.' : introCaption(media, position)}
-          </Text>
-          <View style={styles.controls}>
+          {media.fixture && <Text style={[styles.fixture, { color: colors.icon }]}>Development fixture · plays with the silent switch on</Text>}
+          <View style={styles.player}>
             <Pressable
-              testID="intro-play-pause"
+              testID="intro-video-surface"
               accessibilityRole="button"
-              accessibilityLabel={finished || error ? 'Replay video' : playing ? 'Pause video' : 'Play video'}
+              accessibilityLabel="Video"
+              accessibilityHint="Pauses or plays the video"
               disabled={!loaded && !error}
               onPress={() => void toggle()}
-              style={({ pressed }) => [styles.control, { backgroundColor: colors.cardAlt, opacity: !loaded && !error ? 0.5 : 1, transform: [{ scale: pressed && loaded ? Motion.pressScale : 1 }] }]}
+              style={[styles.frame, { backgroundColor: colors.card }]}
             >
-              <IconSymbol name={finished || error ? 'arrow.counterclockwise' : playing ? 'pause.fill' : 'play.fill'} size={18} color={colors.text} />
-              <Text style={[styles.controlText, { color: colors.text }]}>{finished || error ? 'Replay' : playing ? 'Pause' : 'Play'}</Text>
+              <Video
+                ref={player}
+                source={source}
+                style={StyleSheet.absoluteFill}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                isLooping={false}
+                progressUpdateIntervalMillis={250}
+                onPlaybackStatusUpdate={onStatus}
+                onError={() => { if (active.current) setError(true); }}
+              />
+              {!loaded && !error && <ActivityIndicator color={colors.primary} />}
+              <Animated.View pointerEvents="none" style={[styles.glyph, { backgroundColor: colors.overlay }, glyphStyle]}>
+                <IconSymbol name={glyph} size={30} color={colors.white} />
+              </Animated.View>
             </Pressable>
-            <Text testID="intro-progress" style={[styles.progress, { color: colors.icon }]}>{time}</Text>
+            <View style={styles.bar}>
+              <Pressable
+                testID="intro-play-pause"
+                accessibilityRole="button"
+                accessibilityLabel={finished || error ? 'Replay video' : playing ? 'Pause video' : 'Play video'}
+                disabled={!loaded && !error}
+                onPress={() => void toggle()}
+                style={({ pressed }) => [styles.control, { opacity: !loaded && !error ? 0.5 : 1, transform: [{ scale: pressed && loaded ? Motion.pressScale : 1 }] }]}
+              >
+                <IconSymbol name={finished || error ? 'arrow.counterclockwise' : playing ? 'pause.fill' : 'play.fill'} size={20} color={colors.text} />
+              </Pressable>
+              <Text testID="intro-progress" style={[styles.progress, { color: colors.text }]}>{playbackClock(shown)}</Text>
+              <View
+                testID="intro-scrubber"
+                accessible
+                accessibilityLabel="Video position"
+                accessibilityValue={{ text: `${playbackClock(shown)} of ${playbackClock(duration)}` }}
+                style={styles.track}
+                onLayout={(event) => { track.current.width = event.nativeEvent.layout.width; }}
+                onStartShouldSetResponder={() => canScrub}
+                onMoveShouldSetResponder={() => canScrub}
+                onResponderTerminationRequest={() => false}
+                onResponderGrant={(event) => { track.current.left = event.nativeEvent.pageX - event.nativeEvent.locationX; drag(event); }}
+                onResponderMove={drag}
+                onResponderRelease={() => void seek()}
+                onResponderTerminate={() => void seek()}
+              >
+                <View pointerEvents="none" style={[styles.rail, { backgroundColor: colors.border }]}>
+                  <View style={[styles.fill, { width: fraction, backgroundColor: colors.primary }]} />
+                </View>
+                <View pointerEvents="none" style={[scrub === null ? styles.thumb : styles.thumbActive, { left: fraction, backgroundColor: colors.primary }]} />
+              </View>
+              <Text style={[styles.progress, { color: colors.icon }]}>{playbackClock(duration)}</Text>
+            </View>
           </View>
+          <Text testID="intro-caption" style={[styles.caption, { color: colors.text }]} accessibilityLiveRegion="polite">
+            {error ? 'This video could not load. You can close it or try replaying.' : introCaption(media, shown)}
+          </Text>
         </View>
         <Text style={[styles.footnote, { color: colors.icon }]}>Start with one verse. Keep it close.</Text>
       </View>
@@ -138,10 +202,16 @@ const styles = StyleSheet.create({
   headline: { fontFamily: Fonts.serif, fontWeight: '600', fontSize: 34 },
   fixture: { fontSize: 12 },
   frame: { width: '100%', aspectRatio: 16 / 9, borderRadius: Radius.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  player: { gap: 4 },
+  glyph: { position: 'absolute', width: 64, height: 64, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  control: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  track: { flex: 1, height: 44, justifyContent: 'center' },
+  rail: { height: 4, borderRadius: Radius.full, overflow: 'hidden' },
+  fill: { height: '100%' },
+  thumb: { position: 'absolute', top: 15, width: 14, height: 14, marginLeft: -7, borderRadius: Radius.full },
+  thumbActive: { position: 'absolute', top: 12, width: 20, height: 20, marginLeft: -10, borderRadius: Radius.full },
   caption: { fontSize: 18, lineHeight: 27, textAlign: 'center', minHeight: 54 },
-  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  control: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 18, borderRadius: Radius.full },
-  controlText: { fontSize: 14, fontWeight: '600' },
   progress: { fontSize: 13, fontVariant: ['tabular-nums'] },
   footnote: { textAlign: 'center', fontSize: 13, marginTop: 20 },
 });
