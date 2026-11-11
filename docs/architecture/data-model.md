@@ -54,7 +54,7 @@ Indexes:
 - `idx_user_collections_user (user_id) WHERE deleted_at IS NULL` — active-collection lookups
 - `idx_user_collections_client (user_id, client_id)` — lookups by client_id
 
-RLS: owner SELECT/INSERT/UPDATE, service role all.
+RLS: owner SELECT/INSERT/UPDATE/DELETE, service all.
 
 ### `user_verses`
 

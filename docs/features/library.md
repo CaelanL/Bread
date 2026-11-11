@@ -145,7 +145,7 @@ and range in any version, including soft-deleted ones:
 | Soft-deleted only | Restore the best one (version rule in `bible-versions.md`), then the junction row |
 | None | Insert the verse with `DEFAULT_PROGRESS`, then the junction row |
 
-A verse is one row per reference (`docs/architecture/bible-versions.md`). The restore
+A verse is one row per reference (`bible-versions.md`). The restore
 path means a soft-deleted row never blocks a re-add.
 
 ## Copying a saved verse
@@ -184,8 +184,8 @@ Tap a custom collection's header icon to change it. See [Explore collections](ho
 4. If none do and it isn't mastered, hard-deletes it. Junction rows cascade.
    `session_attempts` rows survive, since they have no foreign key to the verse.
 
-A failed lookup or junction delete restores the local list and rethrows. A failure
-writing step 3 or 4 is only logged.
+A failed lookup, junction delete or step 4 (owner DELETE policy; none deleted
+fails) restores the local list and rethrows. Step 3 only logs.
 
 `SwipeableVerseCard` picks its confirmation text from the same facts, using
 `collectionCount` from `[id].tsx`:

@@ -85,7 +85,8 @@ versions could create. `planCollapse` looks only at active rows and keeps the
 one with better progress: mastered beats learning, then higher `passCount`,
 then more completed difficulties. A soft-deleted row never wins, so a verse
 the user reset or removed stays that way. The winner takes the losers'
-collections, and the losers are deleted outright. `session_attempts` has no
+collections, and the losers are deleted outright (allowed by the owner
+DELETE policy on `user_verses`; a delete that removes fewer rows throws). `session_attempts` has no
 foreign key to `user_verses`, so their history and stats stay.
 `fetchMasteredVerses` still lists one row per reference
 (`onePerReference`) for soft-deleted twins. This runs on every hydrate,
@@ -96,7 +97,6 @@ Adding a verse finds it by reference in any version (`addVerse`), so the add
 flow can't create a second translation of a held verse. A soft-deleted match
 comes back in the account translation, unless another row of that reference
 already holds it or the verse may be left out there; then it keeps its own.
-
 
 ## Propagation
 

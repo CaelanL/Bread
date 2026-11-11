@@ -38,6 +38,7 @@ test('account translation sync and switch', async (t) => {
   let profile = 'NIV';
   let heldProfile;
   let failLinks = false;
+  let deleteBlocked = false;
   const writes = [];
   const json = (body, status = 200) => Response.json(body, { status });
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
@@ -65,6 +66,11 @@ test('account translation sync and switch', async (t) => {
     if (url.pathname === '/rest/v1/verse_collections' && url.searchParams.get('select') === 'collection_id,added_at') {
       return failLinks ? json({ message: 'unavailable' }, 503) : json([]);
     }
+    if (method === 'DELETE' && url.pathname === '/rest/v1/user_verses') {
+      writes.push([method, url.pathname, url.searchParams.get('id')]);
+      const ids = url.searchParams.get('id').replace(/^in\.\(|\)$/g, '').split(',');
+      return json(deleteBlocked ? [] : ids.map((id) => ({ id })));
+    }
     if (method !== 'GET') {
       writes.push([method, url.pathname, url.searchParams.get('id')]);
       return new Response(null, { status: 204 });
@@ -90,6 +96,12 @@ test('account translation sync and switch', async (t) => {
     assert.equal(writes.some(([method]) => method === 'DELETE'), false);
 
     failLinks = false;
+    deleteBlocked = true;
+    await state().refresh();
+    assert.match(toasts.at(-1), /Pull to refresh/, 'a delete that removes no row is an error');
+
+    deleteBlocked = false;
+    writes.length = 0;
     toasts.length = 0;
     await state().refresh();
     assert.deepEqual(toasts, []);

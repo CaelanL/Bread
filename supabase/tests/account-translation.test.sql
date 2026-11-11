@@ -2,7 +2,7 @@
 -- Uses the seed logins. All writes roll back.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(13);
 
 select set_config('test.reader_a', (select id::text from auth.users where email = 'reader-a@example.test'), true);
 select set_config('test.reader_b', (select id::text from auth.users where email = 'reader-b@example.test'), true);
@@ -30,6 +30,26 @@ select is((select translation from public.profiles where user_id = current_setti
 set local role anon;
 select throws_ok($$select * from public.profiles$$, '42501', null, 'Anonymous clients cannot read profiles');
 reset role;
+
+-- Only the owner can delete a verse (collapse and removing an unmastered verse hard-delete).
+select set_config('test.a_verse', (select id::text from public.user_verses
+  where user_id = current_setting('test.reader_a')::uuid order by id limit 1), true);
+set local role anon;
+delete from public.user_verses where id = current_setting('test.a_verse')::uuid;
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.reader_b'), true);
+delete from public.user_verses where id = current_setting('test.a_verse')::uuid;
+reset role;
+select is((select count(*)::int from public.user_verses where id = current_setting('test.a_verse')::uuid), 1,
+  'Reader B and anonymous clients cannot delete reader A''s verse');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.reader_a'), true);
+select lives_ok(format($$delete from public.user_verses where id = %L$$, current_setting('test.a_verse')),
+  'Reader A deletes their own verse');
+reset role;
+select is((select count(*)::int from public.user_verses where id = current_setting('test.a_verse')::uuid), 0,
+  'Reader A''s deleted verse is gone');
 
 -- Reader B had an estimate when the same verse counted twice; now it counts once.
 insert into public.user_stats (user_id, avg_time_per_word_ms, total_words_mastered)

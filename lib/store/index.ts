@@ -224,6 +224,13 @@ function reportSyncFailure(e: unknown) {
 // The winner takes the losers' collections, then the losers are deleted for good, so a
 // reset or removed winner is never replaced by its twin. session_attempts has no foreign
 // key to user_verses, so their history stays.
+// A delete that RLS filters out returns no error, so the deleted ids are counted.
+async function hardDeleteVerses(ids: string[]) {
+  const { data, error } = await supabase.from('user_verses').delete().in('id', ids).select('id');
+  if (error) throw error;
+  if (data.length !== ids.length) throw new Error(`Deleted ${data.length} of ${ids.length} verses`);
+}
+
 async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
   const loserIds = losers.map(({ id }) => id);
   const { data: links, error } = await supabase
@@ -241,8 +248,7 @@ async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
     if (linkError) throw linkError;
   }
 
-  const { error: deleteError } = await supabase.from('user_verses').delete().in('id', loserIds);
-  if (deleteError) throw deleteError;
+  await hardDeleteVerses(loserIds);
 }
 
 async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promise<boolean> {
@@ -927,10 +933,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             .eq('id', verseServerId);
         } else {
           // Hard delete - remove completely
-          await supabase
-            .from('user_verses')
-            .delete()
-            .eq('id', verseServerId);
+          await hardDeleteVerses([verseServerId]);
         }
       }
     }
@@ -1246,14 +1249,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         } else {
           // Hard delete - remove completely
-          const { error } = await supabase
-            .from('user_verses')
-            .delete()
-            .eq('id', verseData.id);
+          await hardDeleteVerses([verseData.id]);
 
-          if (error) {
-            console.error('[STORE] Failed to hard delete verse:', error);
-          }
         }
       }
 

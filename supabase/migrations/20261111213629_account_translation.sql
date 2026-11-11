@@ -19,6 +19,11 @@ create policy "Owners update their profile" on public.profiles
 
 revoke all on public.profiles from anon;
 
+-- Collapsing two translations of one verse hard-deletes the loser, and removing an
+-- unmastered verse hard-deletes it. Without this policy both deleted nothing.
+create policy "Owners delete their verses" on public.user_verses
+  for delete to authenticated using ((select auth.uid()) = user_id);
+
 create trigger update_profiles_updated_at
   before update on public.profiles
   for each row execute function public.update_updated_at_column();
