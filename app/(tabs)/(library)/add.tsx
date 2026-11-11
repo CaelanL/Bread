@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/app-header';
+import { QuickAddField } from '@/components/library/QuickAddField';
 import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
@@ -28,6 +29,7 @@ export default function AddVerseScreen() {
 
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
 
   const handleBookPress = useDebouncedPress((book: string) => {
     setExpandedBook(expandedBook === book ? null : book);
@@ -119,7 +121,9 @@ export default function AddVerseScreen() {
         accountNote
       />
 
-      <ScrollView style={styles.scrollView}>
+      <QuickAddField collectionId={collectionId} onTypingChange={setIsTyping} />
+
+      <ScrollView style={[styles.scrollView, { opacity: isTyping ? 0.55 : 1 }]} keyboardShouldPersistTaps="handled">
         {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
         <View style={styles.bottomPadding} />
       </ScrollView>
