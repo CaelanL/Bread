@@ -11,6 +11,10 @@ name: collection-savers
     visible:
       id: tab-home
     timeout: 30000
+- runFlow:
+    file: subflows/set-account-translation.yaml
+    env:
+      VERSION: KJV
 - tapOn:
     id: tab-settings
 - scrollUntilVisible:
@@ -90,6 +94,10 @@ name: collection-savers
       id: tab-home
     timeout: 30000
 - runFlow:
+    file: subflows/set-account-translation.yaml
+    env:
+      VERSION: KJV
+- runFlow:
     file: subflows/assert-collection-savers.yaml
     env:
       SAVER_LABEL: ${output.savers.afterALabel}
@@ -100,6 +108,10 @@ name: collection-savers
     visible:
       id: tab-home
     timeout: 30000
+- runFlow:
+    file: subflows/set-account-translation.yaml
+    env:
+      VERSION: KJV
 - tapOn:
     id: tab-settings
 - scrollUntilVisible:

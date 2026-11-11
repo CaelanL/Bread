@@ -1,0 +1,19 @@
+# Sets the account translation in Settings. Every saved verse moves to it.
+appId: com.caelanliu.biblemem
+---
+- tapOn:
+    id: tab-settings
+- tapOn:
+    id: settings-translation-picker
+- extendedWaitUntil:
+    visible:
+      id: settings-translation-${VERSION}
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: settings-translation-${VERSION}
+    direction: DOWN
+- tapOn:
+    id: settings-translation-${VERSION}
+- assertNotVisible:
+    id: settings-translation-${VERSION}

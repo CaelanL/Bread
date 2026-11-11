@@ -1,0 +1,51 @@
+# reader-a switches the account translation from the add screen to bundled KJV:
+# every saved verse follows, mastery stays. Then back to ESV in Settings.
+appId: com.caelanliu.biblemem
+name: account-translation
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- runFlow:
+    file: subflows/set-account-translation.yaml
+    env:
+      VERSION: ESV
+- tapOn:
+    id: tab-library
+- tapOn: ".*My Verses.*"
+- extendedWaitUntil:
+    visible: ".*John 3:16 • ESV.*"
+    timeout: 20000
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fadd%3FcollectionId%3Dmy-verses
+- tapOn:
+    id: add-translation-picker
+- assertVisible: "Translation"
+- takeScreenshot: account-translation-1-picker
+- scrollUntilVisible:
+    element:
+      id: bible-translation-KJV
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: bible-translation-KJV
+- assertNotVisible: "Translation"
+- assertVisible: "Add Verse"
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fmy-verses
+- extendedWaitUntil:
+    visible: ".*John 3:16 • KJV.*"
+    timeout: 20000
+- assertVisible: ".*Romans 8:28 • KJV.*"
+- assertVisible: ".*Review now.*"
+- takeScreenshot: account-translation-2-collection
+- tapOn:
+    id: tab-settings
+- assertVisible: ".*Translation.*KJV.*"
+- takeScreenshot: account-translation-3-settings
+- runFlow:
+    file: subflows/set-account-translation.yaml
+    env:
+      VERSION: ESV
+- tapOn:
+    id: tab-library
+- extendedWaitUntil:
+    visible: ".*John 3:16 • ESV.*"
+    timeout: 20000

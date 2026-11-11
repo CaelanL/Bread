@@ -14,7 +14,7 @@ const names = rows.map((row) => row.user_collections.name).sort().join(', ');
 const expected = EXPECT_COPY === 'yes' ? 'My Verses, Verses for patience and encouragement' : 'My Verses';
 if (names !== expected) throw new Error('Unexpected verse memberships: ' + names);
 if (!rows.every((row) => row.verse_id === rows[0].verse_id
-  && row.user_verses.version === 'ESV'
+  && row.user_verses.version === rows[0].user_verses.version
   && row.user_verses.progress.hard.bestAccuracy === 92
   && row.user_verses.progress.engraved.passCount === 1)) {
   throw new Error('Copy changed verse identity, translation or progress');

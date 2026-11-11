@@ -7,6 +7,10 @@ name: collection-icons
     visible:
       id: tab-home
     timeout: 30000
+- runFlow:
+    file: subflows/set-account-translation.yaml
+    env:
+      VERSION: KJV
 - scrollUntilVisible:
     element:
       text: Light

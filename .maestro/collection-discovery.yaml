@@ -7,6 +7,11 @@ name: collection-discovery
     visible:
       id: tab-home
     timeout: 30000
+# Collections are added in the account translation; KJV is bundled.
+- runFlow:
+    file: subflows/set-account-translation.yaml
+    env:
+      VERSION: KJV
 - runFlow:
     file: subflows/browse-collections.yaml
     env:
@@ -48,17 +53,14 @@ name: collection-discovery
     direction: DOWN
 - tapOn:
     id: discover-anxiety-and-peace
-- assertVisible: "Add collection"
-- runFlow:
-    file: subflows/choose-curated-translation.yaml
-    env:
-      VERSION: KJV
 - assertVisible: "Open collection"
+# Previewing another translation doesn't offer a second copy.
 - runFlow:
     file: subflows/choose-curated-translation.yaml
     env:
       VERSION: ESV
-- assertVisible: "Add collection"
+- assertVisible: "Open collection"
+- assertVisible: "Previewing ESV.*"
 - runFlow:
     file: subflows/choose-curated-translation.yaml
     env:

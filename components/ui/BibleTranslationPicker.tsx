@@ -54,7 +54,7 @@ export function BibleTranslationPicker({ version, visible, onSelect, onClose, ac
           </Text>
           {showNote && (
             <Text testID="translation-account-note" style={[styles.note, { color: colors.icon }]}>
-              This changes your translation everywhere in Bread.
+              Changes your translation everywhere.
             </Text>
           )}
           <ScrollView style={styles.list}>
