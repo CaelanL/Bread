@@ -161,18 +161,36 @@ in `docs/architecture/bible-api-and-caching.md`.
 
 ## Missing-verse handling
 
-Some translations omit certain verses (e.g. Mark 9:44 in the ESV and NIV).
-A switch keeps such a held verse in its old version, see "Switching". The
-server side:
+Modern translations (ESV, NIV, NLT, NKJV footnotes them) drop 16 verses
+that the KJV numbers in the main text: Matthew 17:21, 18:11, 23:14; Mark
+7:16, 9:44, 9:46, 11:26, 15:28; Luke 17:36, 23:17; John 5:4; Acts 8:37,
+15:34, 24:7, 28:29; Romans 16:24. Longer passages that some translations
+bracket (Mark 16:9-20, John 7:53-8:11) keep their verse numbers and text,
+so they are not on the list.
 
-- The adapter logs a warning if its parsed verse count doesn't
-  match `getExpectedVerseCount` for that chapter.
-- The DB cache treats the chapter as incomplete and re-fetches on
-  every request — bad for the rate limit.
-- There is no version-aware verse-count override.
+`OMITTED_IN_SOME_TRANSLATIONS` in `lib/store/translation.ts` holds that
+list (plus Matthew 12:47, which ESV and NIV do print; a false positive
+costs one fetch and nothing else). `mayBeMissing()` decides which held
+verses a switch reads in the target translation before moving them
+(`isAvailableIn` in `lib/store/index.ts`): any empty verse in the range,
+or a failed fetch, keeps the row in its old version and shows one alert
+per verse and translation. The list is only a hint that limits fetches;
+the fetch result is what decides.
 
-This is a real limitation worth knowing about, especially for NIV
-where some verses are footnoted out.
+Adding a translation: check it against this list, and for two other
+shapes the fetch check catches but the UI doesn't explain:
+
+- Merged verse numbers (NLT prints some pairs as "3-4" under one
+  number). A single-verse fetch comes back empty, so the verse is kept
+  in its old version with the generic alert.
+- A verse missing in the new translation but not on the list. The switch
+  moves it without reading it, and its card then shows empty text. Add
+  the reference to the list.
+
+Server side: the adapter logs a warning when its parsed verse count
+doesn't match `getExpectedVerseCount`, the DB cache treats such a
+chapter as incomplete and re-fetches it on every request (bad for the
+rate limit), and there is no version-aware verse-count override.
 
 ## Browser checks
 
