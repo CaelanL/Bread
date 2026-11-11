@@ -1,18 +1,21 @@
+import { useIsFocused } from '@react-navigation/native';
+import { useAuth } from '@/lib/auth';
+import type { VOTM } from '@/lib/api/votm';
 import { AppHeader } from '@/components/app-header';
 import { ExploreCollections } from '@/components/home/ExploreCollections';
 import { InsightsCard, type InsightsCardRef } from '@/components/home/InsightsCard';
+import { IntroVideo } from '@/components/home/IntroVideo';
 import { VOTMCard } from '@/components/home/VOTMCard';
 import { AddToCollectionModal } from '@/components/ui/AddToCollectionModal';
 import { VerseExpandModal } from '@/components/ui/VerseExpandModal';
-import { Colors } from '@/constants/theme';
+import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { getCurrentVOTM, getVOTMMasteryCount, hasUserMasteredVOTM, type VOTM } from '@/lib/api/votm';
-import { getVerseText } from '@/lib/api/bible';
+import { useVotm } from '@/hooks/use-votm';
 import { useAppStore, useVerses } from '@/lib/store';
-import { showErrorToast } from '@/lib/toast';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Animated,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -85,17 +88,30 @@ export default function HomeScreen() {
   // Store data
   const verses = useVerses();
 
-  // VOTM state
-  const [votm, setVotm] = useState<VOTM | null>(null);
-  const [votmLoading, setVotmLoading] = useState(true);
-  const [verseText, setVerseText] = useState<string | null>(null);
-  const [textLoading, setTextLoading] = useState(false);
-  const [masteryCount, setMasteryCount] = useState(0);
-  const [userMastered, setUserMastered] = useState(false);
+  const { votm, loading: votmLoading, text: verseText, textLoading, masteryCount, userMastered, error: monthlyError, refresh: refreshVotm } = useVotm(defaultVersion);
 
   // Modal states
   const [expanded, setExpanded] = useState(false);
   const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
+  const [modalTransition, setModalTransition] = useState(false);
+  const [expandedPresented, setExpandedPresented] = useState(false);
+  const [pickerPresented, setPickerPresented] = useState(false);
+  const [modalContent, setModalContent] = useState<{ verse: VOTM; text: string | null; version: typeof defaultVersion } | null>(null);
+  const focused = useIsFocused();
+  const { user } = useAuth();
+  const pickerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (pickerTimer.current) clearTimeout(pickerTimer.current); }, []);
+
+  useEffect(() => {
+    if (pickerTimer.current) clearTimeout(pickerTimer.current);
+    setExpanded(false); setCollectionPickerVisible(false); setModalTransition(false);
+    setExpandedPresented(false); setPickerPresented(false); setModalContent(null);
+  }, [focused, user?.id]);
+  useEffect(() => {
+    if (!votm) return;
+    setModalContent((current) => current && current.verse.id === votm.id && current.version === defaultVersion
+      ? { ...current, text: verseText } : current);
+  }, [votm, verseText, defaultVersion]);
 
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -114,57 +130,11 @@ export default function HomeScreen() {
     );
   }, [votm, verses]);
 
-  // Fetch VOTM data
-  const fetchVOTM = async (isRefresh = false) => {
-    if (!isRefresh) setVotmLoading(true);
-    try {
-      const currentVotm = await getCurrentVOTM();
-      setVotm(currentVotm);
-
-      if (currentVotm) {
-        // Fetch additional data in parallel
-        const [count, mastered] = await Promise.all([
-          getVOTMMasteryCount(currentVotm),
-          hasUserMasteredVOTM(currentVotm),
-        ]);
-        setMasteryCount(count);
-        setUserMastered(mastered);
-
-        // Fetch verse text
-        if (!isRefresh) setTextLoading(true);
-        try {
-          const { text } = await getVerseText({
-            book: currentVotm.book,
-            chapter: currentVotm.chapter,
-            verseStart: currentVotm.verseStart,
-            verseEnd: currentVotm.verseEnd,
-            version: defaultVersion,
-          } as any);
-          setVerseText(text);
-        } catch (e) {
-          console.error('[HOME] Failed to fetch verse text:', e);
-          showErrorToast('Failed to load verse of the month.');
-        } finally {
-          if (!isRefresh) setTextLoading(false);
-        }
-      }
-    } catch (e) {
-      console.error('[HOME] Failed to fetch VOTM:', e);
-    } finally {
-      if (!isRefresh) setVotmLoading(false);
-    }
-  };
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchVOTM();
-  }, [defaultVersion]);
-
   // Pull to refresh handler
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([
-      fetchVOTM(true),
+      refreshVotm(),
       refresh(), // Refresh store data (collections, verses, mastered)
       insightsCardRef.current?.refresh(), // Refresh streak
     ]);
@@ -173,18 +143,26 @@ export default function HomeScreen() {
 
   const handleVOTMPress = () => {
     if (!votm) return;
+    setModalContent({ verse: votm, text: verseText, version: defaultVersion });
+    setExpandedPresented(process.env.EXPO_OS === 'ios');
     setExpanded(true);
   };
 
   const handleAddPress = () => {
     if (!votm) return;
+    setModalContent({ verse: votm, text: verseText, version: defaultVersion });
+    setPickerPresented(process.env.EXPO_OS === 'ios');
     setCollectionPickerVisible(true);
   };
 
   const handleAddFromExpand = () => {
+    setModalTransition(true);
     setExpanded(false);
-    // Small delay to let expand modal close first
-    setTimeout(() => setCollectionPickerVisible(true), 150);
+    pickerTimer.current = setTimeout(() => {
+      setPickerPresented(process.env.EXPO_OS === 'ios');
+      setCollectionPickerVisible(true);
+      setModalTransition(false);
+    }, Motion.exitMs);
   };
 
   return (
@@ -211,40 +189,48 @@ export default function HomeScreen() {
             version={defaultVersion}
             onPress={handleVOTMPress}
             onAddPress={handleAddPress}
+            onRetry={() => void refreshVotm()}
           />
         ) : (
           <View style={[styles.emptyCard, { backgroundColor: colors.cardAlt }]}>
             <Text style={[styles.emptyText, { color: colors.icon }]}>
-              No verse of the month yet.
+              {monthlyError ?? 'No verse of the month yet.'}
             </Text>
-            <Text style={[styles.emptySubtext, { color: colors.icon }]}>
-              Check back soon!
-            </Text>
+            {monthlyError ? (
+              <Pressable accessibilityRole="button" onPress={() => void refreshVotm()}>
+                <Text style={[styles.emptySubtext, { color: colors.primary }]}>Try again</Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.emptySubtext, { color: colors.icon }]}>Check back soon!</Text>
+            )}
           </View>
         )}
 
         {/* Insights Section */}
         <InsightsCard ref={insightsCardRef} />
         <ExploreCollections />
+        <IntroVideo blocked={expanded || collectionPickerVisible || modalTransition || expandedPresented || pickerPresented} />
       </ScrollView>
 
       {/* Expanded Verse Modal */}
       <VerseExpandModal
         visible={expanded}
-        verse={votm}
-        verseText={verseText}
-        version={defaultVersion}
+        verse={modalContent?.verse ?? null}
+        verseText={modalContent?.text ?? null}
+        version={modalContent?.version ?? defaultVersion}
         showAddButton={!userHasVerse}
         onClose={() => setExpanded(false)}
+        onDismiss={() => setExpandedPresented(false)}
         onAddPress={handleAddFromExpand}
       />
 
       {/* Collection Picker Modal */}
       <AddToCollectionModal
         visible={collectionPickerVisible}
-        verse={votm}
-        version={defaultVersion}
+        verse={modalContent?.verse ?? null}
+        version={modalContent?.version ?? defaultVersion}
         onClose={() => setCollectionPickerVisible(false)}
+        onDismiss={() => setPickerPresented(false)}
       />
     </View>
   );

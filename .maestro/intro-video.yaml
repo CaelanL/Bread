@@ -1,0 +1,78 @@
+appId: com.caelanliu.biblemem
+name: intro-video
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome%3FintroFixture%3Dsample
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 30000
+- assertVisible:
+    id: intro-close
+- extendedWaitUntil:
+    visible:
+      id: intro-progress
+      text: 00:0[1-8]
+    timeout: 10000
+- assertVisible:
+    id: intro-caption
+- takeScreenshot: intro-autoplay-captions
+- tapOn:
+    id: intro-close
+- assertNotVisible:
+    id: intro-video-modal
+- runScript:
+    file: scripts/intro-presentations.js
+    env:
+      READER: reader-b
+      EXPECTED: 1
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome%3FintroFixture%3Dsample
+- scrollUntilVisible:
+    element:
+      id: intro-watch
+    direction: DOWN
+- assertNotVisible:
+    id: intro-video-modal
+- takeScreenshot: intro-no-second-presentation
+- tapOn:
+    id: intro-watch
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 20000
+- extendedWaitUntil:
+    visible: Pause video
+    timeout: 10000
+- tapOn: Pause video
+- assertVisible: Play video
+- takeScreenshot: intro-paused-replay
+- tapOn: Play video
+- tapOn:
+    id: intro-close
+- assertNotVisible:
+    id: intro-video-modal
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome%3FintroFixture%3Dunavailable
+- scrollUntilVisible:
+    element:
+      id: intro-watch
+    direction: DOWN
+- assertNotVisible:
+    id: intro-video-modal
+- runScript:
+    file: scripts/intro-presentations.js
+    env:
+      READER: reader-a
+      EXPECTED: 0
+- takeScreenshot: intro-unavailable-source
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome
+- scrollUntilVisible:
+    element:
+      id: intro-watch
+    direction: DOWN
+- assertVisible:
+    id: intro-watch
+    text: .*Watch on Desiring God.*
+- assertNotVisible:
+    id: intro-video-modal
+- takeScreenshot: intro-unset-media

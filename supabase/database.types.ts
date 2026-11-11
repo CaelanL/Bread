@@ -177,6 +177,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"user_intro_presentations": {
+                  Row: {
+                    "claimed_at": string,"intro_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "claimed_at"?: string,"intro_id": string,"user_id": string
+                  }
+                  Update: {
+                    "claimed_at"?: string,"intro_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"user_stats": {
                   Row: {
                     "avg_time_per_word_ms": number | null,"total_words_mastered": number | null,"updated_at": string | null,"user_id": string
@@ -273,7 +287,10 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "cleanup_expired_verse_cache":
+            "claim_intro_presentation":
+{ Args: { "p_intro_id": string }; Returns: boolean
+                           },
+"cleanup_expired_verse_cache":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "cleanup_stale_transcription_locks":

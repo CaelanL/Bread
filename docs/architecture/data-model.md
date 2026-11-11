@@ -17,6 +17,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
 | `verse_collections` | per-user (via verse) | Many-to-many junction: `(verse_id, collection_id)` |
 | `verse_of_month` | global | Public monthly challenge verse, optional `image_url` |
+| `user_intro_presentations` | per-user | [Intro claims](../features/home.md#encouragement-video) |
 | `session_attempts` | per-user, append-only | One row per practice session (or partial early exit). Denormalized — no FK to `user_verses`. |
 | `user_stats` | per-user | Cron-precomputed: `total_words_mastered`, and `avg_time_per_word_ms` for users with 600+ words mastered. |
 | `popular_ranges` | global | Cron-aggregated top 1000 mastered verse ranges across all users |
@@ -214,11 +215,7 @@ by the edge function via `getUserTier()` to apply rate limits.
 
 ### `verse_of_month`, `popular_ranges`, `user_stats`
 
-`verse_of_month` (migrations 007, 008): Public-readable monthly
-challenge. Schema: `id`, `year_month` (TEXT, format `"YYYY-MM"`,
-unique), `book`, `chapter`, `verse_start`, `verse_end`, `image_url`
-(nullable, optional cover image). Inserted by admin via Supabase
-dashboard or service role.
+`verse_of_month`: [monthly references, artwork and access rules](../features/home.md#verse_of_month).
 
 `popular_ranges` (migrations `0101_popular_verses.sql`,
 `015_popular_verses_mastered_only.sql`): Top verse ranges across all
@@ -247,6 +244,7 @@ incrementally — the cron is the only writer.
 | `evict_lru_verses(version, max, needed)` | fn | LRU eviction batch |
 | `upsert_verses(book, chapter, version, jsonb)` | fn | bulk verse upsert |
 | `import_curated_collection()` | authenticated invoker | atomic Library import |
+| `claim_intro_presentation(text)` | authenticated invoker | one account claim |
 | `get_total_time_studied(user_id)` | fn (SECURITY DEFINER) | sums `recording_duration_ms` |
 | `get_current_streak(user_id, tz_offset_min)` | fn (SECURITY DEFINER) | counts consecutive practice days in user's TZ |
 | `update_popular_ranges()` | fn (SECURITY DEFINER) | rebuilds `popular_ranges` |

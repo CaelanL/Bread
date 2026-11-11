@@ -146,6 +146,8 @@ is `undetermined`. **Enable** requests permission, registers the token and inser
 if there's no row. **Maybe later** only sets the flag. `app/dev-sign-in.tsx` also sets it,
 because the card would cover every simulator screenshot.
 
+`q1Presented` coordinates the [Home intro](home.md#encouragement-video).
+
 `useSettingsBadge` puts a "1" on the Settings tab when flags are hydrated, the card was
 dismissed, Settings hasn't been visited, permission is `undetermined` or `denied`, and the
 user has a verse. Opening Settings clears it for good through `markSettingsVisited`. Keep

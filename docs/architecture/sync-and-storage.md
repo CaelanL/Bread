@@ -13,6 +13,7 @@ AsyncStorage holds device settings and small local caches.
 | Verses | ✓ | ✓ | — |
 | Mastered verses (incl. soft-deleted) | ✓ | ✓ | — |
 | [Curated saver totals](../features/home.md#community-saves) | ✓ (ledger) | ✓ | — |
+| [Intro presentation claims](../features/home.md#encouragement-video) | ✓ | runtime coordinator | — |
 | Session attempts | ✓ (append) | — | — |
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |

@@ -1,0 +1,35 @@
+appId: com.caelanliu.biblemem
+---
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      text: ${THEME}
+    direction: DOWN
+- tapOn: ${THEME}
+- tapOn:
+    id: tab-home
+- scrollUntilVisible:
+    element:
+      id: votm-card
+    direction: UP
+    centerElement: true
+- extendedWaitUntil:
+    visible:
+      id: votm-text
+    timeout: 20000
+- assertNotVisible: Unable to load verse text.*
+- takeScreenshot: monthly-${THEME}-card
+- tapOn:
+    id: votm-card
+- assertVisible:
+    id: verse-expand-close
+- takeScreenshot: monthly-${THEME}-expanded
+- tapOn:
+    id: verse-expand-close
+- tapOn:
+    id: votm-add
+- assertVisible: Add to Collection
+- takeScreenshot: monthly-${THEME}-add
+- tapOn:
+    id: collection-picker-close

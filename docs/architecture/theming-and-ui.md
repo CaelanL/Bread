@@ -190,6 +190,7 @@ have hex literals; don't copy them.
 | `PopoverMenu.tsx` | Floating context menu |
 | `VerseReferenceBadge.tsx` | "John 3:16 KJV" badge |
 | `VerseExpandModal.tsx` | Expanded verse text modal |
+| `IntroVideoModal.tsx` | Dark video surface, captions, close and playback controls |
 | `AddToCollectionModal.tsx` | Pick collection(s) for a verse |
 | `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
 | `EngravedIcon.tsx` | Special icon for engraved verses |

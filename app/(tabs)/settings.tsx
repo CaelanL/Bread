@@ -273,7 +273,7 @@ export default function SettingsScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Bible Settings */}
         <SettingsSection title="BIBLE">
-          <Pressable onPress={() => setVersionPickerVisible(true)}>
+          <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
             <SettingsRow
               icon="book.fill"
               label="Default Translation"
@@ -427,6 +427,7 @@ export default function SettingsScreen() {
                 return (
                   <Pressable
                     key={version.value}
+                    testID={`settings-translation-${version.value}`}
                     style={[
                       styles.modalOption,
                       isSelected && { backgroundColor: colors.primary },

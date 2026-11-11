@@ -24,6 +24,7 @@ interface AddToCollectionModalProps {
   verse: VerseData | null;
   version: BibleVersion;
   onClose: () => void;
+  onDismiss?: () => void;
   onSuccess?: () => void;
 }
 
@@ -32,6 +33,7 @@ export function AddToCollectionModal({
   verse,
   version,
   onClose,
+  onDismiss,
   onSuccess,
 }: AddToCollectionModalProps) {
   const colorScheme = useColorScheme();
@@ -104,6 +106,7 @@ export function AddToCollectionModal({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      onDismiss={onDismiss}
     >
       <BlurView
         intensity={isDark ? 40 : 80}
@@ -116,7 +119,7 @@ export function AddToCollectionModal({
             <Text style={[styles.pickerTitle, { color: colors.text }]}>
               Add to Collection
             </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable testID="collection-picker-close" accessibilityRole="button" accessibilityLabel="Close collection picker" onPress={onClose} hitSlop={8}>
               <IconSymbol name="xmark.circle.fill" size={28} color={colors.icon} />
             </Pressable>
           </View>

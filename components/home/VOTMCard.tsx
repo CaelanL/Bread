@@ -1,251 +1,130 @@
+import { Image } from 'expo-image';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { CollectionArt } from '@/components/collections/CollectionArt';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Fonts, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { VOTM } from '@/lib/api/votm';
-import { formatVerseReference } from '@/lib/storage';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
+import { formatReference } from '@/lib/bible';
 
 interface VOTMCardProps {
   votm: VOTM;
   verseText: string | null;
   textLoading: boolean;
-  masteryCount: number;
+  masteryCount: number | null;
   userMastered: boolean;
   userHasVerse: boolean;
   version: string;
   onPress: () => void;
   onAddPress: () => void;
+  onRetry: () => void;
 }
 
+const monthlyIcons = ['sunrise', 'dove', 'mountain', 'heart', 'lamp', 'globe'] as const;
+
 export function VOTMCard({
-  votm,
-  verseText,
-  textLoading,
-  masteryCount,
-  userMastered,
-  userHasVerse,
-  version,
-  onPress,
-  onAddPress,
+  votm, verseText, textLoading, masteryCount, userMastered, userHasVerse,
+  version, onPress, onAddPress, onRetry,
 }: VOTMCardProps) {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
+  const colors = Colors[useColorScheme() ?? 'light'];
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const imageKey = `${votm.id}:${votm.imageUrl}`;
+  const hasImage = !!votm.imageUrl && failedImage !== imageKey;
+  const month = Number(votm.yearMonth.slice(-2));
+  const icon = monthlyIcons[(month - 1) % monthlyIcons.length] ?? 'sunrise';
+  const reference = formatReference({ book: votm.book, chapter: votm.chapter, verse: votm.verseStart,
+    verseEnd: votm.verseEnd === votm.verseStart ? undefined : votm.verseEnd });
 
-  const hasImage = !!votm.imageUrl;
-
-  // Colors change when we have a background image
-  const accentColor = hasImage ? colors.white : colors.primary;
-  const textColor = hasImage ? colors.white : colors.text;
-  const subtextColor = hasImage ? 'rgba(255,255,255,0.7)' : colors.icon;
-  const badgeBg = hasImage
-    ? 'rgba(255,255,255,0.2)'
-    : colors.primaryLight;
-  const cardBg = colors.cardAlt;
-
-  // Format reference for display
-  const reference = formatVerseReference({
-    book: votm.book,
-    chapter: votm.chapter,
-    verseStart: votm.verseStart,
-    verseEnd: votm.verseEnd,
-  } as any);
-
-  const cardContent = (
-    <View style={styles.contentWrapper}>
-      {/* Overlay for image background */}
-      {hasImage && <View style={styles.overlay} />}
-
-      {/* Content */}
+  return (
+    <Pressable
+      testID="votm-card"
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, { backgroundColor: colors.card, opacity: pressed ? 0.9 : 1 }]}
+    >
+      <View style={styles.art} testID={hasImage ? 'votm-cover' : 'votm-art-fallback'}>
+        <CollectionArt icon={icon} size="hero" />
+        {hasImage && (
+          <Image
+            source={{ uri: votm.imageUrl! }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="disk"
+            onError={() => setFailedImage(imageKey)}
+            accessible={false}
+          />
+        )}
+      </View>
       <View style={styles.content}>
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <IconSymbol name="calendar" size={16} color={accentColor} />
-            <Text style={[styles.headerText, { color: accentColor }]}>
-              Verse of the Month
-            </Text>
+            <IconSymbol name="calendar" size={15} color={colors.icon} />
+            <Text style={[styles.headerText, { color: colors.icon }]}>Verse of the Month</Text>
           </View>
-          <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color={subtextColor} />
+          <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color={colors.icon} />
         </View>
-
-        {/* Reference Badge */}
-        <View style={styles.badgeRow}>
-          <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
-            <IconSymbol name="book.fill" size={14} color={accentColor} />
-            <Text style={[styles.referenceText, { color: accentColor }]}>
-              {reference}
-            </Text>
-          </View>
-          <Text style={[styles.versionText, { color: subtextColor }]}>
-            {version}
-          </Text>
+        <View style={styles.referenceRow}>
+          <Text style={[styles.reference, { color: colors.text }]}>{reference}</Text>
+          <Text style={[styles.version, { color: colors.icon }]}>{version}</Text>
         </View>
-
-        {/* Verse Text */}
         {textLoading ? (
-          <ActivityIndicator size="small" color={subtextColor} style={styles.loader} />
+          <ActivityIndicator color={colors.icon} style={styles.loader} />
+        ) : verseText ? (
+          <Text testID="votm-text" style={[styles.verseText, { color: colors.text }]} numberOfLines={3}>{verseText}</Text>
         ) : (
-          <Text style={[styles.verseText, { color: textColor }]} numberOfLines={3}>
-            {verseText || 'Unable to load verse text'}
-          </Text>
+          <Pressable testID="votm-retry" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onRetry(); }}>
+            <Text style={[styles.verseText, { color: colors.icon }]}>Unable to load verse text. Tap to retry.</Text>
+          </Pressable>
         )}
-
-        {/* Footer Stats */}
-        <View style={styles.footer}>
-          {/* Mastery Count */}
-          <View style={styles.stat}>
-            <IconSymbol name="person.2.fill" size={14} color={subtextColor} />
-            <Text style={[styles.statText, { color: subtextColor }]}>
+        <View style={[styles.footer, masteryCount === null && styles.footerWithoutCount]}>
+          {masteryCount !== null && <View style={styles.stat}>
+            <IconSymbol name="person.2.fill" size={14} color={colors.icon} />
+            <Text style={[styles.statText, { color: colors.icon }]}>
               {masteryCount} {masteryCount === 1 ? 'person has' : 'people have'} mastered
             </Text>
-          </View>
-
-          {/* User Status */}
-          {userMastered ? (
-            <View style={[styles.statusBadge, { backgroundColor: hasImage ? 'rgba(34,197,94,0.3)' : 'rgba(34,197,94,0.15)' }]}>
-              <IconSymbol name="checkmark.circle.fill" size={14} color={colors.success} />
-              <Text style={[styles.statusText, { color: colors.success }]}>
-                Mastered
-              </Text>
-            </View>
-          ) : userHasVerse ? (
-            <View style={[styles.statusBadge, { backgroundColor: badgeBg }]}>
-              <IconSymbol name="book.fill" size={12} color={accentColor} />
-              <Text style={[styles.statusText, { color: accentColor }]}>
-                In Library
+          </View>}
+          {userMastered || userHasVerse ? (
+            <View style={[styles.status, { backgroundColor: colors.primaryLight }]}>
+              <IconSymbol name={userMastered ? 'checkmark.circle.fill' : 'book.fill'} size={14} color={userMastered ? colors.success : colors.primary} />
+              <Text style={[styles.statusText, { color: userMastered ? colors.success : colors.primary }]}>
+                {userMastered ? 'Mastered' : 'In Library'}
               </Text>
             </View>
           ) : (
             <Pressable
-              style={[styles.statusBadge, { backgroundColor: badgeBg }]}
-              onPress={(e) => {
-                e.stopPropagation();
-                onAddPress();
-              }}
-              hitSlop={8}
+              testID="votm-add"
+              accessibilityRole="button"
+              accessibilityLabel="Add verse of the month to Library"
+              style={({ pressed }) => [styles.status, { backgroundColor: colors.primaryLight, transform: [{ scale: pressed ? Motion.pressScale : 1 }] }]}
+              onPress={(event) => { event.stopPropagation(); onAddPress(); }}
             >
-              <IconSymbol name="plus" size={12} color={accentColor} />
-              <Text style={[styles.statusText, { color: accentColor }]}>
-                Add to Library
-              </Text>
+              <IconSymbol name="plus" size={13} color={colors.primary} />
+              <Text style={[styles.statusText, { color: colors.primary }]}>Add to Library</Text>
             </Pressable>
           )}
         </View>
       </View>
-    </View>
-  );
-
-  if (hasImage) {
-    return (
-      <Pressable onPress={onPress} style={styles.card}>
-        <Image
-          source={{ uri: votm.imageUrl! }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          cachePolicy="disk"
-        />
-        {cardContent}
-      </Pressable>
-    );
-  }
-
-  return (
-    <Pressable
-      style={[styles.card, { backgroundColor: cardBg }]}
-      onPress={onPress}
-    >
-      {cardContent}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  contentWrapper: {
-    position: 'relative',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.16)',
-  },
-  content: {
-    padding: 16,
-    gap: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  referenceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  referenceText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  versionText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  verseText: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  loader: {
-    alignSelf: 'flex-start',
-    marginVertical: 8,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  stat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statText: {
-    fontSize: 13,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  card: { borderRadius: Radius.huge, overflow: 'hidden' },
+  art: { margin: 10, marginBottom: 0, borderRadius: Radius.xl, overflow: 'hidden' },
+  content: { padding: 18, gap: 12 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 },
+  headerText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase', flexShrink: 1 },
+  referenceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' },
+  reference: { fontFamily: Fonts.serif, fontSize: 25, fontWeight: '600' },
+  version: { fontSize: 13, fontWeight: '500' },
+  verseText: { fontSize: 16, lineHeight: 25 },
+  loader: { alignSelf: 'flex-start', marginVertical: 8 },
+  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  footerWithoutCount: { justifyContent: 'flex-end' },
+  stat: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  statText: { fontSize: 12, flexShrink: 1 },
+  status: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 12, minHeight: 44, borderRadius: Radius.full },
+  statusText: { fontSize: 13, fontWeight: '600' },
 });

@@ -52,6 +52,11 @@ export function Q1ExplainerCard({ isAuthenticated }: Props) {
   // racing two calls — keeps the OS prompt single-track.
   const requesting = useRef(false);
 
+  useEffect(() => () => useUxFlagsStore.getState().setQ1Presented(false), []);
+  useEffect(() => {
+    if (process.env.EXPO_OS !== 'ios') useUxFlagsStore.getState().setQ1Presented(visible);
+  }, [visible]);
+
   useEffect(() => {
     // Sign-out closes the card immediately — don't leave it hovering
     // over the auth screen.
@@ -65,7 +70,7 @@ export function Q1ExplainerCard({ isAuthenticated }: Props) {
     let cancelled = false;
     (async () => {
       const status = await getPermissionStatus();
-      if (cancelled) return;
+      if (cancelled || useUxFlagsStore.getState().q1Dismissed) return;
       if (status === 'undetermined') {
         setVisible(true);
       } else {
@@ -105,10 +110,12 @@ export function Q1ExplainerCard({ isAuthenticated }: Props) {
     setVisible(false);
   };
 
-  if (!visible) return null;
-
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={handleMaybeLater}>
+    <Modal
+      visible={visible} transparent animationType="fade" onRequestClose={handleMaybeLater}
+      onShow={() => useUxFlagsStore.getState().setQ1Presented(true)}
+      onDismiss={() => useUxFlagsStore.getState().setQ1Presented(false)}
+    >
       <View style={styles.overlay}>
         <View style={[styles.card, { backgroundColor: colors.cardAlt }]}>
           <Text style={[styles.title, { color: colors.text }]}>Get review reminders</Text>

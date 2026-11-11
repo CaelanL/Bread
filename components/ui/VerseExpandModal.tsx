@@ -19,6 +19,7 @@ interface VerseExpandModalProps {
   version: string;
   showAddButton?: boolean;
   onClose: () => void;
+  onDismiss?: () => void;
   onAddPress?: () => void;
 }
 
@@ -29,6 +30,7 @@ export function VerseExpandModal({
   version,
   showAddButton = false,
   onClose,
+  onDismiss,
   onAddPress,
 }: VerseExpandModalProps) {
   const colorScheme = useColorScheme();
@@ -43,6 +45,7 @@ export function VerseExpandModal({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      onDismiss={onDismiss}
     >
       <BlurView
         intensity={isDark ? 40 : 80}
@@ -61,7 +64,7 @@ export function VerseExpandModal({
               showAddButton={showAddButton}
               onAddPress={onAddPress}
             />
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable testID="verse-expand-close" accessibilityRole="button" accessibilityLabel="Close expanded verse" onPress={onClose} hitSlop={8}>
               <IconSymbol name="xmark.circle.fill" size={28} color={colors.icon} />
             </Pressable>
           </View>

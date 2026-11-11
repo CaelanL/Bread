@@ -97,6 +97,7 @@ only deletes the calling user — there's no parameter to delete
 someone else.
 
 Curated save totals follow the [anonymous retention rule](../features/home.md#community-saves).
+Intro presentation markers cascade with the account; see [Home](../features/home.md#encouragement-video).
 
 ### Sign out
 

@@ -72,6 +72,8 @@ Two modal styles, both handled at the root Stack:
 `app/notifications.tsx` and `app/reset-password.tsx` are plain root
 Stack screens.
 
+Home also presents the [intro player](../features/home.md#encouragement-video) through a React Native modal; it adds no route or tab.
+
 ## Dynamic routes
 
 | Route | Param(s) |

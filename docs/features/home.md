@@ -70,15 +70,24 @@ When adding a catalog entry, update `private.curated_catalog_ids` through an add
 migration alongside the client catalog. `curated-savers-catalog.test.mjs` checks
 parity. A new translation uses the same catalog contribution and needs no count ID.
 
-## Loading
+## Monthly schedule and loading
 
-`fetchVOTM` in `home.tsx` runs on mount and whenever `bibleVersion` changes. Pull to refresh runs it too, along with the store's `refresh()` and the card's streak refresh.
+`lib/votm/schedule.ts` defines thirty-six distinct one- or two-verse passages and
+120 month assignments from November 2026 through October 2036. The generated seed
+migration inserts missing months only. Existing selections and `image_url` values
+survive; they may differ from the generated three-year rotation. Schedule tests
+check canonical bounds, continuous coverage and SQL/source parity.
 
-1. `getCurrentVOTM` builds `YYYY-MM` from the device's local clock and selects that row from `verse_of_month`.
-2. If there is a row, `getVOTMMasteryCount` and `hasUserMasteredVOTM` run in parallel.
-3. `getVerseText` then fetches the text in the user's current version. See `docs/architecture/bible-api-and-caching.md`.
+`useVotm` loads on Home focus, translation change, app return and pull to refresh.
+While focused, a short local clock check detects a month change without a long
+JavaScript timer or server polling. `getCurrentVOTM` uses the device's local month.
 
-The skeleton stays up until all of that finishes. If there is no row, Home shows "No verse of the month yet." and "Check back soon!". If the text fails, Home shows a toast and the card reads "Unable to load verse text".
+The reference appears as soon as metadata arrives. Text and mastery reads run in
+parallel through the existing Bible/API paths. `createMonthlyLoader` clears old
+text immediately and ignores responses from an older month, version, account or
+blurred screen. A missing schedule row shows the empty card; a failed metadata
+read offers Try again. A text failure keeps the reference and offers a text retry.
+Only the current month's text is fetched, not the future schedule.
 
 ## `verse_of_month`
 
@@ -93,8 +102,8 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 ## The card
 
 - **Text.** Three lines at most, in the user's `bibleVersion`, with the version shown beside the reference.
-- **Image.** With `image_url`, `expo-image` draws it behind a dark overlay and the text turns white.
-- **Count.** "N people have mastered", from `getVOTMMasteryCount`.
+- **Art.** Optional `image_url` appears above the copy. Missing/broken images use themed native artwork. All text remains on a solid themed surface, independent of image loading.
+- **Count.** "N people have mastered" appears only after a successful `getVOTMMasteryCount` response. A successful zero is shown; an unknown/unavailable count is omitted.
 - **User status.** One of these, in this order:
 
 | Condition | Shows |
@@ -105,6 +114,46 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 
 **Tapping.** The card opens `VerseExpandModal`. It does not start a session. "Add to Library" on the card, or the add button in the modal, opens `AddToCollectionModal`.
 
+## Encouragement video
+
+Home's Why memorize Scripture entry opens the credited official source when
+`INTRO_VIDEO.playback` is unset. Activating in-app playback requires a rights-cleared
+asset and matching timed captions in `lib/intro/media.ts`; the stable intro ID does
+not change for a new cut, title or soundtrack. No third-party sermon is bundled.
+
+`user_intro_presentations` uses `(user_id, intro_id)` as its key, a claim timestamp,
+and an account FK with ON DELETE CASCADE. Owner-only SELECT/INSERT policies and
+grants deny anonymous access and client UPDATE/DELETE. `claim_intro_presentation`
+is an authenticated invoker with an empty search path; insert-on-conflict returns
+true only for the winning insert.
+
+`createIntroCoordinator` reads the account's presentation state, prepares media in
+a paused hidden native Video, configures audio, then atomically claims immediately
+before presenting. Reads and claims use the initiating session's token. Only a
+confirmed winning claim can autoplay; local absence, offline state, failed reads,
+failed preparation and lost claim acknowledgements never authorize presentation.
+A committed claim may consume the opportunity before a visible frame if focus is
+lost or playback later fails. Manual replay remains available and does not reset
+account eligibility. No writes are queued offline.
+
+The coordinator requires focused/active Home, completed hydration, settled reminder
+UX and no verse/collection modal. Home retains opened verse/picker content through metadata refresh and blocks intro until native dismissal. Q1's transient native presentation flag blocks an
+overlap through its actual dismissal; a stale reminder check rechecks dismissal
+before opening. Backgrounding, navigation, account changes and close unload the
+players. Audio starts with `playsInSilentModeIOS: false`, recording disabled and no
+background playback. Cleanup does not restore a guessed recording audio mode.
+
+`IntroVideoModal` exposes Close immediately, timed captions, pause and replay. Actual
+sound-on, silent-switch, background/closed silence and recording afterward must be
+checked on a physical iPhone; simulator playback alone cannot establish them.
+
+For local development only, `/home?introFixture=sample` uses an original nine-second
+tone/video fixture; `introFixture=unavailable` exercises a failed source. Both need
+`__DEV__` and a loopback/private-LAN Supabase URL. This guard does not loosen dev
+sign-in. Ordinary startup has no fixture. The server marker is shared by all devices
+for the same local account, so reset the disposable test stack before a fresh intro
+flow rather than deleting markers through the client.
+
 ## Rules
 
 1. **VOTM is keyed by `year_month` from the local clock.** Don't switch to UTC without working through the rollover hour.
@@ -114,26 +163,28 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 
 ## Sharp edges
 
-- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it with `p_book`, `p_chapter`, `p_verse_start` and `p_verse_end`, but no file in `supabase/` defines it, including `supabase/migrations/` and `supabase/database.types.ts`. On a database built from the migrations the call errors, `getVOTMMasteryCount` logs it and returns 0, and the card reads "0 people have mastered". Nothing throws. The client's untyped `SupabaseClient` means typecheck can't catch it. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
-- **A failed load looks like no verse.** `getCurrentVOTM` returns null on any error, so a network failure shows "No verse of the month yet."
-- **Home doesn't refetch on focus.** After mastering the VOTM, the status stays "In Library" until pull to refresh. An app left open across a month boundary keeps the old verse the same way.
-- **A broken image URL leaves unreadable text.** The card has no `onError` and no fallback. With `image_url` set it also drops its background color, so white text sits on the page background.
-- **A slow text fetch holds up the whole card.** The skeleton waits for the text, so the card's own text spinner never shows on a normal load.
+- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it with `p_book`, `p_chapter`, `p_verse_start` and `p_verse_end`, but no file in `supabase/` defines it, including `supabase/migrations/` and `supabase/database.types.ts`. On a database built from the migrations the call is unavailable, so `getVOTMMasteryCount` returns null and the card hides the optional count without an error banner. The client's untyped `SupabaseClient` means typecheck can't catch it. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
 
 ## Browser checks
 
-The seed adds no `verse_of_month` row.
+The release migration seeds the monthly schedule; the local seed preserves it.
 
-- `npm run sim -- shot /home --as reader-a`: the "No verse of the month yet." card, and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
-- `npm run sim -- shot /home --as reader-b`: the same empty VOTM card, and an insights card with 0 day streak, 0 mastered, 0 in progress.
-- Add a local `verse_of_month` row for the current month, then `npm run sim -- shot /home --as reader-a`: the VOTM card with reference, text and "0 people have mastered" (the missing function).
+- `npm run sim -- shot /home --as reader-a`: the current monthly card, and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
+- `npm run sim -- shot /home --as reader-b`: the same current monthly card, and an insights card with 0 day streak, 0 mastered, 0 in progress.
+- `npm run sim -- shot /home --as reader-a`: the VOTM card with reference/text and no optional mastery total (the missing function).
 - `npm run sim -- flow collection-discovery`: Home and Explore in both themes, introduction, KJV preview, add and open the saved copy.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. These checks use the local environment; the migration test rolls back all fixtures.
-- By hand, with that row: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
+- `npm run sim -- flow monthly-verse`: solid text, default/image-error artwork, expand and add picker in both themes.
+- `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second automatic presentation, replay and unavailable/unset media.
+- `npm run sim -- flow intro-after-reminders`: fresh UI sign-in, no intro claim while the reminder is visible, then autoplay after native reminder dismissal. Run before that account has claimed the fixture.
+- By hand: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
 
 ## Decisions
 
 - 2025-12-24 · VOTM stores a reference with no version · The challenge is the verse, and users read it in their own translation.
 - 2026-01-20 · The count goes through an RPC · RLS stops a client counting other users' rows. The function it calls never reached a migration.
+
+- 2026-11-10 · Monthly choices use a thirty-six-passage cycle and fill only missing months · Existing editorial selections and artwork remain authoritative.
+- 2026-11-10 · An account-wide atomic claim controls automatic intro presentation · Prefer suppressing an ambiguous attempt over surprising users twice; explicit replay remains available.
