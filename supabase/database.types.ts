@@ -37,6 +37,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"curated_collection_savers": {
+                  Row: {
+                    "catalog_id": string,"id": number,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "catalog_id": string,"id"?: never,"user_id"?: string | null
+                  }
+                  Update: {
+                    "catalog_id"?: string,"id"?: never,"user_id"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"device_tokens": {
                   Row: {
                     "created_at": string,"expo_token": string,"id": string,"last_seen_at": string,"platform": string,"user_id": string
@@ -151,14 +165,28 @@ export type Database = {
                   ]
                 },"user_collections": {
                   Row: {
-                    "client_id": string,"created_at": string,"deleted_at": string | null,"id": string,"is_default": boolean,"name": string,"position": number | null,"sort_preference": string | null,"updated_at": string,"user_id": string
+                    "client_id": string,"created_at": string,"deleted_at": string | null,"icon_key": string | null,"id": string,"is_default": boolean,"name": string,"position": number | null,"sort_preference": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
+                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"user_intro_presentations": {
+                  Row: {
+                    "claimed_at": string,"intro_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "claimed_at"?: string,"intro_id": string,"user_id": string
+                  }
+                  Update: {
+                    "claimed_at"?: string,"intro_id"?: string,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -259,7 +287,10 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "cleanup_expired_verse_cache":
+            "claim_intro_presentation":
+{ Args: { "p_intro_id": string }; Returns: boolean
+                           },
+"cleanup_expired_verse_cache":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "cleanup_stale_transcription_locks":
@@ -287,6 +318,11 @@ isOneToOne: false
 "get_cron_secret":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"get_curated_collection_saver_counts":
+{ Args: { "p_catalog_ids": (string)[] }; Returns: {
+              "catalog_id": string,"saver_count": number
+            }[]
+                           },
 "get_current_streak":
 { Args: { "p_tz_offset_min": number,"p_user_id": string }; Returns: number
                            },
@@ -295,6 +331,9 @@ isOneToOne: false
                            },
 "get_verse_cache_count":
 { Args: { "p_version": string }; Returns: number
+                           },
+"import_curated_collection":
+{ Args: { "p_catalog_id": string,"p_icon_key": string,"p_name": string,"p_passages": Json,"p_version": string }; Returns: string
                            },
 "local_time_in_tz":
 { Args: { "tz": string }; Returns: string

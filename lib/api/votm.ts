@@ -18,20 +18,21 @@ export interface VOTM {
 /**
  * Get the current month's Verse of the Month
  */
-export async function getCurrentVOTM(): Promise<VOTM | null> {
-  // Use local timezone, not UTC
-  const now = new Date();
-  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+export function localMonthKey(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export async function getCurrentVOTM(now = new Date()): Promise<VOTM | null> {
+  const yearMonth = localMonthKey(now);
 
   const { data, error } = await supabase
     .from('verse_of_month')
     .select('*')
     .eq('year_month', yearMonth)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
-    return null;
-  }
+  if (error) throw new Error('Unable to load this month’s verse.');
+  if (!data) return null;
 
   return {
     id: data.id,
@@ -48,7 +49,7 @@ export async function getCurrentVOTM(): Promise<VOTM | null> {
  * Get count of users who have mastered the VOTM (any Bible version)
  * Uses SECURITY DEFINER function to bypass RLS and count across all users
  */
-export async function getVOTMMasteryCount(votm: VOTM): Promise<number> {
+export async function getVOTMMasteryCount(votm: VOTM): Promise<number | null> {
   const { data, error } = await supabase.rpc('get_votm_mastery_count', {
     p_book: votm.book,
     p_chapter: votm.chapter,
@@ -56,12 +57,8 @@ export async function getVOTMMasteryCount(votm: VOTM): Promise<number> {
     p_verse_end: votm.verseEnd,
   });
 
-  if (error) {
-    console.error('[VOTM] Failed to get mastery count:', error);
-    return 0;
-  }
-
-  return data ?? 0;
+  if (error) return null;
+  return typeof data === 'number' ? data : null;
 }
 
 /**

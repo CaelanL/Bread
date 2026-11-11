@@ -12,6 +12,8 @@ AsyncStorage holds device settings and small local caches.
 | Collections | ✓ | ✓ | — |
 | Verses | ✓ | ✓ | — |
 | Mastered verses (incl. soft-deleted) | ✓ | ✓ | — |
+| [Curated saver totals](../features/home.md#community-saves) | ✓ (ledger) | ✓ | — |
+| [Intro presentation claims](../features/home.md#encouragement-video) | ✓ | runtime coordinator | — |
 | Session attempts | ✓ (append) | — | — |
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
@@ -68,7 +70,9 @@ interface AppState {
   setColorMode: (mode) => Promise<void>;
   setBibleVersion: (v) => Promise<void>;
   setReviewMaxIntervalDays: (days) => Promise<void>;
-  addCollection: (name) => Promise<Collection>;
+  addCollection: (name, iconKey?) => Promise<Collection>;
+  importCuratedCollection: (catalogId, version) => Promise<{ collectionId: string; loaded: boolean }>;
+  setCollectionIcon: (id, iconKey) => Promise<void>;
   renameCollection: (id, name) => Promise<void>;
   reorderCollections: (ids) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
@@ -226,7 +230,7 @@ still fail without retry.
 
 Holds the shared types (`SavedVerse`, `Collection`, `VerseProgress`),
 `DEFAULT_PROGRESS`, the row parsers (`parseProgress`,
-`parseVerseRowExtras`, `parseSortPreference`), the virtual collection
+`parseVerseRowExtras`, `parseSortPreference`, `parseCollectionRow`), the virtual collection
 IDs, and `formatVerseReference`.
 
 The store calls two of its writes: `updateCollectionSort` and

@@ -74,6 +74,7 @@ If you add a new version, every one of these needs an entry:
 | `supabase/functions/bible/adapters/apibible.ts` | If using API.Bible: add Bible ID to `BIBLE_IDS` |
 | `supabase/functions/bible/adapters/esv.ts` | Only if it's a new ESV-API-served version (unlikely) |
 | Settings and add-verse UI | Render from `BIBLE_VERSIONS`, nothing to do |
+| Discovery content | Verify distinct references in `lib/collections/catalog.ts` and `lib/votm/schedule.ts` through `fetchVerse`. `tests/verify-discovery-translations.ts` checks every keyed verse and logs references/status only, never Scripture text. Run from the isolated local verifier with matching `.env.local` and local seed credentials, outside CI. Provider secrets and test quota stay local; see `edge-functions.md`. |
 
 If using a brand-new external API, write a new adapter implementing
 the `BibleAdapter` contract (see

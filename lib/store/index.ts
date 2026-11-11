@@ -7,11 +7,16 @@
  */
 
 import { ensureAuth } from '@/lib/api';
-import { getVerseText } from '@/lib/api/bible';
+import { fetchVerse, getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
+import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
+import { importCollection } from '@/lib/collections/import';
+import { validateCollectionPassages } from '@/lib/collections/passages';
+import { readCollectionSavers } from '@/lib/collections/savers';
+import type { CollectionIconKey } from '@/lib/collections/icons';
 import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
-import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress, parseSortPreference, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
+import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -67,6 +72,7 @@ interface AppState {
   collections: Collection[];
   verses: SavedVerse[];
   masteredVerses: SavedVerse[];
+  curatedSaverCounts: Partial<Record<string, number>>;
 
   // Settings
   colorMode: ColorMode;
@@ -91,6 +97,7 @@ interface AppState {
   fetchCollections: () => Promise<boolean>;
   fetchVerses: () => Promise<boolean>;
   fetchMasteredVerses: () => Promise<boolean>;
+  fetchCuratedSaverCounts: (signal?: AbortSignal) => Promise<boolean>;
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -101,7 +108,9 @@ interface AppState {
   setReviewMaxIntervalDays: (days: number) => Promise<void>;
 
   // Actions - Collections
-  addCollection: (name: string) => Promise<Collection>;
+  addCollection: (name: string, iconKey?: CollectionIconKey) => Promise<Collection>;
+  importCuratedCollection: (catalogId: string, version: BibleVersion) => Promise<{ collectionId: string; loaded: boolean }>;
+  setCollectionIcon: (id: string, iconKey: CollectionIconKey) => Promise<void>;
   renameCollection: (id: string, name: string) => Promise<void>;
   reorderCollections: (ids: string[]) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
@@ -138,6 +147,7 @@ async function getCurrentUserId(): Promise<string> {
 }
 
 let accountGeneration = 0;
+let saverReadGeneration = 0;
 
 async function getCollectionWriteSession(generation: number) {
   const result = await supabase.auth.getSession().catch((error: unknown) => {
@@ -175,6 +185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   collections: [],
   verses: [],
   masteredVerses: [],
+  curatedSaverCounts: {},
   colorMode: 'system',
   bibleVersion: 'ESV',
   reviewMaxIntervalDays: DEFAULT_MAX_INTERVAL_DAYS,
@@ -191,6 +202,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
 
   // ============ FETCH ACTIONS ============
+
+  fetchCuratedSaverCounts: async (signal) => {
+    const generation = accountGeneration;
+    const request = ++saverReadGeneration;
+    try {
+      const session = await getCollectionWriteSession(generation);
+      if (!session || signal?.aborted) return false;
+      const counts = await readCollectionSavers(supabase, session, signal);
+      const current = await getCollectionWriteSession(generation);
+      if (signal?.aborted || request !== saverReadGeneration
+        || generation !== accountGeneration || current?.user.id !== session.user.id) return false;
+      set({ curatedSaverCounts: counts });
+      return true;
+    } catch {
+      return false;
+    }
+  },
 
   fetchCollections: async () => {
     if (get().collectionOrderSaving) return true;
@@ -214,13 +242,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         return false;
       }
 
-      const collections: Collection[] = data.map((c) => ({
-        id: c.client_id,
-        name: c.name,
-        isDefault: c.is_default,
-        createdAt: new Date(c.created_at).getTime(),
-        sortPreference: parseSortPreference(c.sort_preference),
-      }));
+      const collections = data.map(parseCollectionRow);
 
       const pinned = [
         collections.find((c) => c.isDefault) ?? DEFAULT_COLLECTION,
@@ -414,6 +436,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchCollections(),
       get().fetchVerses(),
       get().fetchMasteredVerses(),
+      get().fetchCuratedSaverCounts(),
     ]);
   },
 
@@ -456,7 +479,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ============ COLLECTION ACTIONS ============
 
-  addCollection: async (name: string) => {
+  addCollection: async (name, iconKey) => {
     const userId = await getCurrentUserId();
     const clientId = `collection-${Date.now()}`;
     const createdAt = new Date();
@@ -466,6 +489,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       client_id: clientId,
       name,
       is_default: false,
+      ...(iconKey ? { icon_key: iconKey } : {}),
       created_at: createdAt.toISOString(),
     });
 
@@ -478,6 +502,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: clientId,
       name,
       isDefault: false,
+      iconKey,
       createdAt: createdAt.getTime(),
     };
 
@@ -487,6 +512,65 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     return newCollection;
+  },
+
+  importCuratedCollection: async (catalogId, version) => {
+    const catalog = CURATED_COLLECTIONS.find(({ id }) => id === catalogId);
+    if (!catalog) throw new Error('Collection not found.');
+
+    const generation = accountGeneration;
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
+
+    await validateCollectionPassages(catalog.passages, version, fetchVerse);
+    const current = await getCollectionWriteSession(generation);
+    if (current?.user.id !== session.user.id || generation !== accountGeneration) {
+      throw new Error('Your account changed.');
+    }
+    const { collectionId, row } = await importCollection(supabase, current, catalogId, version, () => {
+      if (generation === accountGeneration) void get().fetchCuratedSaverCounts();
+    });
+    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!row) return { collectionId, loaded: false };
+
+    const collection = parseCollectionRow(row);
+    const verses = row.verse_collections.map(({ user_verses, added_at }) =>
+      parseVerseMembership(user_verses, collection.id, added_at),
+    );
+    set((state) => ({
+      collections: state.collections.some(({ id }) => id === collection.id)
+        ? state.collections.map((current) => current.id === collection.id ? collection : current)
+        : [...state.collections, collection],
+      verses: [...verses, ...state.verses.filter(({ collectionId: id }) => id !== collection.id)],
+    }));
+    return { collectionId, loaded: true };
+  },
+
+  setCollectionIcon: async (id, iconKey) => {
+    const generation = accountGeneration;
+    const collection = get().collections.find((item) => item.id === id);
+    if (!collection || collection.isDefault || collection.isVirtual) {
+      throw new Error('This collection’s icon cannot be changed.');
+    }
+
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
+    const { data, error } = await supabase
+      .from('user_collections')
+      .update({ icon_key: iconKey })
+      .eq('user_id', session.user.id)
+      .eq('client_id', id)
+      .eq('is_default', false)
+      .is('deleted_at', null)
+      .setHeader('Authorization', `Bearer ${session.access_token}`)
+      .select('icon_key')
+      .single();
+
+    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    if (error || !data) throw new Error('Could not save the collection icon. Try again.');
+    set((state) => ({
+      collections: state.collections.map((current) => current.id === id ? { ...current, iconKey } : current),
+    }));
   },
 
   renameCollection: async (id, name) => {
@@ -1109,6 +1193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       collections: [],
       verses: [],
       masteredVerses: [],
+      curatedSaverCounts: {},
       // Device prefs (colorMode, bibleVersion, reviewMaxIntervalDays,
       // masteredSort, inProgressSort) are preserved across sign-out by
       // virtue of being absent from this set call — Zustand keeps
@@ -1132,6 +1217,7 @@ export const useCollections = () => useAppStore((state) => state.collections);
 export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
 export const useStoreError = () => useAppStore((state) => state.error);
+export const useCuratedSaverCount = (catalogId: string) => useAppStore((state) => state.curatedSaverCounts[catalogId]);
 export const useReviewMaxIntervalDays = () => useAppStore((state) => state.reviewMaxIntervalDays);
 
 /**

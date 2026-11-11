@@ -21,7 +21,7 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
       }}>
       <Tabs.Screen
-        name="home"
+        name="(home)"
         options={{
           title: 'Home',
           tabBarButtonTestID: 'tab-home',
@@ -43,18 +43,6 @@ export default function TabLayout() {
           tabBarButtonTestID: 'tab-settings',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
           tabBarBadge: settingsBadge ? '1' : undefined,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null, // Hide this tab for now
-        }}
-      />
-      <Tabs.Screen
-        name="insights"
-        options={{
-          href: null, // Navigate via InsightsCard, not a tab
         }}
       />
     </Tabs>

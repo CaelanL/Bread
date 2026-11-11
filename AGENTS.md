@@ -4,7 +4,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 ## Map
 - Stack: Expo SDK 54, React Native 0.81, React 19, TypeScript strict, Expo Router 6, Zustand 5, `react-native-reanimated` 4, Supabase (Postgres, Auth, Edge Functions in Deno). iOS is what ships. Android and web run but aren't released.
 - `app/` — screens and routes. `components/` — UI, grouped by area, `ui/` holds shared primitives. `hooks/` — `use-study-session.ts`, `use-recording.ts` and others. `constants/theme.ts` — tokens.
-- `lib/` — `store/` (Zustand, mastery), `api/` (Bible, recording, stats), `storage/`, `sync/`, `auth/`, `notifications/`, `transcription/`, `bible/`, plus `align.ts` and `study-chunks.ts`. Co-locate new code with its feature. A new file here must start with `// lib-ok: <reason>`.
+- `lib/` — `store/` (Zustand, mastery), `api/` (Bible, recording, stats), `storage/`, `sync/`, `auth/`, `notifications/`, `transcription/`, `bible/`, `collections/` (curated catalog, import, icons, savers), `votm/` (monthly schedule), `intro/` (dormant video player), plus `align.ts` and `study-chunks.ts`. Co-locate new code with its feature. A new file here must start with `// lib-ok: <reason>`.
 - `supabase/` — `migrations/`, `functions/` (`bible`, `process-recording`, `transcription-token`, `send-notifications`), `tests/` (pgTAP), `seed.sql`, `database.types.ts` (generated). `scripts/` — kit tools. `.eas/workflows/` — deploy.
 - Old code comments and migrations cite `CLAUDE.md` invariants, which are the numbered list below, and `docs/features/<change>.md` files that no longer exist. Look in the area doc or git history instead.
 

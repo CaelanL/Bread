@@ -1,12 +1,14 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { COLLECTION_ICONS, COLLECTION_VECTOR_GLYPHS, isCollectionVectorSymbol } from '@/lib/collections/icons';
 import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-type IconSymbolName = keyof typeof MAPPING;
+type IconSymbolName = keyof typeof MAPPING | keyof typeof COLLECTION_VECTOR_GLYPHS;
 
 /**
  * Add your SF Symbols to Material Icons mappings here.
@@ -14,6 +16,9 @@ type IconSymbolName = keyof typeof MAPPING;
  * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
  */
 const MAPPING = {
+  ...Object.fromEntries(Object.values(COLLECTION_ICONS).flatMap((icon) =>
+    'fallback' in icon ? [[icon.symbol, icon.fallback]] : []
+  )),
   'house.fill': 'home',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
@@ -24,6 +29,9 @@ const MAPPING = {
   'book.fill': 'menu-book',
   'book.closed': 'book',
   'mic.fill': 'mic',
+  'play.fill': 'play-arrow',
+  'pause.fill': 'pause',
+  'arrow.up.right': 'north-east',
   'xmark': 'close',
   'checkmark': 'check',
   'arrow.counterclockwise': 'refresh',
@@ -54,5 +62,8 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
+  if (isCollectionVectorSymbol(name)) {
+    return <MaterialCommunityIcons color={color} size={size} name={COLLECTION_VECTOR_GLYPHS[name]} style={style} />;
+  }
   return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
 }

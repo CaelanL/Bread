@@ -8,7 +8,10 @@ just `StyleSheet.create` per file plus inline dynamic styles.
 
 ## Color tokens
 
-Defined in `constants/theme.ts`.
+Defined in `constants/theme.ts`. `CollectionArtColors` supplies the
+decorative surfaces and symbol colors for the curated collection art.
+Titles, subtitles, and introductions use the core text colors on solid
+surfaces.
 
 ### Light mode
 
@@ -141,8 +144,7 @@ export function MyComponent() {
 
 `ThemedText` and `ThemedView` (`components/themed-text.tsx`,
 `themed-view.tsx`) are used only by Expo template leftovers:
-`app/modal.tsx`, `app/(tabs)/explore.tsx`,
-`components/parallax-scroll-view.tsx` and
+`app/modal.tsx`, `components/parallax-scroll-view.tsx` and
 `components/ui/collapsible.tsx`. Don't rewrite existing components to
 use them.
 
@@ -187,6 +189,7 @@ have hex literals; don't copy them.
 | `PopoverMenu.tsx` | Floating context menu |
 | `VerseReferenceBadge.tsx` | "John 3:16 KJV" badge |
 | `VerseExpandModal.tsx` | Expanded verse text modal |
+| `IntroVideoModal.tsx` | Dark video surface, captions, close and playback controls |
 | `AddToCollectionModal.tsx` | Pick collection(s) for a verse |
 | `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
@@ -211,6 +214,10 @@ Adding a new icon means:
 2. Find the closest Material Icons equivalent (e.g. `home`).
 3. Add a line to `MAPPING` in `icon-symbol.tsx`.
 4. Use `<IconSymbol name="house.fill" size={24} color={colors.tint} />`.
+
+The collection icon registry contributes its fallback glyphs to
+`MAPPING` and provides older iOS fallbacks. Cross, sword, and praying hands
+use Material Community Icons through `IconSymbol` on every platform.
 
 Forgetting step 3 means the icon renders correctly on iOS and not
 on Android / web.
@@ -275,3 +282,7 @@ Invariant 8 is above. Also:
 - **No design-system documentation beyond this file** —
   `components/ui/` is the de facto catalog. If a new primitive is
   added, list it here.
+
+## Decisions
+
+- 2026-11-10 · Translation-picker backdrops are not accessibility elements · Settings' outer Pressable otherwise grouped the entire popup, hiding individual translation choices from native accessibility and UI automation. `accessible={false}` preserves the existing layout and dismissal behavior while exposing the option rows.

@@ -1,8 +1,7 @@
 # Data Model
 
-The schema lives in `supabase/migrations/`. The migrations are the
-source of truth — this doc explains the shape and the *why*. For every
-column and type, see the generated `supabase/database.types.ts`.
+Schema: `supabase/migrations/`. Generated columns and types:
+`supabase/database.types.ts`.
 
 ## Tables overview
 
@@ -13,10 +12,12 @@ column and type, see the generated `supabase/database.types.ts`.
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
 | `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits, see `docs/architecture/bible-api-and-caching.md` |
 | `app_config` | shared | Key/value settings for the stats cron (`stats_min_words`, `stats_cron_schedule`) |
-| `user_collections` | per-user | User's collections, soft-deletable, identified by `(user_id, client_id)` |
+| `user_collections` | per-user | Editable, soft-deleted; IDs unique per user |
+| `curated_collection_savers` | global | [All-time contribution ledger and access rules](../features/home.md#community-saves) |
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
 | `verse_collections` | per-user (via verse) | Many-to-many junction: `(verse_id, collection_id)` |
 | `verse_of_month` | global | Public monthly challenge verse, optional `image_url` |
+| `user_intro_presentations` | per-user | [Intro claims](../features/home.md#encouragement-video) |
 | `session_attempts` | per-user, append-only | One row per practice session (or partial early exit). Denormalized — no FK to `user_verses`. |
 | `user_stats` | per-user | Cron-precomputed: `total_words_mastered`, and `avg_time_per_word_ms` for users with 600+ words mastered. |
 | `popular_ranges` | global | Cron-aggregated top 1000 mastered verse ranges across all users |
@@ -43,9 +44,10 @@ Migrations: `002_user_data.sql`, `016_sort_and_last_practiced.sql`,
 | `name` | TEXT | |
 | `is_default` | BOOLEAN | `true` for the auto-created "My Verses" collection |
 | `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = client default |
-| `position` | INTEGER | nullable custom collection order, assigned by `reorder_collections` |
+| `icon_key` | TEXT | nullable |
+| `position` | INTEGER | custom order, nullable |
 | `deleted_at` | TIMESTAMPTZ | soft delete; NULL = active |
-| `updated_at` | TIMESTAMPTZ | auto-updated by trigger `update_user_collections_updated_at` |
+| `updated_at` | TIMESTAMPTZ | trigger maintained |
 
 Indexes:
 - `idx_user_collections_user (user_id) WHERE deleted_at IS NULL` — active-collection lookups
@@ -67,7 +69,7 @@ Migration: `002_user_data.sql` (created), `005_user_verses_no_text.sql`
 | `book` | TEXT | canonical name e.g. `"John"`, `"Psalms"` (not `"Psalm"`) |
 | `chapter`, `verse_start` | INT | |
 | `verse_end` | INT | equal to `verse_start` for single verses |
-| `version` | TEXT | `ESV` \| `KJV` \| `NLT` \| `NIV` \| `NKJV` |
+| `version` | TEXT | short uppercase version code |
 | `progress` | JSONB | shape below |
 | `last_practiced_at` | TIMESTAMPTZ | nullable; last session, full or partial, any difficulty; cleared on progress reset |
 | `last_chunk_size` | INT | nullable; last chunk size chosen on the setup screen |
@@ -213,11 +215,7 @@ by the edge function via `getUserTier()` to apply rate limits.
 
 ### `verse_of_month`, `popular_ranges`, `user_stats`
 
-`verse_of_month` (migrations 007, 008): Public-readable monthly
-challenge. Schema: `id`, `year_month` (TEXT, format `"YYYY-MM"`,
-unique), `book`, `chapter`, `verse_start`, `verse_end`, `image_url`
-(nullable, optional cover image). Inserted by admin via Supabase
-dashboard or service role.
+`verse_of_month`: [monthly references, public-bucket artwork and access rules](../features/home.md#verse_of_month).
 
 `popular_ranges` (migrations `0101_popular_verses.sql`,
 `015_popular_verses_mastered_only.sql`): Top verse ranges across all
@@ -245,6 +243,8 @@ incrementally — the cron is the only writer.
 | `get_verse_cache_count(version)` | fn | row count per version |
 | `evict_lru_verses(version, max, needed)` | fn | LRU eviction batch |
 | `upsert_verses(book, chapter, version, jsonb)` | fn | bulk verse upsert |
+| `import_curated_collection()` | authenticated invoker | atomic Library import |
+| `claim_intro_presentation(text)` | authenticated invoker | one account claim |
 | `get_total_time_studied(user_id)` | fn (SECURITY DEFINER) | sums `recording_duration_ms` |
 | `get_current_streak(user_id, tz_offset_min)` | fn (SECURITY DEFINER) | counts consecutive practice days in user's TZ |
 | `update_popular_ranges()` | fn (SECURITY DEFINER) | rebuilds `popular_ranges` |

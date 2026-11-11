@@ -1,0 +1,125 @@
+appId: com.caelanliu.biblemem
+name: intro-video
+---
+# Home has no manual entry, so every check runs inside the one automatic presentation.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome%3FintroFixture%3Dsample
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 30000
+- assertVisible:
+    id: intro-close
+- extendedWaitUntil:
+    visible:
+      id: intro-progress
+      text: 00:0[1-8]
+    timeout: 10000
+- assertVisible:
+    id: intro-caption
+- takeScreenshot: intro-autoplay-captions
+- tapOn: Pause video
+- assertVisible: Play video
+- takeScreenshot: intro-paused
+- tapOn: Play video
+- extendedWaitUntil:
+    visible: Pause video
+    timeout: 10000
+- tapOn:
+    id: intro-video-surface
+- assertVisible: Play video
+- copyTextFrom:
+    id: intro-progress
+# A two-second drag on empty space above the headline; a paused clock must not move.
+- swipe:
+    start: 20%, 20%
+    end: 40%, 20%
+    duration: 2000
+- assertVisible:
+    id: intro-progress
+    text: ${maestro.copiedText}
+- takeScreenshot: intro-tap-paused
+- tapOn:
+    id: intro-video-surface
+- assertVisible: Pause video
+- extendedWaitUntil:
+    notVisible:
+      id: intro-progress
+      text: ${maestro.copiedText}
+    timeout: 5000
+- takeScreenshot: intro-tap-resumed
+- assertVisible:
+    id: intro-progress
+    text: 00:0[2-8]
+# The scrub track spans about 30-83% of the iPhone 16 Pro width at 65% height; release near its start.
+- swipe:
+    start: 66%, 65%
+    end: 31%, 65%
+    duration: 1000
+- extendedWaitUntil:
+    visible:
+      id: intro-progress
+      text: 00:0[0-1]
+    timeout: 3000
+- assertVisible: Pause video
+- takeScreenshot: intro-scrubbed-back
+- tapOn:
+    id: intro-close
+- assertNotVisible:
+    id: intro-video-modal
+- runScript:
+    file: scripts/intro-presentations.js
+    env:
+      READER: reader-b
+      EXPECTED: 1
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome%3FintroFixture%3Dsample
+- extendedWaitUntil:
+    visible:
+      id: votm-card
+    timeout: 30000
+# Gives a second presentation time to appear; the assertion below is the check.
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 10000
+    optional: true
+- assertNotVisible:
+    id: intro-video-modal
+- takeScreenshot: intro-no-second-presentation
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome%3FintroFixture%3Dunavailable
+- extendedWaitUntil:
+    visible:
+      id: votm-card
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 10000
+    optional: true
+- assertNotVisible:
+    id: intro-video-modal
+- runScript:
+    file: scripts/intro-presentations.js
+    env:
+      READER: reader-a
+      EXPECTED: 0
+- takeScreenshot: intro-unavailable-source
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: votm-card
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 10000
+    optional: true
+- assertNotVisible:
+    id: intro-video-modal
+- runScript:
+    file: scripts/intro-presentations.js
+    env:
+      READER: reader-a
+      EXPECTED: 0
+- takeScreenshot: intro-unset-media

@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/app-header';
+import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -14,7 +15,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -348,54 +348,19 @@ export default function VerseSelectScreen() {
         title={`${bookName} ${chapterNum}`}
         rightButton={{
           label: selectedVersion,
+          accessibilityLabel: `Translation, ${selectedVersion}`,
+          testID: 'verse-translation-picker',
           onPress: () => setVersionPickerVisible(true),
           variant: 'text',
         }}
       />
 
-      {/* Version Picker Modal */}
-      <Modal
+      <BibleTranslationPicker
+        version={selectedVersion}
         visible={versionPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVersionPickerVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setVersionPickerVisible(false)}
-        >
-          <View style={[styles.pickerContainer, { backgroundColor: colors.card }]}>
-            <Text style={[styles.pickerTitle, { color: colors.text }]}>Translation</Text>
-            {BIBLE_VERSIONS.map((ver) => (
-              <Pressable
-                key={ver.value}
-                style={[
-                  styles.pickerOption,
-                  selectedVersion === ver.value && { backgroundColor: colors.primary },
-                ]}
-                onPress={() => handleVersionSelect(ver.value)}
-              >
-                <Text
-                  style={[
-                    styles.pickerOptionText,
-                    { color: selectedVersion === ver.value ? colors.white : colors.text },
-                  ]}
-                >
-                  {ver.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.pickerOptionSubtext,
-                    { color: selectedVersion === ver.value ? 'rgba(255,255,255,0.7)' : colors.icon },
-                  ]}
-                >
-                  {ver.full}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
+        onSelect={handleVersionSelect}
+        onClose={() => setVersionPickerVisible(false)}
+      />
 
       {/* Loading State */}
       {loading && (
@@ -554,43 +519,6 @@ const styles = StyleSheet.create({
     color: '#fff', // Always white on colored button
     fontSize: 16,
     fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerContainer: {
-    width: '80%',
-    maxWidth: 300,
-    borderRadius: 14,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  pickerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  pickerOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    marginBottom: 6,
-  },
-  pickerOptionText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  pickerOptionSubtext: {
-    fontSize: 12,
-    marginTop: 2,
   },
   touchContainer: {
     flex: 1,

@@ -29,7 +29,7 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 | Route (`app/(tabs)/(library)/`) | Purpose |
 |---|---|
 | `index.tsx` | Collection list, pull to refresh, Edit, and + to create |
-| `[id].tsx` | One collection: search, sort pill, verse list, + to add, and long press to copy |
+| `[id].tsx` | One collection: icon picker, search, sort pill, verse list, + to add, and long press to copy |
 | `add.tsx` | Pick a version, book and chapter. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
 | `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
@@ -171,6 +171,10 @@ reading is offline: saving verses and recording progress still need the network
 (invariant 10, `docs/architecture/sync-and-storage.md`). The bundle itself is in
 `docs/architecture/bible-api-and-caching.md`.
 
+## Curated collections
+
+Tap a custom collection's header icon to change it. See [Explore collections](home.md#explore-collections) for imports and [save totals](home.md#community-saves).
+
 ## Deleting a verse
 
 `deleteVerse(id, collectionId)` in the store removes the verse from the store first, then:
@@ -259,7 +263,7 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-a`: My Verses, Mastered with a "1 due" pill, In Progress, and Psalms.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
-- `npm run sim -- flow add-verse`: reader-b opens the empty My Verses, adds Ruth 1:1 (ESV, from the local `bible` function) with a quick tap, sees the card, then swipes it away with Delete, back to "No verses yet".
+- `npm run sim -- flow add-verse`: reader-b uses the shared picker, adds bundled KJV Ruth 1:1 with a tap, sees the card, then deletes it back to "No verses yet".
 - After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
 - Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery. Then +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
 

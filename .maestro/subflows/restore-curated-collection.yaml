@@ -1,0 +1,83 @@
+appId: com.caelanliu.biblemem
+---
+# An explicit re-add should come after a saved manual position.
+- runFlow:
+    when:
+      notVisible: ".*Reading list.*0 verses.*"
+    commands:
+      - tapOn: "New collection"
+      - tapOn:
+          id: collection-name
+      - inputText: Reading list
+      - tapOn: "Create Collection"
+      - assertVisible: ".*Reading list.*0 verses.*"
+- waitForAnimationToEnd
+- assertVisible:
+    id: tab-library
+    selected: true
+- takeScreenshot: discovery-restore-before-edit
+- tapOn: Edit
+- extendedWaitUntil:
+    visible: Done
+    timeout: 10000
+- takeScreenshot: discovery-restore-editing
+- runFlow:
+    when:
+      visible:
+        text: "Reorder Anxiety & Peace"
+        below: "Reorder Reading list"
+    commands:
+      - swipe:
+          from:
+            text: "Reorder Anxiety & Peace"
+          direction: UP
+- assertVisible:
+    text: "Reorder Anxiety & Peace"
+    above: "Reorder Reading list"
+- tapOn: Done
+- extendedWaitUntil:
+    visible: Edit
+    timeout: 15000
+- swipe:
+    from: ".*Anxiety & Peace.*12 verses.*"
+    direction: LEFT
+- tapOn:
+    id: swipe-delete
+    above: ".*Reading list.*0 verses.*"
+- assertVisible: 'Delete "Anxiety & Peace"?'
+- tapOn:
+    text: Delete
+    below: "Verses not mastered or in another collection will be deleted and lose progress."
+- extendedWaitUntil:
+    notVisible: ".*Anxiety & Peace.*12 verses.*"
+    timeout: 20000
+- tapOn:
+    id: tab-home
+- scrollUntilVisible:
+    element:
+      id: discover-anxiety-and-peace
+    direction: DOWN
+- tapOn:
+    id: discover-anxiety-and-peace
+- runFlow:
+    file: choose-curated-translation.yaml
+    env:
+      VERSION: KJV
+- assertVisible: "Add collection"
+- tapOn:
+    id: curated-collection-action
+- extendedWaitUntil:
+    visible: "Change collection icon, .*"
+    timeout: 30000
+- waitForAnimationToEnd
+- tapOn: Back
+- assertVisible:
+    text: ".*Anxiety & Peace.*12 verses.*"
+    below: ".*Reading list.*0 verses.*"
+- swipe:
+    start: "50%, 20%"
+    end: "50%, 56%"
+- assertVisible:
+    text: ".*Anxiety & Peace.*12 verses.*"
+    below: ".*Reading list.*0 verses.*"
+- runScript: ../scripts/discovery-memberships.js

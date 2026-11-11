@@ -1,0 +1,67 @@
+appId: com.caelanliu.biblemem
+name: intro-interruption
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome%3FintroFixture%3Dsample
+# Needs reader-b without an intro claim (a fresh stack); the automatic presentation is the only entry.
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 30000
+- extendedWaitUntil:
+    visible: Pause video
+    timeout: 10000
+- tapOn: Pause video
+- assertVisible: Play video
+- takeScreenshot: intro-inactive-paused-before
+- swipe:
+    start: 95%, 1%
+    end: 80%, 75%
+    duration: 500
+- extendedWaitUntil:
+    visible: Add Controls
+    timeout: 10000
+- takeScreenshot: intro-inactive-control-center
+- swipe:
+    start: 50%, 95%
+    end: 50%, 5%
+    duration: 500
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 10000
+- assertVisible: Play video
+- takeScreenshot: intro-inactive-paused-after
+- tapOn: Play video
+- extendedWaitUntil:
+    visible: Pause video
+    timeout: 10000
+- takeScreenshot: intro-inactive-playing-before
+- swipe:
+    start: 95%, 1%
+    end: 80%, 75%
+    duration: 500
+- extendedWaitUntil:
+    visible: Add Controls
+    timeout: 10000
+- takeScreenshot: intro-inactive-playing-control-center
+- swipe:
+    start: 50%, 95%
+    end: 50%, 5%
+    duration: 500
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 10000
+- extendedWaitUntil:
+    visible: Pause video
+    timeout: 10000
+- takeScreenshot: intro-inactive-playing-after
+- launchApp:
+    appId: com.apple.Preferences
+    stopApp: false
+- launchApp:
+    stopApp: false
+- assertNotVisible:
+    id: intro-video-modal
+- takeScreenshot: intro-background-closed

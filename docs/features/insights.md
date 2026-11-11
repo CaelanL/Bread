@@ -2,7 +2,7 @@
 
 The Insights screen shows the user's activity and the verses most people have mastered. Some numbers come from the store, some from SQL on demand, and two from tables that cron rebuilds.
 
-The screen is `app/(tabs)/insights.tsx`, a tab with `href: null`. Users reach it from `InsightsCard` on Home (`docs/features/home.md`). Engraved and review rules are in `docs/features/review.md`. Table shapes are in `docs/architecture/data-model.md`.
+The screen is `app/(tabs)/(home)/insights.tsx`, pushed on the Home tab's stack from `InsightsCard` on Home (`docs/features/home.md`). Engraved and review rules are in `docs/features/review.md`. Table shapes are in `docs/architecture/data-model.md`.
 
 ## Screen and sources
 

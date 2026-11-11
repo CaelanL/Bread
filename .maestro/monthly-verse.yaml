@@ -1,0 +1,33 @@
+appId: com.caelanliu.biblemem
+name: monthly-verse
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-settings
+    timeout: 30000
+- tapOn:
+    id: tab-settings
+- tapOn:
+    id: settings-translation-picker
+- extendedWaitUntil:
+    visible:
+      id: settings-translation-KJV
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: settings-translation-KJV
+    direction: DOWN
+- tapOn:
+    id: settings-translation-KJV
+- assertNotVisible:
+    id: settings-translation-KJV
+- runFlow:
+    file: subflows/monthly-card.yaml
+    env:
+      THEME: Light
+- runFlow:
+    file: subflows/monthly-card.yaml
+    env:
+      THEME: Dark

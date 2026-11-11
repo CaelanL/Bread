@@ -148,6 +148,7 @@ function RootLayoutNav() {
   }, [isAuthenticated, navigationState?.key]);
 
   const colors = Colors[colorScheme ?? 'light'];
+  const darkScreen = colorScheme === 'dark' || segments[0] === '(auth)' || segments[0] === 'reset-password';
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -165,11 +166,12 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="reset-password" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="collections/[slug]" />
         <Stack.Screen name="session" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <Q1ExplainerCard isAuthenticated={isAuthenticated} />
-      <StatusBar style="auto" />
+      <StatusBar style={darkScreen ? 'light' : 'dark'} />
     </ThemeProvider>
   );
 }

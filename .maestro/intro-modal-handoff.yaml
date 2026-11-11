@@ -1,0 +1,15 @@
+appId: com.caelanliu.biblemem
+name: intro-modal-handoff
+---
+- runFlow:
+    file: subflows/intro-modal-handoff.yaml
+    env:
+      READER: reader-a
+      OPEN_ID: votm-card
+      CLOSE_ID: verse-expand-close
+- runFlow:
+    file: subflows/intro-modal-handoff.yaml
+    env:
+      READER: reader-b
+      OPEN_ID: votm-add
+      CLOSE_ID: collection-picker-close

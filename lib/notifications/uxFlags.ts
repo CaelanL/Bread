@@ -17,6 +17,8 @@ interface UxFlagsState {
   q1Dismissed: boolean;
   settingsVisited: boolean;
   hydrated: boolean;
+  q1Presented: boolean;
+  setQ1Presented: (presented: boolean) => void;
   hydrate: () => Promise<void>;
   markQ1Dismissed: () => Promise<void>;
   markSettingsVisited: () => Promise<void>;
@@ -27,6 +29,8 @@ export const useUxFlagsStore = create<UxFlagsState>((set) => ({
   q1Dismissed: false,
   settingsVisited: false,
   hydrated: false,
+  q1Presented: false,
+  setQ1Presented: (q1Presented) => set({ q1Presented }),
 
   hydrate: async () => {
     try {

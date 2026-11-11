@@ -6,6 +6,7 @@ import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
+import { resolveCollectionIcon } from '@/lib/collections/icons';
 import type { Collection } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
@@ -223,7 +224,7 @@ export function SwipeableCollectionCard({
                 },
               ]}>
                 <IconSymbol
-                  name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : 'folder.fill')}
+                  name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
                   size={24}
                   color={collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
                 />

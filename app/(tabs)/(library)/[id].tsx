@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/app-header';
+import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
@@ -6,13 +7,14 @@ import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
+import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
 import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useVerses, useVersesByCollection } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -27,6 +29,7 @@ import {
 
 export default function CollectionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -66,6 +69,9 @@ export default function CollectionScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const canChangeIcon = collection && !collection.isDefault && !collection.isVirtual;
+  const collectionIcon = resolveCollectionIcon(collection?.iconKey);
   const [copyingVerse, setCopyingVerse] = useState<SavedVerse | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const sortBy = useCollectionSort(id || '');
@@ -181,6 +187,19 @@ export default function CollectionScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
         title={collection?.name || 'Collection'}
+        leftButton={{
+          icon: 'chevron.left',
+          label: 'Back',
+          onPress: () => {
+            if ((navigation.getState()?.index ?? 0) > 0) router.back();
+            else router.replace('/(tabs)/(library)');
+          },
+        }}
+        titleIcon={canChangeIcon ? {
+          name: collectionIcon.symbol,
+          label: `Change collection icon, ${collectionIcon.label}`,
+          onPress: () => setIconPickerOpen(true),
+        } : undefined}
         rightButton={
           collection?.isVirtual
             ? undefined
@@ -244,6 +263,13 @@ export default function CollectionScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
           }
+        />
+      )}
+      {iconPickerOpen && canChangeIcon && (
+        <CollectionIconPicker
+          currentKey={collection.iconKey}
+          onClose={() => setIconPickerOpen(false)}
+          onSave={(key) => useAppStore.getState().setCollectionIcon(collection.id, key)}
         />
       )}
       {copyNotice && (

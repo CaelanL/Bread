@@ -17,7 +17,11 @@ app/
 │   └── forgot-password.tsx
 ├── (tabs)/                    ← Bottom tab navigator
 │   ├── _layout.tsx
-│   ├── home.tsx                       ← Tab: Home
+│   ├── (home)/                        ← Nested Stack inside the Home tab
+│   │   ├── _layout.tsx                ← `initialRouteName: 'home'`
+│   │   ├── home.tsx                   ← Home
+│   │   ├── explore.tsx                ← Curated catalog, pushed from Explore collections on Home
+│   │   └── insights.tsx               ← Pushed from Home InsightsCard
 │   ├── (library)/                     ← Nested Stack inside the Library tab
 │   │   ├── _layout.tsx
 │   │   ├── index.tsx                  ← Library list
@@ -25,9 +29,8 @@ app/
 │   │   ├── add.tsx                    ← Add a verse: version, book and chapter
 │   │   ├── add/[book]/[chapter].tsx   ← Verse picker for a chapter
 │   │   └── setup/[id].tsx             ← Difficulty + chunk-size picker before starting a session
-│   ├── settings.tsx                   ← Tab: Settings
-│   ├── explore.tsx                    ← Hidden tab (`href: null`) — Expo template screen, nothing links to it
-│   └── insights.tsx                   ← Hidden tab (`href: null`) — reachable from Home InsightsCard
+│   └── settings.tsx                   ← Tab: Settings
+├── collections/[slug].tsx     ← Curated collection introduction and import
 ├── notifications.tsx          ← Notification settings, pushed from Settings
 ├── reset-password.tsx         ← Reachable WITHOUT auth (deep link from password-reset email)
 ├── dev-sign-in.tsx            ← Reachable WITHOUT auth; dev builds against a local Supabase only
@@ -42,19 +45,19 @@ from the file. It renders nothing. See `docs/architecture/auth.md`.
 
 | Tab | Route | Visible? |
 |---|---|---|
-| Home | `(tabs)/home` | ✓ (first in the tab layout) |
+| Home | `(tabs)/(home)/home` | ✓ (first in the tab layout) |
 | Library | `(tabs)/(library)/index` | ✓ |
 | Settings | `(tabs)/settings` | ✓ |
-| Explore | `(tabs)/explore` | hidden (`href: null`) — not linked from anywhere |
-| Insights | `(tabs)/insights` | hidden (`href: null`) — entered from `InsightsCard` on Home |
 
-The hidden tabs still exist as routes — they're just not in the tab
-bar. To navigate to them, push the route directly:
-`router.push('/insights')`.
-
-The Library tab uses a nested Stack so that pushing a collection or
-the verse-picker keeps the tab bar visible (within the tab) and back
-navigation works as expected.
+Home and Library each use a nested Stack, so pushing a screen keeps the
+tab bar visible, animates in, and supports the back swipe. Explore
+(`/explore`) and Insights (`/insights`) are Home stack screens. Their
+"Back to Home" header button calls `router.back()`. The Home stack's
+`initialRouteName` is `home`, so a deep link to `/explore` still has
+Home under it. A tab keeps its stack when you switch away and back.
+`npm run sim -- flow home-stack` checks this and that a double tap on a
+curated card opens one introduction. Maestro cannot start the iOS edge
+swipe, so check the swipe on a device.
 
 ## Modals
 
@@ -71,10 +74,13 @@ Two modal styles, both handled at the root Stack:
 `app/notifications.tsx` and `app/reset-password.tsx` are plain root
 Stack screens.
 
+Home also presents the [intro player](../features/home.md#encouragement-video) through a React Native modal; it adds no route or tab.
+
 ## Dynamic routes
 
 | Route | Param(s) |
 |---|---|
+| `collections/[slug].tsx` | `slug` — bundled curated collection ID |
 | `(tabs)/(library)/[id].tsx` | `id` — collection `client_id`, or the virtual `mastered` / `in-progress` |
 | `(tabs)/(library)/add/[book]/[chapter].tsx` | `book`, `chapter` — Bible reference; query `collectionId`, `version` |
 | `(tabs)/(library)/setup/[id].tsx` | `id` — verse `client_id` |
@@ -143,11 +149,10 @@ gating logic above. A notification tap routes through
 ## Conventions
 
 - **New tab screen**: add `app/(tabs)/<name>.tsx` and a
-  `<Tabs.Screen>` entry in `app/(tabs)/_layout.tsx`. Set `href: null`
-  if it shouldn't appear in the tab bar.
-- **New screen inside the Library tab**: add a file under
-  `app/(tabs)/(library)/`. It will be pushed onto the Library Stack
-  by default.
+  `<Tabs.Screen>` entry in `app/(tabs)/_layout.tsx`.
+- **New screen inside the Home or Library tab**: add a file under
+  `app/(tabs)/(home)/` or `app/(tabs)/(library)/`. It will be pushed
+  onto that tab's Stack by default.
 - **New top-level modal**: add a file at root `app/`, register it
   in `app/_layout.tsx` with the `presentation` option you want.
 - **New auth screen**: add to `app/(auth)/`. The auth Stack is
@@ -164,9 +169,10 @@ gating logic above. A notification tap routes through
 2. **The session screen is a `fullScreenModal`.** Don't change it
    to a regular Stack screen — the tab bar would re-appear over
    the recording UI.
-3. **Hidden tabs (`href: null`) are still routes.** Anyone can
-   `router.push('/(tabs)/insights')`. If you want to truly hide
-   a route, move it out of `(tabs)/`.
+3. **Screens pushed from a tab belong in that tab's Stack group.**
+   A hidden tab (`href: null`) opens as a tab switch, with no push
+   animation and no back swipe. Every route under `(tabs)/` is
+   reachable by URL; to truly hide one, move it out of `(tabs)/`.
 4. **Tab order in `(tabs)/_layout.tsx` is the visible order.**
    `unstable_settings.anchor` in `app/_layout.tsx` is `(tabs)`, the
    root Stack's base route.

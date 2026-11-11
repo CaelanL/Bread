@@ -1,0 +1,82 @@
+appId: com.caelanliu.biblemem
+name: collection-discovery
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- runFlow:
+    file: subflows/browse-collections.yaml
+    env:
+      THEME: Light
+- tapOn: Back
+- assertVisible: "Back to Home"
+- tapOn: "Back to Home"
+- runFlow:
+    file: subflows/browse-collections.yaml
+    env:
+      THEME: Dark
+- runFlow:
+    when:
+      visible: "Add collection"
+    commands:
+      - tapOn:
+          id: curated-collection-action
+- runFlow:
+    when:
+      visible: "Open collection"
+    commands:
+      - tapOn:
+          id: curated-collection-action
+- extendedWaitUntil:
+    visible: "Change collection icon, .*"
+    timeout: 30000
+- waitForAnimationToEnd
+- assertVisible: ".*1 Peter 5:7.*KJV.*"
+- takeScreenshot: discovery-Dark-saved-collection
+- tapOn: Back
+- assertVisible: ".*Anxiety & Peace.*12 verses.*"
+- assertNotVisible: ".*Anxiety & Peace.*12 verses.*KJV.*"
+- takeScreenshot: discovery-Dark-library
+- tapOn:
+    id: tab-home
+- scrollUntilVisible:
+    element:
+      id: discover-anxiety-and-peace
+    direction: DOWN
+- tapOn:
+    id: discover-anxiety-and-peace
+- assertVisible: "Add collection"
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
+- assertVisible: "Open collection"
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: ESV
+- assertVisible: "Add collection"
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
+- tapOn:
+    id: curated-collection-action
+- extendedWaitUntil:
+    visible: "Change collection icon, .*"
+    timeout: 30000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: tab-library
+    timeout: 60000
+- tapOn:
+    id: tab-library
+- assertVisible: ".*Anxiety & Peace.*12 verses.*"
+- runScript: scripts/discovery-memberships.js
+
+- runFlow: subflows/restore-curated-collection.yaml
