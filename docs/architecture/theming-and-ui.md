@@ -225,8 +225,8 @@ if (process.env.EXPO_OS === 'ios') {
 }
 ```
 
-`HapticTab` follows it. The study and add-verse screens call `Haptics`
-without the check, so they also fire on Android.
+`HapticTab`, recording and Library hold actions follow this guard.
+Verse reveal and the add-verse screens also trigger haptics on Android.
 
 | Interaction | Style |
 |---|---|

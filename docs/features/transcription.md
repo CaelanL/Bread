@@ -105,9 +105,8 @@ synchronously, so audio can be fed from the first callback. Its `state` runs
 
 1. **Mint.** POST to `transcription-token` with the user's JWT. The response is
    `{ apiKey, expiresAt, websocketUrl, model }`.
-2. **Buffer.** PCM fed while connecting is held in memory, so the first words
-   survive the connect gap. Recording starts instantly, with no connecting state in
-   the UI.
+2. **Buffer.** PCM captured while Soniox connects is held in memory. The mic
+   can start as soon as native setup finishes, regardless of connection state.
 3. **Open.** The first frame is JSON config: key, model, `pcm_s16le`, sample rate,
    channels, `language_hints`, and the verse as context. The backlog then flushes as
    individual chunks.
@@ -209,7 +208,7 @@ run takes the batch path until the secret is set for local functions.
 
 Recording needs a person and a real device. Local runs take the batch path unless the secret is set.
 
-- With live on: Library, a verse, Start session, mic, recite, check. The score appears almost at once, and the Metro log has no `[LIVE] falling back to batch` line.
+- With live on: Library, a verse, Start session, mic. Speak as soon as the waveform pill appears, then submit. Check the first word in the result and confirm the Metro log has no `[LIVE] falling back to batch` line.
 - With the secret unset: same taps. The analysis indicator stays visible longer, the log says `falling back to batch: token endpoint 403`, the score still appears, and no error shows.
 - Hold a recording past 5:00: the toast "5 minute limit reached — scoring what you recited." appears and a score follows, with no second submit.
 - Mic, then the X beside the mic or on the pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
@@ -224,7 +223,7 @@ Recording needs a person and a real device. Local runs take the batch path unles
 - 2026-08-24 · Heartbeat stream from `process-recording`, no client timeout · The phone killed silent sockets at about 60 s while the server finished fine. Leading whitespace keeps older clients parsing.
 - 2026-08-24 · `@siteed/audio-studio` pinned to exactly `3.2.0` · It gives file and PCM from one mic session, which `expo-audio` can't on SDK 54. Later versions need SDK 57, so the pin and the SDK move together.
 - 2026-08-24 · m4a-only recorder output · The file exists only for batch, whose contract expects m4a. WAV would just fill the cache.
-- 2026-08-24 · Connect gap solved by buffer-and-flush, not a connecting state · Recording starts instantly and first words survive.
+- 2026-08-24 · Buffer and flush PCM during the live connection · Native capture can start independently of Soniox while the live path retains audio already captured.
 - 2026-08-24 · No incremental scoring · Alignment is local and fast, so the transcript is the only wait. A second scoring path over provisional tokens would gain nothing.
 - 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off. Revisit if quota returns.
 - 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
