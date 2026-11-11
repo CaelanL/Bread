@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FlatList } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -12,28 +12,17 @@ import { getVerseText } from '@/lib/api/bible';
 import {
   type Chunk,
   type Difficulty,
-  type AlignmentWord,
   type ResultsPageItem,
   parseVerseIntoChunks,
-  calculateChunkScore,
   calculateFinalScore,
   calculatePartialScore,
   createResultsPageItem,
 } from '@/lib/study-chunks';
 import { processRecording as processRecordingApi, logSessionAttempt } from '@/lib/api';
 import { showErrorToast } from '@/lib/toast';
-import { alignTranscription, buildAllMissingAlignment } from '@/lib/align';
-import type { LiveTranscriptionSession } from '@/lib/transcription/live-session';
-
-// Measured finalize latency is ~70-90ms; past this the stream is
-// abandoned and the batch path scores the recording file instead
-const FINALIZE_TIMEOUT_MS = 3000;
-
-interface ChunkResult {
-  score: number;
-  transcription: string;
-  alignment: AlignmentWord[];
-}
+import { getChunkReview, saveChunkResult, scoredAlignments, type ChunkResults } from '@/lib/transcription/chunk-results';
+import type { RecordingState, RecordingSubmission } from '@/lib/transcription/recording-controls';
+import { scoreRecording } from '@/lib/transcription/score-recording';
 
 interface UseStudySessionOptions {
   verseId: string;
@@ -50,17 +39,10 @@ interface UseStudySessionReturn {
   completedChunks: Set<number>;
   showResults: boolean;
 
-  // Results per chunk
-  getChunkResult: (index: number) => ChunkResult | undefined;
-  getRetryResult: (index: number) => ChunkResult | undefined;
-  getPeekResult: (index: number) => ChunkResult | undefined;
-
-  // Retry state
-  retryingChunks: Set<number>;
-  retryChunk: (index: number) => void;
+  getChunkReview: (index: number, recording: RecordingState) => ReturnType<typeof getChunkReview>;
 
   // Peek (reveal) state — a peeked chunk scores 0 (Medium/Hard only)
-  peekedChunks: Set<number>;
+  getPeekedChunks: () => ReadonlySet<number>;
   peekChunk: (index: number) => void;
   sessionSeed: number;
 
@@ -78,15 +60,7 @@ interface UseStudySessionReturn {
   saveAndExit: () => void;
 
   // Recording result handler
-  processRecording: (
-    uri: string,
-    durationMs: number,
-    liveSession?: LiveTranscriptionSession
-  ) => Promise<{
-    score: number;
-    alignment: AlignmentWord[];
-    allDone: boolean;
-  }>;
+  processRecording: (submission: RecordingSubmission, isPeeked: boolean) => Promise<void>;
 
   // Refs
   flatListRef: React.RefObject<FlatList | null>;
@@ -101,17 +75,14 @@ export function useStudySession({
   const [loading, setLoading] = useState(true);
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [completedChunks, setCompletedChunks] = useState<Set<number>>(new Set());
-  const [chunkResults, setChunkResults] = useState<Map<number, ChunkResult>>(new Map());
+  const [chunkResults, setChunkResults] = useState<ChunkResults>(new Map());
   const [showResults, setShowResults] = useState(false);
   const [totalRecordingDurationMs, setTotalRecordingDurationMs] = useState(0);
-  const [retryingChunks, setRetryingChunks] = useState<Set<number>>(new Set());
-  const [retryResults, setRetryResults] = useState<Map<number, ChunkResult>>(new Map());
-  const [peekedChunks, setPeekedChunks] = useState<Set<number>>(new Set());
-  const [peekResults, setPeekResults] = useState<Map<number, ChunkResult>>(new Map());
   const [sessionSeed, setSessionSeed] = useState(0);
 
   const flatListRef = useRef<FlatList>(null);
+  const peekedChunksRef = useRef<ReadonlySet<number>>(new Set());
+  const savedAttemptRef = useRef(false);
 
   // Load verse on mount
   useEffect(() => {
@@ -137,133 +108,54 @@ export function useStudySession({
   }, [verseId, difficulty, chunkSize]);
 
   // Computed values
+  const completedChunks = useMemo(() => new Set(chunkResults.keys()), [chunkResults]);
   const allChunksCompleted = completedChunks.size === chunks.length && chunks.length > 0;
 
   const listData: (Chunk | ResultsPageItem)[] = allChunksCompleted
     ? [...chunks, createResultsPageItem()]
     : chunks;
 
-  const finalScore = calculateFinalScore(
-    new Map(Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment]))
-  );
+  const finalScore = calculateFinalScore(scoredAlignments(chunkResults));
+  const readChunkReview = (index: number, recording: RecordingState) =>
+    getChunkReview(chunkResults, index, currentIndex, chunks.length, recording);
 
-  // Get result for a specific chunk
-  const getChunkResult = useCallback((index: number): ChunkResult | undefined => {
-    return chunkResults.get(index);
-  }, [chunkResults]);
+  const getPeekedChunks = useCallback(() => peekedChunksRef.current, []);
 
-  // Get retry result for a specific chunk
-  const getRetryResult = useCallback((index: number): ChunkResult | undefined => {
-    return retryResults.get(index);
-  }, [retryResults]);
-
-  // Get the real recited result for a peeked chunk (display-only; the
-  // chunk's scored result in chunkResults is a forced 0)
-  const getPeekResult = useCallback((index: number): ChunkResult | undefined => {
-    return peekResults.get(index);
-  }, [peekResults]);
-
-  // Mark a chunk as peeked (revealed before reciting). Sticky and
-  // one-way: re-hiding never untaints. Only meaningful on Medium/Hard.
+  // Replace the set so submit can retain the exact reveal state at the tap.
   const peekChunk = useCallback((index: number) => {
-    setPeekedChunks((prev) => new Set([...prev, index]));
+    peekedChunksRef.current = new Set([...peekedChunksRef.current, index]);
   }, []);
 
-  // Retry a completed chunk (resets to recording state without affecting score)
-  const retryChunk = useCallback((index: number) => {
-    setRetryingChunks((prev) => new Set([...prev, index]));
-    // Clear any previous retry result for this chunk
-    setRetryResults((prev) => {
-      const next = new Map(prev);
-      next.delete(index);
-      return next;
-    });
-  }, []);
-
-  // Process a recording and update state
   const processRecording = useCallback(async (
-    uri: string,
-    durationMs: number,
-    liveSession?: LiveTranscriptionSession
+    { index, isRetry, recording, liveSession, isCurrent }: RecordingSubmission,
+    isPeeked: boolean
   ) => {
-    const currentChunk = chunks[currentIndex];
-    const actualText = currentChunk.text;
+    const text = chunks[index].text;
+    const durationMs = recording.durationMs ?? 0;
+    const uri = recording.compression?.compressedFileUri ?? recording.fileUri;
 
-    // Transcribe: live stream finalize when available, batch edge
-    // function otherwise — and silently on any live failure
-    let cleanedTranscription =
-      (await liveSession?.finish(FINALIZE_TIMEOUT_MS).catch(() => null)) ?? null;
-    // Guarantee the socket is closed however finish() settled (idempotent)
-    liveSession?.abort();
-    if (cleanedTranscription === null) {
-      ({ cleanedTranscription } = await processRecordingApi(uri, durationMs, actualText));
-    }
+    const result = await scoreRecording({
+      text,
+      isRetry,
+      isPeeked,
+      liveSession,
+      isCurrent,
+      async transcribeFile() {
+        if (!uri) throw new Error('No recording URI');
+        return (await processRecordingApi(uri, durationMs, text)).cleanedTranscription;
+      },
+    });
+    if (!result || !isCurrent()) return;
 
-    // Track recording duration — only after a transcript came back, so
-    // failed transcriptions don't inflate time studied
+    // Count only recitations that produced a transcript and were kept.
     setTotalRecordingDurationMs((prev) => prev + durationMs);
 
-    // Align locally (no API call needed)
-    const alignment = alignTranscription(actualText, cleanedTranscription);
+    const nextResults = saveChunkResult(chunkResults, index, result, isPeeked);
+    setChunkResults(nextResults);
 
-    // Calculate score
-    const score = calculateChunkScore(alignment);
-
-    const isRetrying = retryingChunks.has(currentIndex);
-
-    if (isRetrying) {
-      // Store as retry result — don't touch the original score
-      setRetryResults((prev) => new Map(prev).set(currentIndex, {
-        score,
-        transcription: cleanedTranscription,
-        alignment,
-      }));
-      // Clear retry mode for this chunk
-      setRetryingChunks((prev) => {
-        const next = new Set(prev);
-        next.delete(currentIndex);
-        return next;
-      });
-      return { score, alignment, allDone: false };
-    }
-
-    // Peeked chunks score 0: the user revealed the answer before
-    // reciting, so this attempt counts as if every word was missed.
-    // The real recited result is stashed (display-only) so the card
-    // can still show what they actually said.
-    const isPeeked = peekedChunks.has(currentIndex);
-    const scoredAlignment = isPeeked ? buildAllMissingAlignment(actualText) : alignment;
-    const scoredValue = isPeeked ? 0 : score;
-
-    if (isPeeked) {
-      setPeekResults((prev) => new Map(prev).set(currentIndex, {
-        score,
-        transcription: cleanedTranscription,
-        alignment,
-      }));
-    }
-
-    // Store result (the scored alignment — forced-missing if peeked)
-    setChunkResults((prev) => new Map(prev).set(currentIndex, {
-      score: scoredValue,
-      transcription: cleanedTranscription,
-      alignment: scoredAlignment,
-    }));
-
-    // Mark as completed
-    const newCompleted = new Set([...completedChunks, currentIndex]);
-    setCompletedChunks(newCompleted);
-
-    // Check if all done
-    const allDone = newCompleted.size === chunks.length;
-
-    if (allDone) {
-      // Calculate final score from ALL alignments
-      const allAlignments = new Map(
-        Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment])
-      );
-      allAlignments.set(currentIndex, scoredAlignment);
-      const finalScoreValue = calculateFinalScore(allAlignments);
+    if (result.scored && nextResults.size === chunks.length && !savedAttemptRef.current) {
+      savedAttemptRef.current = true;
+      const finalScoreValue = calculateFinalScore(scoredAlignments(nextResults));
 
       // Update progress in Zustand store (writes to Supabase + updates
       // local state). Fire-and-forget like the saveAndExit and
@@ -295,9 +187,7 @@ export function useStudySession({
 
       setShowResults(true);
     }
-
-    return { score, alignment, allDone };
-  }, [chunks, currentIndex, completedChunks, chunkResults, retryingChunks, peekedChunks, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
+  }, [chunks, chunkResults, verseId, difficulty, verse, chunkSize, totalRecordingDurationMs]);
 
   // Navigation actions
   const goToNext = useCallback(() => {
@@ -333,12 +223,10 @@ export function useStudySession({
   const saveAndExit = useCallback(() => {
     // Only save if at least one chunk completed AND not already fully completed
     // (full completion already saves in processRecording)
-    if (completedChunks.size > 0 && !allChunksCompleted && verse && verseId && difficulty) {
+    if (!savedAttemptRef.current && completedChunks.size > 0 && !allChunksCompleted && verse && verseId && difficulty) {
+      savedAttemptRef.current = true;
       // Calculate partial score (treats uncompleted chunks as missing)
-      const alignmentsMap = new Map(
-        Array.from(chunkResults.entries()).map(([k, v]) => [k, v.alignment])
-      );
-      const partialScore = calculatePartialScore(chunks, completedChunks, alignmentsMap);
+      const partialScore = calculatePartialScore(chunks, completedChunks, scoredAlignments(chunkResults));
 
       // Fire-and-forget: the Supabase round-trip must not block dismissal
       // (awaiting it here froze the X button for the full network latency).
@@ -374,12 +262,8 @@ export function useStudySession({
     currentIndex,
     completedChunks,
     showResults,
-    getChunkResult,
-    getRetryResult,
-    getPeekResult,
-    retryingChunks,
-    retryChunk,
-    peekedChunks,
+    getChunkReview: readChunkReview,
+    getPeekedChunks,
     peekChunk,
     sessionSeed,
     allChunksCompleted,

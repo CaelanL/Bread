@@ -111,7 +111,7 @@ only, and re-hide resets it in a layout effect, so the answer can't flash.
 ## Peek and reveal
 
 An eye button sits on each `VerseCard` until the chunk completes. Visibility
-(`hideModes`, screen-local) is separate from taint (`peekedChunks`, hook).
+(`hideModes`, screen-local) is separate from taint (`peekedChunksRef`, hook).
 
 - **Medium and Hard:** the button toggles the chunk's words, at twice the normal
   reveal speed. Any reveal calls `peekChunk`. Taint is per-chunk, sticky and
@@ -120,12 +120,12 @@ An eye button sits on each `VerseCard` until the chunk completes. Visibility
   `maskDisplayWords`, a cosmetic mask computed in render from
   `sessionSeed + verseNum`. "All" shows the Hard placeholder.
 
-A tainted chunk's attempt stores `buildAllMissingAlignment(chunk.text)` in
-`chunkResults`, so its words count as missing through the normal aggregator. The
-scorer has no peek case. The real recited result goes to `peekResults` for
+A tainted chunk's attempt stores `buildAllMissingAlignment(chunk.text)` as its
+scored alignment, so its words count as missing through the normal aggregator.
+The scorer has no peek case. The same chunk keeps the real recited result for
 display, with the banner "Revealed — this chunk won't count". Other chunks score
-normally. A reveal during recording counts, because `processRecording` reads the
-taint when submit is tapped.
+normally. A reveal during recording counts. The submit tap captures the taint
+for the recorded chunk, and the eye is unavailable during analysis.
 
 A finished chunk always shows its text, whatever its hide mode. While a chunk is
 being retried, its hide mode applies again.
@@ -180,10 +180,12 @@ or more, and "Keep Practicing" below that. A help icon opens
 
 ### Retry
 
-After a chunk completes, the retry button collapses its result card and starts
-recording again. The result goes to `retryResults` and never touches
-`chunkResults`, so the score stands. Retry is hidden on single-chunk sessions. The
-result card shows retry first, then peek, then the original.
+After a chunk completes, Retry starts another recording for that chunk as the
+result card fades. The recording attempt owns the retry state. A successful
+retry replaces only that chunk's practice result, so its scored result stands.
+Discarding, leaving the chunk or failing restores the previous result and
+controls. Retry is hidden on single-chunk sessions. The result card shows retry
+first, then peek, then the original.
 
 ## Finishing a session
 
@@ -199,8 +201,8 @@ The final score computes only once every chunk has a result. Then the hook:
 **Early exit.** The X in the header calls `saveAndExit`. With some chunks complete
 but not all, it calls `updateVerseProgress` with `calculatePartialScore` and no
 `fullSession` flag, logs an attempt, and leaves at once. Failures only reach the
-console. Otherwise it just leaves. A recording in progress is thrown away on
-unmount.
+console. Otherwise it just leaves. Exiting discards an in-flight recording or
+analysis. A late transcript cannot update the session or save a second attempt.
 
 **Session attempts.** A session writes at most one `session_attempts` row, from
 one of those two call sites, through `logSessionAttempt` in `lib/api/analytics.ts`.
@@ -218,13 +220,6 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - **Soft-deleted mastered verses can't start a session.** Setup finds them through
   `useVerse`, but `getSavedVerses` filters on `deleted_at`, so the session lands on
   "Something went wrong".
-- **Reveal after the submit tap.** `processRecording` reads `peekedChunks` from the
-  render at the tap. A reveal while transcribing leaves the attempt scored normally,
-  while the screen treats the chunk as peeked with no `peekResults` entry, so no
-  score badge or result card shows.
-- **Exiting while transcribing.** `processRecording` isn't cancelled. If the
-  in-flight chunk was the last, `saveAndExit` writes a partial attempt and the
-  finished call writes a second, full one. Otherwise the result is dropped.
 - **Partial scores can mark mastery.** See `docs/features/review.md`.
 - **Partial scores read low.** One of two equal chunks at 100% saves about 50%.
 - **Empty chunks.** A keyed map missing a verse gives a chunk with empty `text`,
@@ -238,7 +233,8 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - `npm run sim -- shot "/(tabs)/(library)/setup/seed-psalm-23-1-3" --as reader-a`: Easy selected, "Verses per chunk" at 1 with All beside it, "Start session" pill.
 - `npm run sim -- shot "/(tabs)/(library)/setup/seed-john-3-16" --as reader-a`: Hard selected (mastered with nothing saved), no chunk row.
 - `npm run sim -- shot "/session?id=seed-psalm-23-1-3&difficulty=medium&chunkSize=1" --as reader-a`: "Verse 1" card with every other word as one unbroken blank, three progress segments, mic button. Needs the local `bible` function serving ESV.
-- `npm run sim -- flow practice-session`: reader-a opens Psalm 23:1-3 setup, picks Medium, taps Start session, sees "Verse 1" and the mic, taps the mic and gets the iOS microphone prompt. Don't Allow shows "Permission required".
+- `npm run sim -- flow practice-session`: reader-a opens Psalm 23:1-3 setup, picks Medium, taps Start session, sees "Verse 1" and the mic, taps the mic and gets the iOS microphone prompt. Don't Allow shows "Permission required" and dismissing it restores the mic.
+- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. The mic stays circular with a loading ring during permission, then becomes a slimmer pill with the waveform and actions once capture starts. One recording starts on the double tap. Discard returns the mic to the same chunk.
 - Real device, Medium, multi-verse: tap the eye, re-hide, recite, submit. The card shows the real score and "Revealed — this chunk won't count", and the final score treats those words as missing.
 
 ## Decisions

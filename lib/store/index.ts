@@ -13,6 +13,7 @@ import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
 import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseProgress, parseSortPreference, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
+import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import {
@@ -79,6 +80,7 @@ interface AppState {
   // Loading states
   hydrated: boolean;
   collectionsLoading: boolean;
+  collectionOrderSaving: boolean;
   versesLoading: boolean;
   masteredLoading: boolean;
 
@@ -100,6 +102,8 @@ interface AppState {
 
   // Actions - Collections
   addCollection: (name: string) => Promise<Collection>;
+  renameCollection: (id: string, name: string) => Promise<void>;
+  reorderCollections: (ids: string[]) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   setCollectionSort: (collectionId: string, sort: SortOption) => Promise<void>;
 
@@ -109,6 +113,7 @@ interface AppState {
     collectionId: string,
     version: BibleVersion
   ) => Promise<SavedVerse>;
+  copyVerseToCollection: (verseId: string, collectionId: string) => Promise<void>;
   deleteVerse: (id: string, collectionId: string) => Promise<{ wasMastered: boolean }>;
   updateVerseProgress: (
     id: string,
@@ -132,6 +137,37 @@ async function getCurrentUserId(): Promise<string> {
   return user.id;
 }
 
+let accountGeneration = 0;
+
+async function getCollectionWriteSession(generation: number) {
+  const result = await supabase.auth.getSession().catch((error: unknown) => {
+    if (generation === accountGeneration) throw error;
+    return null;
+  });
+  if (!result || generation !== accountGeneration) return null;
+  if (result.error) throw result.error;
+  if (!result.data.session) throw new Error('Not authenticated');
+  return result.data.session;
+}
+
+type VerseRow = Database['public']['Tables']['user_verses']['Row'];
+type VerseMembershipRow = { user_verses: VerseRow; added_at: string };
+
+function parseVerseMembership(row: VerseRow, collectionId: string, addedAt: string): SavedVerse {
+  return {
+    id: row.client_id,
+    collectionId,
+    book: row.book,
+    chapter: row.chapter,
+    verseStart: row.verse_start,
+    verseEnd: row.verse_end,
+    version: row.version as BibleVersion,
+    createdAt: new Date(addedAt).getTime(),
+    progress: parseProgress(row.progress),
+    ...parseVerseRowExtras(row),
+  };
+}
+
 // ============ STORE ============
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -149,6 +185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   inProgressSort: DEFAULT_SORT,
   hydrated: false,
   collectionsLoading: true,
+  collectionOrderSaving: false,
   versesLoading: true,
   masteredLoading: true,
   error: null,
@@ -156,14 +193,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ FETCH ACTIONS ============
 
   fetchCollections: async () => {
+    if (get().collectionOrderSaving) return true;
+    const generation = accountGeneration;
+    const previousCollections = get().collections;
     set({ collectionsLoading: true });
     try {
       const { data, error } = await supabase
         .from('user_collections')
         .select('*')
         .is('deleted_at', null)
-        .order('created_at', { ascending: true });
+        .order('position', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
+        .order('client_id', { ascending: true });
 
+      if (generation !== accountGeneration) return false;
       if (error) {
         console.error('[STORE] Failed to fetch collections:', error);
         // Keep existing state, set error
@@ -179,19 +222,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         sortPreference: parseSortPreference(c.sort_preference),
       }));
 
-      // Ensure default collection always exists
-      const hasDefault = collections.some((c) => c.isDefault);
-      if (!hasDefault) {
-        collections.unshift(DEFAULT_COLLECTION);
-      }
-
-      // Add Mastered + In Progress virtual collections after default
-      const defaultIndex = collections.findIndex((c) => c.isDefault);
-      collections.splice(defaultIndex + 1, 0, MASTERED_COLLECTION, IN_PROGRESS_COLLECTION);
-
-      set({ collections, collectionsLoading: false, error: null });
+      const pinned = [
+        collections.find((c) => c.isDefault) ?? DEFAULT_COLLECTION,
+        MASTERED_COLLECTION,
+        IN_PROGRESS_COLLECTION,
+      ];
+      set((state) => ({
+        // An older refresh must not replace a collection write made during the request.
+        collections: state.collections === previousCollections
+          ? [...pinned, ...collections.filter((c) => !c.isDefault)]
+          : state.collections,
+        collectionsLoading: false,
+        error: null,
+      }));
       return true;
     } catch (e) {
+      if (generation !== accountGeneration) return false;
       console.error('[STORE] Collection fetch error:', e);
       // Keep existing state, set error
       set({ collectionsLoading: false, error: 'Failed to load collections' });
@@ -200,6 +246,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   fetchVerses: async () => {
+    const generation = accountGeneration;
+    const previousVerses = get().verses;
     set({ versesLoading: true });
     try {
       // Query via junction table - returns verse for each collection it's in
@@ -211,8 +259,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           user_verses!inner(*)
         `)
         .is('user_verses.deleted_at', null)
-        .order('added_at', { ascending: false });
+        .order('added_at', { ascending: false })
+        .overrideTypes<(VerseMembershipRow & { user_collections: { client_id: string } })[], { merge: false }>();
 
+      if (generation !== accountGeneration) return false;
       if (error) {
         console.error('[STORE] Failed to fetch verses:', error);
         // Keep existing state, set error
@@ -221,22 +271,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       // Map junction rows to SavedVerse (one entry per collection membership)
-      const verses: SavedVerse[] = data.map((vc: any) => ({
-        id: vc.user_verses.client_id,
-        collectionId: vc.user_collections.client_id,
-        book: vc.user_verses.book,
-        chapter: vc.user_verses.chapter,
-        verseStart: vc.user_verses.verse_start,
-        verseEnd: vc.user_verses.verse_end,
-        version: vc.user_verses.version as BibleVersion,
-        createdAt: new Date(vc.added_at).getTime(),
-        progress: parseProgress(vc.user_verses.progress),
-        ...parseVerseRowExtras(vc.user_verses),
-      }));
+      const verses = data.map((vc) =>
+        parseVerseMembership(vc.user_verses, vc.user_collections.client_id, vc.added_at)
+      );
 
-      set({ verses, versesLoading: false, error: null });
+      set((state) => ({
+        verses: state.verses === previousVerses ? verses : state.verses,
+        versesLoading: false,
+        error: null,
+      }));
       return true;
     } catch (e) {
+      if (generation !== accountGeneration) return false;
       console.error('[STORE] Verse fetch error:', e);
       // Keep existing state, set error
       set({ versesLoading: false, error: 'Failed to load verses' });
@@ -245,6 +291,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   fetchMasteredVerses: async () => {
+    const generation = accountGeneration;
     set({ masteredLoading: true });
     try {
       // Fetch mastered verses directly from DB - NO deleted_at filter
@@ -255,6 +302,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .eq('progress->hard->completed', true)
         .order('updated_at', { ascending: false });
 
+      if (generation !== accountGeneration) return false;
       if (error) {
         console.error('[STORE] Failed to fetch mastered verses:', error);
         set({ masteredLoading: false });
@@ -277,6 +325,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ masteredVerses, masteredLoading: false });
       return true;
     } catch (e) {
+      if (generation !== accountGeneration) return false;
       console.error('[STORE] Mastered verses fetch error:', e);
       set({ masteredLoading: false });
       return false;
@@ -284,6 +333,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   hydrate: async () => {
+    const generation = accountGeneration;
     // Load settings from AsyncStorage (doesn't require auth)
     try {
       const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort] = await Promise.all([
@@ -320,20 +370,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('[STORE] Failed to load settings:', e);
     }
 
+    if (generation !== accountGeneration) return;
     let [collectionsOk, versesOk, masteredOk] = await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),
       get().fetchMasteredVerses(),
     ]);
+    if (generation !== accountGeneration) return;
 
     // Retry once after short delay if any fetch failed (handles auth propagation race)
     if (!collectionsOk || !versesOk || !masteredOk) {
       await new Promise((resolve) => setTimeout(resolve, 500));
+      if (generation !== accountGeneration) return;
       [collectionsOk, versesOk, masteredOk] = await Promise.all([
         collectionsOk ? true : get().fetchCollections(),
         versesOk ? true : get().fetchVerses(),
         masteredOk ? true : get().fetchMasteredVerses(),
       ]);
+      if (generation !== accountGeneration) return;
     }
 
     // Always mark as hydrated so UI can render (partial data is better than nothing)
@@ -433,6 +487,66 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     return newCollection;
+  },
+
+  renameCollection: async (id, name) => {
+    const generation = accountGeneration;
+    const trimmed = name.trim();
+    const collection = get().collections.find((c) => c.id === id);
+    if (!trimmed || !collection || collection.isDefault || collection.isVirtual) {
+      throw new Error('Cannot rename this collection');
+    }
+
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) return;
+    const { data, error } = await supabase.from('user_collections')
+      .update({ name: trimmed })
+      .eq('user_id', session.user.id)
+      .eq('client_id', id)
+      .eq('is_default', false)
+      .is('deleted_at', null)
+      .select('name')
+      .single()
+      .setHeader('Authorization', `Bearer ${session.access_token}`);
+    if (generation !== accountGeneration) return;
+    if (error) throw error;
+
+    set((state) => ({
+      collections: state.collections.map((c) => c.id === id ? { ...c, name: data.name } : c),
+    }));
+  },
+
+  reorderCollections: async (ids) => {
+    if (get().collectionOrderSaving) return;
+    const generation = accountGeneration;
+    const previous = get().collections;
+    const custom = previous.filter((c) => !c.isDefault && !c.isVirtual);
+    const byId = new Map(custom.map((c) => [c.id, c]));
+    const ordered = ids.flatMap((id) => byId.get(id) ?? []);
+    if (ordered.length !== custom.length || ordered.length !== ids.length || new Set(ids).size !== ids.length) {
+      throw new Error('Collection list changed');
+    }
+
+    const collections = [...previous.filter((c) => c.isDefault || c.isVirtual), ...ordered];
+    set({ collections, collectionOrderSaving: true });
+    try {
+      const session = await getCollectionWriteSession(generation);
+      if (!session || generation !== accountGeneration) return;
+      const { error } = await supabase.rpc('reorder_collections', { collection_ids: ids })
+        .setHeader('Authorization', `Bearer ${session.access_token}`);
+      if (generation !== accountGeneration) return;
+      if (error) throw error;
+    } catch (error) {
+      if (generation !== accountGeneration) return;
+      set((state) => ({
+        collections: state.collections === collections ? previous : state.collections,
+        collectionOrderSaving: false,
+      }));
+      await get().fetchCollections();
+      if (generation === accountGeneration) throw error;
+      return;
+    }
+    set({ collectionOrderSaving: false });
   },
 
   deleteCollection: async (id: string) => {
@@ -563,6 +677,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // ============ VERSE ACTIONS ============
+
+  copyVerseToCollection: async (verseId, collectionId) => {
+    const generation = accountGeneration;
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) return;
+    const { data, error } = await supabase.rpc('copy_verse_to_collection', {
+      verse_client_id: verseId,
+      collection_client_id: collectionId,
+    }).select('added_at,user_verses!inner(*)').single()
+      .setHeader('Authorization', `Bearer ${session.access_token}`)
+      .overrideTypes<VerseMembershipRow, { merge: false }>();
+    if (generation !== accountGeneration) return;
+    if (error) throw error;
+
+    const copy = parseVerseMembership(data.user_verses, collectionId, data.added_at);
+    set((state) => state.verses.some((v) => v.id === verseId && v.collectionId === collectionId)
+      ? state
+      : { verses: [copy, ...state.verses] }
+    );
+  },
 
   addVerse: async (verse, collectionId, version) => {
     const userId = await getCurrentUserId();
@@ -970,6 +1104,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ RESET ============
 
   clear: () => {
+    accountGeneration++;
     set({
       collections: [],
       verses: [],
@@ -980,6 +1115,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // unspecified keys. AsyncStorage copies are never touched here.
       hydrated: false,
       collectionsLoading: true,
+      collectionOrderSaving: false,
       versesLoading: true,
       masteredLoading: true,
       error: null,
@@ -1001,7 +1137,7 @@ export const useReviewMaxIntervalDays = () => useAppStore((state) => state.revie
 /**
  * Sort preference for a given collection. Routes by ID literal because
  * virtual-collection objects in `collections` never carry a
- * `sortPreference` field — the splice in fetchCollections inserts the
+ * `sortPreference` field — fetchCollections inserts the
  * frozen MASTERED_COLLECTION / IN_PROGRESS_COLLECTION constants.
  */
 export function useCollectionSort(collectionId: string): SortOption {

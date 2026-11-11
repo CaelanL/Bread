@@ -15,10 +15,13 @@ export const Motion = {
   pressScale: 0.96,
   pressMs: 150,
   exitMs: 150,
+  expandMs: 200,
   staggerMs: 100,
+  spinnerMs: 900,
   easing: [0.2, 0, 0, 1],
 } as const;
 export const Shadows = {
+  floating: '0px 4px 10px rgba(0,0,0,0.14)',
   border: '0px 0px 0px 1px rgba(0,0,0,0.06), 0px 1px 2px -1px rgba(0,0,0,0.06), 0px 2px 4px 0px rgba(0,0,0,0.04)',
   borderHover: '0px 0px 0px 1px rgba(0,0,0,0.08), 0px 1px 2px -1px rgba(0,0,0,0.08), 0px 2px 4px 0px rgba(0,0,0,0.06)',
 } as const;
@@ -35,6 +38,8 @@ export const Colors = {
 
     // Primary (bronze gold)
     primary: '#b08d57',           // Muted bronze/champagne gold
+    recordingControl: '#987142',
+    recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(176,141,87,0.12)',
 
     // Surfaces
@@ -51,6 +56,7 @@ export const Colors = {
     success: '#22c55e',
     warning: '#f59e0b',
     error: '#ef4444',
+    destructiveAction: '#c93636',
 
     // Utility
     shadow: '#000',
@@ -67,6 +73,8 @@ export const Colors = {
 
     // Primary (bronze gold - slightly lighter for dark)
     primary: '#c9a962',           // Brighter bronze for dark mode
+    recordingControl: '#a8824c',
+    recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(201,169,98,0.15)',
 
     // Surfaces
@@ -83,6 +91,7 @@ export const Colors = {
     success: '#22c55e',
     warning: '#f59e0b',
     error: '#ef4444',
+    destructiveAction: '#c93636',
 
     // Utility
     shadow: '#000',

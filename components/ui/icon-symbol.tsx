@@ -30,6 +30,11 @@ const MAPPING = {
   'arrow.right': 'arrow-forward',
   'eye': 'visibility',
   'eye.slash': 'visibility-off',
+  'line.3.horizontal': 'drag-handle',
+  'pencil': 'edit',
+  'trash': 'delete-outline',
+  'heart.fill': 'favorite',
+  'folder.fill': 'folder',
 } as IconMapping;
 
 /**
