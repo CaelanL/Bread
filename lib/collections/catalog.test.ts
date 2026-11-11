@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { VERSE_COUNTS } from '../../supabase/functions/bible/verse-counts';
 import { CURATED_COLLECTIONS } from './catalog';
+import { curatedCollectionId, curatedCollectionVersion } from './identity';
 import { COLLECTION_ICONS, collectionSymbolFallback, isCollectionIconKey, resolveCollectionIcon } from './icons';
 
 test('curated collections contain distinct, short canonical references and original introductions', () => {
@@ -46,4 +47,10 @@ test('older supported iOS releases have a fallback for newer collection symbols'
   assert.equal(collectionSymbolFallback('mountain.2', 16), 'terrain');
   assert.equal(collectionSymbolFallback('mountain.2', 16.1), undefined);
   assert.equal(collectionSymbolFallback('book.closed', 15.1), undefined);
+});
+
+test('saved imports expose their original version and ordinary collection IDs have no label', () => {
+  assert.equal(curatedCollectionVersion(curatedCollectionId('anxiety-and-peace', 'KJV')), 'KJV');
+  assert.equal(curatedCollectionVersion(curatedCollectionId('anxiety-and-peace', 'ESV')), 'ESV');
+  assert.equal(curatedCollectionVersion('collection-1234'), undefined);
 });

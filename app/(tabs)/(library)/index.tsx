@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
-import { SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
+import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -9,7 +9,7 @@ import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useD
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -18,11 +18,8 @@ import {
   View,
   RefreshControl,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-
-interface CollectionWithCount extends Collection {
-  verseCount: number;
-}
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { FadeInDown, useSharedValue } from 'react-native-reanimated';
 
 // Component to get verse count for a collection
 function CollectionCard({
@@ -30,11 +27,19 @@ function CollectionCard({
   index,
   onPress,
   onDelete,
+  onRename,
+  onReorder,
+  reorder,
+  actionsDisabled,
 }: {
   collection: Collection;
   index: number;
   onPress: () => void;
   onDelete: () => Promise<void>;
+  onRename: () => void;
+  onReorder: () => void;
+  reorder?: CollectionReorder;
+  actionsDisabled: boolean;
 }) {
   const isMastered = collection.id === MASTERED_COLLECTION_ID;
   const isInProgress = collection.id === IN_PROGRESS_COLLECTION_ID;
@@ -49,15 +54,18 @@ function CollectionCard({
     : isInProgress
       ? inProgressVerseCount
       : collectionVerseCount;
-  const collectionWithCount: CollectionWithCount = { ...collection, verseCount };
   const dueCount = isMastered ? dueCounts.mastered : 0;
 
   return (
     <SwipeableCollectionCard
-      collection={collectionWithCount}
+      collection={{ ...collection, verseCount }}
       index={index}
       onPress={onPress}
       onDelete={onDelete}
+      onRename={onRename}
+      onReorder={onReorder}
+      reorder={reorder}
+      actionsDisabled={actionsDisabled}
       dueCount={dueCount}
     />
   );
@@ -66,7 +74,6 @@ function CollectionCard({
 export default function LibraryScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
   const now = useReviewNow();
 
   // Store data
@@ -77,16 +84,44 @@ export default function LibraryScreen() {
     : allCollections.filter((c) => c.id !== IN_PROGRESS_COLLECTION_ID);
   const hydrated = useHydrated();
   const addCollection = useAppStore((s) => s.addCollection);
+  const renameCollection = useAppStore((s) => s.renameCollection);
+  const reorderCollections = useAppStore((s) => s.reorderCollections);
+  const orderSaving = useAppStore((s) => s.collectionOrderSaving);
   const deleteCollection = useAppStore((s) => s.deleteCollection);
   const refresh = useAppStore((s) => s.refresh);
 
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
+  const renamingCollection = nameDialog?.collection;
+  const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
+  const actionsDisabled = refreshing || orderSaving;
+  const scrollGesture = useMemo(() => Gesture.Native(), []);
+  const from = useSharedValue(-1);
+  const to = useSharedValue(-1);
+  const offset = useSharedValue(0);
+
+  useLayoutEffect(() => {
+    from.value = -1;
+    to.value = -1;
+    offset.value = 0;
+  }, [allCollections, editing, from, to, offset]);
 
   const onRefresh = async () => {
+    if (orderSaving) return;
     setRefreshing(true);
     await refresh();
     setRefreshing(false);
+  };
+
+  const moveCollection = (source: number, destination: number) => {
+    const ids = customCollections.map((c) => c.id);
+    const [moved] = ids.splice(source, 1);
+    if (!moved) return;
+    ids.splice(destination, 0, moved);
+    void reorderCollections(ids).catch(() => {
+      showErrorToast('Could not save the collection order. Please try again.');
+    });
   };
 
   const handleAddCollection = async (name: string) => {
@@ -103,11 +138,12 @@ export default function LibraryScreen() {
       await deleteCollection(id);
     } catch (e) {
       showErrorToast('Failed to delete collection.');
-      throw e; // Re-throw so SwipeableCollectionCard can handle animation
+      throw e;
     }
   };
 
   const handleCollectionPress = (collection: Collection) => {
+    if (editing) return;
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 
@@ -129,14 +165,30 @@ export default function LibraryScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Library</Text>
-          <Pressable
-            style={styles.addButton}
-            onPress={() => setModalVisible(true)}
-          >
-            <IconSymbol name="plus" size={28} color={primaryColor} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            {(editing || customCollections.length > 0) && (
+              <Pressable
+                style={styles.editButton}
+                onPress={() => setEditing(!editing)}
+                accessibilityRole="button"
+                disabled={actionsDisabled}
+              >
+                <Text style={[styles.editLabel, { color: colors.text }]}>{editing ? 'Done' : 'Edit'}</Text>
+              </Pressable>
+            )}
+            <Pressable
+              style={styles.addButton}
+              accessibilityRole="button"
+              accessibilityLabel="New collection"
+              onPress={() => setNameDialog({})}
+              disabled={actionsDisabled}
+            >
+              <IconSymbol name="plus" size={28} color={primaryColor} />
+            </Pressable>
+          </View>
         </View>
 
+        <GestureDetector gesture={scrollGesture}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.collectionsContainer}
@@ -148,25 +200,47 @@ export default function LibraryScreen() {
             <CollectionCardSkeleton count={3} />
           ) : (
             <>
-              {collections.map((collection, index) => (
-                <CollectionCard
-                  key={collection.id}
-                  collection={collection}
-                  index={index}
-                  onPress={() => handleCollectionPress(collection)}
-                  onDelete={() => handleDeleteCollection(collection.id)}
-                />
-              ))}
+              {collections.map((collection, index) => {
+                const customIndex = customCollections.indexOf(collection);
+                return (
+                  <CollectionCard
+                    key={collection.id}
+                    collection={collection}
+                    index={index}
+                    onPress={() => handleCollectionPress(collection)}
+                    onDelete={() => handleDeleteCollection(collection.id)}
+                    onRename={() => setNameDialog({ collection })}
+                    onReorder={() => setEditing(true)}
+                    actionsDisabled={actionsDisabled}
+                    reorder={editing && customIndex >= 0 ? {
+                      index: customIndex,
+                      count: customCollections.length,
+                      disabled: actionsDisabled,
+                      scrollGesture,
+                      from,
+                      to,
+                      offset,
+                      onMove: moveCollection,
+                    } : undefined}
+                  />
+                );
+              })}
               {collections.length <= 1 && renderEmptyHint()}
             </>
           )}
         </ScrollView>
+        </GestureDetector>
 
-        <AddCollectionModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          onAdd={handleAddCollection}
-        />
+        {nameDialog && (
+          <AddCollectionModal
+            visible
+            initialName={renamingCollection?.name}
+            onClose={() => setNameDialog(null)}
+            onAdd={renamingCollection
+              ? (name) => renameCollection(renamingCollection.id, name)
+              : handleAddCollection}
+          />
+        )}
       </View>
     </ReviewNowProvider>
   );
@@ -189,14 +263,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   addButton: {
-    padding: 4,
+    padding: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  editButton: {
+    padding: 10,
+  },
+  editLabel: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,
   },
   collectionsContainer: {
     padding: 16,
-    gap: 12,
+    gap: COLLECTION_ROW_GAP,
   },
   hintContainer: {
     marginTop: 20,

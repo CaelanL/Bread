@@ -20,6 +20,7 @@ interface LeftButtonProps {
 
 interface AppHeaderProps {
   title?: string;
+  titleTag?: string;
   titleIcon?: {
     name: ComponentProps<typeof IconSymbol>['name'];
     label: string;
@@ -30,7 +31,7 @@ interface AppHeaderProps {
   rightButton?: RightButtonProps;
 }
 
-export function AppHeader({ title, titleIcon, showBack = true, leftButton, rightButton }: AppHeaderProps) {
+export function AppHeader({ title, titleTag, titleIcon, showBack = true, leftButton, rightButton }: AppHeaderProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const primaryColor = colors.primary;
@@ -125,6 +126,9 @@ export function AppHeader({ title, titleIcon, showBack = true, leftButton, right
             {title}
           </Text>
         )}
+        {titleTag && (
+          <Text style={[styles.titleTag, { color: colors.icon }]}>{titleTag}</Text>
+        )}
       </View>
 
       <View style={[styles.rightSection, titleIcon && styles.fixedSide]}>{renderRightButton()}</View>
@@ -170,6 +174,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  titleTag: { fontSize: 12, fontWeight: '600' },
   backButton: {
     padding: 8,
     marginLeft: -8,

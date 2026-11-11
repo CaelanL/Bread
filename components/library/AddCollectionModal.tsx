@@ -23,12 +23,15 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface AddCollectionModalProps {
   visible: boolean;
+  initialName?: string;
   onClose: () => void;
   onAdd: (name: string) => Promise<void>;
 }
 
-export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionModalProps) {
-  const [name, setName] = useState('');
+export function AddCollectionModal({ visible, initialName, onClose, onAdd }: AddCollectionModalProps) {
+  const [name, setName] = useState(initialName ?? '');
+  const [renameFailed, setRenameFailed] = useState(false);
+  const renaming = initialName !== undefined;
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -59,18 +62,19 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
       try {
         await onAdd(name.trim());
       } catch {
-        // Error toast is shown by caller
+        if (renaming) {
+          setRenameFailed(true);
+          return;
+        }
       } finally {
         setSubmitting(false);
-        setName('');
-        onClose();
       }
+      onClose();
     }
   };
 
   const handleClose = () => {
-    setName('');
-    onClose();
+    if (!submitting) onClose();
   };
 
   const cardBg = colors.card;
@@ -100,7 +104,7 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
               <View style={[styles.iconContainer, { backgroundColor: `${primaryColor}15` }]}>
                 <IconSymbol name="folder.fill" size={22} color={primaryColor} />
               </View>
-              <Text style={[styles.title, { color: colors.text }]}>New Collection</Text>
+              <Text style={[styles.title, { color: colors.text }]}>{renaming ? 'Rename Collection' : 'New Collection'}</Text>
             </View>
             <Pressable onPress={handleClose} style={styles.closeButton}>
               <IconSymbol name="xmark" size={18} color={colors.icon} />
@@ -122,14 +126,28 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
               placeholder="e.g., Psalms of Comfort"
               placeholderTextColor={colors.icon}
               value={name}
-              onChangeText={setName}
+              onChangeText={(value) => {
+                setName(value);
+                setRenameFailed(false);
+              }}
               autoFocus
+              selectTextOnFocus={renaming}
+              editable={!submitting}
+              accessibilityLabel="Collection name"
+              testID="collection-name"
               returnKeyType="done"
               onSubmitEditing={handleSubmit}
             />
-            <Text style={[styles.hint, { color: colors.icon }]}>
-              Create a collection to organize verses by theme, book, or study plan.
-            </Text>
+            {!renaming && (
+              <Text style={[styles.hint, { color: colors.icon }]}>
+                Create a collection to organize verses by theme, book, or study plan.
+              </Text>
+            )}
+            {renameFailed && (
+              <Text style={[styles.hint, { color: colors.error }]} accessibilityLiveRegion="polite">
+                Could not rename this collection. Please try again.
+              </Text>
+            )}
           </View>
 
           {/* Buttons */}
@@ -152,7 +170,7 @@ export function AddCollectionModal({ visible, onClose, onAdd }: AddCollectionMod
               {submitting ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Text style={[styles.buttonText, { color: colors.white }]}>Create Collection</Text>
+                <Text style={[styles.buttonText, { color: colors.white }]}>{renaming ? 'Save' : 'Create Collection'}</Text>
               )}
             </Pressable>
           </View>

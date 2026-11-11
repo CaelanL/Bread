@@ -1,0 +1,160 @@
+# Start from npm run db:reset. Exercises the real store and local database.
+appId: com.caelanliu.biblemem
+name: library-management
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Psalms, 1 verse.*"
+    timeout: 20000
+- tapOn: "New collection"
+- tapOn:
+    id: collection-name
+- inputText: Comfort
+- tapOn: "Create Collection"
+- longPressOn: ".*Comfort, 0 verses.*"
+- takeScreenshot: library-1-collection-actions
+- tapOn: Rename
+- extendedWaitUntil:
+    visible: "Rename Collection"
+    timeout: 8000
+- assertVisible: Comfort
+- takeScreenshot: library-2-rename
+- tapOn:
+    id: collection-name
+- eraseText: 7
+- inputText: Verses for patience and encouragement
+- tapOn: Save
+- extendedWaitUntil:
+    visible: ".*Verses for patience and encouragement, 0 verses.*"
+    timeout: 10000
+
+- tapOn: Edit
+- assertVisible: "Reorder Psalms"
+- assertNotVisible: "Reorder My Verses"
+- assertNotVisible: "Reorder Mastered"
+- assertNotVisible: "Reorder In Progress"
+- tapOn: ".*Psalms, 1 verse.*"
+- assertVisible: Done
+- tapOn: ".*My Verses, 2 verses.*"
+- assertVisible: Done
+- takeScreenshot: library-3-edit
+- swipe:
+    from:
+      text: "Reorder Verses for patience and encouragement"
+    direction: UP
+- assertVisible:
+    text: "Reorder Verses for patience and encouragement"
+    above: "Reorder Psalms"
+- swipe:
+    from:
+      text: "Reorder Verses for patience and encouragement"
+    direction: DOWN
+- assertVisible:
+    text: "Reorder Psalms"
+    above: "Reorder Verses for patience and encouragement"
+- tapOn: Done
+- longPressOn: ".*Psalms, 1 verse.*"
+- tapOn: Reorder
+- assertVisible: Done
+- swipe:
+    from:
+      text: "Reorder Verses for patience and encouragement"
+    direction: UP
+- tapOn:
+    text: Done
+    enabled: true
+- swipe:
+    start: "50%, 20%"
+    end: "50%, 56%"
+- assertVisible:
+    text: ".*Verses for patience and encouragement, 0 verses.*"
+    above: ".*Psalms, 1 verse.*"
+- assertVisible:
+    text: ".*In Progress, 1 verse.*"
+    above: ".*Verses for patience and encouragement, 0 verses.*"
+- stopApp
+- openLink: ${DEV_CLIENT_URL}
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Verses for patience and encouragement, 0 verses.*"
+    timeout: 30000
+- assertVisible:
+    text: ".*Verses for patience and encouragement, 0 verses.*"
+    above: ".*Psalms, 1 verse.*"
+- takeScreenshot: library-4-saved-order
+- swipe:
+    from: ".*Psalms, 1 verse.*"
+    direction: LEFT
+- takeScreenshot: library-5-collection-swipe-light
+- tapOn:
+    id: swipe-delete
+    below: ".*Verses for patience and encouragement, 0 verses.*"
+- assertVisible: 'Delete "Psalms"?'
+- tapOn: Cancel
+
+- tapOn: ".*Mastered, 1 verse.*"
+- longPressOn: ".*John 3:16 • ESV.*"
+- assertVisible: "Copy to collection"
+- assertVisible:
+    text: "My Verses, Already added"
+    enabled: false
+- takeScreenshot: library-6-copy-picker
+- tapOn: "Verses for patience and encouragement"
+- extendedWaitUntil:
+    visible: "Copied to Verses for patience and encouragement"
+    timeout: 10000
+- runScript:
+    file: scripts/library-membership.js
+    env:
+      EXPECT_COPY: "yes"
+- longPressOn: ".*John 3:16 • ESV.*"
+- assertVisible:
+    text: "Verses for patience and encouragement, Already added"
+    enabled: false
+- tapOn: Close
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- tapOn: ".*Verses for patience and encouragement, 1 verse.*"
+- assertVisible: ".*John 3:16 • ESV.*Review now.*"
+- takeScreenshot: library-7-copied-verse
+- swipe:
+    from: ".*John 3:16 • ESV.*"
+    direction: LEFT
+- takeScreenshot: library-8-verse-swipe-light
+- tapOn:
+    id: swipe-delete
+- assertVisible: "Remove from collection?"
+- tapOn: Cancel
+
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fsettings
+- extendedWaitUntil:
+    visible: Dark
+    timeout: 15000
+- tapOn: Dark
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- swipe:
+    from: ".*Psalms, 1 verse.*"
+    direction: LEFT
+- takeScreenshot: library-9-collection-swipe-dark
+- tapOn: ".*Verses for patience and encouragement, 1 verse.*"
+- swipe:
+    from: ".*John 3:16 • ESV.*"
+    direction: LEFT
+- takeScreenshot: library-10-verse-swipe-dark
+- tapOn:
+    id: swipe-delete
+- assertVisible: "Remove from collection?"
+- tapOn: Remove
+- assertVisible: "No verses yet"
+- runScript:
+    file: scripts/library-membership.js
+    env:
+      EXPECT_COPY: "no"
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- tapOn: ".*My Verses, 2 verses.*"
+- assertVisible: ".*John 3:16 • ESV.*Review now.*"
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fsettings
+- extendedWaitUntil:
+    visible: System
+    timeout: 15000
+- tapOn: System

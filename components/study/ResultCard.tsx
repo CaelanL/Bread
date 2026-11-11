@@ -1,10 +1,10 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AlignmentWord } from '@/lib/study-chunks';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeOut, withDelay, withTiming } from 'react-native-reanimated';
 import { AlignmentHelpModal } from './AlignmentHelpModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -30,8 +30,6 @@ interface ResultCardProps {
   transcription?: string;
   isRetry?: boolean;
   isPeeked?: boolean;
-  exiting?: boolean;
-  onExitComplete?: () => void;
 }
 
 const STATUS_CONFIG = {
@@ -154,43 +152,15 @@ function AlignmentDisplay({ alignment, textColor }: { alignment: AlignmentWord[]
   );
 }
 
-export function ResultCard({ score, alignment, transcription, isRetry = false, isPeeked = false, exiting = false, onExitComplete }: ResultCardProps) {
+export function ResultCard({ score, alignment, transcription, isRetry = false, isPeeked = false }: ResultCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
   const [showHelp, setShowHelp] = useState(false);
-  const [measuredHeight, setMeasuredHeight] = useState(0);
 
   const status = getStatus(score);
   const statusConfig = STATUS_CONFIG[status];
   const statusColors = getStatusColors(status, isDark);
-
-  // Exit animation: fade out + collapse height
-  const exitOpacity = useSharedValue(1);
-  const exitHeight = useSharedValue(-1); // -1 = use auto height
-
-  useEffect(() => {
-    if (exiting && measuredHeight > 0) {
-      const config = { duration: 300, easing: Easing.bezier(0.4, 0.0, 0.65, 0.15) };
-      exitOpacity.value = withTiming(0, config);
-      exitHeight.value = measuredHeight;
-      exitHeight.value = withTiming(0, config, (finished) => {
-        if (finished && onExitComplete) {
-          runOnJS(onExitComplete)();
-        }
-      });
-    }
-  }, [exiting, measuredHeight]);
-
-  const exitAnimStyle = useAnimatedStyle(() => {
-    if (exitHeight.value === -1) {
-      return { opacity: exitOpacity.value };
-    }
-    return {
-      opacity: exitOpacity.value,
-      maxHeight: exitHeight.value,
-    };
-  });
 
   return (
     <Animated.View
@@ -199,16 +169,11 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
         {
           backgroundColor: statusColors.bg,
           borderColor: statusColors.border,
-          maxHeight: exiting ? undefined : CARD_MAX_HEIGHT,
+          maxHeight: CARD_MAX_HEIGHT,
         },
-        exitAnimStyle,
       ]}
       entering={customEntering}
-      onLayout={(e) => {
-        if (!exiting && measuredHeight === 0) {
-          setMeasuredHeight(e.nativeEvent.layout.height);
-        }
-      }}
+      exiting={FadeOut.duration(Motion.exitMs)}
     >
       <View style={styles.cardContent}>
         {/* Retry notice */}

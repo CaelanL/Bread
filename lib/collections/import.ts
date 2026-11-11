@@ -6,9 +6,7 @@ import type { Database } from '@/supabase/database.types';
 
 import { CURATED_COLLECTIONS } from './catalog';
 
-export function curatedCollectionId(catalogId: string, version: BibleVersion): string {
-  return `curated-${catalogId}-${version}`;
-}
+import { curatedCollectionId } from './identity';
 
 export async function importCollection(
   client: SupabaseClient<Database>,

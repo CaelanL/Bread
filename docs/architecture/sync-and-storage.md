@@ -53,6 +53,7 @@ interface AppState {
   // Lifecycle flags
   hydrated: boolean;
   collectionsLoading: boolean;
+  collectionOrderSaving: boolean;
   versesLoading: boolean;
   masteredLoading: boolean;
   error: string | null;
@@ -70,9 +71,12 @@ interface AppState {
   addCollection: (name, iconKey?) => Promise<Collection>;
   importCuratedCollection: (catalogId, version) => Promise<{ collectionId: string; loaded: boolean }>;
   setCollectionIcon: (id, iconKey) => Promise<void>;
+  renameCollection: (id, name) => Promise<void>;
+  reorderCollections: (ids) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
   setCollectionSort: (collectionId, sort) => Promise<void>;
   addVerse: (verse, collectionId, version) => Promise<SavedVerse>;
+  copyVerseToCollection: (verseId, collectionId) => Promise<void>;
   deleteVerse: (id, collectionId) => Promise<{ wasMastered: boolean }>;
   updateVerseProgress: (id, difficulty, accuracy, fullSession?) => Promise<void>;
   resetVerseProgress: (id) => Promise<void>;
@@ -116,6 +120,10 @@ Wipes user data on sign-out. Device-level prefs (`colorMode`,
 keeps everything else. If you add another device-level pref, just
 don't list it in `clear()`'s `set`.
 
+`clear()` also advances the account generation. Collection rename, reorder
+and copy use the session that started them and ignore late completions.
+Library fetches and hydration stop publishing results from that generation.
+
 ## Hydration
 
 Called by an effect in `app/_layout.tsx` when `isAuthenticated` goes
@@ -141,7 +149,7 @@ hydrate()
          → so the first verse render in the UI is instant
 ```
 
-The `hydrated: true` is set unconditionally. This prevents an
+Hydration for the current account always sets `hydrated: true`. This prevents an
 infinite loading spinner if any fetch fails. Components should
 check `useHydrated()` before reading and gracefully handle empty
 arrays.

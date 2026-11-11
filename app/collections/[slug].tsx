@@ -10,7 +10,7 @@ import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
 import { CURATED_COLLECTIONS, type CuratedCollection } from '@/lib/collections/catalog';
-import { curatedCollectionId } from '@/lib/collections/import';
+import { curatedCollectionId } from '@/lib/collections/identity';
 import { BIBLE_VERSIONS, type BibleVersion } from '@/lib/settings';
 import { useAppStore, useCollection, useHydrated } from '@/lib/store';
 

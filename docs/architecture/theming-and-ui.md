@@ -20,6 +20,8 @@ surfaces.
 | `text` | `#1a1a1a` | primary text |
 | `background` | `#faf8f5` | screen background |
 | `tint` / `primary` | `#b08d57` | brand accent (bronze gold) |
+| `recordingControl` | `#987142` | bronze mic and waveform surface with white icons |
+| `recordingAction` | `rgba(0,0,0,0.10)` | submit action fill on bronze, same in both modes |
 | `card` | `#ffffff` | card surfaces |
 | `cardAlt` | `#f5f3f0` | secondary card surfaces |
 | `input` | `#f5f3f0` | input backgrounds |
@@ -28,6 +30,7 @@ surfaces.
 | `success` | `#22c55e` | success status |
 | `warning` | `#f59e0b` | warning status |
 | `error` | `#ef4444` | error status |
+| `destructiveAction` | `#c93636` | swipe-delete fill in both themes, with white text |
 | `tabIconDefault` | `#8a8a8a` | inactive tab icons |
 | `tabIconSelected` | `#b08d57` | active tab icons |
 | `icon` | `#6b6b6b` | default icon color |
@@ -42,6 +45,7 @@ surfaces.
 | `text` | `#f5f5f5` | |
 | `background` | `#1a1a1a` | |
 | `tint` / `primary` | `#c9a962` | brand (lighter for contrast) |
+| `recordingControl` | `#a8824c` | bronze mic and waveform surface with white icons |
 | `card` | `#242424` | |
 | `cardAlt` | `#2e2e2e` | |
 | `input` | `#2e2e2e` | |
@@ -187,6 +191,7 @@ have hex literals; don't copy them.
 | `VerseReferenceBadge.tsx` | "John 3:16 KJV" badge |
 | `VerseExpandModal.tsx` | Expanded verse text modal |
 | `AddToCollectionModal.tsx` | Pick collection(s) for a verse |
+| `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
 
 If you're building a new reusable primitive, add it here with a
@@ -227,14 +232,15 @@ if (process.env.EXPO_OS === 'ios') {
 }
 ```
 
-`HapticTab` follows it. The study and add-verse screens call `Haptics`
-without the check, so they also fire on Android.
+`HapticTab`, recording and Library hold actions follow this guard.
+Verse reveal and the add-verse screens also trigger haptics on Android.
 
 | Interaction | Style |
 |---|---|
 | Tab press | `impactAsync(Light)` (in `HapticTab`) |
 | Selection of a verse for adding | `selectionAsync()` |
 | Recording start/stop | `impactAsync(Medium)` |
+| Library long-press actions | `impactAsync(Light)` |
 | Chunk completion | `impactAsync(Light)` |
 
 Use `impactAsync` for taps and recording state transitions,

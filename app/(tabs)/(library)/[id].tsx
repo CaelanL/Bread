@@ -1,9 +1,10 @@
 import { AppHeader } from '@/components/app-header';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
+import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
@@ -14,8 +15,9 @@ import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  AccessibilityInfo,
   FlatList,
   Pressable,
   StyleSheet,
@@ -70,8 +72,17 @@ export default function CollectionScreen() {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const canChangeIcon = collection && !collection.isDefault && !collection.isVirtual;
   const collectionIcon = resolveCollectionIcon(collection?.iconKey);
+  const [copyingVerse, setCopyingVerse] = useState<SavedVerse | null>(null);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const sortBy = useCollectionSort(id || '');
   const setCollectionSort = useAppStore((s) => s.setCollectionSort);
+
+  useEffect(() => {
+    if (!copyNotice) return;
+    AccessibilityInfo.announceForAccessibility(copyNotice);
+    const timer = setTimeout(() => setCopyNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [copyNotice]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -176,6 +187,7 @@ export default function CollectionScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
         title={collection?.name || 'Collection'}
+        titleTag={collection?.importedVersion}
         leftButton={{
           icon: 'chevron.left',
           label: 'Back',
@@ -238,6 +250,10 @@ export default function CollectionScreen() {
               verse={item}
               onPress={() => handleVersePress(item)}
               onDelete={() => handleDeleteVerse(item.id)}
+              onCopy={() => {
+                setCopyNotice(null);
+                setCopyingVerse(item);
+              }}
               disableSwipe={isMasteredCollection || isInProgressCollection}
               collectionCount={getVerseCollectionCount(item)}
             />
@@ -257,6 +273,23 @@ export default function CollectionScreen() {
           onSave={(key) => useAppStore.getState().setCollectionIcon(collection.id, key)}
         />
       )}
+      {copyNotice && (
+        <View pointerEvents="none" style={styles.noticeContainer}>
+          <Text style={[styles.notice, { color: colors.text, backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
+            {copyNotice}
+          </Text>
+        </View>
+      )}
+      {copyingVerse && (
+        <CopyToCollectionModal
+          verse={copyingVerse}
+          onClose={() => setCopyingVerse(null)}
+          onCopied={(name) => {
+            setCopyingVerse(null);
+            setCopyNotice(`Copied to ${name}`);
+          }}
+        />
+      )}
     </View>
     </ReviewNowProvider>
   );
@@ -265,6 +298,21 @@ export default function CollectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  noticeContainer: {
+    position: 'absolute',
+    bottom: 16,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+  },
+  notice: {
+    borderRadius: Radius.huge,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '500',
   },
   searchContainer: {
     flexDirection: 'row',

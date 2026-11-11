@@ -68,7 +68,7 @@ begin
     end if;
 
     update public.user_collections
-    set deleted_at = null, name = p_name, icon_key = p_icon_key, created_at = now()
+    set deleted_at = null, name = p_name, icon_key = p_icon_key, position = null, created_at = now()
     where id = saved_collection.id and user_id = owner_id;
   else
     insert into public.user_collections (user_id, client_id, name, icon_key)

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(32);
 
 select ok(
   not has_function_privilege('anon', 'public.import_curated_collection(text,text,text,text,jsonb)', 'EXECUTE'),
@@ -76,7 +76,7 @@ select is(
   'a genuinely new verse starts with uncompleted progress'
 );
 
-update public.user_collections set name = 'My edited copy', icon_key = 'heart'
+update public.user_collections set name = 'My edited copy', icon_key = 'heart', position = 2
 where id = current_setting('test.import_id')::uuid;
 delete from public.verse_collections where collection_id = current_setting('test.import_id')::uuid
   and verse_id <> current_setting('test.seed_verse_id')::uuid;
@@ -88,6 +88,10 @@ select is(
   (select concat(name, ':', icon_key) from public.user_collections where id = current_setting('test.import_id')::uuid),
   'My edited copy:heart',
   'retry preserves custom name and icon'
+);
+select is(
+  (select position from public.user_collections where id = current_setting('test.import_id')::uuid),
+  2, 'retry keeps the active collection in its saved position'
 );
 select is(
   (select count(*)::int from public.verse_collections where collection_id = current_setting('test.import_id')::uuid),
@@ -124,6 +128,10 @@ select is(
   (select count(*)::int from public.verse_collections where collection_id = current_setting('test.import_id')::uuid),
   2,
   'explicit re-add restores both memberships'
+);
+select is(
+  (select position from public.user_collections where id = current_setting('test.import_id')::uuid),
+  null::integer, 'a restored collection leaves its old position and appends'
 );
 select is(
   (select to_jsonb(v) - 'updated_at' from public.user_verses v

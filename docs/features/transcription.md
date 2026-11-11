@@ -23,7 +23,8 @@ recording: the m4a file is always written, because the design is dual-path. The
 
 | Piece | File | Role |
 |---|---|---|
-| Recorder | `app/session.tsx` | Mic lifecycle, cap timer, waveform, live feed |
+| Recorder | `app/session.tsx`, `lib/transcription/recording-controls.ts` | Mic lifecycle, cap timer, waveform, live feed |
+| Recording control | `components/study/RecordingBar.tsx` | Mic, startup ring, waveform and analysis indicator |
 | Seam | `hooks/use-study-session.ts` (`processRecording`) | Picks the transcript, then aligns and scores |
 | Live client | `lib/transcription/live-session.ts` | `startLiveTranscription`, `LiveTranscriptionSession` |
 | Batch client | `lib/api/recording.ts` | `processRecording` upload to the edge function, same name as the seam |
@@ -39,12 +40,21 @@ kHz mono 16-bit PCM chunks every 100 ms.
 
 Tapping the mic in `handleMicPress`:
 
-1. Asks for mic permission.
+1. Claims one recording attempt for the current chunk and shows a loading ring
+   around the mic circle. It asks for mic permission at once. The X beside the
+   circle discards the attempt. Further mic taps are ignored while that attempt
+   owns the recorder.
 2. Calls `startLiveTranscription(chunk.text)`, which returns at once and connects
    in the background.
-3. Calls `startRecording`. If a teardown happened while the native start was in
-   flight, `recordingGenRef` has moved on and the recorder stops right away.
-4. Arms the cap timer and slides in `RecordingBar`.
+3. Calls `startRecording`. If the attempt was discarded during permission, it
+   never starts. If discarded during native start, it stops as soon as start
+   resolves and keeps ownership until that stop finishes.
+4. Morphs the circle into a slimmer pill with the waveform, discard and submit
+   actions, and arms the cap timer once native start resolves. The pill and its
+   actions signal readiness even in silence. VoiceOver announces Listening.
+   Motion, the connection to Soniox and the first PCM chunk do not gate capture
+   or readiness. With Reduce Motion enabled, the ring is still and the control
+   fades in place.
 
 PCM goes two places:
 
@@ -61,27 +71,27 @@ for a token refresh in front of the key mint.
 
 ### Submit and teardown
 
-`handleSubmit` runs for the done button and the cap timer. It stops the recorder,
-takes `recording.compression?.compressedFileUri` (or `fileUri`), and hands the file
-and live session to the seam. `liveSessionRef` stays set through
-`processRecording`, so the trailing chunk still gets fed. Clearing it early clips
-the last word. While transcribing, the bar shows a spinner and has no cancel.
+`handleSubmit` runs for the done button and the cap timer. The first call claims
+the submit, stops the recorder and hands the file and live session to the seam.
+The attempt keeps the live session through `processRecording` so the trailing
+chunk can still reach it. While transcribing, the same pill shows a busy indicator.
 
-`teardownRecording` handles every other exit: cancel, scroll-away, unmount, failed
-start. It aborts the live session (closing the socket stops billing), invalidates
-any in-flight start, clears the cap timer and stops the recorder. A cancelled
-recording is discarded: no score, no duration, no attempt.
+Discarding, paging away, and leaving the screen cancel the attempt. The recorder
+closes the live session and holds ownership until native cleanup finishes. A late
+transcript from that attempt is ignored. Discarded recordings do not affect the
+score, duration, or session attempt.
 
 ## The `processRecording` seam
 
-In `useStudySession`, in order:
+In `useStudySession`, `processRecording` uses `scoreRecording` in order:
 
 1. `liveSession.finish(FINALIZE_TIMEOUT_MS)`. Any rejection becomes `null`.
 2. `liveSession.abort()`, always. It's idempotent and guarantees the socket closes.
-3. If there's no transcript, call `processRecording` from `lib/api/recording.ts`
-   with the file, duration and `chunk.text`.
-4. Add the duration to time studied, only now that a transcript exists.
-5. Align and score. This part doesn't know which path produced the text.
+3. If there's no transcript and the attempt is still current, call
+   `processRecording` from `lib/api/recording.ts` with the compressed file URI
+   (or `fileUri`), duration and `chunk.text`.
+4. Align and score the transcript. The hook applies the result and duration
+   only if the attempt still owns the submission.
 
 Both paths give raw Soniox text with the verse as recognition context. The models
 differ (`stt-rt-v5` live, `stt-async-v5` batch), so a word can occasionally differ
@@ -95,9 +105,8 @@ synchronously, so audio can be fed from the first callback. Its `state` runs
 
 1. **Mint.** POST to `transcription-token` with the user's JWT. The response is
    `{ apiKey, expiresAt, websocketUrl, model }`.
-2. **Buffer.** PCM fed while connecting is held in memory, so the first words
-   survive the connect gap. Recording starts instantly, with no connecting state in
-   the UI.
+2. **Buffer.** PCM captured while Soniox connects is held in memory. The mic
+   can start as soon as native setup finishes, regardless of connection state.
 3. **Open.** The first frame is JSON config: key, model, `pcm_s16le`, sample rate,
    channels, `language_hints`, and the verse as context. The backlog then flushes as
    individual chunks.
@@ -151,7 +160,7 @@ the reader records again.
 | Temporary key TTL | 60 s | `KEY_TTL_SECONDS` in `transcription-token` | Gates connecting only; a running stream outlives it |
 | Connect buffer | 15 s of audio | `MAX_BUFFER_SECONDS` | Bounds a stalled connect |
 | Flush grace | 50 ms | `FLUSH_GRACE_MS` | Lets the trailing PCM chunk feed |
-| Finalize wait | 3 s | `FINALIZE_TIMEOUT_MS` in the hook | Then batch |
+| Finalize wait | 3 s | `FINALIZE_TIMEOUT_MS` in `score-recording.ts` | Then batch |
 | Heartbeat | 10 s | `process-recording` | Beats the phone's roughly 60 s socket idle timeout |
 | Soniox poll deadline | 90 s | `process-recording` | Bounds the batch wait |
 
@@ -165,7 +174,7 @@ tapping done, plus the toast "5 minute limit reached — scoring what you recite
 goes through a ref because the timer outlives the render it was armed in, and a stale
 handler would miss retry and peek state set after recording began. The reader keeps
 the recitation and gets a score, so a cap hit is not an error, though the toast
-reuses `showErrorToast`. Every teardown and submit clears the timer.
+reuses `showErrorToast`. Leaving the recording phase clears the timer.
 
 If Soniox ever cuts a stream at its own cap, that's a stream failure, and batch scores
 the full file.
@@ -189,14 +198,8 @@ run takes the batch path until the secret is set for local functions.
   has to account for this.
 - **A failed upload isn't retried.** Live failures are silent, but a batch failure
   loses that attempt. The reader sees the alert and recites again.
-- **A second submit tap downgrades to batch.** `recordingActiveRef` stops a double
-  submit from scoring twice, but the early return aborts the live session. The first
-  submit's `finish` then rejects and the file is uploaded. Slower, nothing lost.
-- **The mic stays tappable during native start.** `recordingState` flips only after
-  `startRecording` resolves, so a quick second press starts a second session and
-  aborts the first live stream.
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
-  `liveSessionRef` set through the seam, and `FLUSH_GRACE_MS` work together. Changing
+  the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
   any of them can clip the last word, which raises `missing` with no error.
 - **Naming.** Two functions are called `processRecording`, and `cleanedTranscription`
   holds raw text while cleaning is off.
@@ -205,10 +208,11 @@ run takes the batch path until the secret is set for local functions.
 
 Recording needs a person and a real device. Local runs take the batch path unless the secret is set.
 
-- With live on: Library, a verse, Start session, mic, recite, check. The score appears almost at once, and the Metro log has no `[LIVE] falling back to batch` line.
-- With the secret unset: same taps. The "Analyzing your recitation..." spinner runs longer, the log says `falling back to batch: token endpoint 403`, the score still appears, and no error shows.
+- With live on: Library, a verse, Start session, mic. Speak as soon as the waveform pill appears, then submit. Check the first word in the result and confirm the Metro log has no `[LIVE] falling back to batch` line.
+- With the secret unset: same taps. The analysis indicator stays visible longer, the log says `falling back to batch: token endpoint 403`, the score still appears, and no error shows.
 - Hold a recording past 5:00: the toast "5 minute limit reached — scoring what you recited." appears and a score follows, with no second submit.
-- Mic, then the X on the red bar: the bar slides away, the mic returns, there is no score, and no toast appears 5 minutes later.
+- Mic, then the X beside the mic or on the pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
+- Enable Reduce Motion in iOS Accessibility and relaunch Bread. The startup ring stays still and the control fades in place as native capture starts.
 
 ## Decisions
 
@@ -219,7 +223,7 @@ Recording needs a person and a real device. Local runs take the batch path unles
 - 2026-08-24 · Heartbeat stream from `process-recording`, no client timeout · The phone killed silent sockets at about 60 s while the server finished fine. Leading whitespace keeps older clients parsing.
 - 2026-08-24 · `@siteed/audio-studio` pinned to exactly `3.2.0` · It gives file and PCM from one mic session, which `expo-audio` can't on SDK 54. Later versions need SDK 57, so the pin and the SDK move together.
 - 2026-08-24 · m4a-only recorder output · The file exists only for batch, whose contract expects m4a. WAV would just fill the cache.
-- 2026-08-24 · Connect gap solved by buffer-and-flush, not a connecting state · Recording starts instantly and first words survive.
+- 2026-08-24 · Buffer and flush PCM during the live connection · Native capture can start independently of Soniox while the live path retains audio already captured.
 - 2026-08-24 · No incremental scoring · Alignment is local and fast, so the transcript is the only wait. A second scoring path over provisional tokens would gain nothing.
 - 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off. Revisit if quota returns.
-- 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep `liveSessionRef` through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
+- 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.

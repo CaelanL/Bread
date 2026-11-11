@@ -151,14 +151,14 @@ export type Database = {
                   ]
                 },"user_collections": {
                   Row: {
-                    "client_id": string,"created_at": string,"deleted_at": string | null,"icon_key": string | null,"id": string,"is_default": boolean,"name": string,"sort_preference": string | null,"updated_at": string,"user_id": string
+                    "client_id": string,"created_at": string,"deleted_at": string | null,"icon_key": string | null,"id": string,"is_default": boolean,"name": string,"position": number | null,"sort_preference": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
+                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -265,6 +265,19 @@ isOneToOne: false
 "cleanup_stale_transcription_locks":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"copy_verse_to_collection":
+{ Args: { "collection_client_id": string,"verse_client_id": string }; Returns: {
+              "added_at": string,
+"collection_id": string,
+"id": string,
+"verse_id": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "verse_collections"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "delete_own_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -291,6 +304,9 @@ isOneToOne: false
                            },
 "register_device_token":
 { Args: { "p_expo_token": string,"p_platform": string }; Returns: undefined
+                           },
+"reorder_collections":
+{ Args: { "collection_ids": (string)[] }; Returns: undefined
                            },
 "update_popular_ranges":
 { Args: Record<PropertyKey, never>; Returns: undefined

@@ -50,7 +50,7 @@ name: collection-icons
 - tapOn: "Cancel icon changes"
 - assertVisible: "Change collection icon, Sword"
 - tapOn: Back
-- assertVisible: ".*Anxiety & Peace.*12 verses.*"
+- assertVisible: ".*Anxiety & Peace.*12 verses.*KJV.*"
 - waitForAnimationToEnd
 - takeScreenshot: collection-icons-Light-library
 - tapOn:
@@ -92,5 +92,5 @@ name: collection-icons
 - tapOn: ".*Psalms.*"
 - assertVisible: "Change collection icon, Praying hands"
 - tapOn: Back
-- tapOn: ".*Anxiety & Peace.*12 verses.*"
+- tapOn: ".*Anxiety & Peace.*12 verses.*KJV.*"
 - assertVisible: "Change collection icon, Sword"

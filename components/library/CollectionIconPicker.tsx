@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -24,9 +24,11 @@ export function CollectionIconPicker({ currentKey, onSave, onClose }: {
   const [error, setError] = useState<string>();
   const inFlight = useRef(false);
 
-  const close = () => {
-    if (!inFlight.current) onClose();
-  };
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const save = async () => {
     if (inFlight.current) return;
@@ -35,21 +37,23 @@ export function CollectionIconPicker({ currentKey, onSave, onClose }: {
     setError(undefined);
     try {
       if (selected !== initial) await onSave(selected);
-      onClose();
+      if (mounted.current) onClose();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save the icon. Try again.');
+      if (mounted.current) {
+        setError(reason instanceof Error ? reason.message : 'Could not save the icon. Try again.');
+      }
     } finally {
-      setSaving(false);
+      if (mounted.current) setSaving(false);
       inFlight.current = false;
     }
   };
 
   return (
-    <Modal transparent visible animationType="slide" onRequestClose={close}>
+    <Modal transparent visible animationType="slide" onRequestClose={onClose}>
       <View style={styles.modal}>
         <Pressable
           accessible={false}
-          onPress={close}
+          onPress={onClose}
           style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]}
         />
         <View accessibilityViewIsModal style={[styles.sheet, {
@@ -65,9 +69,8 @@ export function CollectionIconPicker({ currentKey, onSave, onClose }: {
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Cancel icon changes"
-              disabled={saving}
-              onPress={close}
+              accessibilityLabel={saving ? "Close icon picker" : "Cancel icon changes"}
+              onPress={onClose}
               style={[styles.close, { backgroundColor: colors.cardAlt }]}
             >
               <IconSymbol name="xmark" size={18} color={colors.text} />

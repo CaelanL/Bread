@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Motion, Radius } from '@/constants/theme';
 import Animated, {
   Easing,
   SharedValue,
@@ -10,10 +11,11 @@ import Animated, {
 const WAVEFORM_SAMPLES = 80;
 
 const BASE_HEIGHT = 3;
-const MAX_HEIGHT = 28;
+const MAX_HEIGHT = 22;
 
 interface WaveformProps {
   levels: SharedValue<number[]>;
+  color: string;
 }
 
 /**
@@ -21,13 +23,12 @@ interface WaveformProps {
  * the shared levels array — the tween (slightly longer than the 100ms
  * audio-chunk cadence) is what makes the wave flow instead of snap.
  */
-function Bar({ levels, index }: WaveformProps & { index: number }) {
+function Bar({ levels, color, index }: WaveformProps & { index: number }) {
   const animatedStyle = useAnimatedStyle(() => {
     const curved = Math.pow(levels.value[index] ?? 0, 0.6);
     return {
       height: withTiming(BASE_HEIGHT + (MAX_HEIGHT - BASE_HEIGHT) * curved, {
-        // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-        duration: 130,
+        duration: Motion.pressMs,
         easing: Easing.linear,
       }),
     };
@@ -38,7 +39,7 @@ function Bar({ levels, index }: WaveformProps & { index: number }) {
       style={[
         styles.bar,
         // Older bars (left) fade out toward the tail
-        { opacity: 0.35 + 0.65 * (index / (WAVEFORM_SAMPLES - 1)) },
+        { backgroundColor: color, opacity: 0.35 + 0.65 * (index / (WAVEFORM_SAMPLES - 1)) },
         animatedStyle,
       ]}
     />
@@ -50,11 +51,11 @@ function Bar({ levels, index }: WaveformProps & { index: number }) {
  * value written straight from the PCM stream, so the waveform never
  * causes a React re-render while recording.
  */
-export const Waveform = React.memo(function Waveform({ levels }: WaveformProps) {
+export const Waveform = React.memo(function Waveform({ levels, color }: WaveformProps) {
   return (
     <View style={styles.container}>
       {Array.from({ length: WAVEFORM_SAMPLES }, (_, i) => (
-        <Bar key={i} levels={levels} index={i} />
+        <Bar key={i} levels={levels} color={color} index={i} />
       ))}
     </View>
   );
@@ -68,8 +69,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 1,
-    height: 32,
-    marginHorizontal: 8,
     overflow: 'hidden',
   },
   bar: {
@@ -77,8 +76,6 @@ const styles = StyleSheet.create({
     // spans the full gap between the cancel and submit buttons
     // regardless of screen width.
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-    borderRadius: 1,
+    borderRadius: Radius.full,
   },
 });

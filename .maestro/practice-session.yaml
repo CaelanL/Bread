@@ -26,3 +26,6 @@ name: practice-session
 - tapOn: "Don’t Allow|Don't Allow"
 - assertVisible: "Permission required"
 - tapOn: "OK"
+- assertVisible:
+    id: "mic-button"
+- takeScreenshot: practice-session-4-permission-denied

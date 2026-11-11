@@ -28,8 +28,8 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 
 | Route (`app/(tabs)/(library)/`) | Purpose |
 |---|---|
-| `index.tsx` | Collection list, with pull to refresh. The + opens `AddCollectionModal` |
-| `[id].tsx` | One collection: icon picker for custom collections, search, sort pill, verse list, + to add |
+| `index.tsx` | Collection list, pull to refresh, Edit, and + to create |
+| `[id].tsx` | One collection: icon picker, search, sort pill, verse list, + to add, and long press to copy |
 | `add.tsx` | Pick a version, book and chapter. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
 | `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
@@ -40,17 +40,22 @@ same as a real collection. Notification taps use that path
 
 ## Collections
 
-The list comes from `fetchCollections` in `lib/store/index.ts`: active rows by
-`created_at` ascending, with Mastered and In Progress inserted right after the
-default collection. There's no UI to reorder or rename collections.
+`fetchCollections` pins My Verses, Mastered and In Progress. Custom collections
+follow saved positions, then creation time and client ID. New collections append.
+
+Long-press a custom collection for Rename, Reorder and Delete. On iOS, one light
+haptic confirms the action opens. Rename prefills
+`AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
+actions to move up or down. Each drop saves the order, with rollback on failure.
+Tap Done to return to opening collections by tapping their rows.
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
-- It's created lazily, by `addVerse` or by `updateCollectionSort`, with `created_at`
+- It's created lazily by `addVerse`, `copyVerseToCollection` or `updateCollectionSort`, with `created_at`
   at the epoch so it sorts first. Until then `fetchCollections` adds a local
   `DEFAULT_COLLECTION`.
-- It can't be deleted. `SwipeableCollectionCard` disables swipe when `canDelete` is
-  false, and the store's `deleteCollection` returns early. There's no server guard.
+- Its name and position are fixed in the app. `SwipeableCollectionCard` disables
+  its delete action, and the store's `deleteCollection` returns early.
 - `addVerse` falls back to it if the requested collection isn't found.
 
 **Mastered** has the ID `mastered` (`MASTERED_COLLECTION_ID`).
@@ -76,7 +81,7 @@ default collection. There's no UI to reorder or rename collections.
 - It has no + button and no swipe. Verses live in real collections, and this is a view.
 - It isn't part of review scheduling.
 
-## Sorting
+## Sorting verses
 
 The pill on `[id].tsx` cycles through the options in `cycleSort`, in
 `lib/store/library-sort.ts`. Only Mastered has Due first.
@@ -144,6 +149,17 @@ Verse identity is the partial unique index `idx_user_verses_unique_verse` from
 `006_verse_collections_junction.sql`, on active rows only. The restore path is what
 stops duplicates, so a soft-deleted row never blocks a re-add.
 
+## Copying a saved verse
+
+Long-press a verse for Copy to collection. On iOS, one light haptic confirms
+the picker opens. Choose My Verses or a custom collection.
+Already added destinations are disabled. A failed copy keeps the picker open.
+
+`copyVerseToCollection` adds one membership for the existing verse, so it stays
+in the source collection and shares its version, progress and study preferences.
+A soft-deleted verse copied from Mastered is restored as part of the same write.
+See `docs/architecture/data-model.md` for the database operations.
+
 ## Versions and KJV offline
 
 The version is part of a saved verse's identity, so John 3:16 in ESV and in KJV are two
@@ -157,27 +173,8 @@ reading is offline: saving verses and recording progress still need the network
 
 ## Curated collections
 
-`lib/collections/catalog.ts` holds introductions and references. The first
-passage is the suggested starting point. Each import makes a personal
-collection in the selected translation. Adding it again opens the saved copy,
-including any edits. A different translation creates a separate collection.
-Explicitly adding a deleted copy restores it.
-
-`importCuratedCollection` calls an atomic import and reads back only that
-collection. It reuses a saved verse with the same reference and translation, so
-progress and study preferences follow that verse into the new collection. If
-the import commits but the readback fails, the UI can ask the user to refresh.
-Retrying the import cannot duplicate it.
-
-Migration `20261110145300_curated_collection_import.sql` adds the import
-function and nullable icon key. It allows short uppercase version codes so
-the database accepts every translation Bread offers, including KJV, NIV
-and NKJV.
-
-`setCollectionIcon` saves a custom collection's icon to the account. The
-registry in `lib/collections/icons.ts` maps stable keys to symbols on each
-platform and defaults to the Bible icon for missing or unfamiliar keys. Tap the icon in a custom collection's header to edit it. My
-Verses, Mastered and In Progress keep their built-in icons.
+Imported copies show their saved translation. Tap the icon in a custom
+collection's header to change it. See [Explore collections](home.md#explore-collections).
 
 ## Deleting a verse
 
@@ -202,6 +199,10 @@ writing step 3 or 4 is only logged.
 | Only here, not mastered | Delete verse? | Hard delete, progress is lost |
 
 ## Deleting a collection
+
+Swipe a custom collection or a verse in a real collection left to reveal Delete.
+The same inset action opens the confirmation on both types of card. Collection
+actions also offer Delete on long press.
 
 The store's `deleteCollection` returns early for My Verses. It then finds the row and,
 for each verse, applies the same rule as above: remove the junction, and soft-delete or
@@ -264,6 +265,7 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
 - `npm run sim -- flow add-verse`: reader-b opens the empty My Verses, adds Ruth 1:1 (ESV, from the local `bible` function) with a quick tap, sees the card, then swipes it away with Delete, back to "No verses yet".
+- After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
 - Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery. Then +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
 
 ## Decisions

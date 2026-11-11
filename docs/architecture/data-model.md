@@ -33,8 +33,8 @@ Notification tables are covered in `docs/features/notifications.md`.
 
 ### `user_collections`
 
-Migration: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
-(`sort_preference`)
+Migrations: `002_user_data.sql`, `016_sort_and_last_practiced.sql`,
+`20261110152251_collection_management.sql`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -43,16 +43,16 @@ Migration: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
 | `name` | TEXT | |
 | `is_default` | BOOLEAN | `true` for the auto-created "My Verses" collection |
 | `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = client default |
-| `icon_key` | TEXT | nullable icon key |
+| `icon_key` | TEXT | nullable |
+| `position` | INTEGER | custom order, nullable |
 | `deleted_at` | TIMESTAMPTZ | soft delete; NULL = active |
-| `updated_at` | TIMESTAMPTZ | auto-updated by trigger `update_user_collections_updated_at` |
+| `updated_at` | TIMESTAMPTZ | trigger maintained |
 
 Indexes:
 - `idx_user_collections_user (user_id) WHERE deleted_at IS NULL` — active-collection lookups
 - `idx_user_collections_client (user_id, client_id)` — lookups by client_id
 
-RLS: SELECT/INSERT/UPDATE where `auth.uid() = user_id`. Service role
-all.
+RLS: owner SELECT/INSERT/UPDATE, service role all.
 
 ### `user_verses`
 
@@ -128,17 +128,14 @@ progress reset intentionally keeps them. See
 
 ### `verse_collections`
 
-Migration: `006_verse_collections_junction.sql` (introduced — replaces
-the original `collection_id` column on `user_verses`)
+Migration `006_verse_collections_junction.sql` replaces `user_verses.collection_id`.
 
 `verse_id` and `collection_id` are FKs with ON DELETE CASCADE, plus
 `added_at`.
 
 Unique: `(verse_id, collection_id)`. Indexes on both FKs.
 
-RLS: SELECT/INSERT/DELETE allowed only when the requester owns the
-verse. The policy uses an `EXISTS` subquery against
-`user_verses.user_id`.
+RLS uses `EXISTS` on `user_verses.user_id` to require verse ownership for reads, inserts and deletes.
 
 A verse can live in any number of collections. Removing a verse from
 the *last* collection it belongs to triggers either a soft-delete
@@ -245,7 +242,7 @@ incrementally — the cron is the only writer.
 | `update_user_collections_updated_at` | trigger | fires on UPDATE |
 | `update_user_verses_updated_at` | trigger | fires on UPDATE |
 | `cleanup_stale_transcription_locks()` | fn | deletes locks > 5 min old |
-| `cleanup_expired_verse_cache()` | fn | left from migration 001; references a dropped column and nothing calls it |
+| `cleanup_expired_verse_cache()` | fn | unused since migration 001, references a dropped column |
 | `get_verse_cache_count(version)` | fn | row count per version |
 | `evict_lru_verses(version, max, needed)` | fn | LRU eviction batch |
 | `upsert_verses(book, chapter, version, jsonb)` | fn | bulk verse upsert |
@@ -254,8 +251,10 @@ incrementally — the cron is the only writer.
 | `get_current_streak(user_id, tz_offset_min)` | fn (SECURITY DEFINER) | counts consecutive practice days in user's TZ |
 | `update_popular_ranges()` | fn (SECURITY DEFINER) | rebuilds `popular_ranges` |
 | `update_user_stats()` | fn (SECURITY DEFINER) | refreshes `user_stats` |
-| `delete_own_account()` | fn (SECURITY DEFINER) | deletes the caller across all tables in safe order |
-| `register_device_token(token, platform)` | fn (SECURITY DEFINER) | upserts a `device_tokens` row as the caller, taking it from any other user; see `docs/features/notifications.md` |
+| `delete_own_account()` | fn (SECURITY DEFINER) | safely orders account deletion across tables |
+| `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment. See `docs/features/notifications.md` |
+| `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
+| `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction INSERT RLS checks only the verse owner) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
 | `verse_cache_stats` | view | per-version cache stats |
