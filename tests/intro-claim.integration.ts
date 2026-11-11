@@ -9,7 +9,7 @@ const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 const password = process.env.BREAD_LOCAL_TEST_PASSWORD;
 assert.ok(url && ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname), 'Use a disposable local database.');
 const cwdUrl = readFileSync('.env.local', 'utf8').match(/^EXPO_PUBLIC_SUPABASE_URL=["']?([^"'\r\n]+)/m)?.[1];
-assert.equal(url, cwdUrl, 'Run from the same disposable worktree as the selected environment.');
+assert.equal(cwdUrl, url, 'Run from the same disposable worktree as the selected environment.');
 assert.ok(key && password, 'Supply the local seed login.');
 const client = (transport: typeof fetch = fetch) => createClient(url, key, {
   auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: transport },
