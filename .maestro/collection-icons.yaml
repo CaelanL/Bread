@@ -1,0 +1,96 @@
+appId: com.caelanliu.biblemem
+name: collection-icons
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fsettings
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: Light
+    direction: DOWN
+- tapOn: Light
+- tapOn:
+    id: tab-home
+- scrollUntilVisible:
+    element:
+      id: discover-anxiety-and-peace
+    direction: DOWN
+- tapOn:
+    id: discover-anxiety-and-peace
+- tapOn:
+    id: curated-version-KJV
+- tapOn:
+    id: curated-collection-action
+- extendedWaitUntil:
+    visible: "Change collection icon, .*"
+    timeout: 30000
+- tapOn: "Change collection icon, .*"
+- assertVisible: "Collection icon"
+- waitForAnimationToEnd
+- takeScreenshot: collection-icons-Light-picker
+- tapOn:
+    id: choose-collection-icon-sword
+- tapOn: "Save icon"
+- extendedWaitUntil:
+    visible: "Change collection icon, Sword"
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: collection-icons-Light-imported
+- tapOn: "Change collection icon, Sword"
+- tapOn:
+    id: choose-collection-icon-prayer
+- scrollUntilVisible:
+    element:
+      id: choose-collection-icon-bell
+    direction: DOWN
+- takeScreenshot: collection-icons-Light-picker-bottom
+- tapOn: "Cancel icon changes"
+- assertVisible: "Change collection icon, Sword"
+- tapOn: Back
+- assertVisible: ".*Anxiety & Peace.*12 verses.*"
+- waitForAnimationToEnd
+- takeScreenshot: collection-icons-Light-library
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      text: Dark
+    direction: DOWN
+- tapOn: Dark
+- tapOn:
+    id: tab-library
+- tapOn: ".*Psalms.*"
+- tapOn: "Change collection icon, .*"
+- waitForAnimationToEnd
+- takeScreenshot: collection-icons-Dark-picker
+- tapOn:
+    id: choose-collection-icon-prayer
+- tapOn: "Save icon"
+- extendedWaitUntil:
+    visible: "Change collection icon, Praying hands"
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: collection-icons-Dark-personal
+- tapOn: "Change collection icon, Praying hands"
+- scrollUntilVisible:
+    element:
+      id: choose-collection-icon-bell
+    direction: DOWN
+- takeScreenshot: collection-icons-Dark-picker-bottom
+- tapOn: "Cancel icon changes"
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: tab-library
+    timeout: 60000
+- tapOn:
+    id: tab-library
+- tapOn: ".*Psalms.*"
+- assertVisible: "Change collection icon, Praying hands"
+- tapOn: Back
+- tapOn: ".*Anxiety & Peace.*12 verses.*"
+- assertVisible: "Change collection icon, Sword"

@@ -3,20 +3,33 @@ import type MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { SymbolViewProps } from 'expo-symbols';
 import type { ComponentProps } from 'react';
 
-type CollectionIcon = {
+export const COLLECTION_VECTOR_GLYPHS = {
+  'collection.cross': 'cross',
+  'collection.sword': 'sword',
+  'collection.prayer': 'hands-pray',
+} as const;
+
+type CollectionVectorSymbol = keyof typeof COLLECTION_VECTOR_GLYPHS;
+
+type NativeCollectionIcon = {
   label: string;
   symbol: SymbolViewProps['name'];
   fallback: ComponentProps<typeof MaterialIcons>['name'];
   iosSince?: number;
 };
 
+type CollectionIcon = NativeCollectionIcon | {
+  label: string;
+  symbol: CollectionVectorSymbol;
+};
+
 export const COLLECTION_ICONS = {
   book: { label: 'Bible', symbol: 'book.closed', fallback: 'book' },
   'open-book': { label: 'Open book', symbol: 'book.fill', fallback: 'menu-book' },
-  cross: { label: 'Cross', symbol: 'cross', fallback: 'add' },
-  sword: { label: 'Sword', symbol: 'figure.fencing', fallback: 'sports-martial-arts', iosSince: 16 },
+  cross: { label: 'Cross', symbol: 'collection.cross' },
+  sword: { label: 'Sword', symbol: 'collection.sword' },
   shield: { label: 'Shield', symbol: 'shield', fallback: 'shield' },
-  prayer: { label: 'Prayer', symbol: 'hands.sparkles', fallback: 'volunteer-activism' },
+  prayer: { label: 'Praying hands', symbol: 'collection.prayer' },
   heart: { label: 'Heart', symbol: 'heart', fallback: 'favorite-border' },
   cloud: { label: 'Cloud', symbol: 'cloud', fallback: 'cloud-queue' },
   globe: { label: 'Globe', symbol: 'globe', fallback: 'public' },
@@ -61,8 +74,13 @@ export function resolveCollectionIcon(key: unknown): CollectionIcon {
   return COLLECTION_ICONS[isCollectionIconKey(key) ? key : DEFAULT_COLLECTION_ICON];
 }
 
+export function isCollectionVectorSymbol(name: string): name is CollectionVectorSymbol {
+  return Object.prototype.hasOwnProperty.call(COLLECTION_VECTOR_GLYPHS, name);
+}
+
 export function collectionSymbolFallback(symbol: SymbolViewProps['name'], iosVersion: number) {
   return Object.values<CollectionIcon>(COLLECTION_ICONS).find(
-    (icon) => icon.symbol === symbol && icon.iosSince !== undefined && iosVersion < icon.iosSince,
+    (icon): icon is NativeCollectionIcon => 'fallback' in icon &&
+      icon.symbol === symbol && icon.iosSince !== undefined && iosVersion < icon.iosSince,
   )?.fallback;
 }

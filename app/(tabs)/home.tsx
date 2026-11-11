@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/app-header';
+import { ExploreCollections } from '@/components/home/ExploreCollections';
 import { InsightsCard, type InsightsCardRef } from '@/components/home/InsightsCard';
 import { VOTMCard } from '@/components/home/VOTMCard';
 import { AddToCollectionModal } from '@/components/ui/AddToCollectionModal';
@@ -224,6 +225,7 @@ export default function HomeScreen() {
 
         {/* Insights Section */}
         <InsightsCard ref={insightsCardRef} />
+        <ExploreCollections />
       </ScrollView>
 
       {/* Expanded Verse Modal */}

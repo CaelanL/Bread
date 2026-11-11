@@ -1,7 +1,8 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
+import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface RightButtonProps {
@@ -13,20 +14,25 @@ interface RightButtonProps {
 
 interface LeftButtonProps {
   icon: string;
+  label?: string;
   onPress: () => void;
 }
 
 interface AppHeaderProps {
   title?: string;
+  titleIcon?: {
+    name: ComponentProps<typeof IconSymbol>['name'];
+    label: string;
+    onPress: () => void;
+  };
   showBack?: boolean;
   leftButton?: LeftButtonProps;
   rightButton?: RightButtonProps;
 }
 
-export function AppHeader({ title, showBack = true, leftButton, rightButton }: AppHeaderProps) {
+export function AppHeader({ title, titleIcon, showBack = true, leftButton, rightButton }: AppHeaderProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
   const primaryColor = colors.primary;
 
   const handleBack = () => {
@@ -36,14 +42,14 @@ export function AppHeader({ title, showBack = true, leftButton, rightButton }: A
   const renderLeftButton = () => {
     if (leftButton) {
       return (
-        <Pressable style={styles.backButton} onPress={leftButton.onPress}>
+        <Pressable accessibilityRole="button" accessibilityLabel={leftButton.label} style={styles.backButton} onPress={leftButton.onPress}>
           <IconSymbol name={leftButton.icon as any} size={18} color={colors.text} />
         </Pressable>
       );
     }
     if (showBack) {
       return (
-        <Pressable style={styles.backButton} onPress={handleBack}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" style={styles.backButton} onPress={handleBack}>
           <IconSymbol name="chevron.left" size={22} color={primaryColor} />
         </Pressable>
       );
@@ -97,11 +103,23 @@ export function AppHeader({ title, showBack = true, leftButton, rightButton }: A
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.leftSection}>
+      <View style={[styles.leftSection, titleIcon && styles.fixedSide]}>
         {renderLeftButton()}
       </View>
 
-      <View style={styles.centerSection}>
+      <View style={[styles.centerSection, titleIcon && styles.centerWithIcon]}>
+        {titleIcon && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={titleIcon.label}
+            onPress={titleIcon.onPress}
+            style={({ pressed }) => [styles.titleIcon, {
+              backgroundColor: pressed ? colors.cardAlt : colors.primaryLight,
+            }]}
+          >
+            <IconSymbol name={titleIcon.name} size={23} color={colors.text} />
+          </Pressable>
+        )}
         {title && (
           <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
             {title}
@@ -109,7 +127,7 @@ export function AppHeader({ title, showBack = true, leftButton, rightButton }: A
         )}
       </View>
 
-      <View style={styles.rightSection}>{renderRightButton()}</View>
+      <View style={[styles.rightSection, titleIcon && styles.fixedSide]}>{renderRightButton()}</View>
     </View>
   );
 }
@@ -135,6 +153,23 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
   },
+  fixedSide: {
+    width: 44,
+    flex: 0,
+  },
+  centerWithIcon: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  titleIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   backButton: {
     padding: 8,
     marginLeft: -8,
@@ -143,6 +178,7 @@ const styles = StyleSheet.create({
     width: 38,
   },
   title: {
+    flexShrink: 1,
     fontSize: 17,
     fontWeight: '600',
   },

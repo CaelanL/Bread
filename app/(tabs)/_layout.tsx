@@ -48,7 +48,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          href: null, // Hide this tab for now
+          href: null, // Navigate via Explore collections on Home
         }}
       />
       <Tabs.Screen

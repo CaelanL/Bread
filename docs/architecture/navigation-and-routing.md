@@ -26,8 +26,9 @@ app/
 │   │   ├── add/[book]/[chapter].tsx   ← Verse picker for a chapter
 │   │   └── setup/[id].tsx             ← Difficulty + chunk-size picker before starting a session
 │   ├── settings.tsx                   ← Tab: Settings
-│   ├── explore.tsx                    ← Hidden tab (`href: null`) — Expo template screen, nothing links to it
+│   ├── explore.tsx                    ← Hidden tab (`href: null`) — curated catalog, reachable from Home
 │   └── insights.tsx                   ← Hidden tab (`href: null`) — reachable from Home InsightsCard
+├── collections/[slug].tsx     ← Curated collection introduction and import
 ├── notifications.tsx          ← Notification settings, pushed from Settings
 ├── reset-password.tsx         ← Reachable WITHOUT auth (deep link from password-reset email)
 ├── dev-sign-in.tsx            ← Reachable WITHOUT auth; dev builds against a local Supabase only
@@ -45,7 +46,7 @@ from the file. It renders nothing. See `docs/architecture/auth.md`.
 | Home | `(tabs)/home` | ✓ (first in the tab layout) |
 | Library | `(tabs)/(library)/index` | ✓ |
 | Settings | `(tabs)/settings` | ✓ |
-| Explore | `(tabs)/explore` | hidden (`href: null`) — not linked from anywhere |
+| Explore | `(tabs)/explore` | hidden (`href: null`) — entered from Explore collections on Home |
 | Insights | `(tabs)/insights` | hidden (`href: null`) — entered from `InsightsCard` on Home |
 
 The hidden tabs still exist as routes — they're just not in the tab
@@ -75,6 +76,7 @@ Stack screens.
 
 | Route | Param(s) |
 |---|---|
+| `collections/[slug].tsx` | `slug` — bundled curated collection ID |
 | `(tabs)/(library)/[id].tsx` | `id` — collection `client_id`, or the virtual `mastered` / `in-progress` |
 | `(tabs)/(library)/add/[book]/[chapter].tsx` | `book`, `chapter` — Bible reference; query `collectionId`, `version` |
 | `(tabs)/(library)/setup/[id].tsx` | `id` — verse `client_id` |

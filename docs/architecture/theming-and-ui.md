@@ -8,7 +8,10 @@ just `StyleSheet.create` per file plus inline dynamic styles.
 
 ## Color tokens
 
-Defined in `constants/theme.ts`.
+Defined in `constants/theme.ts`. `CollectionArtColors` supplies the
+decorative surfaces and symbol colors for the curated collection art.
+Titles, subtitles, and introductions use the core text colors on solid
+surfaces.
 
 ### Light mode
 
@@ -206,6 +209,10 @@ Adding a new icon means:
 2. Find the closest Material Icons equivalent (e.g. `home`).
 3. Add a line to `MAPPING` in `icon-symbol.tsx`.
 4. Use `<IconSymbol name="house.fill" size={24} color={colors.tint} />`.
+
+The collection icon registry contributes its fallback glyphs to
+`MAPPING` and provides older iOS fallbacks. Cross, sword, and praying hands
+use Material Community Icons through `IconSymbol` on every platform.
 
 Forgetting step 3 means the icon renders correctly on iOS and not
 on Android / web.

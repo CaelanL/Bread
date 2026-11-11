@@ -90,6 +90,24 @@ export const Colors = {
   },
 };
 
+// Decorative collection artwork. Copy always uses the core text and surface tokens.
+export const CollectionArtColors = {
+  light: {
+    blue: { surface: '#dce8eb', wash: '#c7dbe1', ink: '#345762' },
+    gold: { surface: '#f1e6cb', wash: '#e8d4a9', ink: '#745526' },
+    rose: { surface: '#f0dfda', wash: '#e6cbc5', ink: '#814d46' },
+    green: { surface: '#e0e9d7', wash: '#ccdcc1', ink: '#446044' },
+    violet: { surface: '#e8e0ee', wash: '#dcd0e6', ink: '#644976' },
+  },
+  dark: {
+    blue: { surface: '#293b43', wash: '#354e5a', ink: '#bbd9e2' },
+    gold: { surface: '#403526', wash: '#53452e', ink: '#e7ce96' },
+    rose: { surface: '#442f31', wash: '#573b3e', ink: '#eac0b8' },
+    green: { surface: '#303b2d', wash: '#3d4c36', ink: '#cadfb9' },
+    violet: { surface: '#3c3144', wash: '#4c3b59', ink: '#e1c9ed' },
+  },
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

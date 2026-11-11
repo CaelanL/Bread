@@ -1,15 +1,27 @@
 # Home and Verse of the Month
 
-Home is the first tab. It shows the Verse of the Month (VOTM), a global monthly challenge, and `InsightsCard`, a shortcut to the Insights screen.
+Home is the first tab. It shows the Verse of the Month (VOTM), a global monthly challenge, `InsightsCard`, a shortcut to the Insights screen, and an Explore collections preview.
 
 | File | Purpose |
 |---|---|
 | `app/(tabs)/home.tsx` | Loads VOTM data and composes the screen |
 | `components/home/VOTMCard.tsx` | The VOTM card |
+| `components/home/ExploreCollections.tsx` | Two curated collections and a See all link to `/explore` |
 | `components/home/InsightsCard.tsx` | Streak, mastered and in-progress counts. Tap opens `/insights` |
 | `lib/api/votm.ts` | `getCurrentVOTM`, `getVOTMMasteryCount`, `hasUserMasteredVOTM` |
 
 What those numbers mean is in `docs/features/insights.md`.
+
+## Explore collections
+
+Home shows two suggested collections and See all opens the full catalog.
+The cards use bundled artwork and passage counts, so browsing does not
+fetch Bible text. An introduction lists all references and loads a passage
+through `fetchVerse` when opened. Its translation picker starts from the
+user's setting and applies only to this preview and import. Before writing,
+the store verifies all requested keyed verses. An incomplete read lets the
+user retry or choose another translation. Saved collections and icons are
+described in `docs/features/library.md`.
 
 ## Loading
 
@@ -68,6 +80,8 @@ The seed adds no `verse_of_month` row.
 - `npm run sim -- shot /home --as reader-a`: the "No verse of the month yet." card, and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
 - `npm run sim -- shot /home --as reader-b`: the same empty VOTM card, and an insights card with 0 day streak, 0 mastered, 0 in progress.
 - Add a local `verse_of_month` row for the current month, then `npm run sim -- shot /home --as reader-a`: the VOTM card with reference, text and "0 people have mastered" (the missing function).
+- `npm run sim -- flow collection-discovery`: Home and Explore in both themes, introduction, KJV preview, add and open the saved copy.
+- `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
 - By hand, with that row: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
 
 ## Decisions

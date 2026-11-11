@@ -10,7 +10,7 @@ export interface CollectionPassage {
   verseEnd: number;
 }
 
-interface CuratedCollection {
+export interface CuratedCollection {
   id: string;
   title: string;
   subtitle: string;

@@ -12,7 +12,7 @@ const email = process.env.BREAD_LOCAL_TEST_EMAIL;
 const password = process.env.BREAD_LOCAL_TEST_PASSWORD;
 
 assert.ok(url && ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname), 'Use the local worktree database.');
-assert.ok(key && email?.endsWith('@example.test') && password, 'Supply a local seed login.');
+assert.ok(key && email && email.endsWith('@example.test') && password, 'Supply a local seed login.');
 
 const client = (transport: typeof fetch = fetch) => createClient<Database>(url, key, {
   auth: { persistSession: false, autoRefreshToken: false },

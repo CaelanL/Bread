@@ -7,9 +7,11 @@
  */
 
 import { ensureAuth } from '@/lib/api';
-import { getVerseText } from '@/lib/api/bible';
+import { fetchVerse, getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
+import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 import { importCollection } from '@/lib/collections/import';
+import { validateCollectionPassages } from '@/lib/collections/passages';
 import type { CollectionIconKey } from '@/lib/collections/icons';
 import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
@@ -465,7 +467,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   importCuratedCollection: async (catalogId, version) => {
+    const catalog = CURATED_COLLECTIONS.find(({ id }) => id === catalogId);
+    if (!catalog) throw new Error('Collection not found.');
+
     const session = await getCollectionSession();
+    await validateCollectionPassages(catalog.passages, version, fetchVerse);
+    await assertCollectionAccount(session.user.id);
     const { collectionId, row } = await importCollection(supabase, session, catalogId, version);
     await assertCollectionAccount(session.user.id);
     if (!row) return { collectionId, loaded: false };

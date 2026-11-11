@@ -29,7 +29,7 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 | Route (`app/(tabs)/(library)/`) | Purpose |
 |---|---|
 | `index.tsx` | Collection list, with pull to refresh. The + opens `AddCollectionModal` |
-| `[id].tsx` | One collection: search, sort pill, verse list, + to add |
+| `[id].tsx` | One collection: icon picker for custom collections, search, sort pill, verse list, + to add |
 | `add.tsx` | Pick a version, book and chapter. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
 | `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
@@ -157,11 +157,11 @@ reading is offline: saving verses and recording progress still need the network
 
 ## Curated collections
 
-`lib/collections/catalog.ts` holds short introductions and passage references.
-The first passage is the suggested starting point. Each import makes a personal
+`lib/collections/catalog.ts` holds introductions and references. The first
+passage is the suggested starting point. Each import makes a personal
 collection in the selected translation. Adding it again opens the saved copy,
-including any changes the user made. A different translation creates a separate
-collection. Explicitly adding a deleted copy restores it.
+including any edits. A different translation creates a separate collection.
+Explicitly adding a deleted copy restores it.
 
 `importCuratedCollection` calls an atomic import and reads back only that
 collection. It reuses a saved verse with the same reference and translation, so
@@ -176,7 +176,7 @@ and NKJV.
 
 `setCollectionIcon` saves a custom collection's icon to the account. The
 registry in `lib/collections/icons.ts` maps stable keys to symbols on each
-platform and defaults to the Bible icon for missing or unfamiliar keys. My
+platform and defaults to the Bible icon for missing or unfamiliar keys. Tap the icon in a custom collection's header to edit it. My
 Verses, Mastered and In Progress keep their built-in icons.
 
 ## Deleting a verse

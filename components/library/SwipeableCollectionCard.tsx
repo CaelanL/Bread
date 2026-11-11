@@ -4,6 +4,7 @@ import type { SymbolViewProps } from 'expo-symbols';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
+import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { type Collection } from '@/lib/storage';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -164,7 +165,7 @@ export function SwipeableCollectionCard({
                   ]}
                 >
                   <IconSymbol
-                    name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : 'folder.fill')}
+                    name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
                     size={24}
                     color={collection.iconColor || (collection.isDefault ? primaryColor : colors.icon)}
                   />
