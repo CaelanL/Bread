@@ -72,6 +72,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 
 ## App-wide decisions
 - The scoring formula is final: `(correct + 0.5*close) / (correct + close + missing + added)`. Added words stay in the denominator on purpose. Fix fairness in alignment normalization, never in the formula. See `docs/features/study-session.md`.
+- Translation is an account setting and a verse is one row per reference, in that translation. No per-verse or per-collection translation. See `docs/architecture/bible-versions.md`.
 - Only public-domain translations are bundled in the app. Licensed text is fetched, and held only in the server cache and in memory. See `docs/architecture/bible-api-and-caching.md`.
 - Don't gate work on "wait for production data". Bread is small, so ship reasonable-default constants and name the knob to turn if scale ever matters.
 - Merges ship through EAS: JS over the air, native changes through the App Store. Those jobs are paused in `.eas/workflows/deploy.yml` for now. See `docs/architecture/release.md`.
