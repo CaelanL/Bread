@@ -22,7 +22,7 @@ name: intro-interruption
     end: 80%, 75%
     duration: 500
 - extendedWaitUntil:
-    visible: .*Airplane Mode.*
+    visible: Add Controls
     timeout: 10000
 - takeScreenshot: intro-inactive-control-center
 - swipe:
@@ -45,7 +45,7 @@ name: intro-interruption
     end: 80%, 75%
     duration: 500
 - extendedWaitUntil:
-    visible: .*Airplane Mode.*
+    visible: Add Controls
     timeout: 10000
 - takeScreenshot: intro-inactive-playing-control-center
 - swipe:
