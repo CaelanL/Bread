@@ -1,0 +1,59 @@
+appId: com.caelanliu.biblemem
+---
+- runFlow: open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=${READER}&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-settings
+    timeout: 30000
+- tapOn:
+    id: tab-settings
+- tapOn:
+    id: settings-translation-picker
+- extendedWaitUntil:
+    visible:
+      id: settings-translation-KJV
+    timeout: 10000
+- tapOn:
+    id: settings-translation-KJV
+- tapOn:
+    id: tab-home
+- scrollUntilVisible:
+    element:
+      id: votm-card
+    direction: UP
+- extendedWaitUntil:
+    visible:
+      id: votm-text
+    timeout: 20000
+- tapOn:
+    id: ${OPEN_ID}
+- assertVisible:
+    id: ${CLOSE_ID}
+- openLink: com.biblemem://home?introFixture=sample
+- assertVisible:
+    id: ${CLOSE_ID}
+- assertNotVisible:
+    id: intro-video-modal
+- runScript:
+    file: ../scripts/intro-presentations.js
+    env:
+      READER: ${READER}
+      EXPECTED: 0
+- takeScreenshot: intro-deferred-${OPEN_ID}
+- tapOn:
+    id: ${CLOSE_ID}
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 30000
+- assertNotVisible:
+    id: ${CLOSE_ID}
+- takeScreenshot: intro-after-${OPEN_ID}-dismissal
+- tapOn:
+    id: intro-close
+- runScript:
+    file: ../scripts/intro-presentations.js
+    env:
+      READER: ${READER}
+      EXPECTED: 1

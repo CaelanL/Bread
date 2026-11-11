@@ -76,6 +76,12 @@ If you add a new version, every one of these needs an entry:
 | Settings and add-verse UI | Render from `BIBLE_VERSIONS`, nothing to do |
 | Discovery content | Verify distinct references in `lib/collections/catalog.ts` and `lib/votm/schedule.ts` through `fetchVerse`. `tests/verify-discovery-translations.ts` checks every keyed verse and logs references/status only, never Scripture text. Run from the isolated local verifier with matching `.env.local` and local seed credentials, outside CI. Provider secrets and test quota stay local; see `edge-functions.md`. |
 
+The combined catalog/monthly audit covers 137 distinct ranges through the real
+`fetchVerse` seam. KJV verified all 137. ESV verified 115; 22 remain unverified after
+a single paced retry encountered local Functions setup failures. NLT, NIV and NKJV
+remain unverified because no local `API_BIBLE_KEY` was available. These are setup
+limits, not evidence that those passages are absent from a translation.
+
 If using a brand-new external API, write a new adapter implementing
 the `BibleAdapter` contract (see
 `docs/architecture/bible-api-and-caching.md`) and register it in the

@@ -416,6 +416,7 @@ export default function SettingsScreen() {
       {/* Version Picker Modal */}
       <Modal visible={versionPickerVisible} transparent animationType="fade">
         <Pressable
+          accessible={false}
           style={styles.modalOverlay}
           onPress={() => setVersionPickerVisible(false)}
         >

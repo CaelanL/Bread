@@ -283,3 +283,7 @@ Invariant 8 is above. Also:
 - **No design-system documentation beyond this file** —
   `components/ui/` is the de facto catalog. If a new primitive is
   added, list it here.
+
+## Decisions
+
+- 2026-11-10 · Translation-picker backdrops are not accessibility elements · Settings' outer Pressable otherwise grouped the entire popup, hiding individual translation choices from native accessibility and UI automation. `accessible={false}` preserves the existing layout and dismissal behavior while exposing the option rows.

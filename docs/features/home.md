@@ -137,7 +137,9 @@ lost or playback later fails. Manual replay remains available and does not reset
 account eligibility. No writes are queued offline.
 
 The coordinator requires focused/active Home, completed hydration, settled reminder
-UX and no verse/collection modal. Home retains opened verse/picker content through metadata refresh and blocks intro until native dismissal. Q1's transient native presentation flag blocks an
+UX and no verse/collection modal. Home retains opened verse/picker content through
+metadata refresh and blocks intro until native dismissal. Q1's transient native
+presentation flag blocks an
 overlap through its actual dismissal; a stale reminder check rechecks dismissal
 before opening. Backgrounding, navigation, account changes and close unload the
 players. Audio starts with `playsInSilentModeIOS: false`, recording disabled and no
@@ -178,6 +180,7 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. These checks use the local environment; the migration test rolls back all fixtures.
 - `npm run sim -- flow monthly-verse`: solid text, default/image-error artwork, expand and add picker in both themes.
 - `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second automatic presentation, replay and unavailable/unset media.
+- On a separate fresh disposable stack, `npm run sim -- flow intro-modal-handoff` defers intro while each existing Home modal is visible and presents after native dismissal. It consumes both accounts' markers; reset before the other intro flows.
 - `npm run sim -- flow intro-after-reminders`: fresh UI sign-in, no intro claim while the reminder is visible, then autoplay after native reminder dismissal. Run before that account has claimed the fixture.
 - By hand: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
 
