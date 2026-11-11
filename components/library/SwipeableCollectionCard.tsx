@@ -7,7 +7,7 @@ import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
-import { collectionDisplayName, type Collection } from '@/lib/storage';
+import type { Collection } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -158,7 +158,7 @@ export function SwipeableCollectionCard({
   };
 
   const handleDelete = () => {
-    const title = `Delete "${collectionDisplayName(collection)}"?`;
+    const title = `Delete "${collection.name}"?`;
     const message = collection.verseCount > 0
       ? 'Verses not mastered or in another collection will be deleted and lose progress.'
       : 'This collection will be permanently deleted.';
@@ -234,7 +234,7 @@ export function SwipeableCollectionCard({
                   {collection.name}
                 </Text>
                 <Text style={[styles.verseCount, { color: colors.icon }]}>
-                  {collection.verseCount} verse{collection.verseCount !== 1 ? 's' : ''}{collection.importedVersion ? ` · ${collection.importedVersion}` : ''}
+                  {collection.verseCount} verse{collection.verseCount !== 1 ? 's' : ''}
                 </Text>
               </View>
             </View>
@@ -250,7 +250,7 @@ export function SwipeableCollectionCard({
               <View
                 accessible
                 accessibilityRole="adjustable"
-                accessibilityLabel={`Reorder ${collectionDisplayName(collection)}`}
+                accessibilityLabel={`Reorder ${collection.name}`}
                 accessibilityState={{ disabled: reorder.disabled }}
                 accessibilityActions={[
                   ...(reorderIndex > 0 ? [{ name: 'decrement', label: 'Move up' }] : []),

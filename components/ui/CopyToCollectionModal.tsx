@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { collectionDisplayName, type Collection, SavedVerse } from '@/lib/storage';
+import type { Collection, SavedVerse } from '@/lib/storage';
 import { useAppStore, useCollections, useVerses } from '@/lib/store';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -35,7 +35,7 @@ export function CopyToCollectionModal({
     setFailed(false);
     try {
       await useAppStore.getState().copyVerseToCollection(verse.id, collection.id);
-      onCopied(collectionDisplayName(collection));
+      onCopied(collection.name);
     } catch {
       setFailed(true);
     } finally {
@@ -72,7 +72,7 @@ export function CopyToCollectionModal({
                 <Pressable
                   key={collection.id}
                   accessibilityRole="button"
-                  accessibilityLabel={alreadyAdded ? `${collectionDisplayName(collection)}, Already added` : collectionDisplayName(collection)}
+                  accessibilityLabel={alreadyAdded ? `${collection.name}, Already added` : collection.name}
                   accessibilityState={{ disabled }}
                   disabled={disabled}
                   onPress={() => void copy(collection)}
@@ -82,7 +82,7 @@ export function CopyToCollectionModal({
                   ]}
                 >
                   <IconSymbol name={collection.isDefault ? 'heart.fill' : 'folder.fill'} size={18} color={colors.icon} />
-                  <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>{collectionDisplayName(collection)}</Text>
+                  <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>{collection.name}</Text>
                   {copyingTo === collection.id ? (
                     <ActivityIndicator color={colors.icon} />
                   ) : alreadyAdded ? (

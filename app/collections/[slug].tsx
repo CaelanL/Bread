@@ -6,12 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '@/components/app-header';
 import { CollectionArt } from '@/components/collections/CollectionArt';
 import { CollectionPassages } from '@/components/collections/CollectionPassages';
+import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
 import { CURATED_COLLECTIONS, type CuratedCollection } from '@/lib/collections/catalog';
 import { curatedCollectionId } from '@/lib/collections/identity';
-import { BIBLE_VERSIONS, type BibleVersion } from '@/lib/settings';
+import type { BibleVersion } from '@/lib/settings';
 import { useAppStore, useCollection, useHydrated } from '@/lib/store';
 
 function goBack() {
@@ -26,6 +27,7 @@ function CollectionIntroduction({ collection, defaultVersion }: {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { bottom } = useSafeAreaInsets();
   const [version, setVersion] = useState(defaultVersion);
+  const [versionPickerVisible, setVersionPickerVisible] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string>();
   const [savedPendingIds, setSavedPendingIds] = useState<string[]>([]);
@@ -83,6 +85,29 @@ function CollectionIntroduction({ collection, defaultVersion }: {
 
   return (
     <>
+      <AppHeader
+        title="Collection"
+        leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }}
+        rightButton={{
+          label: version,
+          variant: 'text',
+          accessibilityLabel: `Translation, ${version}`,
+          testID: 'curated-translation-picker',
+          disabled: working,
+          onPress: () => setVersionPickerVisible(true),
+        }}
+      />
+      <BibleTranslationPicker
+        version={version}
+        visible={versionPickerVisible}
+        onClose={() => setVersionPickerVisible(false)}
+        onSelect={(value) => {
+          setVersionPickerVisible(false);
+          if (value === version) return;
+          setVersion(value);
+          setError(undefined);
+        }}
+      />
       <ScrollView contentContainerStyle={styles.content} testID="collection-introduction">
         <CollectionArt icon={collection.icon} size="hero" />
         <View style={styles.intro}>
@@ -110,32 +135,6 @@ function CollectionIntroduction({ collection, defaultVersion }: {
             {message}
           </Text>
         )}
-        <View style={styles.translation}>
-          <Text style={[styles.versionLabel, { color: colors.icon }]}>Translation</Text>
-          <View style={styles.versions}>
-            {BIBLE_VERSIONS.map(({ value, label, full }) => (
-              <Pressable
-                key={value}
-                accessibilityRole="button"
-                accessibilityLabel={full}
-                accessibilityState={{ selected: version === value, disabled: working }}
-                testID={`curated-version-${value}`}
-                style={[styles.version, {
-                  backgroundColor: version === value ? colors.primaryLight : colors.cardAlt,
-                  borderColor: version === value ? colors.primary : colors.border,
-                }]}
-                disabled={working}
-                onPress={() => {
-                  if (value === version) return;
-                  setVersion(value);
-                  setError(undefined);
-                }}
-              >
-                <Text style={[styles.versionText, { color: colors.text }]}>{label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: working, busy: working }}
@@ -167,26 +166,30 @@ export default function CuratedCollectionScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <AppHeader title="Collection" leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }} />
-      {!collection ? (
-        <View style={styles.empty}>
-          <Text style={[styles.subtitle, { color: colors.text }]}>This collection is no longer available.</Text>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.action}
-            onPress={() => router.replace('/explore')}
-          >
-            <Text style={[styles.actionText, { color: colors.text }]}>Explore collections</Text>
-          </Pressable>
-        </View>
-      ) : hydrated && user ? (
+      {collection && hydrated && user ? (
         <CollectionIntroduction
           key={`${user.id}:${collection.id}`}
           collection={collection}
           defaultVersion={defaultVersion}
         />
       ) : (
-        <ActivityIndicator color={colors.primary} style={styles.loading} />
+        <>
+          <AppHeader title="Collection" leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }} />
+          {collection ? (
+            <ActivityIndicator color={colors.primary} style={styles.loading} />
+          ) : (
+            <View style={styles.empty}>
+              <Text style={[styles.subtitle, { color: colors.text }]}>This collection is no longer available.</Text>
+              <Pressable
+                accessibilityRole="button"
+                style={styles.action}
+                onPress={() => router.replace('/explore')}
+              >
+                <Text style={[styles.actionText, { color: colors.text }]}>Explore collections</Text>
+              </Pressable>
+            </View>
+          )}
+        </>
       )}
     </View>
   );
@@ -202,19 +205,6 @@ const styles = StyleSheet.create({
   story: { gap: 12 },
   paragraph: { fontSize: 16, lineHeight: 25 },
   footer: { borderTopWidth: StyleSheet.hairlineWidth, padding: 12, gap: 10 },
-  translation: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  versionLabel: { fontSize: 13, fontWeight: '600' },
-  versions: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, flexShrink: 1 },
-  version: {
-    minHeight: 44,
-    minWidth: 44,
-    paddingHorizontal: 7,
-    borderRadius: Radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  versionText: { fontSize: 13, fontWeight: '600' },
   action: {
     minHeight: 48,
     paddingHorizontal: 12,

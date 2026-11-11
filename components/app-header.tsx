@@ -10,6 +10,9 @@ interface RightButtonProps {
   icon?: string;
   onPress: () => void;
   variant?: 'filled' | 'text' | 'icon';
+  accessibilityLabel?: string;
+  disabled?: boolean;
+  testID?: string;
 }
 
 interface LeftButtonProps {
@@ -20,7 +23,6 @@ interface LeftButtonProps {
 
 interface AppHeaderProps {
   title?: string;
-  titleTag?: string;
   titleIcon?: {
     name: ComponentProps<typeof IconSymbol>['name'];
     label: string;
@@ -31,7 +33,7 @@ interface AppHeaderProps {
   rightButton?: RightButtonProps;
 }
 
-export function AppHeader({ title, titleTag, titleIcon, showBack = true, leftButton, rightButton }: AppHeaderProps) {
+export function AppHeader({ title, titleIcon, showBack = true, leftButton, rightButton }: AppHeaderProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const primaryColor = colors.primary;
@@ -61,7 +63,7 @@ export function AppHeader({ title, titleTag, titleIcon, showBack = true, leftBut
   const renderRightButton = () => {
     if (!rightButton) return <View style={styles.rightPlaceholder} />;
 
-    const { label, icon, onPress, variant = 'filled' } = rightButton;
+    const { label, icon, onPress, variant = 'filled', accessibilityLabel, disabled, testID } = rightButton;
     const isFilled = variant === 'filled';
     const isIconOnly = variant === 'icon';
 
@@ -75,6 +77,10 @@ export function AppHeader({ title, titleTag, titleIcon, showBack = true, leftBut
 
     return (
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        disabled={disabled}
+        testID={testID}
         style={[
           styles.rightButton,
           isFilled && { backgroundColor: primaryColor },
@@ -126,9 +132,6 @@ export function AppHeader({ title, titleTag, titleIcon, showBack = true, leftBut
             {title}
           </Text>
         )}
-        {titleTag && (
-          <Text style={[styles.titleTag, { color: colors.icon }]}>{titleTag}</Text>
-        )}
       </View>
 
       <View style={[styles.rightSection, titleIcon && styles.fixedSide]}>{renderRightButton()}</View>
@@ -174,7 +177,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titleTag: { fontSize: 12, fontWeight: '600' },
   backButton: {
     padding: 8,
     marginLeft: -8,

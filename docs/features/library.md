@@ -173,8 +173,7 @@ reading is offline: saving verses and recording progress still need the network
 
 ## Curated collections
 
-Imported copies show their saved translation. Tap the icon in a custom
-collection's header to change it. See [Explore collections](home.md#explore-collections).
+Tap the icon in a custom collection's header to change it. See [Explore collections](home.md#explore-collections).
 
 ## Deleting a verse
 

@@ -32,7 +32,18 @@ appId: com.caelanliu.biblemem
     id: discover-anxiety-and-peace
 - assertVisible: "Anxiety & Peace"
 - tapOn:
-    id: curated-version-KJV
+    id: curated-translation-picker
+- assertVisible: "Translation"
+- waitForAnimationToEnd
+- takeScreenshot: discovery-${THEME}-translations
+- scrollUntilVisible:
+    element:
+      id: bible-translation-KJV
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: bible-translation-KJV
+- assertNotVisible: "Translation"
 - takeScreenshot: discovery-${THEME}-introduction
 # The scroll viewport ends above the sticky footer. Maestro can report a row
 # below that edge as visible, so bring it clear of the footer before tapping.

@@ -20,8 +20,10 @@ name: collection-icons
     direction: DOWN
 - tapOn:
     id: discover-anxiety-and-peace
-- tapOn:
-    id: curated-version-KJV
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
 - tapOn:
     id: curated-collection-action
 - extendedWaitUntil:
@@ -50,7 +52,7 @@ name: collection-icons
 - tapOn: "Cancel icon changes"
 - assertVisible: "Change collection icon, Sword"
 - tapOn: Back
-- assertVisible: ".*Anxiety & Peace.*12 verses.*KJV.*"
+- assertVisible: ".*Anxiety & Peace.*12 verses.*"
 - waitForAnimationToEnd
 - takeScreenshot: collection-icons-Light-library
 - tapOn:
@@ -63,7 +65,8 @@ name: collection-icons
 - tapOn:
     id: tab-library
 - tapOn: ".*Psalms.*"
-- tapOn: "Change collection icon, .*"
+- assertVisible: "Change collection icon, Bible"
+- tapOn: "Change collection icon, Bible"
 - waitForAnimationToEnd
 - takeScreenshot: collection-icons-Dark-picker
 - tapOn:
@@ -92,5 +95,5 @@ name: collection-icons
 - tapOn: ".*Psalms.*"
 - assertVisible: "Change collection icon, Praying hands"
 - tapOn: Back
-- tapOn: ".*Anxiety & Peace.*12 verses.*KJV.*"
+- tapOn: ".*Anxiety & Peace.*12 verses.*"
 - assertVisible: "Change collection icon, Sword"

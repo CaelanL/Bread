@@ -20,6 +20,13 @@ name: add-verse
 - extendedWaitUntil:
     visible: "Ruth 1"
     timeout: 20000
+- tapOn:
+    id: verse-translation-picker
+- assertVisible: "Translation"
+- takeScreenshot: add-verse-translation-picker
+- tapOn:
+    id: bible-translation-ESV
+- assertNotVisible: "Translation"
 - tapOn: "1  .*"
 - takeScreenshot: add-verse-1-selected
 - tapOn: "Add Verse 1"

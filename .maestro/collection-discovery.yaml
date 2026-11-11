@@ -34,9 +34,11 @@ name: collection-discovery
     visible: "Change collection icon, .*"
     timeout: 30000
 - waitForAnimationToEnd
+- assertVisible: ".*1 Peter 5:7.*KJV.*"
 - takeScreenshot: discovery-Dark-saved-collection
 - tapOn: Back
-- assertVisible: ".*Anxiety & Peace.*12 verses.*KJV.*"
+- assertVisible: ".*Anxiety & Peace.*12 verses.*"
+- assertNotVisible: ".*Anxiety & Peace.*12 verses.*KJV.*"
 - takeScreenshot: discovery-Dark-library
 - tapOn:
     id: tab-home
@@ -47,14 +49,20 @@ name: collection-discovery
 - tapOn:
     id: discover-anxiety-and-peace
 - assertVisible: "Add collection"
-- tapOn:
-    id: curated-version-KJV
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
 - assertVisible: "Open collection"
-- tapOn:
-    id: curated-version-ESV
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: ESV
 - assertVisible: "Add collection"
-- tapOn:
-    id: curated-version-KJV
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
 - tapOn:
     id: curated-collection-action
 - extendedWaitUntil:
@@ -68,72 +76,7 @@ name: collection-discovery
     timeout: 60000
 - tapOn:
     id: tab-library
-- assertVisible: ".*Anxiety & Peace.*12 verses.*KJV.*"
+- assertVisible: ".*Anxiety & Peace.*12 verses.*"
 - runScript: scripts/discovery-memberships.js
 
-# An explicit re-add should come after a saved manual position.
-- runFlow:
-    when:
-      notVisible: ".*Reading list.*0 verses.*"
-    commands:
-      - tapOn: "New collection"
-      - tapOn:
-          id: collection-name
-      - inputText: Reading list
-      - tapOn: "Create Collection"
-      - assertVisible: ".*Reading list.*0 verses.*"
-- tapOn: Edit
-- runFlow:
-    when:
-      visible:
-        text: "Reorder Anxiety & Peace · KJV"
-        below: "Reorder Reading list"
-    commands:
-      - swipe:
-          from:
-            text: "Reorder Anxiety & Peace · KJV"
-          direction: UP
-- assertVisible:
-    text: "Reorder Anxiety & Peace · KJV"
-    above: "Reorder Reading list"
-- tapOn: Done
-- extendedWaitUntil:
-    visible: Edit
-    timeout: 15000
-- swipe:
-    from: ".*Anxiety & Peace.*12 verses.*KJV.*"
-    direction: LEFT
-- tapOn:
-    id: swipe-delete
-    above: ".*Reading list.*0 verses.*"
-- assertVisible: 'Delete "Anxiety & Peace · KJV"?'
-- tapOn: Delete
-- assertNotVisible: ".*Anxiety & Peace.*12 verses.*KJV.*"
-- tapOn:
-    id: tab-home
-- scrollUntilVisible:
-    element:
-      id: discover-anxiety-and-peace
-    direction: DOWN
-- tapOn:
-    id: discover-anxiety-and-peace
-- tapOn:
-    id: curated-version-KJV
-- assertVisible: "Add collection"
-- tapOn:
-    id: curated-collection-action
-- extendedWaitUntil:
-    visible: "Change collection icon, .*"
-    timeout: 30000
-- waitForAnimationToEnd
-- tapOn: Back
-- assertVisible:
-    text: ".*Anxiety & Peace.*12 verses.*KJV.*"
-    below: ".*Reading list.*0 verses.*"
-- swipe:
-    start: "50%, 20%"
-    end: "50%, 56%"
-- assertVisible:
-    text: ".*Anxiety & Peace.*12 verses.*KJV.*"
-    below: ".*Reading list.*0 verses.*"
-- runScript: scripts/discovery-memberships.js
+- runFlow: subflows/restore-curated-collection.yaml

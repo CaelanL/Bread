@@ -4,7 +4,7 @@ import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import type { VerseData } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { collectionDisplayName, type BibleVersion } from '@/lib/storage';
+import type { BibleVersion } from '@/lib/storage';
 import { useAppStore, useCollections } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { BlurView } from 'expo-blur';
@@ -152,7 +152,7 @@ export function AddToCollectionModal({
                       color={collection.iconColor || accentColor}
                     />
                     <Text style={[styles.collectionName, { color: colors.text }]}>
-                      {collectionDisplayName(collection)}
+                      {collection.name}
                     </Text>
                   </View>
                   <IconSymbol

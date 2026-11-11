@@ -187,7 +187,6 @@ export default function CollectionScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
         title={collection?.name || 'Collection'}
-        titleTag={collection?.importedVersion}
         leftButton={{
           icon: 'chevron.left',
           label: 'Back',

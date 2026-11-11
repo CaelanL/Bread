@@ -17,19 +17,20 @@ What those numbers mean is in `docs/features/insights.md`.
 Home shows two suggested collections and See all opens the full catalog.
 The cards use bundled artwork and passage counts, so browsing does not
 fetch Bible text. An introduction lists all references and loads a passage
-through `fetchVerse` when opened. Its translation picker starts from the
-user's setting and applies only to this preview and import. Before writing,
-the store verifies all requested keyed verses. An incomplete read lets the
-user retry or choose another translation.
+through `fetchVerse` when opened. The introduction shares the top-right
+`BibleTranslationPicker` with verse selection. Its scrollable list reads
+`BIBLE_VERSIONS`. The selection starts from the user's setting and applies
+to this preview and import. Before writing, the store verifies all
+requested keyed verses. An incomplete read lets the user retry or choose
+another translation.
 
 `importCuratedCollection` saves every passage in one transaction and reads
 back the resulting collection. Matching references in the same translation
 share progress and study preferences. The same catalog and translation
 opens the edited copy, while another translation creates a distinct copy.
-Library and destination pickers label imported copies with the translation
-encoded in their stable ID. Explicitly adding a deleted copy restores its
-passages and eligible progress at the end of the Library. A failed readback
-after saving offers Refresh Library.
+The translation appears on the saved verses. Explicitly adding a deleted
+copy restores its passages and eligible progress at the end of the
+Library. A failed readback after saving offers Refresh Library.
 
 The import migration adds a nullable icon key and allows the translation
 codes Bread supports. Custom icons sync with the account. Missing and

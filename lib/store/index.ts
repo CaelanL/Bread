@@ -533,6 +533,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { data, error } = await supabase
       .from('user_collections')
       .update({ icon_key: iconKey })
+      .eq('user_id', session.user.id)
+      .eq('client_id', id)
+      .eq('is_default', false)
+      .is('deleted_at', null)
       .setHeader('Authorization', `Bearer ${session.access_token}`)
       .select('icon_key')
       .single();
@@ -556,6 +560,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!session || generation !== accountGeneration) return;
     const { data, error } = await supabase.from('user_collections')
       .update({ name: trimmed })
+      .eq('user_id', session.user.id)
+      .eq('client_id', id)
+      .eq('is_default', false)
+      .is('deleted_at', null)
       .select('name')
       .single()
       .setHeader('Authorization', `Bearer ${session.access_token}`);

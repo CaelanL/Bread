@@ -7,7 +7,6 @@
 
 import { supabase } from '@/lib/api/client';
 import { ensureAuth } from '@/lib/api';
-import { curatedCollectionVersion } from '@/lib/collections/identity';
 import { isCollectionIconKey, type CollectionIconKey } from '@/lib/collections/icons';
 import { ENGRAVED_THRESHOLD } from '@/lib/store/review-config';
 
@@ -68,14 +67,9 @@ export interface Collection {
   isVirtual?: boolean; // Virtual collections (like Mastered) can't be deleted or have verses manually added
   icon?: string; // SF Symbol name
   iconKey?: CollectionIconKey;
-  importedVersion?: string;
   iconColor?: string; // Hex color for icon
   createdAt: number;
   sortPreference?: SortOption; // Per-collection sort, NULL = default
-}
-
-export function collectionDisplayName({ name, importedVersion }: Collection): string {
-  return importedVersion ? `${name} · ${importedVersion}` : name;
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -173,7 +167,6 @@ export function parseCollectionRow(row: {
 }): Collection {
   return {
     id: row.client_id,
-    importedVersion: curatedCollectionVersion(row.client_id),
     name: row.name,
     isDefault: row.is_default,
     createdAt: new Date(row.created_at).getTime(),

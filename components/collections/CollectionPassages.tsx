@@ -64,7 +64,6 @@ export function CollectionPassages({ passages, version }: {
   return (
     <View style={styles.section}>
       <Text accessibilityRole="header" style={[styles.heading, { color: colors.text }]}>Passages</Text>
-      <Text style={[styles.hint, { color: colors.icon }]}>Tap a reference to read it in {version}.</Text>
       {passages.map((passage, index) => {
         const reference = collectionPassageReference(passage);
         const expanded = expandedIndex === index;
@@ -100,7 +99,6 @@ export function CollectionPassages({ passages, version }: {
 const styles = StyleSheet.create({
   section: { gap: 8 },
   heading: { fontSize: 21, fontWeight: '700' },
-  hint: { fontSize: 14, marginBottom: 4 },
   card: { borderRadius: Radius.lg, borderWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 48, padding: 12, gap: 12 },
   rowText: { flex: 1, gap: 4 },
