@@ -3,6 +3,7 @@ import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
 import { type BibleVersion } from '@/lib/storage';
@@ -28,16 +29,16 @@ export default function AddVerseScreen() {
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
 
-  const handleBookPress = (book: string) => {
+  const handleBookPress = useDebouncedPress((book: string) => {
     setExpandedBook(expandedBook === book ? null : book);
-  };
+  });
 
-  const handleChapterPress = (book: string, chapter: number) => {
+  const handleChapterPress = useDebouncedPress((book: string, chapter: number) => {
     const params = new URLSearchParams();
     if (collectionId) params.set('collectionId', collectionId);
     const queryString = params.toString();
     router.push(`/(tabs)/(library)/add/${encodeURIComponent(book)}/${chapter}?${queryString}`);
-  };
+  });
 
   const renderChapterGrid = (book: string) => {
     const chapterCount = getChapterCount(book);

@@ -1,0 +1,26 @@
+# reader-b double-taps a book row and a chapter button on the add screen: the book stays
+# open and the chapter screen opens once, so one Back returns to the add screen.
+appId: com.caelanliu.biblemem
+name: add-double-tap
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)%2Fadd%3FcollectionId%3Dmy-verses
+- extendedWaitUntil:
+    visible: "Ruth, Forward"
+    timeout: 20000
+- tapOn:
+    text: "Ruth, Forward"
+    repeat: 2
+    delay: 100
+- assertVisible: "1"
+- tapOn:
+    text: "1"
+    repeat: 2
+    delay: 100
+- extendedWaitUntil:
+    visible: "Ruth 1"
+    timeout: 20000
+- tapOn: Back
+- assertVisible: "Add Verse"
+- assertNotVisible: "Ruth 1"
+- takeScreenshot: add-double-tap

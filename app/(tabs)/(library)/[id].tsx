@@ -6,6 +6,7 @@ import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
@@ -90,9 +91,9 @@ export default function CollectionScreen() {
     setRefreshing(false);
   };
 
-  const handleAddVerse = () => {
+  const handleAddVerse = useDebouncedPress(() => {
     router.push(`/(tabs)/(library)/add?collectionId=${id}`);
-  };
+  });
 
   const handleVersePress = (verse: SavedVerse) => {
     router.push(`/(tabs)/(library)/setup/${verse.id}`);
