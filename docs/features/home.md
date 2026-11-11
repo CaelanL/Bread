@@ -81,6 +81,8 @@ check canonical bounds, continuous coverage and SQL/source parity.
 `useVotm` loads on Home focus, translation change, app return and pull to refresh.
 While focused, a short local clock check detects a month change without a long
 JavaScript timer or server polling. `getCurrentVOTM` uses the device's local month.
+Existing book aliases such as Psalm retain their display reference and normalize
+through the shared Bible helper for fetching.
 
 The reference appears as soon as metadata arrives. Text and mastery reads run in
 parallel through the existing Bible/API paths. `createMonthlyLoader` clears old
@@ -129,7 +131,7 @@ true only for the winning insert.
 
 `createIntroCoordinator` reads the account's presentation state, prepares media in
 a paused hidden native Video, configures audio, then atomically claims immediately
-before presenting. Reads and claims use the initiating session's token. Only a
+before presenting. Reads and claims snapshot the initiating session's token for each attempt. Same-account token refreshes do not replace the coordinator or close playback. Only a
 confirmed winning claim can autoplay; local absence, offline state, failed reads,
 failed preparation and lost claim acknowledgements never authorize presentation.
 A committed claim may consume the opportunity before a visible frame if focus is
@@ -141,8 +143,7 @@ UX and no verse/collection modal. Home retains opened verse/picker content throu
 metadata refresh and blocks intro until native dismissal. Q1's transient native
 presentation flag blocks an
 overlap through its actual dismissal; a stale reminder check rechecks dismissal
-before opening. Backgrounding, navigation, account changes and close unload the
-players. Audio starts with `playsInSilentModeIOS: false`, recording disabled and no
+before opening. Transient inactivity pauses playback in place and resumes only if it was playing; it blocks new automatic starts. Backgrounding, navigation, account changes and close unload the players. Audio starts with `playsInSilentModeIOS: false`, recording disabled and no
 background playback. Cleanup does not restore a guessed recording audio mode.
 
 `IntroVideoModal` exposes Close immediately, timed captions, pause and replay. Actual
@@ -152,7 +153,7 @@ checked on a physical iPhone; simulator playback alone cannot establish them.
 For local development only, `/home?introFixture=sample` uses an original nine-second
 tone/video fixture; `introFixture=unavailable` exercises a failed source. Both need
 `__DEV__` and a loopback/private-LAN Supabase URL. This guard does not loosen dev
-sign-in. Ordinary startup has no fixture. The server marker is shared by all devices
+sign-in. Ordinary startup has no fixture. Metro includes the original 79 KB fixture asset in the production bundle, but the production guard never selects it; avoiding custom bundler configuration is the accepted size tradeoff. The server marker is shared by all devices
 for the same local account, so reset the disposable test stack before a fresh intro
 flow rather than deleting markers through the client.
 
@@ -181,6 +182,7 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- flow monthly-verse`: solid text, default/image-error artwork, expand and add picker in both themes.
 - `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second automatic presentation, replay and unavailable/unset media.
 - On a separate fresh disposable stack, `npm run sim -- flow intro-modal-handoff` defers intro while each existing Home modal is visible and presents after native dismissal. It consumes both accounts' markers; reset before the other intro flows.
+- After `intro-video` has claimed reader-b's fixture, `npm run sim -- flow intro-interruption` checks native Control Center interruption, preserved pause/position, and background close. Physical iPhone verification is still required.
 - `npm run sim -- flow intro-after-reminders`: fresh UI sign-in, no intro claim while the reminder is visible, then autoplay after native reminder dismissal. Run before that account has claimed the fixture.
 - By hand: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
 

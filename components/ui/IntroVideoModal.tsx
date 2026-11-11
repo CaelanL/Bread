@@ -6,16 +6,30 @@ import { StatusBar } from 'expo-status-bar';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Fonts, Motion, Radius } from '@/constants/theme';
+import { createIntroInterruption } from '@/lib/intro/interruption';
 import { introCaption, type IntroMedia } from '@/lib/intro/media';
 
-export function IntroVideoModal({ media, visible, onClose }: {
+export function IntroVideoModal({ media, visible, inactive, onClose }: {
   media: IntroMedia;
   visible: boolean;
+  inactive: boolean;
   onClose: () => void;
 }) {
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
   const player = useRef<Video>(null);
+  const interruption = useRef<ReturnType<typeof createIntroInterruption> | null>(null);
+  useEffect(() => {
+    const current = createIntroInterruption({
+      pause: async () => player.current?.pauseAsync(),
+      play: async () => player.current?.playAsync(),
+    });
+    interruption.current = current;
+    return () => current.dispose();
+  }, []);
+  useEffect(() => {
+    void interruption.current?.setInactive(inactive).catch(() => {});
+  }, [inactive]);
   const active = useRef(visible);
   active.current = visible;
   const [position, setPosition] = useState(0);
@@ -36,12 +50,14 @@ export function IntroVideoModal({ media, visible, onClose }: {
   const onStatus = (status: AVPlaybackStatus) => {
     if (!active.current) return;
     if (status.isLoaded) {
+      void interruption.current?.onPlaying(status.isPlaying).catch(() => {});
       setLoaded(true); setPosition(status.positionMillis); setPlaying(status.isPlaying);
       if (status.didJustFinish) setFinished(true);
     } else if (status.error) setError(true);
   };
   const close = () => {
     active.current = false;
+    interruption.current?.dispose();
     void player.current?.unloadAsync().catch(() => {});
     onClose();
   };

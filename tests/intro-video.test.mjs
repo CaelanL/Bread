@@ -38,6 +38,8 @@ test('intro presentation uses real account-pinned API calls and the native playe
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'test-key';
   const tokens = Object.fromEntries(['A', 'B'].map((account) => [account,
     'e30.' + Buffer.from(JSON.stringify({ sub: account })).toString('base64url') + '.AA']));
+  const refreshedToken = tokens.A.replace('.AA', '.BB');
+  const requestTokens = [];
   const ledger = new Set();
   const events = [];
   let failRead = false;
@@ -46,20 +48,20 @@ test('intro presentation uses real account-pinned API calls and the native playe
   t.mock.method(globalThis, 'fetch', async (input, init) => {
     const url = new URL(input);
     const authorization = new Headers(init?.headers).get('Authorization');
-    const account = Object.keys(tokens).find((id) => authorization === 'Bearer ' + tokens[id]);
+    const account = authorization === 'Bearer ' + refreshedToken ? 'A' : Object.keys(tokens).find((id) => authorization === 'Bearer ' + tokens[id]);
     if (url.pathname === '/auth/v1/token') {
       const id = JSON.parse(init.body).email[0];
       return Response.json({ access_token: tokens[id], refresh_token: 'refresh-' + id, token_type: 'bearer', expires_in: 3600, user: { id } });
     }
     if (url.pathname === '/auth/v1/logout') return new Response(null, { status: 204 });
     if (url.pathname === '/rest/v1/user_intro_presentations') {
-      events.push('read:' + account);
+      events.push('read:' + account); requestTokens.push(authorization);
       assert.equal(url.searchParams.get('user_id'), 'eq.' + account);
       if (failRead) return Response.json({ message: 'Unavailable' }, { status: 503 });
       return Response.json(ledger.has(account) ? { intro_id: INTRO_VIDEO.id } : null);
     }
     if (url.pathname === '/rest/v1/rpc/claim_intro_presentation') {
-      events.push('claim:' + account);
+      events.push('claim:' + account); requestTokens.push(authorization);
       assert.equal(JSON.parse(init.body).p_intro_id, INTRO_VIDEO.id);
       const won = !ledger.has(account);
       ledger.add(account);
@@ -89,8 +91,11 @@ test('intro presentation uses real account-pinned API calls and the native playe
     show() { events.push('show'); },
     close() { events.push('close'); },
   };
-  const controller = (session = a, chosen = media) => createIntroCoordinator(session, chosen, player, () => eligible);
-  const reset = () => { ledger.clear(); events.length = 0; eligible = true; failRead = false; dropClaim = false; heldClaim = undefined; prepare = undefined; audio = undefined; prepareFailure = false; audioFailure = false; };
+  const controller = (session = a, chosen = media) => {
+    const getSession = typeof session === 'function' ? session : () => session;
+    return createIntroCoordinator(getSession()?.user.id ?? '', getSession, chosen, player, () => eligible);
+  };
+  const reset = () => { ledger.clear(); events.length = 0; requestTokens.length = 0; eligible = true; failRead = false; dropClaim = false; heldClaim = undefined; prepare = undefined; audio = undefined; prepareFailure = false; audioFailure = false; };
 
   await t.test('missing playback never reads, claims or shows an empty modal', async () => {
     reset(); assert.equal(await controller(a, INTRO_VIDEO).attempt(), false); assert.deepEqual(events, []);
@@ -161,6 +166,31 @@ test('intro presentation uses real account-pinned API calls and the native playe
     assert.ok(!events.some((event) => event.startsWith('read:') || event.startsWith('claim:')));
     assert.equal(await first.attempt(), false);
   });
+  await t.test('an old coordinator cannot read or claim with a newly selected account session', async () => {
+    reset(); let session = a; const first = controller(() => session);
+    session = await signIn('B'); events.length = 0;
+    assert.equal(await first.attempt(), false); assert.deepEqual(events, []); assert.equal(ledger.size, 0);
+  });
+  await t.test('same-account token refresh preserves presentation and pins each in-flight attempt to its starting token', async () => {
+    reset(); let session = a; const first = controller(() => session);
+    prepare = Promise.withResolvers(); const showing = first.attempt();
+    while (!events.includes('prepare')) await new Promise((resolve) => setImmediate(resolve));
+    session = { ...a, access_token: refreshedToken }; prepare.resolve();
+    assert.equal(await showing, true);
+    assert.deepEqual(requestTokens, ['Bearer ' + tokens.A, 'Bearer ' + tokens.A]);
+    assert.equal(await first.attempt(), false);
+    assert.ok(!events.includes('close')); assert.equal(events.filter((event) => event === 'show').length, 1);
+    events.length = 0; requestTokens.length = 0;
+    assert.equal(await controller(() => session).attempt(), false);
+    assert.deepEqual(requestTokens, ['Bearer ' + refreshedToken]);
+  });
+  await t.test('an inactive start gate preserves an already shown intro across reactivation', async () => {
+    reset(); const first = controller(); assert.equal(await first.attempt(), true);
+    eligible = false; assert.equal(await first.attempt(), false);
+    eligible = true; assert.equal(await first.attempt(), false);
+    assert.equal(events.filter((event) => event === 'show').length, 1); assert.ok(!events.includes('close'));
+    first.cancel(); assert.equal(events.at(-1), 'close');
+  });
   await t.test('pending/visible reminders defer autoplay and a late blocker cancels before presentation', async () => {
     reset(); eligible = false; const first = controller();
     assert.equal(await first.attempt(), false); assert.deepEqual(events, []);
@@ -170,4 +200,42 @@ test('intro presentation uses real account-pinned API calls and the native playe
     assert.equal(await showing, false); assert.equal(ledger.size, 0); assert.ok(!events.includes('show'));
     eligible = true; audio = undefined; assert.equal(await first.attempt(), true);
   });
+});
+
+test('transient inactivity pauses/resumes the existing native player without seeking or losing a manual pause', async () => {
+  const { createIntroInterruption } = await import('../lib/intro/interruption.ts');
+  const events = [];
+  const interruption = createIntroInterruption({ async pause() { events.push('pause'); }, async play() { events.push('play'); } });
+  interruption.onPlaying(true);
+  await interruption.setInactive(true); interruption.onPlaying(false);
+  assert.deepEqual(events, ['pause']);
+  await interruption.setInactive(false);
+  assert.deepEqual(events, ['pause', 'play']);
+  interruption.onPlaying(false);
+  await interruption.setInactive(true); await interruption.setInactive(false);
+  assert.deepEqual(events, ['pause', 'play', 'pause']);
+  const pending = Promise.withResolvers();
+  const closing = createIntroInterruption({ async pause() { events.push('pending-pause'); await pending.promise; }, async play() { events.push('unexpected-play'); } });
+  closing.onPlaying(true); const paused = closing.setInactive(true);
+  await new Promise((resolve) => setImmediate(resolve));
+  const resumed = closing.setInactive(false); closing.dispose(); pending.resolve();
+  await Promise.all([paused, resumed]); assert.ok(!events.includes('unexpected-play'));
+});
+
+test('a player that finishes loading while inactive is paused and resumes only after reactivation', async () => {
+  const { createIntroInterruption } = await import('../lib/intro/interruption.ts');
+  const events = []; let loaded = false;
+  const interruption = createIntroInterruption({
+    async pause() { events.push('pause'); if (!loaded) throw new Error('Not loaded yet.'); },
+    async play() { events.push('play'); },
+  });
+  await assert.rejects(interruption.setInactive(true), /Not loaded/);
+  loaded = true; await interruption.onPlaying(true);
+  assert.deepEqual(events, ['pause', 'pause']);
+  await interruption.setInactive(false); assert.deepEqual(events, ['pause', 'pause', 'play']);
+  const fast = createIntroInterruption({ async pause() { events.push('fast-pause'); }, async play() { events.push('fast-play'); } });
+  fast.onPlaying(true);
+  await Promise.all([fast.setInactive(true), fast.setInactive(false)]);
+  assert.equal(events.at(-1), 'fast-play');
+  assert.ok(!events.includes('fast-pause'));
 });

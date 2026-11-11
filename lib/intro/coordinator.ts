@@ -11,14 +11,15 @@ interface IntroPlayer {
   close(): void;
 }
 
-export function createIntroCoordinator(session: Session, media: IntroMedia, player: IntroPlayer, eligible: () => boolean) {
+export function createIntroCoordinator(accountId: string, getSession: () => Session | null, media: IntroMedia, player: IntroPlayer, eligible: () => boolean) {
   let generation = 0;
   let busy = false;
   let suppressed = false;
   const current = (request: number) => generation === request && eligible();
 
   async function play(automatic: boolean): Promise<boolean> {
-    if (!media.playback || !eligible() || (automatic && (suppressed || busy))) return false;
+    const session = getSession();
+    if (!session || session.user.id !== accountId || !media.playback || !eligible() || (automatic && (suppressed || busy))) return false;
     const request = ++generation;
     busy = true;
     if (!automatic) suppressed = true;

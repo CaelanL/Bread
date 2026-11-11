@@ -18,6 +18,7 @@ test('monthly loads publish reference metadata promptly and keep text with its c
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:1';
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'test-key';
   const token = 'e30.' + Buffer.from(JSON.stringify({ sub: 'A' })).toString('base64url') + '.AA';
+  let book = 'Psalms';
   let failMetadata = false;
   let emptyMetadata = false;
   let failText = false;
@@ -31,7 +32,7 @@ test('monthly loads publish reference metadata promptly and keep text with its c
       const month = url.searchParams.get('year_month').slice(3); monthCalls.push(month);
       if (failMetadata) return Response.json({ message: 'Unavailable' }, { status: 503 });
       if (emptyMetadata) return Response.json(null);
-      return Response.json({ id: month, year_month: month, book: 'Psalms', chapter: month === '2026-11' ? 23 : 46,
+      return Response.json({ id: month, year_month: month, book, chapter: month === '2026-11' ? 23 : 46,
         verse_start: 1, verse_end: 1, image_url: null });
     }
     if (url.pathname === '/rest/v1/rpc/get_votm_mastery_count') return failCount
@@ -54,7 +55,7 @@ test('monthly loads publish reference metadata promptly and keep text with its c
   t.after(() => supabase.auth.stopAutoRefresh());
   const november = new Date(2026, 10, 30, 23, 59);
   const december = new Date(2026, 11, 1, 0, 1);
-  const reset = () => { held.clear(); monthCalls.length = 0; clearSessionCache(); failMetadata = false; emptyMetadata = false; failText = false; failCount = false; };
+  const reset = () => { held.clear(); monthCalls.length = 0; book = 'Psalms'; clearSessionCache(); failMetadata = false; emptyMetadata = false; failText = false; failCount = false; };
   const hold = (version) => {
     const pending = { sent: Promise.withResolvers(), reply: Promise.withResolvers() };
     held.set(version, pending); return pending;
@@ -109,6 +110,13 @@ test('monthly loads publish reference metadata promptly and keep text with its c
     clearSessionCache(); failText = true; await loader.load('ESV', november);
     assert.equal(updates.at(-1).text, null); assert.equal(updates.at(-1).textLoading, false);
     assert.match(updates.at(-1).error, /verse text/);
+  });
+  await t.test('existing Psalm aliases keep their display reference and load canonical bundled text', async () => {
+    reset(); book = 'Psalm'; const updates = [];
+    await createMonthlyLoader((state) => updates.push(state)).load('KJV', november);
+    assert.equal(updates.at(-1).votm.book, 'Psalm');
+    assert.equal(updates.at(-1).text, 'The LORD is my shepherd; I shall not want.');
+    assert.equal(updates.at(-1).error, null);
   });
   await t.test('an unavailable optional mastery count stays unknown, while a successful zero remains zero', async () => {
     reset(); const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));

@@ -23,7 +23,10 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
   const flagsHydrated = useUxFlagsStore((state) => state.hydrated);
   const q1Dismissed = useUxFlagsStore((state) => state.q1Dismissed);
   const q1Presented = useUxFlagsStore((state) => state.q1Presented);
-  const [active, setActive] = useState(AppState.currentState === 'active');
+  const [appState, setAppState] = useState(AppState.currentState);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const accountId = session?.user.id;
   const [modalOwner, setModalOwner] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [manualError, setManualError] = useState(false);
@@ -37,7 +40,7 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
   const owner = `${session?.user.id ?? ''}:${media.id}:${media.playback ?? ''}`;
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
-  const eligible = focused && active && hydrated && !!session && !blocked && flagsHydrated && q1Dismissed && !q1Presented;
+  const eligible = focused && appState === 'active' && hydrated && !!session && !blocked && flagsHydrated && q1Dismissed && !q1Presented;
   const eligibleRef = useRef(eligible);
   eligibleRef.current = eligible;
 
@@ -66,19 +69,19 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
       void preload.current?.unloadAsync().catch(() => {});
     },
   }), [owner]);
-  const coordinator = useMemo(() => session
-    ? createIntroCoordinator(session, media, player, () => eligibleRef.current && currentOwner.current === owner)
-    : null, [session, media, player, owner]);
+  const coordinator = useMemo(() => accountId
+    ? createIntroCoordinator(accountId, () => sessionRef.current, media, player, () => eligibleRef.current && currentOwner.current === owner)
+    : null, [accountId, media, player, owner]);
 
   useEffect(() => {
-    const listener = AppState.addEventListener('change', (state) => setActive(state === 'active'));
+    const listener = AppState.addEventListener('change', (state) => setAppState(state));
     return () => listener.remove();
   }, []);
+  useEffect(() => () => coordinator?.cancel(), [coordinator]);
   useEffect(() => {
-    if (eligible) void coordinator?.attempt();
-    else coordinator?.cancel();
-    return () => coordinator?.cancel();
-  }, [eligible, coordinator]);
+    if (!focused || appState === 'background' || !hydrated || !accountId || blocked || !flagsHydrated || !q1Dismissed || q1Presented) coordinator?.cancel();
+    else if (appState === 'active') void coordinator?.attempt();
+  }, [focused, appState, hydrated, accountId, blocked, flagsHydrated, q1Dismissed, q1Presented, coordinator]);
 
   const watch = async () => {
     setManualError(false);
@@ -116,7 +119,7 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
       {media.playback !== null && session && (
         <Video key={`preload:${owner}`} ref={preload} style={styles.preloader} pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
       )}
-      <IntroVideoModal key={modalOwner === owner ? `modal:${owner}` : 'closed'} media={media} visible={modalOwner === owner} onClose={() => coordinator?.cancel()} />
+      <IntroVideoModal key={modalOwner === owner ? `modal:${owner}` : 'closed'} media={media} visible={modalOwner === owner} inactive={appState === 'inactive'} onClose={() => coordinator?.cancel()} />
     </View>
   );
 }
