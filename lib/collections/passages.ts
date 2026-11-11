@@ -41,6 +41,22 @@ export async function readCollectionPassage(
   return verses.join(' ');
 }
 
+export function createCollectionPassageReader(version: BibleVersion, readVerse: ReadVerse) {
+  const reads = new Map<string, Promise<string>>();
+  return (passage: CollectionPassage): Promise<string> => {
+    const reference = collectionPassageReference(passage);
+    const existing = reads.get(reference);
+    if (existing) return existing;
+
+    const pending = readCollectionPassage(passage, version, readVerse).catch((error) => {
+      reads.delete(reference);
+      throw error;
+    });
+    reads.set(reference, pending);
+    return pending;
+  };
+}
+
 export async function validateCollectionPassages(
   passages: readonly CollectionPassage[],
   version: BibleVersion,

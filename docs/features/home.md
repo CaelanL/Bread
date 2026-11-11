@@ -14,15 +14,22 @@ What those numbers mean is in `docs/features/insights.md`.
 
 ## Explore collections
 
-Home shows two suggested collections and See all opens the full catalog.
-The cards use bundled artwork and passage counts, so browsing does not
-fetch Bible text. An introduction lists all references and loads a passage
-through `fetchVerse` when opened. The introduction shares the top-right
+Home groups the Explore heading and two suggested collections on one
+surface. See all opens the full catalog. These cards use bundled artwork
+and passage counts, so browsing does not fetch Bible text.
+
+An introduction lists tappable references. It preloads the first two
+passages through `fetchVerse`, then the expanded passage and its next
+neighbor, sequentially. Pending and successful reads are shared in memory
+for the selected translation. Version changes and unmount stop further
+preloads and ignore stale preview results. Failed reads remain retryable.
+Text expands on tap in the app's system font. The introduction shares the top-right
 `BibleTranslationPicker` with verse selection. Its scrollable list reads
 `BIBLE_VERSIONS`. The selection starts from the user's setting and applies
 to this preview and import. Before writing, the store verifies all
 requested keyed verses. An incomplete read lets the user retry or choose
-another translation.
+another translation. The centered Add collection action uses an intrinsic
+width and a minimum 44-point touch target.
 
 `importCuratedCollection` saves every passage in one transaction and reads
 back the resulting collection. Matching references in the same translation

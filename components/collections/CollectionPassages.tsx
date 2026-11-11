@@ -1,31 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Fonts, Radius } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchVerse } from '@/lib/api/bible';
 import type { CollectionPassage } from '@/lib/collections/catalog';
-import { collectionPassageReference, readCollectionPassage } from '@/lib/collections/passages';
+import { collectionPassageReference, createCollectionPassageReader } from '@/lib/collections/passages';
 import type { BibleVersion } from '@/lib/settings';
 
-function PassagePreview({ passage, version }: { passage: CollectionPassage; version: BibleVersion }) {
+function PassagePreview({ passage, readPassage }: {
+  passage: CollectionPassage;
+  readPassage: (passage: CollectionPassage) => Promise<string>;
+}) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const [attempt, setAttempt] = useState(0);
   const [text, setText] = useState<string>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    const controller = new AbortController();
-    readCollectionPassage(passage, version, fetchVerse, controller.signal)
+    let active = true;
+    readPassage(passage)
       .then((value) => {
-        if (!controller.signal.aborted) setText(value);
+        if (active) setText(value);
       })
       .catch((reason: Error) => {
-        if (!controller.signal.aborted) setError(reason.message);
+        if (active) setError(reason.message);
       });
-    return () => controller.abort();
-  }, [passage, version, attempt]);
+    return () => { active = false; };
+  }, [passage, readPassage, attempt]);
 
   return (
     <View style={styles.preview}>
@@ -60,6 +63,20 @@ export function CollectionPassages({ passages, version }: {
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const [expandedIndex, setExpandedIndex] = useState<number>();
+  const readPassage = useMemo(() => createCollectionPassageReader(version, fetchVerse), [version]);
+
+  useEffect(() => {
+    let active = true;
+    const preload = async () => {
+      const start = expandedIndex ?? 0;
+      for (const passage of passages.slice(start, start + 2)) {
+        if (!active) return;
+        await readPassage(passage).catch(() => undefined);
+      }
+    };
+    void preload();
+    return () => { active = false; };
+  }, [expandedIndex, passages, readPassage]);
 
   return (
     <View style={styles.section}>
@@ -88,7 +105,7 @@ export function CollectionPassages({ passages, version }: {
               </View>
               <IconSymbol name={expanded ? 'chevron.down' : 'chevron.right'} size={16} color={colors.icon} />
             </Pressable>
-            {expanded && <PassagePreview key={version} passage={passage} version={version} />}
+            {expanded && <PassagePreview key={version} passage={passage} readPassage={readPassage} />}
           </View>
         );
       })}
@@ -105,7 +122,7 @@ const styles = StyleSheet.create({
   reference: { fontSize: 16, fontWeight: '600' },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
   preview: { paddingHorizontal: 12, paddingBottom: 12 },
-  verseText: { fontFamily: Fonts?.serif, fontSize: 19, lineHeight: 29 },
+  verseText: { fontSize: 19, lineHeight: 29 },
   error: { fontSize: 14, lineHeight: 21 },
   retry: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
   retryText: { fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },

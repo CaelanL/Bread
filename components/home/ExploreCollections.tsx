@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 
 import { CuratedCollectionCard } from '@/components/collections/CuratedCollectionCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 
@@ -13,7 +13,7 @@ export function ExploreCollections() {
   const compact = width >= 350 && fontScale < 1.4;
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, { backgroundColor: colors.card }]}>
       <View style={styles.header}>
         <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
           Explore collections
@@ -31,7 +31,7 @@ export function ExploreCollections() {
       </View>
       <View style={compact ? styles.tiles : styles.rows}>
         {CURATED_COLLECTIONS.slice(0, 2).map((collection) => (
-          <CuratedCollectionCard key={collection.id} collection={collection} compact={compact} />
+          <CuratedCollectionCard key={collection.id} collection={collection} compact={compact} grouped />
         ))}
       </View>
     </View>
@@ -39,7 +39,7 @@ export function ExploreCollections() {
 }
 
 const styles = StyleSheet.create({
-  section: { gap: 4 },
+  section: { borderRadius: Radius.huge, padding: 16, gap: 8 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

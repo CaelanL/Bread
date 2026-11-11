@@ -7,9 +7,10 @@ import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { CuratedCollection } from '@/lib/collections/catalog';
 
-export function CuratedCollectionCard({ collection, compact = false }: {
+export function CuratedCollectionCard({ collection, compact = false, grouped = false }: {
   collection: CuratedCollection;
   compact?: boolean;
+  grouped?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
 
@@ -22,6 +23,7 @@ export function CuratedCollectionCard({ collection, compact = false }: {
       style={({ pressed }) => [
         styles.card,
         compact ? styles.tile : styles.row,
+        grouped && styles.grouped,
         { backgroundColor: pressed ? colors.cardAlt : colors.card, borderColor: colors.border },
       ]}
     >
@@ -47,6 +49,10 @@ const styles = StyleSheet.create({
   },
   tile: {
     flex: 1,
+  },
+  grouped: {
+    borderWidth: 0,
+    padding: 0,
   },
   row: {
     flexDirection: 'row',

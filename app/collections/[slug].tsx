@@ -126,8 +126,7 @@ function CollectionIntroduction({ collection, defaultVersion }: {
       </ScrollView>
 
       <View style={[styles.footer, {
-        backgroundColor: colors.card,
-        borderColor: colors.border,
+        backgroundColor: colors.background,
         paddingBottom: Math.max(12, bottom),
       }]}>
         {message && (
@@ -141,13 +140,13 @@ function CollectionIntroduction({ collection, defaultVersion }: {
           disabled={working}
           testID="curated-collection-action"
           style={({ pressed }) => [styles.action, {
-            backgroundColor: colors.primary,
-            opacity: pressed || working ? 0.75 : 1,
+            backgroundColor: colors.text,
+            opacity: working ? 0.5 : pressed ? 0.8 : 1,
           }]}
           onPress={addCollection}
         >
-          {working && <ActivityIndicator color={Colors.light.text} />}
-          <Text style={[styles.actionText, { color: Colors.light.text }]}>
+          {working && <ActivityIndicator color={colors.background} />}
+          <Text style={[styles.actionText, { color: colors.background }]}>
             {working ? (savedNeedsRefresh ? 'Refreshing Library…' : 'Adding collection…') : actionLabel}
           </Text>
         </Pressable>
@@ -204,18 +203,20 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 17, lineHeight: 24 },
   story: { gap: 12 },
   paragraph: { fontSize: 16, lineHeight: 25 },
-  footer: { borderTopWidth: StyleSheet.hairlineWidth, padding: 12, gap: 10 },
+  footer: { paddingHorizontal: 16, paddingTop: 12, gap: 10 },
   action: {
-    minHeight: 48,
-    paddingHorizontal: 12,
+    alignSelf: 'center',
+    maxWidth: '100%',
+    minHeight: 44,
+    paddingHorizontal: 20,
     paddingVertical: 8,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.full,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  actionText: { fontSize: 16, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+  actionText: { fontSize: 15, fontWeight: '600', textAlign: 'center', flexShrink: 1 },
   error: { fontSize: 14, lineHeight: 20 },
   empty: { padding: 20, gap: 8, alignItems: 'center' },
   loading: { flex: 1 },
