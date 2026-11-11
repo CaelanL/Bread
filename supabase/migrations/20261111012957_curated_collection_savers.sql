@@ -199,4 +199,3 @@ begin
   return saved_collection.id;
 end;
 $$;
-
