@@ -276,8 +276,8 @@ export default function SettingsScreen() {
           <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
             <SettingsRow
               icon="book.fill"
-              label="Default Translation"
-              description="Used when adding new verses"
+              label="Translation"
+              description="Every saved verse uses it"
             >
               <View style={styles.dropdownTrigger}>
                 <Text style={[styles.dropdownValue, { color: colors.text }]}>

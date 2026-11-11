@@ -14,13 +14,15 @@ import { importCollection } from '@/lib/collections/import';
 import { validateCollectionPassages } from '@/lib/collections/passages';
 import { readCollectionSavers } from '@/lib/collections/savers';
 import type { CollectionIconKey } from '@/lib/collections/icons';
-import type { ColorMode } from '@/lib/settings';
+import { BIBLE_VERSIONS, type ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
-import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
+import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, formatVerseReference, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 import { create } from 'zustand';
+
 import {
   getInProgressSort,
   getMasteredSort,
@@ -29,9 +31,12 @@ import {
 } from './library-sort';
 import { computeNextSrState } from './review';
 import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from './review-config';
+import { compareRecords, isVisible, mayBeMissing, onePerReference, planCollapse, referenceKey, type VerseRecord } from './translation';
 
 const COLOR_MODE_KEY = 'app_color_mode';
+// Local cache of the account translation (profiles.translation).
 const BIBLE_VERSION_KEY = 'app_bible_version';
+const KEPT_NOTICES_KEY = 'translation_kept_notices';
 const REVIEW_MAX_INTERVAL_DAYS_KEY = 'review_max_interval_days';
 
 // ============ CONSTANTS ============
@@ -109,7 +114,7 @@ interface AppState {
 
   // Actions - Collections
   addCollection: (name: string, iconKey?: CollectionIconKey) => Promise<Collection>;
-  importCuratedCollection: (catalogId: string, version: BibleVersion) => Promise<{ collectionId: string; loaded: boolean }>;
+  importCuratedCollection: (catalogId: string) => Promise<{ collectionId: string; loaded: boolean }>;
   setCollectionIcon: (id: string, iconKey: CollectionIconKey) => Promise<void>;
   renameCollection: (id: string, name: string) => Promise<void>;
   reorderCollections: (ids: string[]) => Promise<void>;
@@ -120,7 +125,6 @@ interface AppState {
   addVerse: (
     verse: Omit<SavedVerse, 'id' | 'createdAt' | 'progress' | 'collectionId' | 'version'>,
     collectionId: string,
-    version: BibleVersion
   ) => Promise<SavedVerse>;
   copyVerseToCollection: (verseId: string, collectionId: string) => Promise<void>;
   deleteVerse: (id: string, collectionId: string) => Promise<{ wasMastered: boolean }>;
@@ -176,6 +180,173 @@ function parseVerseMembership(row: VerseRow, collectionId: string, addedAt: stri
     progress: parseProgress(row.progress),
     ...parseVerseRowExtras(row),
   };
+}
+
+function isBibleVersion(value: unknown): value is BibleVersion {
+  return BIBLE_VERSIONS.some((version) => version.value === value);
+}
+
+type VerseIdentityRow = Pick<VerseRow, 'id' | 'client_id' | 'book' | 'chapter' | 'verse_start' | 'verse_end' | 'version' | 'progress' | 'deleted_at'>;
+type HeldVerse = VerseRecord & { clientId: string };
+const VERSE_IDENTITY_COLUMNS = 'id, client_id, book, chapter, verse_start, verse_end, version, progress, deleted_at';
+
+function toRecord(row: VerseIdentityRow): HeldVerse {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    book: row.book,
+    chapter: row.chapter,
+    verseStart: row.verse_start,
+    verseEnd: row.verse_end,
+    version: row.version,
+    progress: parseProgress(row.progress),
+    deleted: row.deleted_at !== null,
+  };
+}
+
+// Translation sync and switches touch every verse row, so they run one at a time.
+let translationWork: Promise<unknown> = Promise.resolve();
+function queueTranslationWork<T>(work: () => Promise<T>): Promise<T> {
+  const next = translationWork.then(work, work);
+  translationWork = next.catch(() => undefined);
+  return next;
+}
+
+// The winner takes the losers' collections, then the losers are soft-deleted. Losers go
+// first so a restored winner never shares its version with another active row.
+async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
+  const loserIds = losers.map(({ id }) => id);
+  const { data: links, error } = await supabase
+    .from('verse_collections')
+    .select('collection_id, added_at')
+    .in('verse_id', loserIds);
+  if (error) throw error;
+  if (links.length > 0) {
+    const { error: linkError } = await supabase
+      .from('verse_collections')
+      .upsert(
+        links.map(({ collection_id, added_at }) => ({ verse_id: winner.id, collection_id, added_at })),
+        { onConflict: 'verse_id,collection_id', ignoreDuplicates: true },
+      );
+    if (linkError) throw linkError;
+  }
+
+  const { error: hideError } = await supabase
+    .from('user_verses')
+    .update({ deleted_at: new Date().toISOString() })
+    .in('id', loserIds);
+  if (hideError) throw hideError;
+
+  if (winner.deleted) {
+    const { error: restoreError } = await supabase.from('user_verses').update({ deleted_at: null }).eq('id', winner.id);
+    if (restoreError) {
+      await supabase.from('user_verses').update({ deleted_at: null }).in('id', loserIds);
+      throw restoreError;
+    }
+  }
+}
+
+async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promise<boolean> {
+  try {
+    const { verses } = await fetchVerse(formatVerseReference(verse), translation);
+    for (let n = verse.verseStart; n <= verse.verseEnd; n++) {
+      if (!verses?.[n]?.trim()) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Makes every verse row follow the account translation: collapses two translations
+ * of one reference into the row with better progress, then moves every row to
+ * `translation`. A row whose verse the translation leaves out keeps its version.
+ * Returns those kept rows.
+ */
+async function alignVerses(userId: string, translation: BibleVersion): Promise<HeldVerse[]> {
+  const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
+  if (error) throw error;
+  const records = data.map(toRecord);
+
+  for (const { winner, losers } of planCollapse(records, translation)) {
+    const active = losers.filter((loser) => !loser.deleted);
+    if (active.length === 0) continue;
+    await collapseVerse(winner, active);
+    winner.deleted = false;
+    for (const loser of active) loser.deleted = true;
+  }
+
+  const stale = records.filter((record) => record.version !== translation);
+  const available = new Map<string, boolean>();
+  const kept: HeldVerse[] = [];
+  for (const record of stale.filter(mayBeMissing)) {
+    const key = referenceKey(record);
+    if (!available.has(key)) available.set(key, await isAvailableIn(record, translation));
+    if (!available.get(key)) kept.push(record);
+  }
+  if (stale.length > kept.length) {
+    let update = supabase.from('user_verses').update({ version: translation }).eq('user_id', userId).neq('version', translation);
+    if (kept.length > 0) update = update.not('id', 'in', `(${kept.map(({ id }) => id).join(',')})`);
+    const { error: updateError } = await update;
+    if (updateError) throw updateError;
+  }
+  return kept.filter(isVisible);
+}
+
+/** Tells the user, once per verse and translation, which verses stayed in their old translation. */
+async function tellKeptVerses(kept: HeldVerse[], translation: BibleVersion) {
+  let told: string[] = [];
+  try {
+    told = JSON.parse((await AsyncStorage.getItem(KEPT_NOTICES_KEY)) ?? '[]');
+  } catch (e) {
+    console.error('[STORE] Failed to read translation notices:', e);
+  }
+  const fresh = kept.filter(({ clientId }) => !told.includes(`${clientId}:${translation}`));
+  if (fresh.length === 0) return;
+
+  const references = [...new Set(fresh.map((verse) => formatVerseReference(verse)))];
+  Alert.alert(
+    `Not in the ${translation}`,
+    references.length === 1
+      ? `${references[0]} isn't in the ${translation}, so it stays in the ${fresh[0].version}.`
+      : `${references.slice(0, -1).join(', ')} and ${references[references.length - 1]} aren't in the ${translation}, so they stay in their current translation.`,
+  );
+  try {
+    await AsyncStorage.setItem(KEPT_NOTICES_KEY, JSON.stringify([...told, ...fresh.map(({ clientId }) => `${clientId}:${translation}`)]));
+  } catch (e) {
+    console.error('[STORE] Failed to save translation notices:', e);
+  }
+}
+
+/**
+ * Reads the account translation from `profiles` into the store and its local cache.
+ * An account with none yet gets this device's translation, which is how devices
+ * from before account translations carry their choice over. Then lines the
+ * verses up with it.
+ */
+async function syncAccountTranslation(generation: number) {
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase.from('profiles').select('translation').eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  if (generation !== accountGeneration) return;
+
+  let translation = useAppStore.getState().bibleVersion;
+  if (data?.translation) {
+    // A newer app version may know translations this one doesn't. Leave it alone.
+    if (!isBibleVersion(data.translation)) return;
+    translation = data.translation;
+    useAppStore.setState({ bibleVersion: translation });
+    await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
+      console.error('[STORE] Failed to cache bibleVersion:', e);
+    });
+  } else {
+    const { error: saveError } = await supabase.from('profiles').upsert({ user_id: userId, translation });
+    if (saveError) throw saveError;
+  }
+
+  const kept = await alignVerses(userId, translation);
+  if (generation === accountGeneration) await tellKeptVerses(kept, translation);
 }
 
 // ============ STORE ============
@@ -331,7 +502,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         return false;
       }
 
-      const masteredVerses: SavedVerse[] = data.map((v) => ({
+      // Two translations of one verse can both be mastered. List the better one.
+      const shown = new Set(onePerReference(data.map(toRecord), get().bibleVersion).map(({ id }) => id));
+      const masteredVerses: SavedVerse[] = data.filter((v) => shown.has(v.id)).map((v) => ({
         id: v.client_id,
         collectionId: MASTERED_COLLECTION_ID,
         book: v.book,
@@ -370,8 +543,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
         updates.colorMode = savedColorMode as ColorMode;
       }
-      if (savedBibleVersion && ['ESV', 'NLT', 'NIV', 'NKJV', 'KJV'].includes(savedBibleVersion)) {
-        updates.bibleVersion = savedBibleVersion as BibleVersion;
+      if (isBibleVersion(savedBibleVersion)) {
+        updates.bibleVersion = savedBibleVersion;
       }
       if (savedReviewMax) {
         const parsed = parseInt(savedReviewMax, 10);
@@ -392,6 +565,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('[STORE] Failed to load settings:', e);
     }
 
+    if (generation !== accountGeneration) return;
+    // The cached translation stands in when the profile can't be read (offline).
+    await queueTranslationWork(() => syncAccountTranslation(generation)).catch((e) => {
+      console.error('[STORE] Failed to sync translation:', e);
+    });
     if (generation !== accountGeneration) return;
     let [collectionsOk, versesOk, masteredOk] = await Promise.all([
       get().fetchCollections(),
@@ -432,6 +610,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   refresh: async () => {
     set({ error: null });
+    const generation = accountGeneration;
+    await queueTranslationWork(() => syncAccountTranslation(generation)).catch((e) => {
+      console.error('[STORE] Failed to sync translation:', e);
+    });
     await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),
@@ -455,12 +637,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  // The account translation: saved to the profile, then every verse moves to it.
   setBibleVersion: async (version: BibleVersion) => {
+    const previous = get().bibleVersion;
+    if (version === previous) return;
+    const generation = accountGeneration;
     set({ bibleVersion: version });
+
+    let saved = false;
     try {
-      await AsyncStorage.setItem(BIBLE_VERSION_KEY, version);
+      const kept = await queueTranslationWork(async () => {
+        // A later choice replaced this one before it ran.
+        if (generation !== accountGeneration || get().bibleVersion !== version) return [];
+        const userId = await getCurrentUserId();
+        const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: version });
+        if (error) throw error;
+        saved = true;
+        await AsyncStorage.setItem(BIBLE_VERSION_KEY, version).catch((e) => {
+          console.error('[STORE] Failed to cache bibleVersion:', e);
+        });
+        return alignVerses(userId, version);
+      });
+      if (generation !== accountGeneration) return;
+      await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
+      await tellKeptVerses(kept, version);
     } catch (e) {
-      console.error('[STORE] Failed to save bibleVersion:', e);
+      console.error('[STORE] Failed to change translation:', e);
+      if (generation !== accountGeneration) return;
+      if (saved) {
+        // The profile is right; the next hydrate or pull to refresh moves the rest.
+        showErrorToast("Some verses didn't switch translation. Pull to refresh to try again.");
+      } else {
+        if (get().bibleVersion === version) set({ bibleVersion: previous });
+        showErrorToast("Couldn't change your translation. Try again.");
+      }
     }
   },
 
@@ -514,9 +724,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     return newCollection;
   },
 
-  importCuratedCollection: async (catalogId, version) => {
+  importCuratedCollection: async (catalogId) => {
     const catalog = CURATED_COLLECTIONS.find(({ id }) => id === catalogId);
     if (!catalog) throw new Error('Collection not found.');
+    const version = get().bibleVersion;
 
     const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
@@ -782,9 +993,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     );
   },
 
-  addVerse: async (verse, collectionId, version) => {
+  addVerse: async (verse, collectionId) => {
     const userId = await getCurrentUserId();
     const createdAt = new Date();
+    const translation = get().bibleVersion;
 
     // Get server collection ID
     let serverCollectionId: string;
@@ -829,32 +1041,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
 
-    // Check if verse already exists (including soft-deleted)
-    const { data: existing } = await supabase
+    // One verse per reference, in any translation, including soft-deleted rows.
+    // A held verse is reused; otherwise the best soft-deleted row comes back.
+    const { data: rows, error: lookupError } = await supabase
       .from('user_verses')
-      .select('id, client_id, deleted_at, progress')
+      .select(VERSE_IDENTITY_COLUMNS)
       .eq('user_id', userId)
       .eq('book', verse.book)
       .eq('chapter', verse.chapter)
       .eq('verse_start', verse.verseStart)
-      .eq('verse_end', verse.verseEnd)
-      .eq('version', version)
-      .maybeSingle();
+      .eq('verse_end', verse.verseEnd);
+    if (lookupError) {
+      console.error('[STORE] Failed to look up verse:', lookupError);
+      throw new Error('Failed to save verse');
+    }
+    const records = rows.map(toRecord);
+    const existing = records.find(({ deleted }) => !deleted) ?? [...records].sort(compareRecords(translation))[0];
 
     let verseId: string;
     let clientId: string;
+    let version = translation;
     let progress: SavedVerse['progress'] = DEFAULT_PROGRESS;
 
     if (existing) {
       verseId = existing.id;
-      clientId = existing.client_id;
-      progress = parseProgress(existing.progress);
+      clientId = existing.clientId;
+      progress = existing.progress;
+      if (!existing.deleted) version = existing.version as BibleVersion;
 
-      // Restore if soft-deleted
-      if (existing.deleted_at) {
+      // Restore if soft-deleted, in the account translation
+      if (existing.deleted) {
         const { error: restoreError } = await supabase
           .from('user_verses')
-          .update({ deleted_at: null })
+          .update({ deleted_at: null, version: translation })
           .eq('id', existing.id);
 
         if (restoreError) {
@@ -1194,10 +1413,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       verses: [],
       masteredVerses: [],
       curatedSaverCounts: {},
-      // Device prefs (colorMode, bibleVersion, reviewMaxIntervalDays,
-      // masteredSort, inProgressSort) are preserved across sign-out by
-      // virtue of being absent from this set call — Zustand keeps
-      // unspecified keys. AsyncStorage copies are never touched here.
+      // Device prefs (colorMode, reviewMaxIntervalDays, masteredSort,
+      // inProgressSort) and the cached account translation (bibleVersion,
+      // replaced from the next account's profile on hydrate) are preserved
+      // across sign-out by virtue of being absent from this set call —
+      // Zustand keeps unspecified keys. AsyncStorage copies are never touched here.
+
       hydrated: false,
       collectionsLoading: true,
       collectionOrderSaving: false,

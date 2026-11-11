@@ -884,7 +884,7 @@ export async function updateCollectionSort(
 
 // ============ UTILITY FUNCTIONS ============
 
-export function formatVerseReference(verse: SavedVerse): string {
+export function formatVerseReference(verse: Pick<SavedVerse, 'book' | 'chapter' | 'verseStart' | 'verseEnd'>): string {
   if (verse.verseStart === verse.verseEnd) {
     return `${verse.book} ${verse.chapter}:${verse.verseStart}`;
   }

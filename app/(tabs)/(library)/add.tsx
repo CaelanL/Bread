@@ -1,11 +1,11 @@
 import { AppHeader } from '@/components/app-header';
+import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
 import { type BibleVersion } from '@/lib/storage';
-import { BIBLE_VERSIONS } from '@/lib/settings';
 import { useAppStore } from '@/lib/store';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -15,7 +15,6 @@ import {
   StyleSheet,
   Text,
   View,
-  Modal,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -27,7 +26,6 @@ export default function AddVerseScreen() {
   const bibleVersion = useAppStore((state) => state.bibleVersion);
 
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(bibleVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
 
   const handleBookPress = (book: string) => {
@@ -37,7 +35,6 @@ export default function AddVerseScreen() {
   const handleChapterPress = (book: string, chapter: number) => {
     const params = new URLSearchParams();
     if (collectionId) params.set('collectionId', collectionId);
-    params.set('version', selectedVersion);
     const queryString = params.toString();
     router.push(`/(tabs)/(library)/add/${encodeURIComponent(book)}/${chapter}?${queryString}`);
   };
@@ -93,10 +90,11 @@ export default function AddVerseScreen() {
     );
   };
 
+  // The picker is the account translation: changing it here changes it everywhere.
   const handleVersionSelect = (version: BibleVersion) => {
     Haptics.selectionAsync();
-    setSelectedVersion(version);
     setVersionPickerVisible(false);
+    void useAppStore.getState().setBibleVersion(version);
   };
 
   return (
@@ -104,57 +102,21 @@ export default function AddVerseScreen() {
       <AppHeader
         title="Add Verse"
         rightButton={{
-          label: selectedVersion,
+          label: bibleVersion,
+          accessibilityLabel: `Translation, ${bibleVersion}`,
+          testID: 'add-translation-picker',
           onPress: () => setVersionPickerVisible(true),
           variant: 'text',
         }}
       />
 
-      {/* Version Picker Modal */}
-      <Modal
+      <BibleTranslationPicker
+        version={bibleVersion}
         visible={versionPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVersionPickerVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setVersionPickerVisible(false)}
-        >
-          <View style={[styles.pickerContainer, { backgroundColor: colors.cardAlt }]}>
-            <Text style={[styles.pickerTitle, { color: colors.text }]}>Translation</Text>
-            <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
-              {BIBLE_VERSIONS.map((version) => (
-                <Pressable
-                  key={version.value}
-                  style={[
-                    styles.pickerOption,
-                    selectedVersion === version.value && { backgroundColor: colors.primary },
-                  ]}
-                  onPress={() => handleVersionSelect(version.value)}
-                >
-                  <Text
-                    style={[
-                      styles.pickerOptionText,
-                      { color: selectedVersion === version.value ? colors.white : colors.text },
-                    ]}
-                  >
-                    {version.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.pickerOptionSubtext,
-                      { color: selectedVersion === version.value ? 'rgba(255,255,255,0.7)' : colors.icon },
-                    ]}
-                  >
-                    {version.full}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
+        onSelect={handleVersionSelect}
+        onClose={() => setVersionPickerVisible(false)}
+        accountNote
+      />
 
       <ScrollView style={styles.scrollView}>
         {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
@@ -168,48 +130,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)', // Keep hardcoded for overlay
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerContainer: {
-    width: '80%',
-    maxWidth: 300,
-    maxHeight: '60%',
-    borderRadius: 14,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  pickerScroll: {
-    flexGrow: 0,
-  },
-  pickerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  pickerOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    marginBottom: 6,
-  },
-  pickerOptionText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  pickerOptionSubtext: {
-    fontSize: 12,
-    marginTop: 2,
-  },
   scrollView: {
+
     flex: 1,
   },
   testamentDivider: {

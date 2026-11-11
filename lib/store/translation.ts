@@ -42,7 +42,7 @@ export function compareRecords(translation: string) {
 }
 
 // Active rows, and soft-deleted mastered rows, which stay in the Mastered list.
-function isVisible(record: VerseRecord): boolean {
+export function isVisible(record: VerseRecord): boolean {
   return !record.deleted || record.progress.hard?.completed === true;
 }
 

@@ -1,16 +1,44 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BIBLE_VERSIONS, type BibleVersion } from '@/lib/settings';
 
-export function BibleTranslationPicker({ version, visible, onSelect, onClose }: {
+const ACCOUNT_NOTE_SEEN_KEY = 'translation_account_note_seen';
+
+// True until the picker has been opened once with the note on this device.
+function useFirstOpen(visible: boolean, enabled: boolean): boolean {
+  const [unseen, setUnseen] = useState(false);
+  const shown = useRef(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    AsyncStorage.getItem(ACCOUNT_NOTE_SEEN_KEY).then((seen) => setUnseen(seen === null)).catch(() => {});
+  }, [enabled]);
+
+  useEffect(() => {
+    if (visible && unseen && !shown.current) {
+      shown.current = true;
+      AsyncStorage.setItem(ACCOUNT_NOTE_SEEN_KEY, '1').catch(() => {});
+    }
+    if (!visible && shown.current) setUnseen(false);
+  }, [visible, unseen]);
+
+  return unseen;
+}
+
+/** `accountNote`: the first time it opens, say that picking changes the account translation. */
+export function BibleTranslationPicker({ version, visible, onSelect, onClose, accountNote = false }: {
   version: BibleVersion;
   visible: boolean;
   onSelect: (version: BibleVersion) => void;
   onClose: () => void;
+  accountNote?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
+  const showNote = useFirstOpen(visible, accountNote);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -24,6 +52,11 @@ export function BibleTranslationPicker({ version, visible, onSelect, onClose }: 
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
             Translation
           </Text>
+          {showNote && (
+            <Text testID="translation-account-note" style={[styles.note, { color: colors.icon }]}>
+              This changes your translation everywhere in Bread.
+            </Text>
+          )}
           <ScrollView style={styles.list}>
             {BIBLE_VERSIONS.map(({ value, label, full }) => {
               const selected = value === version;
@@ -71,6 +104,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   title: { fontSize: 17, fontWeight: '600', marginBottom: 12, textAlign: 'center' },
+  note: { fontSize: 13, marginTop: -6, marginBottom: 12, textAlign: 'center' },
+
   list: { flexGrow: 0, flexShrink: 1 },
   option: {
     paddingVertical: 12,
