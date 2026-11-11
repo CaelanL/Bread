@@ -34,8 +34,9 @@ profiles.translation (one row per user, owner-only RLS)   ← source of truth
 
 - `hydrate()` and `refresh()` run `syncAccountTranslation`: read the
   profile into the store and cache. An account with no translation yet
-  gets this device's value written to it, which is how devices from
-  before account translations carry their choice over. A value this app
+  gets the version most of its active verses use (`seedTranslation`), or
+  this device's value if it has none, so the first device to sign in
+  doesn't move every verse to its own choice. A value this app
   version doesn't know (a newer app's translation) is left alone.
 - `useAppStore(s => s.bibleVersion)` reads it.
   `useAppStore.getState().setBibleVersion(version)` is the account switch,
@@ -56,13 +57,18 @@ with any other translation work (`queueTranslationWork`):
 1. Writes `profiles.translation`. On failure the picker goes back and an
    error toast shows.
 2. Runs `alignVerses`: collapses two translations of one verse (below),
-   then moves every `user_verses` row, soft-deleted ones included, to the
-   new version in one update.
+   then moves `user_verses` rows, soft-deleted ones included, to the new
+   version. Only one row per reference moves (`planMoves`): the active one if
+   there is one, else the best. If a soft-deleted twin already holds the new
+   version, the two swap versions, so no reference ever has two rows in one
+   version. Older app versions look a verse up by reference and version and
+   expect at most one row.
 3. Refetches verses and Mastered, so cards read the new text.
 
 If step 2 fails the profile already holds the new translation. A toast says
 to pull to refresh, and the next `hydrate()` or `refresh()` finishes the move,
-since they run the same `alignVerses`. Progress, schedule, study prefs and
+since they run the same `alignVerses`. A failure there shows the same toast.
+A pick made while a sync is running wins over the profile that sync read. Progress, schedule, study prefs and
 `last_practiced_at` are columns of the same row, so they stay.
 
 **Verses a translation leaves out.** ESV, NIV and NLT leave some verses out
@@ -75,18 +81,22 @@ says which verses stayed. Each verse and translation is told once per device
 
 **One verse per reference.** Two rows with the same book, chapter and range
 in different versions are one verse held twice, which only older app
-versions could create. `planCollapse` keeps the row with better progress:
-mastered beats learning, then higher `passCount`, then more completed
-difficulties. The winner takes the losers' collections and is restored if it
-was soft-deleted. The losers are soft-deleted. A mastered loser stays in the
-table, and `fetchMasteredVerses` lists one row per reference
-(`onePerReference`), so it doesn't show twice. This runs on every hydrate,
+versions could create. `planCollapse` looks only at active rows and keeps the
+one with better progress: mastered beats learning, then higher `passCount`,
+then more completed difficulties. A soft-deleted row never wins, so a verse
+the user reset or removed stays that way. The winner takes the losers'
+collections, and the losers are deleted outright. `session_attempts` has no
+foreign key to `user_verses`, so their history and stats stay.
+`fetchMasteredVerses` still lists one row per reference
+(`onePerReference`) for soft-deleted twins. This runs on every hydrate,
 refresh and switch, not only once, because old clients keep adding verses in
 their device translation. Tests: `lib/store/__tests__/translation.test.ts`.
 
 Adding a verse finds it by reference in any version (`addVerse`), so the add
 flow can't create a second translation of a held verse. A soft-deleted match
-comes back in the account translation.
+comes back in the account translation, unless another row of that reference
+already holds it or the verse may be left out there; then it keeps its own.
+
 
 ## Propagation
 

@@ -2,7 +2,7 @@
 -- Uses the seed logins. All writes roll back.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(10);
 
 select set_config('test.reader_a', (select id::text from auth.users where email = 'reader-a@example.test'), true);
 select set_config('test.reader_b', (select id::text from auth.users where email = 'reader-b@example.test'), true);
@@ -31,6 +31,10 @@ set local role anon;
 select throws_ok($$select * from public.profiles$$, '42501', null, 'Anonymous clients cannot read profiles');
 reset role;
 
+-- Reader B had an estimate when the same verse counted twice; now it counts once.
+insert into public.user_stats (user_id, avg_time_per_word_ms, total_words_mastered)
+values (current_setting('test.reader_b')::uuid, 1234, 700);
+
 -- Reader B masters John 3:16 in ESV, then again after switching to NIV.
 insert into public.session_attempts (user_id, book, chapter, verse_start, verse_end, version, difficulty, chunk_size, accuracy, recording_duration_ms, word_count, created_at)
 values
@@ -39,6 +43,8 @@ values
 select public.update_user_stats();
 select is((select total_words_mastered from public.user_stats where user_id = current_setting('test.reader_b')::uuid), 25,
   'A verse mastered in two translations counts its words once');
+select is((select avg_time_per_word_ms from public.user_stats where user_id = current_setting('test.reader_b')::uuid), null,
+  'An estimate below the threshold after deduplication is cleared');
 
 select * from finish();
 rollback;

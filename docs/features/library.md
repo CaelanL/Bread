@@ -142,7 +142,7 @@ and range in any version, including soft-deleted ones:
 | Existing row | What happens |
 |---|---|
 | Active | Upsert the junction row, ignoring duplicates |
-| Soft-deleted only | Restore the best one in the account translation, then the junction row |
+| Soft-deleted only | Restore the best one (version rule in `bible-versions.md`), then the junction row |
 | None | Insert the verse with `DEFAULT_PROGRESS`, then the junction row |
 
 A verse is one row per reference (`docs/architecture/bible-versions.md`). The restore

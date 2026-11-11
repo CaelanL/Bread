@@ -1,5 +1,6 @@
 # reader-a switches the account translation from the add screen to bundled KJV:
-# every saved verse follows, mastery stays. Then back to ESV in Settings.
+# every saved verse follows, mastery stays. Then back to ESV in Settings, with an open
+# setup screen following along.
 appId: com.caelanliu.biblemem
 name: account-translation
 ---
@@ -40,12 +41,24 @@ name: account-translation
     id: tab-settings
 - assertVisible: ".*Translation.*KJV.*"
 - takeScreenshot: account-translation-3-settings
+- tapOn:
+    id: tab-library
+- tapOn: ".*John 3:16 • KJV.*"
+- extendedWaitUntil:
+    visible: ".*begotten.*"
+    timeout: 20000
+# The setup screen stays mounted under the Library tab and must follow the switch.
 - runFlow:
     file: subflows/set-account-translation.yaml
     env:
       VERSION: ESV
 - tapOn:
     id: tab-library
+- extendedWaitUntil:
+    notVisible: ".*begotten.*"
+    timeout: 20000
+- takeScreenshot: account-translation-4-setup
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fmy-verses
 - extendedWaitUntil:
     visible: ".*John 3:16 • ESV.*"
     timeout: 20000
