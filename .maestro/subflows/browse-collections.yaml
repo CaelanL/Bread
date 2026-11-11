@@ -24,10 +24,12 @@ appId: com.caelanliu.biblemem
     element:
       id: discover-gratitude-and-joy
     direction: DOWN
+# Maestro counts a card clipped under the header as visible, so center it before tapping.
 - scrollUntilVisible:
     element:
       id: discover-anxiety-and-peace
     direction: UP
+    centerElement: true
 - tapOn:
     id: discover-anxiety-and-peace
 - assertVisible: "Anxiety & Peace"

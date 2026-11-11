@@ -144,8 +144,7 @@ export function MyComponent() {
 
 `ThemedText` and `ThemedView` (`components/themed-text.tsx`,
 `themed-view.tsx`) are used only by Expo template leftovers:
-`app/modal.tsx`, `app/(tabs)/explore.tsx`,
-`components/parallax-scroll-view.tsx` and
+`app/modal.tsx`, `components/parallax-scroll-view.tsx` and
 `components/ui/collapsible.tsx`. Don't rewrite existing components to
 use them.
 

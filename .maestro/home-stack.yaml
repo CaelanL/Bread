@@ -1,0 +1,72 @@
+appId: com.caelanliu.biblemem
+name: home-stack
+---
+# Explore and Insights are pushed on the Home tab's stack, so the Home tab stays
+# selected and Back returns to Home. Maestro's swipe does not start the iOS edge
+# back gesture (not on Library either), so the swipe itself is a device check.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: explore-see-all
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: explore-see-all
+- assertVisible:
+    id: discover-anxiety-and-peace
+- assertVisible:
+    id: tab-home
+    selected: true
+- takeScreenshot: home-stack-explore
+- tapOn: "Back to Home"
+- waitForAnimationToEnd
+- assertVisible:
+    id: explore-see-all
+- assertNotVisible: "Back to Home"
+
+- scrollUntilVisible:
+    element: ".*day streak.*"
+    direction: UP
+- tapOn: ".*day streak.*"
+- assertVisible: "Insights"
+- assertVisible:
+    id: tab-home
+    selected: true
+- takeScreenshot: home-stack-insights
+- tapOn: "Back to Home"
+- waitForAnimationToEnd
+- assertVisible: ".*day streak.*"
+- assertNotVisible: "Back to Home"
+
+# A double tap on a curated card opens one introduction, so one Back returns to Explore.
+- scrollUntilVisible:
+    element:
+      id: explore-see-all
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: explore-see-all
+- assertVisible:
+    id: discover-anxiety-and-peace
+- tapOn:
+    id: discover-anxiety-and-peace
+    repeat: 2
+    delay: 100
+- extendedWaitUntil:
+    visible:
+      id: curated-collection-action
+    timeout: 10000
+- waitForAnimationToEnd
+- tapOn: Back
+- waitForAnimationToEnd
+- assertVisible: "Back to Home"
+- assertVisible:
+    id: discover-anxiety-and-peace
+- assertNotVisible:
+    id: curated-collection-action
+- takeScreenshot: home-stack-double-tap-back

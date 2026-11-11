@@ -5,9 +5,12 @@ import { CollectionArt } from '@/components/collections/CollectionArt';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import type { CuratedCollection } from '@/lib/collections/catalog';
 import { saverCountLabel } from '@/lib/collections/savers';
 import { useCuratedSaverCount } from '@/lib/store';
+
+const lastCardPress = { current: 0 };
 
 export function CuratedCollectionCard({ collection, compact = false, grouped = false }: {
   collection: CuratedCollection;
@@ -16,13 +19,18 @@ export function CuratedCollectionCard({ collection, compact = false, grouped = f
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const saverCount = useCuratedSaverCount(collection.id);
+  const handlePress = useDebouncedPress(
+    () => router.push({ pathname: '/collections/[slug]', params: { slug: collection.id } }),
+    undefined,
+    lastCardPress,
+  );
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${collection.title}, ${collection.passages.length} passages${saverCount === undefined ? '' : `, ${saverCountLabel(saverCount)}`}`}
       testID={`discover-${collection.id}`}
-      onPress={() => router.push({ pathname: '/collections/[slug]', params: { slug: collection.id } })}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.card,
         compact ? styles.tile : styles.row,

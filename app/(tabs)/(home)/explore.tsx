@@ -14,7 +14,7 @@ export default function ExploreScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <AppHeader leftButton={{ icon: 'chevron.left', label: 'Back to Home', onPress: () => router.navigate('/home') }} />
+      <AppHeader leftButton={{ icon: 'chevron.left', label: 'Back to Home', onPress: () => router.back() }} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.intro}>
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>

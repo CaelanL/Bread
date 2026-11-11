@@ -5,6 +5,7 @@ import { CuratedCollectionCard } from '@/components/collections/CuratedCollectio
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 
@@ -13,6 +14,7 @@ export function ExploreCollections() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { width, fontScale } = useWindowDimensions();
   const compact = width >= 350 && fontScale < 1.4;
+  const openExplore = useDebouncedPress(() => router.push('/explore'));
 
   return (
     <View style={[styles.section, { backgroundColor: colors.card }]}>
@@ -24,7 +26,7 @@ export function ExploreCollections() {
           accessibilityRole="button"
           accessibilityLabel="See all collections"
           testID="explore-see-all"
-          onPress={() => router.push('/explore')}
+          onPress={openExplore}
           style={styles.seeAll}
         >
           <Text style={[styles.link, { color: colors.text }]}>See all</Text>

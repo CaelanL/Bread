@@ -9,6 +9,7 @@ import { getAvgTimeToMaster, getTotalTimeStudied } from '@/lib/api';
 import { getVerseText } from '@/lib/api/bible';
 import { getPopularRanges, formatRange, PopularRange } from '@/lib/api/popular-verses';
 import { useAppStore, useInsightsStats, useMostMemorizedBooks, useVerses } from '@/lib/store';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -213,7 +214,7 @@ export default function InsightsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Insights" />
+      <AppHeader title="Insights" leftButton={{ icon: 'chevron.left', label: 'Back to Home', onPress: () => router.back() }} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}

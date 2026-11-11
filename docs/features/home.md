@@ -4,7 +4,7 @@ Home is the first tab. It shows the Verse of the Month (VOTM), a global monthly 
 
 | File | Purpose |
 |---|---|
-| `app/(tabs)/home.tsx` | Loads VOTM data and composes the screen |
+| `app/(tabs)/(home)/home.tsx` | Loads VOTM data and composes the screen |
 | `components/home/VOTMCard.tsx` | The VOTM card |
 | `components/home/ExploreCollections.tsx` | Two curated collections and a See all link to `/explore` |
 | `components/home/InsightsCard.tsx` | Streak, mastered and in-progress counts. Tap opens `/insights` |
