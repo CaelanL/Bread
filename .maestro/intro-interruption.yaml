@@ -3,14 +3,11 @@ name: intro-interruption
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome%3FintroFixture%3Dsample
-- scrollUntilVisible:
-    element:
-      id: intro-watch
-    direction: DOWN
-- assertNotVisible:
-    id: intro-video-modal
-- tapOn:
-    id: intro-watch
+# Needs reader-b without an intro claim (a fresh stack); the automatic presentation is the only entry.
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 30000
 - extendedWaitUntil:
     visible: Pause video
     timeout: 10000
