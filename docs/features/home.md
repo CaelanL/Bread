@@ -175,9 +175,8 @@ of deleting markers through the client.
 
 The release migration seeds the monthly schedule; the local seed preserves it.
 
-- `npm run sim -- shot /home --as reader-a`: the current monthly card, and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
+- `npm run sim -- shot /home --as reader-a`: the current monthly card with reference and text and no optional mastery total (the missing function), and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
 - `npm run sim -- shot /home --as reader-b`: the same current monthly card, an insights card with 0 day streak, 0 mastered, 0 in progress, Explore collections, and no video card.
-- `npm run sim -- shot /home --as reader-a`: the VOTM card with reference/text and no optional mastery total (the missing function).
 - `npm run sim -- flow collection-discovery`: Home and Explore in both themes, introduction, KJV preview, add and open the saved copy.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
