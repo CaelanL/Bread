@@ -1,4 +1,4 @@
-# reader-b adds Ruth 1:1 to My Verses, then deletes it again. Needs the local `bible` function serving ESV.
+# reader-b adds bundled KJV Ruth 1:1 to My Verses, then deletes it again.
 appId: com.caelanliu.biblemem
 name: add-verse
 ---
@@ -9,7 +9,7 @@ name: add-verse
 # A failed earlier run can leave the verse behind.
 - runFlow:
     when:
-      visible: ".*Ruth 1:1 • ESV.*"
+      visible: ".*Ruth 1:1 • (ESV|KJV).*"
     file: subflows/delete-ruth.yaml
 - extendedWaitUntil:
     visible: "No verses yet"
@@ -27,11 +27,25 @@ name: add-verse
 - tapOn:
     id: bible-translation-ESV
 - assertNotVisible: "Translation"
+- tapOn:
+    id: verse-translation-picker
+- assertVisible: "Translation"
+- scrollUntilVisible:
+    element:
+      id: bible-translation-KJV
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: bible-translation-KJV
+- assertNotVisible: "Translation"
+- extendedWaitUntil:
+    visible: "1  .*"
+    timeout: 20000
 - tapOn: "1  .*"
 - takeScreenshot: add-verse-1-selected
 - tapOn: "Add Verse 1"
 - extendedWaitUntil:
-    visible: ".*Ruth 1:1 • ESV.*"
+    visible: ".*Ruth 1:1 • KJV.*"
     timeout: 20000
 - takeScreenshot: add-verse-2-added
 - runFlow: subflows/delete-ruth.yaml

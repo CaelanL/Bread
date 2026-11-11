@@ -263,7 +263,7 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-a`: My Verses, Mastered with a "1 due" pill, In Progress, and Psalms.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
-- `npm run sim -- flow add-verse`: reader-b opens the empty My Verses, adds Ruth 1:1 (ESV, from the local `bible` function) with a quick tap, sees the card, then swipes it away with Delete, back to "No verses yet".
+- `npm run sim -- flow add-verse`: reader-b uses the shared picker, adds bundled KJV Ruth 1:1 with a tap, sees the card, then deletes it back to "No verses yet".
 - After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
 - Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery. Then +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
 
