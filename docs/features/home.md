@@ -195,6 +195,6 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - 2026-01-20 · The count goes through an RPC · RLS stops a client counting other users' rows. The function it calls never reached a migration.
 
 - 2026-11-10 · Monthly choices use a thirty-six-passage cycle and fill only missing months · Existing editorial selections and artwork remain authoritative.
-- 2026-11-10 · An account-wide atomic claim controls automatic intro presentation · Prefer suppressing an ambiguous attempt over surprising users twice; explicit replay remains available.
+- 2026-11-10 · An account-wide atomic claim controls automatic intro presentation · Prefer suppressing an ambiguous attempt over surprising users twice. The replay surface left with the Home card and returns with it.
 - 2026-11-11 · Monthly art is plain public URLs · Signed URLs expire.
 - 2026-11-11 · Intro sound ignores the silent switch; scrubbing uses RN responders · A chosen video should just play; no new native module.
