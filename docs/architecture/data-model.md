@@ -215,7 +215,7 @@ by the edge function via `getUserTier()` to apply rate limits.
 
 ### `verse_of_month`, `popular_ranges`, `user_stats`
 
-`verse_of_month`: [monthly references, artwork and access rules](../features/home.md#verse_of_month).
+`verse_of_month`: [monthly references, public-bucket artwork and access rules](../features/home.md#verse_of_month).
 
 `popular_ranges` (migrations `0101_popular_verses.sql`,
 `015_popular_verses_mastered_only.sql`): Top verse ranges across all

@@ -8,6 +8,14 @@ select ok(not exists(select 1 from generate_series(0,119) n
   where not exists(select 1 from public.verse_of_month v
     where v.year_month = to_char(date '2026-11-01' + make_interval(months => n), 'YYYY-MM'))),
   'there are no gaps in the seeded schedule');
+select is((select count(*) from public.verse_of_month where year_month between '2026-11' and '2036-10'
+    and image_url in ('https://bhvvagvnmoxpjgfffgpl.supabase.co/storage/v1/object/public/images/vtm-gold-trees.png',
+      'https://bhvvagvnmoxpjgfffgpl.supabase.co/storage/v1/object/public/images/vtm-dark-sky.png')),
+  120::bigint, 'every seeded month has one of the two public artwork URLs');
+select ok(not exists(select 1 from generate_series(0,119) n
+  join public.verse_of_month v on v.year_month = to_char(date '2026-11-01' + make_interval(months => n), 'YYYY-MM')
+  where v.image_url not like '%/' || case when n % 2 = 0 then 'vtm-gold-trees.png' else 'vtm-dark-sky.png' end),
+  'artwork alternates gold trees then dark sky from November 2026');
 select ok((select relrowsecurity from pg_class where oid='public.user_intro_presentations'::regclass), 'intro state has RLS');
 select ok(not has_table_privilege('anon','public.user_intro_presentations','SELECT,INSERT,UPDATE,DELETE'), 'anonymous clients have no intro access');
 select ok(has_table_privilege('authenticated','public.user_intro_presentations','SELECT,INSERT'), 'owners can read and insert their marker');

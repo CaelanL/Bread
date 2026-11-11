@@ -81,15 +81,15 @@ check canonical bounds, continuous coverage and SQL/source parity.
 `useVotm` loads on Home focus, translation change, app return and pull to refresh.
 While focused, a short local clock check detects a month change without a long
 JavaScript timer or server polling. `getCurrentVOTM` uses the device's local month.
-Existing book aliases such as Psalm retain their display reference and normalize
-through the shared Bible helper for fetching.
+Aliases such as Psalm keep their display reference and normalize through the
+shared Bible helper.
 
 The reference appears as soon as metadata arrives. Text and mastery reads run in
 parallel through the existing Bible/API paths. `createMonthlyLoader` clears old
 text immediately and ignores responses from an older month, version, account or
 blurred screen. A missing schedule row shows the empty card; a failed metadata
 read offers Try again. A text failure keeps the reference and offers a text retry.
-Only the current month's text is fetched, not the future schedule.
+Only the current month's text is fetched.
 
 ## `verse_of_month`
 
@@ -99,7 +99,7 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 - A row holds a reference: book, chapter, verse start and end. There is no version column.
 - Anyone can read it, signed in or not. No write policy exists, so rows are added with the service role.
 
-`image_url` is free-form text. The bucket line in migration 008 is a comment, so no migration creates a storage bucket.
+`image_url` is free-form text. No migration creates the `images` bucket; only prod has it. `20261111144002_monthly_artwork.sql` makes it public and gives each artless month from 2026-11 to 2036-10 a plain URL: `vtm-gold-trees.png` for 2026-11 and every second month after, `vtm-dark-sky.png` for the rest.
 
 ## The card
 
@@ -161,7 +161,7 @@ builds have no test button.
 
 `/home?introFixture=sample` uses the same fixture; `introFixture=unavailable` uses
 a missing local file. Both share the test button's guard; dev sign-in restrictions
-stay intact. Ordinary startup has no fixture. Metro includes the original 79 KB fixture asset in the production bundle, but the production guard never selects it; avoiding custom bundler configuration is the accepted size tradeoff. The server marker is shared by all devices
+stay intact. Ordinary startup has no fixture. Production bundles include the 79 KB fixture, which the guard never selects; that beats custom bundler configuration. The server marker is shared by all devices
 for the same local account, so reset the disposable test stack before a fresh intro
 flow rather than deleting markers through the client.
 
@@ -174,7 +174,7 @@ flow rather than deleting markers through the client.
 
 ## Sharp edges
 
-- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it with `p_book`, `p_chapter`, `p_verse_start` and `p_verse_end`, but no file in `supabase/` defines it, including `supabase/migrations/` and `supabase/database.types.ts`. On a database built from the migrations the call is unavailable, so `getVOTMMasteryCount` returns null and the card hides the optional count without an error banner. The client's untyped `SupabaseClient` means typecheck can't catch it. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
+- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it with `p_book`, `p_chapter`, `p_verse_start` and `p_verse_end`, but nothing in `supabase/` defines it, migrations and generated types included, so `getVOTMMasteryCount` returns null and the card hides the optional count without an error banner. The untyped `SupabaseClient` hides it from typecheck. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
 
 ## Browser checks
 
@@ -186,7 +186,7 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- flow collection-discovery`: Home and Explore in both themes, introduction, KJV preview, add and open the saved copy.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
-- Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. These checks use the local environment; the migration test rolls back all fixtures.
+- Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. Both are local; the migration test rolls back its fixtures.
 - `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same actual artwork and reference; a placeholder cannot verify continuity.
 - `npm run sim -- flow intro-test-player-appearance`: Both themes and same-session unavailable link; no claim precondition, restores Light.
 - `npm run sim -- flow intro-test-player`: Home first tap/replay, no manual-test claim, then replay after a claim. Needs fresh verifier markers.
@@ -203,3 +203,4 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 
 - 2026-11-10 · Monthly choices use a thirty-six-passage cycle and fill only missing months · Existing editorial selections and artwork remain authoritative.
 - 2026-11-10 · An account-wide atomic claim controls automatic intro presentation · Prefer suppressing an ambiguous attempt over surprising users twice; explicit replay remains available.
+- 2026-11-11 · Monthly art is plain public URLs · Signed URLs expire.
