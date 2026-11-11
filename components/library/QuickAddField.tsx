@@ -78,13 +78,8 @@ export function QuickAddField({
   const handleChangeText = (next: string) => {
     const typedOne = next.length === input.length + 1 && next.startsWith(input);
     const uniqueBook = parse.kind === 'book' && parse.matches.length === 1;
-    if (typedOne && uniqueBook && next.endsWith(' ')) {
-      updateInput(completeBook(next.trimEnd()) ?? next);
-    } else if (typedOne && uniqueBook && /\d$/.test(next)) {
-      updateInput(completeBook(next) ?? next);
-    } else {
-      updateInput(next);
-    }
+    const completes = typedOne && uniqueBook && /[ \d]$/.test(next);
+    updateInput(completes ? completeBook(next.trimEnd()) ?? next : next);
   };
 
   const addChip = (chip: Omit<QuickAddChip, 'key'>) => {
