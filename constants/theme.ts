@@ -99,6 +99,14 @@ export const Colors = {
   },
 };
 
+export const MonthlyCardColors = {
+  overlay: 'rgba(0,0,0,0.16)',
+  subtext: 'rgba(255,255,255,0.7)',
+  badge: 'rgba(255,255,255,0.2)',
+  masteredImage: 'rgba(34,197,94,0.3)',
+  masteredPlain: 'rgba(34,197,94,0.15)',
+} as const;
+
 // Decorative collection artwork. Copy always uses the core text and surface tokens.
 export const CollectionArtColors = {
   light: {

@@ -104,7 +104,7 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 ## The card
 
 - **Text.** Three lines at most, in the user's `bibleVersion`, with the version shown beside the reference.
-- **Art.** Optional `image_url` appears above the copy. Missing/broken images use themed native artwork. All text remains on a solid themed surface, independent of image loading.
+- **Art.** `expo-image` fills the whole card behind native white copy and the original dark overlay. The compact reference badge, header, three-line body and footer retain the original card structure. A broken image returns to the plain themed card with contrasting text; collection symbols are not monthly artwork.
 - **Count.** "N people have mastered" appears only after a successful `getVOTMMasteryCount` response. A successful zero is shown; an unknown/unavailable count is omitted.
 - **User status.** One of these, in this order:
 
@@ -179,7 +179,7 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. These checks use the local environment; the migration test rolls back all fixtures.
-- `npm run sim -- flow monthly-verse`: solid text, default/image-error artwork, expand and add picker in both themes.
+- `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same actual artwork and reference; a placeholder cannot verify continuity.
 - `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second automatic presentation, replay and unavailable/unset media.
 - On a separate fresh disposable stack, `npm run sim -- flow intro-modal-handoff` defers intro while each existing Home modal is visible and presents after native dismissal. It consumes both accounts' markers; reset before the other intro flows.
 - After `intro-video` has claimed reader-b's fixture, `npm run sim -- flow intro-interruption` checks native Control Center interruption, preserved pause/position, and background close. Physical iPhone verification is still required.
