@@ -10,7 +10,7 @@ import { getChapterCount } from '@/lib/bible';
 import { type BibleVersion } from '@/lib/storage';
 import { useAppStore } from '@/lib/store';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -31,9 +31,14 @@ export default function AddVerseScreen() {
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
 
-  const handleBookPress = useDebouncedPress((book: string) => {
-    setExpandedBook(expandedBook === book ? null : book);
-  });
+  // Ignores only a quick re-tap of the same book; a tap on another book goes through.
+  const lastBookPress = useRef({ book: '', at: 0 });
+  const handleBookPress = (book: string) => {
+    const now = Date.now();
+    if (lastBookPress.current.book === book && now - lastBookPress.current.at <= 500) return;
+    lastBookPress.current = { book, at: now };
+    setExpandedBook((current) => (current === book ? null : book));
+  };
 
   const handleChapterPress = useDebouncedPress((book: string, chapter: number) => {
     const params = new URLSearchParams();
@@ -123,7 +128,9 @@ export default function AddVerseScreen() {
 
       <QuickAddField collectionId={collectionId} onTypingChange={setIsTyping} />
 
-      <ScrollView style={[styles.scrollView, { opacity: isTyping ? 0.55 : 1 }]} keyboardShouldPersistTaps="handled">
+      <ScrollView style={[styles.scrollView, { opacity: isTyping ? 0.55 : 1 }]} keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
         <View style={styles.bottomPadding} />
       </ScrollView>

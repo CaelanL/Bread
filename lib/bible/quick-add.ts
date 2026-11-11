@@ -94,7 +94,9 @@ export function hintFor(parse: QuickAddParse): string | null {
     case 'empty':
       return null;
     case 'book':
-      return parse.matches.length === 0 ? 'No book matches' : 'Space picks the only match · 2 5-7 for a range';
+      if (parse.matches.length === 0) return 'No book matches';
+      if (parse.matches.length > 1) return 'Keep typing to pick one book';
+      return squash(parse.query) === squash(parse.matches[0]) ? '2 5-7 for a range' : 'Space picks it · 2 5-7 for a range';
     case 'chapter':
       return `${parse.book} ${parse.chapter} has ${parse.verseCount} verses`;
     case 'verse': {

@@ -26,7 +26,7 @@ app/
 │   │   ├── _layout.tsx
 │   │   ├── index.tsx                  ← Library list
 │   │   ├── [id].tsx                   ← Collection detail
-│   │   ├── add.tsx                    ← Add a verse: version, book and chapter
+│   │   ├── add.tsx                    ← Add a verse: quick-add field, version, book and chapter
 │   │   ├── add/[book]/[chapter].tsx   ← Verse picker for a chapter
 │   │   └── setup/[id].tsx             ← Difficulty + chunk-size picker before starting a session
 │   └── settings.tsx                   ← Tab: Settings

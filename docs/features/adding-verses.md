@@ -68,9 +68,11 @@ component and go when the screen is popped.
 
 ## Double taps
 
-`useDebouncedPress` guards the book rows, the chapter grid and the collection's +. The
-chapter grid uses one hook instance, so every chapter shares one 500 ms window and a quick
-tap on a second chapter is ignored too.
+`useDebouncedPress` guards the chapter grid and the collection's +. The chapter grid uses
+one hook instance, so every chapter shares one 500 ms window and a quick tap on a second
+chapter is ignored too. Book rows open in place, so `handleBookPress` in `add.tsx` ignores
+only a re-tap of the same book inside 500 ms; a quick tap on another book goes through.
+Dragging the book list closes the keyboard; tapping a book or chapter keeps it up.
 
 ## Sharp edges
 
@@ -86,11 +88,13 @@ tap on a second chapter is ignored too.
 
 - `npm run sim -- flow add-verse`: reader-b uses the shared picker, adds bundled KJV Ruth 1:1 with a tap, sees the card, then deletes it back to "No verses yet".
 - `npm run sim -- flow quick-add`: reader-b picks Ruth from a suggestion, makes Ruth 1:1, Ruth 2:1-2 and a red John 22:1, peeks a chip, taps Add 2, sees both KJV cards, then deletes them.
-- `npm run sim -- flow add-double-tap`: reader-b double-taps Ruth and its chapter 1. Ruth stays open and one Back returns to the add screen.
+- `npm run sim -- flow add-double-tap`: a quick tap on a second book opens it; reader-b double-taps Ruth and its chapter 1, Ruth stays open and one Back returns to the add screen.
+- Tap path: +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
 
 ## Decisions
 
 - 2026-11-11 · Book matching is prefix or an exact known abbreviation, never fuzzy · misspellings were out of scope; `gn` works because it's in `BOOK_ALIASES`.
 - 2026-11-11 · Only a dash makes a range, and one saved verse stays inside one chapter · Caelan: "then you need a dash".
 - 2026-11-11 · Add returns to the collection once every chip saved · same as the chapter screen.
+- 2026-11-11 · Book rows ignore only a quick re-tap of the same book, chapters share one window · a book row stays on screen, so a fast tap on another book is a real choice; a chapter tap leaves the screen.
 - 2026-11-11 · The Add pill sits in the field row, not the header · the header holds the account translation picker.

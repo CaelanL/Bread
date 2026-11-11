@@ -96,7 +96,9 @@ describe('completeBook', () => {
 describe('hintFor', () => {
   it('words each state', () => {
     assert.equal(hintFor(parseQuickAdd('')), null);
-    assert.equal(hintFor(parseQuickAdd('1t')), 'Space picks the only match · 2 5-7 for a range');
+    assert.equal(hintFor(parseQuickAdd('1t')), 'Keep typing to pick one book');
+    assert.equal(hintFor(parseQuickAdd('1th')), 'Space picks it · 2 5-7 for a range');
+    assert.equal(hintFor(parseQuickAdd('1 Thessalonians ')), '2 5-7 for a range');
     assert.equal(hintFor(parseQuickAdd('xq')), 'No book matches');
     assert.equal(hintFor(parseQuickAdd('Gen 5')), 'Genesis 5 has 32 verses');
     assert.equal(hintFor(parseQuickAdd('Gen 5:5-10')), 'Return adds Genesis 5:5-10');

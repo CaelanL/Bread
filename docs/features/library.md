@@ -231,7 +231,8 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
 - `npm run sim -- flow account-translation`: reader-a switches to KJV on the add screen; cards follow, mastery stays.
 - After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
-- Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery. Then +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
+- Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery.
+- Adding verses has its own checks in `docs/features/adding-verses.md`.
 
 ## Decisions
 
