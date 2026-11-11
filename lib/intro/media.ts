@@ -32,7 +32,7 @@ export function introMediaForPreview(isDev: boolean, url: string | undefined, mo
     ...INTRO_VIDEO,
     headline: 'Playback test',
     credit: 'Original Bread test video',
-    playback: mode === 'sample' ? fixture : 'http://127.0.0.1:1/intro-missing.mp4',
+    playback: mode === 'sample' ? fixture : 'file:///bread-intro-unavailable.mp4',
     fixture: true,
     captions: [
       { startMs: 0, endMs: 3000, text: '[A soft tone plays]' },

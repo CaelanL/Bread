@@ -16,6 +16,7 @@ export function createIntroCoordinator(accountId: string, getSession: () => Sess
   let busy = false;
   let suppressed = false;
   const current = (request: number) => generation === request && eligible();
+  const cancel = () => { generation++; busy = false; player.close(); };
 
   async function play(automatic: boolean): Promise<boolean> {
     const session = getSession();
@@ -40,7 +41,7 @@ export function createIntroCoordinator(accountId: string, getSession: () => Sess
       player.show();
       return true;
     } catch {
-      if (generation === request) { suppressed = true; player.close(); }
+      if (generation === request) { suppressed = true; cancel(); }
       return false;
     } finally {
       if (generation === request) busy = false;
@@ -50,6 +51,6 @@ export function createIntroCoordinator(accountId: string, getSession: () => Sess
   return {
     attempt: () => play(true),
     replay: () => play(false),
-    cancel() { generation++; busy = false; player.close(); },
+    cancel,
   };
 }

@@ -19,6 +19,7 @@ test('production media remains unconfigured and fixture captions match the origi
   }
   const media = introMediaForPreview(true, 'http://127.0.0.1:1', 'sample', 42);
   assert.equal(media.playback, 42);
+  assert.equal(introMediaForPreview(true, 'http://127.0.0.1:1', 'unavailable', 42).playback, 'file:///bread-intro-unavailable.mp4');
   assert.equal(introCaption(media, 0), '[A soft tone plays]');
   assert.equal(introCaption(media, 3000), '[The tone continues]');
   assert.equal(introCaption(media, 6000), '[The tone fades]');
@@ -119,8 +120,12 @@ test('intro presentation uses real account-pinned API calls and the native playe
   await t.test('bad media and failed audio setup never claim or display', async () => {
     for (const failure of ['media', 'audio']) {
       reset(); prepareFailure = failure === 'media'; audioFailure = failure === 'audio';
-      assert.equal(await controller().attempt(), false);
+      const first = controller();
+      assert.equal(await first.attempt(), false);
       assert.equal(ledger.size, 0); assert.ok(!events.includes('show'));
+      prepareFailure = false; audioFailure = false;
+      assert.equal(await first.replay(), true);
+      assert.equal(ledger.size, 0);
     }
   });
   await t.test('a lost successful claim suppresses auto on this and another device', async () => {

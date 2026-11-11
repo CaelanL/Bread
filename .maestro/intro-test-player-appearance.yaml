@@ -32,6 +32,12 @@ onFlowComplete:
     direction: DOWN
 - assertNotVisible:
     id: intro-video-modal
+- assertVisible: Original Bread test video
+- extendedWaitUntil:
+    visible:
+      id: intro-watch
+      enabled: true
+    timeout: 20000
 - tapOn:
     id: intro-watch
 - extendedWaitUntil:
@@ -40,4 +46,22 @@ onFlowComplete:
 - assertNotVisible:
     id: intro-video-modal
 - takeScreenshot: direct-test-route-unavailable-after-manual
+- scrollUntilVisible:
+    element:
+      id: intro-test-player
+    direction: DOWN
+- tapOn:
+    id: intro-test-player
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: intro-progress
+      text: 00:0[1-8]
+    timeout: 10000
+- takeScreenshot: direct-test-retry-after-unavailable
+- tapOn:
+    id: intro-close
 - openLink: com.biblemem://home

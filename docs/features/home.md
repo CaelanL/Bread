@@ -131,7 +131,8 @@ true only for the winning insert.
 
 `createIntroCoordinator` reads the account's presentation state, prepares media in
 a paused hidden native Video, configures audio, then atomically claims immediately
-before presenting. Reads and claims snapshot the initiating session's token for each attempt. Same-account token refreshes do not replace the coordinator or close playback. Only a
+before presenting. Native unload/load has a 15-second deadline; cancellation and stale guards block
+late presentation or cleanup of a newer request. Reads and claims snapshot the initiating session's token for each attempt. Same-account token refreshes do not replace the coordinator or close playback. Only a
 confirmed winning claim can autoplay; local absence, offline state, failed reads,
 failed preparation and lost claim acknowledgements never authorize presentation.
 A committed claim may consume the opportunity before a visible frame if focus is
@@ -154,12 +155,13 @@ Local builds (`__DEV__` plus loopback/private-LAN Supabase) expose **Test video
 player** on Home. The labeled original nine-second tone/video uses manual replay,
 even after a claim. A tap waits for the fixture/preloader to mount and never reads
 or consumes intro eligibility. The official link stays separate. Route fixture
-changes clear the manual override; close preserves replay. Hosted/production
+changes clear the manual override; close preserves replay. The preloader is keyed by account; one remounted per
+fixture rejected its first unload. Hosted/production
 builds have no test button.
 
-For local development only, `/home?introFixture=sample` uses the same fixture; `introFixture=unavailable` exercises a failed source. Both need
-`__DEV__` and a loopback/private-LAN Supabase URL. This guard does not loosen dev
-sign-in. Ordinary startup has no fixture. Metro includes the original 79 KB fixture asset in the production bundle, but the production guard never selects it; avoiding custom bundler configuration is the accepted size tradeoff. The server marker is shared by all devices
+`/home?introFixture=sample` uses the same fixture; `introFixture=unavailable` uses
+a missing local file. Both share the test button's guard; dev sign-in restrictions
+stay intact. Ordinary startup has no fixture. Metro includes the original 79 KB fixture asset in the production bundle, but the production guard never selects it; avoiding custom bundler configuration is the accepted size tradeoff. The server marker is shared by all devices
 for the same local account, so reset the disposable test stack before a fresh intro
 flow rather than deleting markers through the client.
 
@@ -186,7 +188,7 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. These checks use the local environment; the migration test rolls back all fixtures.
 - `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same actual artwork and reference; a placeholder cannot verify continuity.
-- `npm run sim -- flow intro-test-player-appearance`: Home entry/player in both themes and same-session unavailable link. No claim precondition; restores Light.
+- `npm run sim -- flow intro-test-player-appearance`: Both themes and same-session unavailable link; no claim precondition, restores Light.
 - `npm run sim -- flow intro-test-player`: Home first tap/replay, no manual-test claim, then replay after a claim. Needs fresh verifier markers.
 - `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, immediate close, no second automatic presentation, replay and unavailable/unset media.
 - On a separate fresh disposable stack, `npm run sim -- flow intro-modal-handoff` defers intro while each existing Home modal is visible and presents after native dismissal. It consumes both accounts' markers; reset before the other intro flows.

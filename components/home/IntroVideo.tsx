@@ -10,6 +10,7 @@ import { Colors, Fonts, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
 import { createIntroCoordinator } from '@/lib/intro/coordinator';
+import { prepareIntroVideo } from '@/lib/intro/preparation';
 import { INTRO_VIDEO, canUseIntroFixture, introMediaForPreview } from '@/lib/intro/media';
 import { useUxFlagsStore } from '@/lib/notifications';
 import { useHydrated } from '@/lib/store';
@@ -36,6 +37,7 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
   const previewMode = manualFixture ? 'sample' : introFixture;
   const preload = useRef<Video>(null);
   const preparation = useRef(0);
+  const preparationAbort = useRef<AbortController | null>(null);
   const media = useMemo(() => {
     const fixture = canUseIntroFixture(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL) && previewMode === 'sample'
       ? require('@/assets/video/intro-fixture.mp4') : 0;
@@ -53,14 +55,15 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
   const player = useMemo(() => ({
     async prepare(source: string | number) {
       const request = ++preparation.current;
+      preparationAbort.current?.abort();
+      const controller = new AbortController();
+      preparationAbort.current = controller;
       const video = preload.current;
       if (!video || currentOwner.current !== owner) throw new Error('Player unavailable.');
       setPreparing(true);
       try {
-        await video.unloadAsync();
-        if (request !== preparation.current || currentOwner.current !== owner) throw new Error('Playback canceled.');
-        const status = await video.loadAsync(typeof source === 'number' ? source : { uri: source }, { shouldPlay: false, isMuted: true });
-        if (!status.isLoaded || request !== preparation.current || currentOwner.current !== owner) throw new Error('Media unavailable.');
+        await prepareIntroVideo(video, source, controller.signal,
+          () => request === preparation.current && currentOwner.current === owner && preload.current === video);
       } finally {
         if (request === preparation.current && currentOwner.current === owner) setPreparing(false);
       }
@@ -70,6 +73,7 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
     close() {
       if (currentOwner.current !== owner) return;
       preparation.current++;
+      preparationAbort.current?.abort();
       setPreparing(false);
       setModalOwner(null);
       void preload.current?.unloadAsync().catch(() => {});
@@ -147,7 +151,7 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
       )}
       {manualError && <Text style={[styles.error, { color: colors.icon }]}>Video unavailable. Please try again later.</Text>}
       {media.playback !== null && session && (
-        <Video key={`preload:${owner}`} ref={preload} style={styles.preloader} pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
+        <Video key={`preload:${session.user.id}`} ref={preload} style={styles.preloader} pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
       )}
       <IntroVideoModal key={modalOwner === owner ? `modal:${owner}` : 'closed'} media={media} visible={modalOwner === owner} inactive={appState === 'inactive'} onClose={() => coordinator?.cancel()} />
     </View>
