@@ -30,7 +30,7 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 |---|---|
 | `index.tsx` | Collection list, pull to refresh, Edit, and + to create |
 | `[id].tsx` | One collection: icon picker, search, sort pill, verse list, + to add, and long press to copy |
-| `add.tsx` | Pick a book and chapter. Its picker sets the account translation. Passes `collectionId` along |
+| `add.tsx` | Quick-add field, then pick a book and chapter. Its picker sets the account translation. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
 | `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
 
@@ -118,35 +118,8 @@ chapter and verse.
 
 ## Adding a verse
 
-`add.tsx` is a book and chapter list with a version picker. The chapter screen loads
-with `fetchChapter`, and the user selects one continuous range:
-
-1. **Long press, 250 ms.** Starts a selection, with a haptic.
-2. **Drag while held.** Extends the range. It auto-scrolls within 60 points of the edge.
-3. **Moving more than 10 points during the wait.** Cancels the long press, so it scrolls
-   instead.
-4. **Quick tap.** With nothing selected it selects one verse. With a selection it clears
-   the selection.
-5. **Add.** `handleAddVerses` makes one `addVerse` call with `verseStart` and `verseEnd`,
-   so a range is a single saved verse. Then it returns to the collection, or to the
-   Library if none was given.
-
-This gesture is how someone grabs John 3:16-18 in one motion. It depends on timing,
-distance thresholds and auto-scroll together, so test on a device after any change.
-
-`AddToCollectionModal`, on Home and Insights, also goes through `addVerse`.
-
-`addVerse` in `lib/store/index.ts` looks for rows with the same user, book, chapter
-and range in any version, including soft-deleted ones:
-
-| Existing row | What happens |
-|---|---|
-| Active | Upsert the junction row, ignoring duplicates |
-| Soft-deleted only | Restore the best one (version rule in `bible-versions.md`), then the junction row |
-| None | Insert the verse with `DEFAULT_PROGRESS`, then the junction row |
-
-A verse is one row per reference (`bible-versions.md`). The restore
-path means a soft-deleted row never blocks a re-add.
+The add screen, quick add, the chapter range gesture and `addVerse`'s identity rules are in
+`docs/features/adding-verses.md`.
 
 ## Copying a saved verse
 
@@ -238,10 +211,6 @@ way a verse leaves Mastered.
   `saveVerse` in `lib/storage/index.ts` are only called from `lib/sync`, and the app imports
   nothing from `lib/sync`. The older `deleteCollection` moves verses to My Verses, which is
   the opposite of what the store does. Use the store actions.
-- **Adding a verse already in the collection duplicates it locally.** `addVerse` always
-  prepends to `verses`, even when the junction upsert did nothing. The verse shows twice,
-  with a duplicate list key, until the next fetch. Restored verses also lose
-  `lastPracticedAt` in that local entry until then.
 - **Reset on a soft-deleted mastered verse doesn't update the Mastered list.**
   `resetVerseProgress` works out `wasMastered` from `verses` alone, and such a verse is only
   in `masteredVerses`. It stays listed with old progress until the next fetch. After that the
@@ -251,9 +220,6 @@ way a verse leaves Mastered.
   while the local state is unchanged.
 - **Re-adding a soft-deleted verse restores it.** That's intended, because it preserves
   mastery, but a "new" verse can arrive with progress.
-- **The chapter screen needs a connection even for KJV.** `[chapter].tsx` checks `NetInfo`
-  before `fetchChapter` and shows "No Internet Connection", although KJV could load from the
-  bundle.
 - **A-Z isn't numeric.** `localeCompare` on the reference puts John 10 before John 3.
 - **The empty hint never shows.** `index.tsx` renders it at `collections.length <= 1`, but My
   Verses and Mastered are always present once hydrated.
@@ -264,7 +230,6 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
 - `npm run sim -- flow account-translation`: reader-a switches to KJV on the add screen; cards follow, mastery stays.
-- `npm run sim -- flow add-verse`: reader-b uses the shared picker, adds bundled KJV Ruth 1:1 with a tap, sees the card, then deletes it back to "No verses yet".
 - After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
 - Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery. Then +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
 

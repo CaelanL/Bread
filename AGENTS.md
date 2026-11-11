@@ -15,7 +15,8 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Setup screen, chunks, masks, peek, scoring | `docs/features/study-session.md` |
 | Recording, Soniox, batch and live paths | `docs/features/transcription.md` |
 | Mastery, spaced repetition, engraved | `docs/features/review.md` |
-| Collections, add-verse flow, sorting, library list | `docs/features/library.md` |
+| Collections, sorting, library list | `docs/features/library.md` |
+| Add screen, quick add, chapter range select, double-tap guard | `docs/features/adding-verses.md` |
 | Streak, time studied, popular ranges | `docs/features/insights.md` |
 | Home tab, Verse of the Month | `docs/features/home.md` |
 | Push, cron, prefs UI, device tokens | `docs/features/notifications.md` |
