@@ -1,0 +1,133 @@
+appId: com.caelanliu.biblemem
+name: collection-savers
+---
+- runFlow: subflows/open-app.yaml
+- runScript:
+    file: scripts/collection-savers.js
+    env:
+      MODE: baseline
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      text: Light
+    direction: DOWN
+- tapOn: Light
+- runFlow:
+    file: subflows/assert-collection-savers.yaml
+    env:
+      SAVER_LABEL: ${output.savers.beforeLabel}
+      STEP: Light-before
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
+- tapOn:
+    id: curated-collection-action
+- extendedWaitUntil:
+    visible: "Change collection icon, .*"
+    timeout: 30000
+- tapOn: Back
+- runScript:
+    file: scripts/collection-savers.js
+    env:
+      MODE: another-version
+- longPressOn: "Anxiety & Peace, 12 verses"
+- tapOn: Rename
+- tapOn:
+    id: collection-name
+- eraseText: 15
+- inputText: My memory list
+- tapOn: Save
+- extendedWaitUntil:
+    visible: "My memory list, 12 verses"
+    timeout: 15000
+- runFlow:
+    file: subflows/assert-collection-savers.yaml
+    env:
+      SAVER_LABEL: ${output.savers.afterALabel}
+      STEP: Light-after-save
+- tapOn: Back
+- tapOn:
+    id: tab-library
+- longPressOn: "My memory list, 12 verses"
+- tapOn: Delete
+- assertVisible: 'Delete "My memory list"?'
+- tapOn:
+    text: Delete
+    below: "Verses not mastered or in another collection will be deleted and lose progress."
+- extendedWaitUntil:
+    notVisible: "My memory list, 12 verses"
+    timeout: 20000
+- runFlow:
+    file: subflows/assert-collection-savers.yaml
+    env:
+      SAVER_LABEL: ${output.savers.afterALabel}
+      STEP: Light-after-delete
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
+- assertVisible: "Add collection"
+- tapOn:
+    id: curated-collection-action
+- extendedWaitUntil:
+    visible: "Change collection icon, .*"
+    timeout: 30000
+- runScript:
+    file: scripts/collection-savers.js
+    env:
+      MODE: check-a
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- runFlow:
+    file: subflows/assert-collection-savers.yaml
+    env:
+      SAVER_LABEL: ${output.savers.afterALabel}
+      STEP: Light-after-relaunch
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      text: Dark
+    direction: DOWN
+- tapOn: Dark
+- runFlow:
+    file: subflows/assert-collection-savers.yaml
+    env:
+      SAVER_LABEL: ${output.savers.afterALabel}
+      STEP: Dark-before-second-account
+- runFlow:
+    file: subflows/choose-curated-translation.yaml
+    env:
+      VERSION: KJV
+- tapOn:
+    id: curated-collection-action
+- extendedWaitUntil:
+    visible: "Change collection icon, .*"
+    timeout: 30000
+- tapOn: Back
+- runFlow:
+    file: subflows/assert-collection-savers.yaml
+    env:
+      SAVER_LABEL: ${output.savers.afterBLabel}
+      STEP: Dark-after-second-account
+- runScript:
+    file: scripts/collection-savers.js
+    env:
+      MODE: check-b

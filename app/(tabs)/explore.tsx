@@ -5,9 +5,11 @@ import { AppHeader } from '@/components/app-header';
 import { CuratedCollectionCard } from '@/components/collections/CuratedCollectionCard';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 
 export default function ExploreScreen() {
+  useCollectionSaversRefresh();
   const colors = Colors[useColorScheme() ?? 'light'];
 
   return (

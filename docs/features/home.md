@@ -43,6 +43,33 @@ The import migration adds a nullable icon key and allows the translation
 codes Bread supports. Custom icons sync with the account. Missing and
 unknown icons render the Bible symbol. Built-in collection icons are fixed.
 
+### Community saves
+
+Home, Explore and introductions show all-time unique accounts that saved each
+curated collection. A first successful import contributes once across translations.
+Editing, emptying, renaming, deleting or re-adding the personal copy leaves that
+contribution unchanged. This is not a count of current copies or completed passages.
+
+`curated_collection_savers` stores only a surrogate ID, catalog ID and nullable
+user ID. Account deletion sets that user link to NULL, retaining an anonymous
+contribution. Totals use `COUNT(*)`, including these anonymous rows. Clients cannot
+read or write ledger rows. The import transaction calls a private, owner-checking
+writer; `get_curated_collection_saver_counts` exposes bounded aggregate reads only.
+The migration backfills exact known import identities, including soft-deleted
+copies, deduplicated across versions; ordinary collections with similar names do
+not count.
+
+`curatedSaverCounts` in the app store shares successful reads across these screens.
+Focus, app return and pull to refresh fetch authoritative totals. A committed import
+starts a non-blocking count refresh before Library readback. Loading/failure omits
+an unknown number and retains a previously successful total on refresh failure.
+There is no optimistic increment. Requests are account-scoped, ignore older reads,
+and abort when their screen loses focus. Counts do not block browsing or saving.
+
+When adding a catalog entry, update `private.curated_catalog_ids` through an additive
+migration alongside the client catalog. `curated-savers-catalog.test.mjs` checks
+parity. A new translation uses the same catalog contribution and needs no count ID.
+
 ## Loading
 
 `fetchVOTM` in `home.tsx` runs on mount and whenever `bibleVersion` changes. Pull to refresh runs it too, along with the store's `refresh()` and the card's streak refresh.
@@ -102,6 +129,8 @@ The seed adds no `verse_of_month` row.
 - Add a local `verse_of_month` row for the current month, then `npm run sim -- shot /home --as reader-a`: the VOTM card with reference, text and "0 people have mastered" (the missing function).
 - `npm run sim -- flow collection-discovery`: Home and Explore in both themes, introduction, KJV preview, add and open the saved copy.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
+- `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
+- Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. These checks use the local environment; the migration test rolls back all fixtures.
 - By hand, with that row: tap the card and the expand modal opens. Close it, tap "Add to Library", and the collection picker opens.
 
 ## Decisions

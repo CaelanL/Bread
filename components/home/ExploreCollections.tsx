@@ -5,9 +5,11 @@ import { CuratedCollectionCard } from '@/components/collections/CuratedCollectio
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 
 export function ExploreCollections() {
+  useCollectionSaversRefresh();
   const colors = Colors[useColorScheme() ?? 'light'];
   const { width, fontScale } = useWindowDimensions();
   const compact = width >= 350 && fontScale < 1.4;

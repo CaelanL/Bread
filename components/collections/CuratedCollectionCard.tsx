@@ -6,6 +6,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { CuratedCollection } from '@/lib/collections/catalog';
+import { saverCountLabel } from '@/lib/collections/savers';
+import { useCuratedSaverCount } from '@/lib/store';
 
 export function CuratedCollectionCard({ collection, compact = false, grouped = false }: {
   collection: CuratedCollection;
@@ -13,11 +15,12 @@ export function CuratedCollectionCard({ collection, compact = false, grouped = f
   grouped?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
+  const saverCount = useCuratedSaverCount(collection.id);
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${collection.title}, ${collection.passages.length} passages`}
+      accessibilityLabel={`${collection.title}, ${collection.passages.length} passages${saverCount === undefined ? '' : `, ${saverCountLabel(saverCount)}`}`}
       testID={`discover-${collection.id}`}
       onPress={() => router.push({ pathname: '/collections/[slug]', params: { slug: collection.id } })}
       style={({ pressed }) => [
@@ -34,6 +37,11 @@ export function CuratedCollectionCard({ collection, compact = false, grouped = f
           <Text style={[styles.subtitle, { color: colors.icon }]}>{collection.subtitle}</Text>
         )}
         <Text style={[styles.count, { color: colors.icon }]}>{collection.passages.length} passages</Text>
+        {saverCount !== undefined && (
+          <Text testID={`collection-savers-${collection.id}`} style={[styles.count, { color: colors.icon }]}>
+            {saverCountLabel(saverCount)}
+          </Text>
+        )}
       </View>
       {!compact && <IconSymbol name="chevron.right" size={16} color={colors.icon} />}
     </Pressable>

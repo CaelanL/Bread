@@ -173,7 +173,7 @@ reading is offline: saving verses and recording progress still need the network
 
 ## Curated collections
 
-Tap the icon in a custom collection's header to change it. See [Explore collections](home.md#explore-collections).
+Tap a custom collection's header icon to change it. See [Explore collections](home.md#explore-collections) for imports and [save totals](home.md#community-saves).
 
 ## Deleting a verse
 

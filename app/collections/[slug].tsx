@@ -9,11 +9,13 @@ import { CollectionPassages } from '@/components/collections/CollectionPassages'
 import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
 import { useAuth } from '@/lib/auth';
 import { CURATED_COLLECTIONS, type CuratedCollection } from '@/lib/collections/catalog';
 import { curatedCollectionId } from '@/lib/collections/identity';
+import { saverCountLabel } from '@/lib/collections/savers';
 import type { BibleVersion } from '@/lib/settings';
-import { useAppStore, useCollection, useHydrated } from '@/lib/store';
+import { useAppStore, useCollection, useCuratedSaverCount, useHydrated } from '@/lib/store';
 
 function goBack() {
   if (router.canGoBack()) router.back();
@@ -36,6 +38,8 @@ function CollectionIntroduction({ collection, defaultVersion }: {
   const collectionId = curatedCollectionId(collection.id, version);
   const savedCollection = useCollection(collectionId);
   const savedNeedsRefresh = savedPendingIds.includes(collectionId);
+  const saverCount = useCuratedSaverCount(collection.id);
+  useCollectionSaversRefresh();
 
   useFocusEffect(useCallback(() => {
     focused.current = true;
@@ -116,6 +120,11 @@ function CollectionIntroduction({ collection, defaultVersion }: {
           </Text>
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{collection.title}</Text>
           <Text style={[styles.subtitle, { color: colors.icon }]}>{collection.subtitle}</Text>
+          {saverCount !== undefined && (
+            <Text testID={`collection-savers-${collection.id}`} style={[styles.savers, { color: colors.icon }]}>
+              {saverCountLabel(saverCount)}
+            </Text>
+          )}
         </View>
         <View style={styles.story}>
           {collection.introduction.split('\n\n').map((paragraph) => (
@@ -201,6 +210,7 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.3 },
   title: { fontFamily: Fonts?.serif, fontSize: 34, fontWeight: '600' },
   subtitle: { fontSize: 17, lineHeight: 24 },
+  savers: { fontSize: 14 },
   story: { gap: 12 },
   paragraph: { fontSize: 16, lineHeight: 25 },
   footer: { paddingHorizontal: 16, paddingTop: 12, gap: 10 },

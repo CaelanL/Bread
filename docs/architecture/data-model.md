@@ -1,8 +1,7 @@
 # Data Model
 
-The schema lives in `supabase/migrations/`. The migrations are the
-source of truth — this doc explains the shape and the *why*. For every
-column and type, see the generated `supabase/database.types.ts`.
+Schema: `supabase/migrations/`. Generated columns and types:
+`supabase/database.types.ts`.
 
 ## Tables overview
 
@@ -13,7 +12,8 @@ column and type, see the generated `supabase/database.types.ts`.
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
 | `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits, see `docs/architecture/bible-api-and-caching.md` |
 | `app_config` | shared | Key/value settings for the stats cron (`stats_min_words`, `stats_cron_schedule`) |
-| `user_collections` | per-user | User's collections, soft-deletable, identified by `(user_id, client_id)` |
+| `user_collections` | per-user | Editable, soft-deleted; IDs unique per user |
+| `curated_collection_savers` | global | [All-time contribution ledger and access rules](../features/home.md#community-saves) |
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
 | `verse_collections` | per-user (via verse) | Many-to-many junction: `(verse_id, collection_id)` |
 | `verse_of_month` | global | Public monthly challenge verse, optional `image_url` |

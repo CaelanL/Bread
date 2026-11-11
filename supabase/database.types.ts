@@ -37,6 +37,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"curated_collection_savers": {
+                  Row: {
+                    "catalog_id": string,"id": number,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "catalog_id": string,"id"?: never,"user_id"?: string | null
+                  }
+                  Update: {
+                    "catalog_id"?: string,"id"?: never,"user_id"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"device_tokens": {
                   Row: {
                     "created_at": string,"expo_token": string,"id": string,"last_seen_at": string,"platform": string,"user_id": string
@@ -286,6 +300,11 @@ isOneToOne: false
                            },
 "get_cron_secret":
 { Args: Record<PropertyKey, never>; Returns: string
+                           },
+"get_curated_collection_saver_counts":
+{ Args: { "p_catalog_ids": (string)[] }; Returns: {
+              "catalog_id": string,"saver_count": number
+            }[]
                            },
 "get_current_streak":
 { Args: { "p_tz_offset_min": number,"p_user_id": string }; Returns: number

@@ -12,6 +12,7 @@ import { supabase } from '@/lib/api/client';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 import { importCollection } from '@/lib/collections/import';
 import { validateCollectionPassages } from '@/lib/collections/passages';
+import { readCollectionSavers } from '@/lib/collections/savers';
 import type { CollectionIconKey } from '@/lib/collections/icons';
 import type { ColorMode } from '@/lib/settings';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
@@ -71,6 +72,7 @@ interface AppState {
   collections: Collection[];
   verses: SavedVerse[];
   masteredVerses: SavedVerse[];
+  curatedSaverCounts: Partial<Record<string, number>>;
 
   // Settings
   colorMode: ColorMode;
@@ -95,6 +97,7 @@ interface AppState {
   fetchCollections: () => Promise<boolean>;
   fetchVerses: () => Promise<boolean>;
   fetchMasteredVerses: () => Promise<boolean>;
+  fetchCuratedSaverCounts: (signal?: AbortSignal) => Promise<boolean>;
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -144,6 +147,7 @@ async function getCurrentUserId(): Promise<string> {
 }
 
 let accountGeneration = 0;
+let saverReadGeneration = 0;
 
 async function getCollectionWriteSession(generation: number) {
   const result = await supabase.auth.getSession().catch((error: unknown) => {
@@ -181,6 +185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   collections: [],
   verses: [],
   masteredVerses: [],
+  curatedSaverCounts: {},
   colorMode: 'system',
   bibleVersion: 'ESV',
   reviewMaxIntervalDays: DEFAULT_MAX_INTERVAL_DAYS,
@@ -197,6 +202,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
 
   // ============ FETCH ACTIONS ============
+
+  fetchCuratedSaverCounts: async (signal) => {
+    const generation = accountGeneration;
+    const request = ++saverReadGeneration;
+    try {
+      const session = await getCollectionWriteSession(generation);
+      if (!session || signal?.aborted) return false;
+      const counts = await readCollectionSavers(supabase, session, signal);
+      const current = await getCollectionWriteSession(generation);
+      if (signal?.aborted || request !== saverReadGeneration
+        || generation !== accountGeneration || current?.user.id !== session.user.id) return false;
+      set({ curatedSaverCounts: counts });
+      return true;
+    } catch {
+      return false;
+    }
+  },
 
   fetchCollections: async () => {
     if (get().collectionOrderSaving) return true;
@@ -414,6 +436,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchCollections(),
       get().fetchVerses(),
       get().fetchMasteredVerses(),
+      get().fetchCuratedSaverCounts(),
     ]);
   },
 
@@ -504,7 +527,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (current?.user.id !== session.user.id || generation !== accountGeneration) {
       throw new Error('Your account changed.');
     }
-    const { collectionId, row } = await importCollection(supabase, current, catalogId, version);
+    const { collectionId, row } = await importCollection(supabase, current, catalogId, version, () => {
+      if (generation === accountGeneration) void get().fetchCuratedSaverCounts();
+    });
     if (generation !== accountGeneration) throw new Error('Your account changed.');
     if (!row) return { collectionId, loaded: false };
 
@@ -1168,6 +1193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       collections: [],
       verses: [],
       masteredVerses: [],
+      curatedSaverCounts: {},
       // Device prefs (colorMode, bibleVersion, reviewMaxIntervalDays,
       // masteredSort, inProgressSort) are preserved across sign-out by
       // virtue of being absent from this set call — Zustand keeps
@@ -1191,6 +1217,7 @@ export const useCollections = () => useAppStore((state) => state.collections);
 export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
 export const useStoreError = () => useAppStore((state) => state.error);
+export const useCuratedSaverCount = (catalogId: string) => useAppStore((state) => state.curatedSaverCounts[catalogId]);
 export const useReviewMaxIntervalDays = () => useAppStore((state) => state.reviewMaxIntervalDays);
 
 /**

@@ -96,6 +96,8 @@ The function is `SECURITY DEFINER` so it can touch `auth.users`. It
 only deletes the calling user — there's no parameter to delete
 someone else.
 
+Curated save totals follow the [anonymous retention rule](../features/home.md#community-saves).
+
 ### Sign out
 
 ```

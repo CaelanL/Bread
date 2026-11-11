@@ -13,6 +13,7 @@ export async function importCollection(
   session: Session,
   catalogId: string,
   version: BibleVersion,
+  onSaved?: () => void,
 ) {
   const collection = CURATED_COLLECTIONS.find(({ id }) => id === catalogId);
   if (!collection) throw new Error('Collection not found.');
@@ -34,6 +35,7 @@ export async function importCollection(
     .setHeader('Authorization', authorization);
 
   if (error || !id) throw new Error('Could not add this collection. Try again.');
+  onSaved?.();
 
   const { data: row } = await client
     .from('user_collections')
