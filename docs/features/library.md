@@ -30,7 +30,7 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 |---|---|
 | `index.tsx` | Collection list, pull to refresh, Edit, and + to create |
 | `[id].tsx` | One collection: icon picker, search, sort pill, verse list, + to add, and long press to copy |
-| `add.tsx` | Pick a version, book and chapter. Passes `collectionId` along |
+| `add.tsx` | Pick a book and chapter. Its picker sets the account translation. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
 | `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
 
@@ -136,18 +136,17 @@ distance thresholds and auto-scroll together, so test on a device after any chan
 
 `AddToCollectionModal`, on Home and Insights, also goes through `addVerse`.
 
-`addVerse` in `lib/store/index.ts` looks for a row with the same user, book, chapter,
-range and version, including soft-deleted ones:
+`addVerse` in `lib/store/index.ts` looks for rows with the same user, book, chapter
+and range in any version, including soft-deleted ones:
 
 | Existing row | What happens |
 |---|---|
 | Active | Upsert the junction row, ignoring duplicates |
-| Soft-deleted | Clear `deleted_at`, then upsert the junction row. Progress comes back |
+| Soft-deleted only | Restore the best one in the account translation, then the junction row |
 | None | Insert the verse with `DEFAULT_PROGRESS`, then the junction row |
 
-Verse identity is the partial unique index `idx_user_verses_unique_verse` from
-`006_verse_collections_junction.sql`, on active rows only. The restore path is what
-stops duplicates, so a soft-deleted row never blocks a re-add.
+A verse is one row per reference (`docs/architecture/bible-versions.md`). The restore
+path means a soft-deleted row never blocks a re-add.
 
 ## Copying a saved verse
 
@@ -162,8 +161,8 @@ See `docs/architecture/data-model.md` for the database operations.
 
 ## Versions and KJV offline
 
-The version is part of a saved verse's identity, so John 3:16 in ESV and in KJV are two
-verses. The add screens start from the user's Bible version and can switch.
+Saved verses follow the account translation, and the add screens' picker changes it
+(`docs/architecture/bible-versions.md`).
 
 KJV is public domain and ships in the app, so reading a saved KJV verse needs no network
 and costs no API quota. Other versions need a connection unless already cached. Only
@@ -220,7 +219,8 @@ way a verse leaves Mastered.
 
 ## Invariants
 
-1. Verse identity is user, book, chapter, range and version, unique among active rows.
+1. Verse identity is user, book, chapter and range. Version follows the account translation.
+
 2. My Verses can't be deleted. Don't add a bypass.
 3. Mastered and In Progress have no row. Code that expects every collection ID to map to
    `user_collections` breaks on them, so check `isVirtual` or the ID constants.
@@ -263,6 +263,7 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-a`: My Verses, Mastered with a "1 due" pill, In Progress, and Psalms.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
+- `npm run sim -- flow account-translation`: reader-a switches to KJV on the add screen; cards follow, mastery stays.
 - `npm run sim -- flow add-verse`: reader-b uses the shared picker, adds bundled KJV Ruth 1:1 with a tap, sees the card, then deletes it back to "No verses yet".
 - After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
 - Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery. Then +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.

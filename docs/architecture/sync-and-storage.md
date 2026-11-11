@@ -17,7 +17,8 @@ AsyncStorage holds device settings and small local caches.
 | Session attempts | ✓ (append) | — | — |
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
-| `bibleVersion` | — | ✓ | ✓ (`app_bible_version`) |
+| Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
+| Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
 | Virtual collection sorts | — | ✓ | ✓ (`library_sort_mastered`, `library_sort_in_progress`) |
 | Other collections' sort | ✓ (`sort_preference`) | ✓ | — |
@@ -71,13 +72,13 @@ interface AppState {
   setBibleVersion: (v) => Promise<void>;
   setReviewMaxIntervalDays: (days) => Promise<void>;
   addCollection: (name, iconKey?) => Promise<Collection>;
-  importCuratedCollection: (catalogId, version) => Promise<{ collectionId: string; loaded: boolean }>;
+  importCuratedCollection: (catalogId) => Promise<{ collectionId: string; loaded: boolean }>;
   setCollectionIcon: (id, iconKey) => Promise<void>;
   renameCollection: (id, name) => Promise<void>;
   reorderCollections: (ids) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
   setCollectionSort: (collectionId, sort) => Promise<void>;
-  addVerse: (verse, collectionId, version) => Promise<SavedVerse>;
+  addVerse: (verse, collectionId) => Promise<SavedVerse>;
   copyVerseToCollection: (verseId, collectionId) => Promise<void>;
   deleteVerse: (id, collectionId) => Promise<{ wasMastered: boolean }>;
   updateVerseProgress: (id, difficulty, accuracy, fullSession?) => Promise<void>;
@@ -109,15 +110,18 @@ The convention is `useX(...)` selectors, not direct
 ### Persistence
 
 - Settings and virtual-collection sorts are written to AsyncStorage
-  in their setters (manually, not via `persist` middleware).
+  in their setters (manually, not via `persist` middleware). The
+  translation is the exception: it's saved to `profiles`, and AsyncStorage
+  only caches it. See `docs/architecture/bible-versions.md`.
 - All other state is in-memory only. On app restart it's empty
   until `hydrate()` runs.
 
 ### `clear()`
 
 Wipes user data on sign-out. Device-level prefs (`colorMode`,
-`bibleVersion`, `reviewMaxIntervalDays`, `masteredSort`,
-`inProgressSort`) are **preserved by omission** — `clear()` calls
+`reviewMaxIntervalDays`, `masteredSort`, `inProgressSort`) and the
+cached translation (`bibleVersion`, replaced from the next account's
+profile on hydrate) are **preserved by omission** — `clear()` calls
 `set(...)` listing only the data and loading-state keys, and Zustand
 keeps everything else. If you add another device-level pref, just
 don't list it in `clear()`'s `set`.
@@ -136,6 +140,13 @@ hydrate()
   ├── Promise.all(AsyncStorage reads for colorMode, bibleVersion,
   │                reviewMaxIntervalDays, masteredSort, inProgressSort)
   │     → set in store, after validating each value
+  │
+  ├── syncAccountTranslation (queued with other translation work)
+  │     → profiles.translation into the store and cache, or the device
+  │       value into an empty profile
+  │     → alignVerses: collapse two translations of one verse, move
+  │       every row to the account translation
+  │     → on error: logged, the cached translation stands
   │
   ├── Promise.all(fetchCollections, fetchVerses, fetchMasteredVerses)
   │     → each queries Supabase directly from the store
@@ -196,14 +207,16 @@ for the server.
 | Trigger | Direction | Notes |
 |---|---|---|
 | Sign-in or app start with a session | Pull (collections, verses, mastered) | via `hydrate()` |
-| Pull-to-refresh | Pull | `refresh()` re-fetches all three |
+| Pull-to-refresh | Pull | `refresh()` syncs the translation like hydrate, then re-fetches all three |
 | Add/delete collection | Push, then local | |
-| Add verse | Push, then local | may upsert junction or restore soft-deleted |
+| Add verse | Push, then local | finds the verse by reference in any version; may upsert junction or restore soft-deleted |
 | Delete verse | Local, then push, rollback on failure | |
 | Verse progress update | Push, then local | `updateVerseProgress`; also computes engraved progression into `progress` JSONB |
 | Session attempt | Push only | `logSessionAttempt` in `lib/api/analytics.ts`, called fire-and-forget by `hooks/use-study-session.ts` |
 | Study prefs | Local, then push | `setVerseStudyPrefs`, fire-and-forget, no rollback |
-| Settings change (colorMode, bibleVersion) | Local only | AsyncStorage write — not synced |
+| Translation change | Local, then push, rollback on failure | `setBibleVersion`: profile, then every verse row, then refetch. See `docs/architecture/bible-versions.md` |
+| Settings change (colorMode) | Local only | AsyncStorage write — not synced |
+
 
 ## Offline behavior
 

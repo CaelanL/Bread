@@ -20,25 +20,73 @@ re-checking licensing.
 
 ## Where the user's selection lives
 
+The translation is an account setting: one per account, and every saved
+verse shows and scores in it.
+
 ```
-Zustand store (lib/store/index.ts)
-  bibleVersion: BibleVersion (default: "ESV")
+profiles.translation (one row per user, owner-only RLS)   ← source of truth
         │
-        ├── persisted to AsyncStorage as "app_bible_version"
-        │   (saved on every setBibleVersion call, hydrated at app start)
+        ├── Zustand store (lib/store/index.ts): bibleVersion (default "ESV")
         │
-        └── NOT synced to Supabase
-            (so if the user signs in on a new device, they get ESV
-             until they change it)
+        └── AsyncStorage "app_bible_version": local cache, used when the
+            profile can't be read (offline, before hydrate)
 ```
 
-Selectors:
+- `hydrate()` and `refresh()` run `syncAccountTranslation`: read the
+  profile into the store and cache. An account with no translation yet
+  gets this device's value written to it, which is how devices from
+  before account translations carry their choice over. A value this app
+  version doesn't know (a newer app's translation) is left alone.
+- `useAppStore(s => s.bibleVersion)` reads it.
+  `useAppStore.getState().setBibleVersion(version)` is the account switch,
+  see "Switching".
 
-- `useAppStore(s => s.bibleVersion)` — read
-- `useAppStore.getState().setBibleVersion(version)` — write
+Three pickers change it, all through `setBibleVersion`: Settings, and the
+add-verse book and chapter screens (`add.tsx`, `add/[book]/[chapter].tsx`).
+The add-screen picker shows "Changes your translation everywhere." the first
+time it opens on a device (`accountNote` on `BibleTranslationPicker`, flag
+`translation_account_note_seen`). The curated collection preview has its own
+picker that changes only the preview, see `docs/features/home.md`.
 
-The version selector lives on the Settings tab. The add-verse screen
-(`app/(tabs)/(library)/add.tsx`) also lists `BIBLE_VERSIONS`.
+## Switching
+
+`setBibleVersion(version)` updates the store at once, then, one at a time
+with any other translation work (`queueTranslationWork`):
+
+1. Writes `profiles.translation`. On failure the picker goes back and an
+   error toast shows.
+2. Runs `alignVerses`: collapses two translations of one verse (below),
+   then moves every `user_verses` row, soft-deleted ones included, to the
+   new version in one update.
+3. Refetches verses and Mastered, so cards read the new text.
+
+If step 2 fails the profile already holds the new translation. A toast says
+to pull to refresh, and the next `hydrate()` or `refresh()` finishes the move,
+since they run the same `alignVerses`. Progress, schedule, study prefs and
+`last_practiced_at` are columns of the same row, so they stay.
+
+**Verses a translation leaves out.** ESV, NIV and NLT leave some verses out
+of the main text (Mark 9:44, Acts 8:37 and others). A row whose range touches
+one of those (`OMITTED_IN_SOME_TRANSLATIONS` in `lib/store/translation.ts`)
+is read in the target through `fetchVerse` before it moves. If any verse
+comes back empty, or the read fails, the row keeps its version and an alert
+says which verses stayed. Each verse and translation is told once per device
+(`translation_kept_notices`). Every other row moves without a Bible fetch.
+
+**One verse per reference.** Two rows with the same book, chapter and range
+in different versions are one verse held twice, which only older app
+versions could create. `planCollapse` keeps the row with better progress:
+mastered beats learning, then higher `passCount`, then more completed
+difficulties. The winner takes the losers' collections and is restored if it
+was soft-deleted. The losers are soft-deleted. A mastered loser stays in the
+table, and `fetchMasteredVerses` lists one row per reference
+(`onePerReference`), so it doesn't show twice. This runs on every hydrate,
+refresh and switch, not only once, because old clients keep adding verses in
+their device translation. Tests: `lib/store/__tests__/translation.test.ts`.
+
+Adding a verse finds it by reference in any version (`addVerse`), so the add
+flow can't create a second translation of a held verse. A soft-deleted match
+comes back in the account translation.
 
 ## Propagation
 
@@ -69,7 +117,6 @@ If you add a new version, every one of these needs an entry:
 | `lib/settings.ts` | `BibleVersion` type, `BIBLE_VERSIONS` array, display info (name) |
 | `lib/api/bible.ts` | its own `BibleVersion` type |
 | `lib/storage/index.ts` | its own `BibleVersion` type |
-| `lib/store/index.ts` | the version list `hydrate` validates the saved setting against |
 | `supabase/functions/bible/index.ts` | `adapters` registry — pick existing adapter or write a new one |
 | `supabase/functions/bible/adapters/apibible.ts` | If using API.Bible: add Bible ID to `BIBLE_IDS` |
 | `supabase/functions/bible/adapters/esv.ts` | Only if it's a new ESV-API-served version (unlikely) |
@@ -83,12 +130,14 @@ the `BibleAdapter` contract (see
 
 ## Per-user vs global
 
-- **Per user**: which version they currently see (`bibleVersion`
-  in their Zustand store). Local-only — not synced.
-- **Per verse saved by user**: each `user_verses` row has its own
-  `version` column, set at save time. Switching the global setting
-  doesn't change verses already saved — those keep their original
-  version forever (relevant for streak / mastery progression).
+- **Per account**: `profiles.translation`, cached as `bibleVersion`.
+- **Per verse saved by user**: `user_verses.version` stays a column, for
+  old clients and because each row may lag the account during a switch or
+  keep an older version when the account translation leaves the verse out.
+  New clients write it from the account translation.
+- **Per attempt**: `session_attempts.version` records the version practiced,
+  so history keeps what was actually recited. Stats that count verses group
+  by reference, not version (`update_user_stats`, `popular_ranges`).
 - **Global VOTM**: `verse_of_month` has no version column. The
   client renders the VOTM in the user's *current* `bibleVersion`.
   Mastery checks for VOTM ignore version — see
@@ -102,8 +151,9 @@ in `docs/architecture/bible-api-and-caching.md`.
 
 ## Missing-verse handling
 
-Some translations omit certain verses (e.g. Mark 16:9–20 in some
-modern editions). Current behavior:
+Some translations omit certain verses (e.g. Mark 9:44 in the ESV and NIV).
+A switch keeps such a held verse in its old version, see "Switching". The
+server side:
 
 - The adapter logs a warning if its parsed verse count doesn't
   match `getExpectedVerseCount` for that chapter.
@@ -114,14 +164,18 @@ modern editions). Current behavior:
 This is a real limitation worth knowing about, especially for NIV
 where some verses are footnoted out.
 
+## Browser checks
+
+- `npm run sim -- flow account-translation`: the tap path, see `docs/features/library.md`.
+- `npm run sim -- shot "/(tabs)/settings" --as reader-a`: the Translation row reads "Every saved verse uses it" and the account translation.
+
 ## Invariants
 
 1. **Version is part of every cache key.** Don't strip it. Don't
    assume "ESV is the default and we can omit it."
-2. **The version a verse was saved at is locked in
-   (`user_verses.version`).** Don't migrate it across versions
-   based on the user's current selection — that would invalidate
-   `session_attempts` history for that verse.
+2. **Verses follow the account translation.** `user_verses.version` is
+   moved only by `alignVerses`. `session_attempts` keeps its own version
+   column, so history isn't rewritten.
 3. **VOTM mastery ignores version on purpose.** Mastering John 3:16
    in NLT counts the same as ESV. `hasUserMasteredVOTM` and
    `getVOTMMasteryCount` take no version.
@@ -132,3 +186,7 @@ where some verses are footnoted out.
 ## Decisions
 
 - 2026-02-15 · CSB removed (commit `06ae8fe`) · The commit gives no reason, so re-check licensing before bringing it back.
+- 2026-11-11 · Translation is an account setting in `profiles`, and every held verse follows it · Users memorize a verse, not a translation; two copies of one verse in two translations were confusing.
+- 2026-11-11 · Collapse runs in the client on every sync, keeping the better row · Additive migrations only, and old clients keep creating pairs.
+- 2026-11-11 · Only verses on the omitted list are read before moving · The free tier allows 100 Bible fetches a day; a switch shouldn't spend one per verse.
+
