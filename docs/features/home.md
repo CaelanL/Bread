@@ -25,17 +25,18 @@ for the selected translation. Version changes and unmount stop further
 preloads and ignore stale preview results. Failed reads remain retryable.
 Text expands on tap in the app's system font. The introduction shares the top-right
 `BibleTranslationPicker` with verse selection. Its scrollable list reads
-`BIBLE_VERSIONS`. The selection starts from the user's setting and applies
-to this preview and import. Before writing, the store verifies all
-requested keyed verses. An incomplete read lets the user retry or choose
-another translation. The centered Add collection action uses an intrinsic
-width and a minimum 44-point touch target.
+`BIBLE_VERSIONS`. The selection starts from the account translation and
+changes only the preview. When it differs, a line under the action says
+verses are added in the account one. Before writing, the store
+verifies all requested keyed verses in the account translation. An
+incomplete read lets the user retry. The centered Add collection action
+uses an intrinsic width and a minimum 44-point touch target.
 
-`importCuratedCollection` saves every passage in one transaction and reads
-back the resulting collection. Matching references in the same translation
-share progress and study preferences. The same catalog and translation
-opens the edited copy, while another translation creates a distinct copy.
-The translation appears on the saved verses. Explicitly adding a deleted
+`importCuratedCollection` saves every passage in the account translation in
+one transaction and reads back the resulting collection. Matching references
+in the same translation share progress and study preferences. The copy's id
+carries the translation it was saved in, but the introduction opens a saved
+copy under any translation. Explicitly adding a deleted
 copy restores its passages and eligible progress at the end of the
 Library. A failed readback after saving offers Refresh Library.
 
@@ -177,7 +178,7 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 
 - `npm run sim -- shot /home --as reader-a`: the current monthly card with reference and text and no optional mastery total (the missing function), and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
 - `npm run sim -- shot /home --as reader-b`: the same current monthly card, an insights card with 0 day streak, 0 mastered, 0 in progress, Explore collections, and no video card.
-- `npm run sim -- flow collection-discovery`: Home and Explore in both themes, introduction, KJV preview, add and open the saved copy.
+- `npm run sim -- flow collection-discovery`: sets reader-b's account translation to KJV, then Home and Explore in both themes, introduction, KJV preview, add and open the saved copy, and an ESV preview that still opens it.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. Both are local; the migration test rolls back its fixtures.
@@ -198,3 +199,4 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - 2026-11-10 · An account-wide atomic claim controls automatic intro presentation · Prefer suppressing an ambiguous attempt over surprising users twice. The replay surface left with the Home card and returns with it.
 - 2026-11-11 · Monthly art is plain public URLs · Signed URLs expire.
 - 2026-11-11 · Intro sound ignores the silent switch; scrubbing uses RN responders · A chosen video should just play; no new native module.
+- 2026-11-11 · The curated preview picker previews only; imports use the account translation · One translation per account (`docs/architecture/bible-versions.md`).

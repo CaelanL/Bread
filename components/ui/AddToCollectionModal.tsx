@@ -85,7 +85,6 @@ export function AddToCollectionModal({
             verseEnd: verse.verseEnd,
           },
           collectionId,
-          version
         );
       }
       onClose();

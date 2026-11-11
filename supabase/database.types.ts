@@ -107,6 +107,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"profiles": {
+                  Row: {
+                    "created_at": string,"translation": string | null,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"translation"?: string | null,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"translation"?: string | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"session_attempts": {
                   Row: {
                     "accuracy": number,"book": string,"chapter": number,"chunk_size": number,"created_at": string | null,"difficulty": string,"id": string,"recording_duration_ms": number | null,"user_id": string,"verse_end": number,"verse_start": number,"version": string,"word_count": number | null

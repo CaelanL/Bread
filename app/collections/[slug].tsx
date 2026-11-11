@@ -14,29 +14,34 @@ import { useAuth } from '@/lib/auth';
 import { CURATED_COLLECTIONS, type CuratedCollection } from '@/lib/collections/catalog';
 import { curatedCollectionId } from '@/lib/collections/identity';
 import { saverCountLabel } from '@/lib/collections/savers';
-import type { BibleVersion } from '@/lib/settings';
-import { useAppStore, useCollection, useCuratedSaverCount, useHydrated } from '@/lib/store';
+import { BIBLE_VERSIONS, type BibleVersion } from '@/lib/settings';
+import { useAppStore, useCollections, useCuratedSaverCount, useHydrated } from '@/lib/store';
 
 function goBack() {
   if (router.canGoBack()) router.back();
   else router.replace('/home');
 }
 
-function CollectionIntroduction({ collection, defaultVersion }: {
+function CollectionIntroduction({ collection, accountVersion }: {
   collection: CuratedCollection;
-  defaultVersion: BibleVersion;
+  accountVersion: BibleVersion;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { bottom } = useSafeAreaInsets();
-  const [version, setVersion] = useState(defaultVersion);
+  // Preview only. Adding uses the account translation.
+  const [version, setVersion] = useState(accountVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string>();
   const [savedPendingIds, setSavedPendingIds] = useState<string[]>([]);
   const inFlight = useRef(false);
   const focused = useRef(false);
-  const collectionId = curatedCollectionId(collection.id, version);
-  const savedCollection = useCollection(collectionId);
+  // Saved under any translation counts: its verses follow the account translation.
+  const collections = useCollections();
+  const savedIds = [accountVersion, ...BIBLE_VERSIONS.map(({ value }) => value)]
+    .map((value) => curatedCollectionId(collection.id, value));
+  const savedCollection = savedIds.map((id) => collections.find((saved) => saved.id === id)).find(Boolean);
+  const collectionId = savedCollection?.id ?? curatedCollectionId(collection.id, accountVersion);
   const savedNeedsRefresh = savedPendingIds.includes(collectionId);
   const saverCount = useCuratedSaverCount(collection.id);
   useCollectionSaversRefresh();
@@ -68,7 +73,7 @@ function CollectionIntroduction({ collection, defaultVersion }: {
           throw new Error('Could not refresh Library. Your collection was saved.');
         }
       } else {
-        const result = await useAppStore.getState().importCuratedCollection(collection.id, version);
+        const result = await useAppStore.getState().importCuratedCollection(collection.id);
         if (!result.loaded) {
           setSavedPendingIds((ids) => [...ids, collectionId]);
           return;
@@ -84,7 +89,9 @@ function CollectionIntroduction({ collection, defaultVersion }: {
     }
   };
 
-  const message = error ?? (savedNeedsRefresh ? 'Collection saved. Refresh Library to open it.' : undefined);
+  const message = error
+    ?? (savedNeedsRefresh ? 'Collection saved. Refresh Library to open it.' : undefined)
+    ?? (version !== accountVersion ? `Previewing ${version}. Verses are added in your translation, ${accountVersion}.` : undefined);
   const actionLabel = savedNeedsRefresh ? 'Refresh Library' : savedCollection ? 'Open collection' : 'Add collection';
 
   return (
@@ -169,7 +176,7 @@ export default function CuratedCollectionScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { user } = useAuth();
   const hydrated = useHydrated();
-  const defaultVersion = useAppStore((state) => state.bibleVersion);
+  const accountVersion = useAppStore((state) => state.bibleVersion);
   const collection = CURATED_COLLECTIONS.find(({ id }) => id === slug);
 
   return (
@@ -178,7 +185,7 @@ export default function CuratedCollectionScreen() {
         <CollectionIntroduction
           key={`${user.id}:${collection.id}`}
           collection={collection}
-          defaultVersion={defaultVersion}
+          accountVersion={accountVersion}
         />
       ) : (
         <>

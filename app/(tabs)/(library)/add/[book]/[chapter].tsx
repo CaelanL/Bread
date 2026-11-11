@@ -5,7 +5,6 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchChapter } from '@/lib/api';
 import { getVerseCount, normalizeBookName } from '@/lib/bible';
-import { BIBLE_VERSIONS } from '@/lib/settings';
 import { type BibleVersion } from '@/lib/storage';
 import { useAppStore } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
@@ -31,25 +30,20 @@ interface VerseLayout {
 }
 
 export default function VerseSelectScreen() {
-  const { book, chapter, collectionId, version } = useLocalSearchParams<{
+  const { book, chapter, collectionId } = useLocalSearchParams<{
     book: string;
     chapter: string;
     collectionId?: string;
-    version?: string;
   }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const bibleVersion = useAppStore((state) => state.bibleVersion);
+  // The account translation. The picker below changes it everywhere.
+  const selectedVersion = useAppStore((state) => state.bibleVersion);
 
   const bookName = normalizeBookName(decodeURIComponent(book ?? ''));
   const chapterNum = parseInt(chapter ?? '1', 10);
   const verseCount = getVerseCount(bookName, chapterNum);
-
-  // Translation from URL param (passed from book selection), fallback to store
-  const validVersions = BIBLE_VERSIONS.map(v => v.value);
-  const initialVersion = (version && validVersions.includes(version as BibleVersion)) ? version as BibleVersion : bibleVersion;
-  const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(initialVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
 
   // Chapter data from API
@@ -308,7 +302,7 @@ export default function VerseSelectScreen() {
         chapter: chapterNum,
         verseStart: min,
         verseEnd: max,
-      }, collectionId || 'my-verses', selectedVersion);
+      }, collectionId || 'my-verses');
 
       // Navigate back to collection or library
       if (collectionId) {
@@ -338,8 +332,8 @@ export default function VerseSelectScreen() {
 
   const handleVersionSelect = (ver: BibleVersion) => {
     Haptics.selectionAsync();
-    setSelectedVersion(ver);
     setVersionPickerVisible(false);
+    void useAppStore.getState().setBibleVersion(ver);
   };
 
   return (
@@ -360,6 +354,7 @@ export default function VerseSelectScreen() {
         visible={versionPickerVisible}
         onSelect={handleVersionSelect}
         onClose={() => setVersionPickerVisible(false)}
+        accountNote
       />
 
       {/* Loading State */}

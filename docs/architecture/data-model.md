@@ -7,6 +7,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 
 | Table | Owner | Purpose |
 |---|---|---|
+| `profiles` | per-user | `translation`: the account translation (`bible-versions.md`) |
 | `usage_daily` | per-user | Free/Supporter rate-limit counters (transcribe seconds, evaluate count, Bible fetch count) |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
@@ -53,7 +54,7 @@ Indexes:
 - `idx_user_collections_user (user_id) WHERE deleted_at IS NULL` — active-collection lookups
 - `idx_user_collections_client (user_id, client_id)` — lookups by client_id
 
-RLS: owner SELECT/INSERT/UPDATE, service role all.
+RLS: owner SELECT/INSERT/UPDATE/DELETE, service all.
 
 ### `user_verses`
 
@@ -69,7 +70,7 @@ Migration: `002_user_data.sql` (created), `005_user_verses_no_text.sql`
 | `book` | TEXT | canonical name e.g. `"John"`, `"Psalms"` (not `"Psalm"`) |
 | `chapter`, `verse_start` | INT | |
 | `verse_end` | INT | equal to `verse_start` for single verses |
-| `version` | TEXT | short uppercase version code |
+| `version` | TEXT | short uppercase version code, from the account translation |
 | `progress` | JSONB | shape below |
 | `last_practiced_at` | TIMESTAMPTZ | nullable; last session, full or partial, any difficulty; cleared on progress reset |
 | `last_chunk_size` | INT | nullable; last chunk size chosen on the setup screen |
@@ -84,7 +85,7 @@ Indexes:
 - `idx_user_verses_user (user_id) WHERE deleted_at IS NULL`
 - `idx_user_verses_client (user_id, client_id)`
 - `idx_user_verses_unique_verse (user_id, book, chapter, verse_start, verse_end, version) WHERE deleted_at IS NULL`
-  — prevents adding the same verse twice while it's active
+  — per version; the client keeps one row per reference (`bible-versions.md`)
 
 `progress` JSONB shape (canonical default is `DEFAULT_PROGRESS` in
 `lib/storage/index.ts`):
@@ -161,11 +162,7 @@ Edge functions reach them with the service role, which bypasses both.
 Licensing limits, eviction and its known gaps are in
 `docs/architecture/bible-api-and-caching.md`.
 
-The SQL helpers are defined but the edge function doesn't call them:
-- `get_verse_cache_count(version)` → row count for a version
-- `evict_lru_verses(version, max_count, needed)` → deletes oldest
-- `upsert_verses(book, chapter, version, jsonb)` → bulk upsert,
-  bumps `last_used_at` on conflict
+The edge function calls none of the cache SQL helpers in the table below.
 
 `getCacheStats` in `cache.ts` reads the view `verse_cache_stats`
 (per-version count + min/max `last_used_at`).
@@ -226,7 +223,7 @@ Public-readable; service role writes. See `docs/features/insights.md`.
 
 `user_stats` (migration 011): Cron-precomputed every 6 hours by
 `update_user_stats()`. Computes `total_words_mastered` for every user
-with a qualifying attempt, and `avg_time_per_word_ms` only for users
+with a qualifying attempt, once per reference, and `avg_time_per_word_ms` only for users
 with `stats_min_words` (600) or more mastered words. So the "average
 time to master" insight is null for most users. Not populated
 incrementally — the cron is the only writer.
@@ -266,6 +263,7 @@ incrementally — the cron is the only writer.
 
 ```
 auth.users
+ ├── profiles (account translation)
  ├── user_collections (soft-delete)
  │     └── verse_collections (junction) ─── user_verses (soft-delete, no text)
  │                                               │
@@ -386,12 +384,10 @@ two logins: `reader-a` with a small library and a 5-day streak, and
 `reader-b` brand new. It also unschedules any local cron job that
 would call a hosted URL.
 
-**Tests.** `npm run test:db` runs the pgTAP files in `supabase/tests/`:
-`catalog.test.sql` (every public table has RLS on; no `SECURITY DEFINER`
-function is open to clients unless allowlisted), `access.test.sql`
-(one reader can't read or write another's data, with known bugs as
-todos) and `device-tokens.test.sql` (a shared phone's token row goes
-to the last account to register it).
+**Tests.** `npm run test:db` runs the pgTAP files in `supabase/tests/`, one per
+area. `catalog.test.sql`: every public table has RLS on, and no `SECURITY DEFINER`
+function is open to clients unless allowlisted. `access.test.sql`: one reader can't
+reach another's data, with known bugs as todos.
 
 **Prod.** Migrations reach prod only through `npm run release`, which
 also re-dates new files to sort after prod's newest. See
@@ -417,3 +413,4 @@ also re-dates new files to sort after prod's newest. See
 - 2025-12-24 · `session_attempts` keeps its own verse columns and no FK to `user_verses` · Attempts must survive verse deletion for analytics.
 - 2026-08-25 · Study prefs are columns, not `progress` keys · Progress writes are whole-object read-modify-write through `parseProgress`, which strips unknown keys, so old clients would clobber a JSONB key and Reset Progress would wipe it.
 - 2026-08-25 · `verse_cache`, `app_config` and `verse_cache_stats` locked to the service role (020) · Clients never query them directly, so this is safe for old clients.
+- 2026-11-11 · Account settings live in `profiles`, not auth metadata · RLS-guarded, additive, room for display names.

@@ -136,7 +136,7 @@ export default function StudySetupScreen() {
     // this effect then flashes the text loader over already-loaded
     // text (visible as a flicker when starting a session).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verse?.id]);
+  }, [verse?.id, verse?.version]);
 
   // Persist the setup whenever the user changes it, so prefs stick
   // even without starting a session. The store action no-ops when
