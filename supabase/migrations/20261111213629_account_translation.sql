@@ -54,6 +54,11 @@ begin
     total_words_mastered = excluded.total_words_mastered,
     updated_at = now();
 
+  -- Deduplicating can drop an account below the threshold; its old estimate goes too.
+  update user_stats
+  set avg_time_per_word_ms = null, updated_at = now()
+  where total_words_mastered < min_words and avg_time_per_word_ms is not null;
+
   with mastery_points as (
     select distinct on (user_id, book, chapter, verse_start, verse_end)
       user_id,

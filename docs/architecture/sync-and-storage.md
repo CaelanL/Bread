@@ -217,7 +217,6 @@ for the server.
 | Translation change | Local, then push, rollback on failure | `setBibleVersion`: profile, then every verse row, then refetch. See `docs/architecture/bible-versions.md` |
 | Settings change (colorMode) | Local only | AsyncStorage write — not synced |
 
-
 ## Offline behavior
 
 **Invariant 10: the app has no offline write support.** Failed writes

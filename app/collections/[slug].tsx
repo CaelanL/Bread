@@ -186,7 +186,6 @@ export default function CuratedCollectionScreen() {
           key={`${user.id}:${collection.id}`}
           collection={collection}
           accountVersion={accountVersion}
-
         />
       ) : (
         <>

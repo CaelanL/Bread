@@ -22,8 +22,7 @@ Top to bottom:
 
 ## Mastered and in progress
 
-Mastered counts `masteredVerses`, which is fetched with no `deleted_at` filter. Soft-deleted verses still count, because mastery is permanent. A verse mastered in two translations is listed and counted once (`onePerReference`).
- What masters a verse is in `docs/features/review.md`.
+Mastered counts `masteredVerses`, which is fetched with no `deleted_at` filter. Soft-deleted verses still count, because mastery is permanent. A verse mastered in two translations is listed and counted once (`onePerReference`). What masters a verse is in `docs/features/review.md`.
 
 In progress uses the same `isInProgressVerse` predicate as `useInProgressVerses`, so this number always equals the In Progress collection in the Library. The push source `loadInProgressVerses` mirrors it on the server. Change them together.
 

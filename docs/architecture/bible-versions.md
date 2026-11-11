@@ -189,4 +189,3 @@ where some verses are footnoted out.
 - 2026-11-11 · Translation is an account setting in `profiles`, and every held verse follows it · Users memorize a verse, not a translation; two copies of one verse in two translations were confusing.
 - 2026-11-11 · Collapse runs in the client on every sync, keeping the better row · Additive migrations only, and old clients keep creating pairs.
 - 2026-11-11 · Only verses on the omitted list are read before moving · The free tier allows 100 Bible fetches a day; a switch shouldn't spend one per verse.
-

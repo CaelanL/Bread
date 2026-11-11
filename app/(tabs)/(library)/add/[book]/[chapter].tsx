@@ -357,7 +357,6 @@ export default function VerseSelectScreen() {
         accountNote
       />
 
-
       {/* Loading State */}
       {loading && (
         <View style={styles.centerContainer}>

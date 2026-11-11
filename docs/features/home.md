@@ -179,7 +179,6 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- shot /home --as reader-a`: the current monthly card with reference and text and no optional mastery total (the missing function), and an insights card with 5 day streak, 1 mastered, 1 in progress on a freshly reset database.
 - `npm run sim -- shot /home --as reader-b`: the same current monthly card, an insights card with 0 day streak, 0 mastered, 0 in progress, Explore collections, and no video card.
 - `npm run sim -- flow collection-discovery`: sets reader-b's account translation to KJV, then Home and Explore in both themes, introduction, KJV preview, add and open the saved copy, and an ESV preview that still opens it.
-
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
 - `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. Both are local; the migration test rolls back its fixtures.

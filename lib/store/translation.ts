@@ -46,15 +46,22 @@ export function isVisible(record: VerseRecord): boolean {
   return !record.deleted || record.progress.hard?.completed === true;
 }
 
-/** Every reference the user can see more than once, with the row that keeps it. */
-export function planCollapse<T extends VerseRecord>(records: T[], translation: string): { winner: T; losers: T[] }[] {
+function groupByReference<T extends VerseRecord>(records: T[]): T[][] {
   const groups = new Map<string, T[]>();
   for (const record of records) {
-    if (!isVisible(record)) continue;
     const key = referenceKey(record);
     groups.set(key, [...(groups.get(key) ?? []), record]);
   }
-  return [...groups.values()]
+  return [...groups.values()];
+}
+
+/**
+ * Every reference held active more than once, with the row that keeps it. The losers
+ * are deleted for good. Soft-deleted rows never take part, so a verse the user reset
+ * or removed is never replaced by an older twin.
+ */
+export function planCollapse<T extends VerseRecord>(records: T[], translation: string): { winner: T; losers: T[] }[] {
+  return groupByReference(records.filter((record) => !record.deleted))
     .filter((group) => group.length > 1)
     .map((group) => {
       const [winner, ...losers] = [...group].sort(compareRecords(translation));
@@ -62,7 +69,47 @@ export function planCollapse<T extends VerseRecord>(records: T[], translation: s
     });
 }
 
+/**
+ * Version changes that put each reference in `translation`. Only one row per reference
+ * moves: the active one, else the best soft-deleted one. A row already holding
+ * `translation` takes the mover's old version, so no two rows of a reference ever share
+ * a version (older app versions look a verse up by reference and version, expecting one).
+ * Rows `keep` says stay put (the translation leaves them out) don't move.
+ */
+export function planMoves<T extends VerseRecord>(
+  records: T[],
+  translation: string,
+  keep: (record: T) => boolean = () => false,
+): { id: string; version: string }[] {
+  const moves: { id: string; version: string }[] = [];
+  for (const group of groupByReference(records)) {
+    const [mover] = [...group].sort((a, b) => Number(a.deleted) - Number(b.deleted) || compareRecords(translation)(a, b));
+    if (mover.version === translation || keep(mover)) continue;
+    const holder = group.find((record) => record.version === translation);
+    if (holder) moves.push({ id: holder.id, version: mover.version });
+    moves.push({ id: mover.id, version: translation });
+  }
+  return moves;
+}
+
+/**
+ * The translation for an account that has none yet: the one most of its active verses
+ * are in, so nothing moves. With no active verses, this device's choice.
+ */
+export function seedTranslation<V extends string>(records: VerseRecord[], fallback: V, known: (value: string) => value is V): V {
+  const counts = new Map<V, number>();
+  for (const { version, deleted } of records) {
+    if (!deleted && known(version)) counts.set(version, (counts.get(version) ?? 0) + 1);
+  }
+  let best = fallback;
+  for (const [version, count] of counts) {
+    if (count > (counts.get(best) ?? 0)) best = version;
+  }
+  return best;
+}
+
 /** The best row of each reference, in input order. */
+
 export function onePerReference<T extends VerseRecord>(records: T[], translation: string): T[] {
   const compare = compareRecords(translation);
   const best = new Map<string, T>();

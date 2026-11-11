@@ -31,7 +31,7 @@ import {
 } from './library-sort';
 import { computeNextSrState } from './review';
 import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from './review-config';
-import { compareRecords, isVisible, mayBeMissing, onePerReference, planCollapse, referenceKey, type VerseRecord } from './translation';
+import { compareRecords, isVisible, mayBeMissing, onePerReference, planCollapse, planMoves, referenceKey, seedTranslation, type VerseRecord } from './translation';
 
 const COLOR_MODE_KEY = 'app_color_mode';
 // Local cache of the account translation (profiles.translation).
@@ -212,8 +212,18 @@ function queueTranslationWork<T>(work: () => Promise<T>): Promise<T> {
   return next;
 }
 
-// The winner takes the losers' collections, then the losers are soft-deleted. Losers go
-// first so a restored winner never shares its version with another active row.
+// The latest translation picked and not yet saved. Sync leaves the store alone meanwhile.
+let requestedTranslation: BibleVersion | null = null;
+
+// No offline queue (invariant 10): say so, and the next hydrate or pull to refresh retries.
+function reportSyncFailure(e: unknown) {
+  console.error('[STORE] Failed to sync translation:', e);
+  showErrorToast("Couldn't line your verses up with your translation. Pull to refresh to try again.");
+}
+
+// The winner takes the losers' collections, then the losers are deleted for good, so a
+// reset or removed winner is never replaced by its twin. session_attempts has no foreign
+// key to user_verses, so their history stays.
 async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
   const loserIds = losers.map(({ id }) => id);
   const { data: links, error } = await supabase
@@ -231,19 +241,8 @@ async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
     if (linkError) throw linkError;
   }
 
-  const { error: hideError } = await supabase
-    .from('user_verses')
-    .update({ deleted_at: new Date().toISOString() })
-    .in('id', loserIds);
-  if (hideError) throw hideError;
-
-  if (winner.deleted) {
-    const { error: restoreError } = await supabase.from('user_verses').update({ deleted_at: null }).eq('id', winner.id);
-    if (restoreError) {
-      await supabase.from('user_verses').update({ deleted_at: null }).in('id', loserIds);
-      throw restoreError;
-    }
-  }
+  const { error: deleteError } = await supabase.from('user_verses').delete().in('id', loserIds);
+  if (deleteError) throw deleteError;
 }
 
 async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promise<boolean> {
@@ -259,39 +258,48 @@ async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promi
 }
 
 /**
- * Makes every verse row follow the account translation: collapses two translations
- * of one reference into the row with better progress, then moves every row to
- * `translation`. A row whose verse the translation leaves out keeps its version.
- * Returns those kept rows.
+ * Makes every verse follow the account translation: collapses two active translations
+ * of one reference into the row with better progress, then moves each reference to
+ * `translation` (`planMoves`). A verse the translation leaves out keeps its version.
+ * Returns those kept rows. `rows` saves a read when the caller already has them.
  */
-async function alignVerses(userId: string, translation: BibleVersion): Promise<HeldVerse[]> {
-  const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
-  if (error) throw error;
-  const records = data.map(toRecord);
-
-  for (const { winner, losers } of planCollapse(records, translation)) {
-    const active = losers.filter((loser) => !loser.deleted);
-    if (active.length === 0) continue;
-    await collapseVerse(winner, active);
-    winner.deleted = false;
-    for (const loser of active) loser.deleted = true;
+async function alignVerses(userId: string, translation: BibleVersion, rows?: VerseIdentityRow[]): Promise<HeldVerse[]> {
+  let records = rows?.map(toRecord);
+  if (!records) {
+    const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
+    if (error) throw error;
+    records = data.map(toRecord);
   }
 
-  const stale = records.filter((record) => record.version !== translation);
+  const merged = new Set<string>();
+  for (const { winner, losers } of planCollapse(records, translation)) {
+    await collapseVerse(winner, losers);
+    for (const { id } of losers) merged.add(id);
+  }
+  records = records.filter(({ id }) => !merged.has(id));
+
+  const kept = new Set<string>();
   const available = new Map<string, boolean>();
-  const kept: HeldVerse[] = [];
-  for (const record of stale.filter(mayBeMissing)) {
+  for (const { id } of planMoves(records, translation)) {
+    const record = records.find((r) => r.id === id)!;
+    if (record.version === translation || !mayBeMissing(record)) continue;
     const key = referenceKey(record);
     if (!available.has(key)) available.set(key, await isAvailableIn(record, translation));
-    if (!available.get(key)) kept.push(record);
+    if (!available.get(key)) kept.add(id);
   }
-  if (stale.length > kept.length) {
-    let update = supabase.from('user_verses').update({ version: translation }).eq('user_id', userId).neq('version', translation);
-    if (kept.length > 0) update = update.not('id', 'in', `(${kept.map(({ id }) => id).join(',')})`);
-    const { error: updateError } = await update;
-    if (updateError) throw updateError;
+
+  const moves = planMoves(records, translation, ({ id }) => kept.has(id));
+  // Rows giving the translation up go first, so two rows never share it.
+  for (const { id, version } of moves.filter((move) => move.version !== translation)) {
+    const { error } = await supabase.from('user_verses').update({ version }).eq('id', id);
+    if (error) throw error;
   }
-  return kept.filter(isVisible);
+  const movers = moves.filter((move) => move.version === translation).map(({ id }) => id);
+  if (movers.length > 0) {
+    const { error } = await supabase.from('user_verses').update({ version: translation }).in('id', movers);
+    if (error) throw error;
+  }
+  return records.filter(({ id }) => kept.has(id)).filter(isVisible);
 }
 
 /** Tells the user, once per verse and translation, which verses stayed in their old translation. */
@@ -331,21 +339,36 @@ async function syncAccountTranslation(generation: number) {
   if (error) throw error;
   if (generation !== accountGeneration) return;
 
-  let translation = useAppStore.getState().bibleVersion;
+  let translation: BibleVersion;
+  let rows: VerseIdentityRow[] | undefined;
   if (data?.translation) {
     // A newer app version may know translations this one doesn't. Leave it alone.
     if (!isBibleVersion(data.translation)) return;
     translation = data.translation;
-    useAppStore.setState({ bibleVersion: translation });
-    await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
-      console.error('[STORE] Failed to cache bibleVersion:', e);
-    });
+    if (requestedTranslation === null) {
+      useAppStore.setState({ bibleVersion: translation });
+      await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
+        console.error('[STORE] Failed to cache bibleVersion:', e);
+      });
+    }
   } else {
+    // No profile yet: keep the verses where most of them already are.
+    const { data: held, error: heldError } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
+    if (heldError) throw heldError;
+    rows = held;
+    translation = seedTranslation(held.map(toRecord), useAppStore.getState().bibleVersion, isBibleVersion);
     const { error: saveError } = await supabase.from('profiles').upsert({ user_id: userId, translation });
     if (saveError) throw saveError;
+    if (generation !== accountGeneration) return;
+    if (requestedTranslation === null) {
+      useAppStore.setState({ bibleVersion: translation });
+      await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
+        console.error('[STORE] Failed to cache bibleVersion:', e);
+      });
+    }
   }
 
-  const kept = await alignVerses(userId, translation);
+  const kept = await alignVerses(userId, translation, rows);
   if (generation === accountGeneration) await tellKeptVerses(kept, translation);
 }
 
@@ -567,9 +590,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (generation !== accountGeneration) return;
     // The cached translation stands in when the profile can't be read (offline).
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch((e) => {
-      console.error('[STORE] Failed to sync translation:', e);
-    });
+    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure);
     if (generation !== accountGeneration) return;
     let [collectionsOk, versesOk, masteredOk] = await Promise.all([
       get().fetchCollections(),
@@ -611,9 +632,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   refresh: async () => {
     set({ error: null });
     const generation = accountGeneration;
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch((e) => {
-      console.error('[STORE] Failed to sync translation:', e);
-    });
+    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure);
     await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),
@@ -643,16 +662,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (version === previous) return;
     const generation = accountGeneration;
     set({ bibleVersion: version });
+    requestedTranslation = version;
 
     let saved = false;
     try {
       const kept = await queueTranslationWork(async () => {
         // A later choice replaced this one before it ran.
-        if (generation !== accountGeneration || get().bibleVersion !== version) return [];
+        if (generation !== accountGeneration || requestedTranslation !== version) return [];
         const userId = await getCurrentUserId();
         const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: version });
         if (error) throw error;
         saved = true;
+        requestedTranslation = null;
+        set({ bibleVersion: version });
+
         await AsyncStorage.setItem(BIBLE_VERSION_KEY, version).catch((e) => {
           console.error('[STORE] Failed to cache bibleVersion:', e);
         });
@@ -668,6 +691,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         // The profile is right; the next hydrate or pull to refresh moves the rest.
         showErrorToast("Some verses didn't switch translation. Pull to refresh to try again.");
       } else {
+        if (requestedTranslation === version) requestedTranslation = null;
         if (get().bibleVersion === version) set({ bibleVersion: previous });
         showErrorToast("Couldn't change your translation. Try again.");
       }
@@ -1067,14 +1091,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       verseId = existing.id;
       clientId = existing.clientId;
       progress = existing.progress;
-      if (!existing.deleted) version = existing.version as BibleVersion;
+      // A restored verse comes back in the account translation, unless the translation
+      // may leave it out or another row of the reference already holds that version.
+      if (!existing.deleted || mayBeMissing(existing)
+        || records.some((r) => r !== existing && r.version === translation)) {
+        version = existing.version as BibleVersion;
+      }
 
-      // Restore if soft-deleted, in the account translation
       if (existing.deleted) {
         const { error: restoreError } = await supabase
           .from('user_verses')
-          .update({ deleted_at: null, version: translation })
+          .update({ deleted_at: null, version })
           .eq('id', existing.id);
+
 
         if (restoreError) {
           console.error('[STORE] Failed to restore verse:', restoreError);
@@ -1408,6 +1437,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clear: () => {
     accountGeneration++;
+    requestedTranslation = null;
     set({
       collections: [],
       verses: [],
