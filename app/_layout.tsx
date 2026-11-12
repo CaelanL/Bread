@@ -80,19 +80,37 @@ function RootLayoutNav() {
   }, [isAuthenticated, isLoading, segments, pathname, navigationState?.key]);
 
   // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in,
-  // over the Library, so Not now and Join both land there.
+  // over the Library, so Not now and Join both land there. The reminders card is held before the
+  // read, so it can't present first and be under (or closing under) the invite; JoinInvite then
+  // holds it while mounted and releases it as it unmounts.
+  const inviteCheck = useRef(0);
   useEffect(() => {
     if (!isAuthenticated || !navigationState?.key) return;
-    let current = true;
+    const run = ++inviteCheck.current;
+    const flags = useUxFlagsStore.getState();
+    flags.setInviteOpen(true);
     readPendingJoin()
+      .catch((e) => {
+        console.error('[join] Failed to read the kept invite:', e);
+        return null;
+      })
       .then((invite) => {
-        if (!current || !invite) return;
+        if (run !== inviteCheck.current) return;
+        inviteCheck.current++;
+        if (!invite) {
+          flags.setInviteOpen(false);
+          return;
+        }
         router.replace('/(tabs)/(library)');
         router.push(`/join/${invite}`);
-        return clearPendingJoin();
-      })
-      .catch((e) => console.error('[join] Failed to open the kept invite:', e));
-    return () => { current = false; };
+        clearPendingJoin().catch((e) => console.error('[join] Failed to clear the kept invite:', e));
+      });
+    return () => {
+      // Still reading: this run won't push, so it lets go of the card.
+      if (run !== inviteCheck.current) return;
+      inviteCheck.current++;
+      flags.setInviteOpen(false);
+    };
   }, [isAuthenticated, navigationState?.key]);
 
   // Hydrate store and run migration when authenticated. Sequenced as
