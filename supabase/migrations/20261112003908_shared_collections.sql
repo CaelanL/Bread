@@ -3,6 +3,7 @@
 -- collection. Reference: docs/features/shared-collections.md.
 -- The delete statements below act only on the caller's own copies, or on a removed member's
 -- copies and a removed reference's copies with today's remove-from-collection rule.
+-- destructive-ok: delete statements in new functions (remove verse, remove member, stop sharing) act on shared-collection rows only, no existing data deleted, approved by Caelan 2026-11-12
 
 alter table public.profiles add column display_name text
   check (display_name is null or length(btrim(display_name)) between 1 and 40);
