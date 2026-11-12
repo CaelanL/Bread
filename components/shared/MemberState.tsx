@@ -1,3 +1,4 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { barSegments, isMasteredState, type MemberState } from '@/lib/shared/progress';
@@ -12,35 +13,30 @@ export const MEMBER_STATE_LABEL: Record<MemberState, string> = {
   engraved: 'Engraved',
 };
 
-/** One colour per state, for dots, bars and Who's where squares. Open is a border only. */
+/** One solid fill per state, for dots, bars, tiles and the legend. Open is the surface one step up. */
 export function memberStateFill(state: MemberState, colors: Palette): string {
   if (state === 'engraved') return colors.tint;
   if (state === 'mastered') return colors.success;
-  if (state === 'learning') return `${colors.warning}4D`;
-  return 'transparent';
+  if (state === 'learning') return colors.warning;
+  return colors.cardAlt;
 }
 
-const DOT_BORDER: Record<MemberState, (colors: Palette) => string> = {
-  open: (colors) => colors.border,
-  learning: (colors) => colors.warning,
-  mastered: () => 'transparent',
-  engraved: () => 'transparent',
-};
+// Open also gets a hairline so the empty fill still shows on the card.
+function stateStyle(state: MemberState, colors: Palette) {
+  return state === 'open'
+    ? { backgroundColor: colors.cardAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderLight }
+    : { backgroundColor: memberStateFill(state, colors) };
+}
 
 /** Your state on a verse, as a dot. */
 export function MemberStateDot({ state }: { state: MemberState }) {
   const colors = Colors[useColorScheme() ?? 'light'];
-  return (
-    <View
-      accessibilityLabel={`You: ${MEMBER_STATE_LABEL[state]}`}
-      style={[styles.dot, { backgroundColor: memberStateFill(state, colors), borderColor: DOT_BORDER[state](colors) }]}
-    />
-  );
+  return <View accessibilityLabel={`You: ${MEMBER_STATE_LABEL[state]}`} style={[styles.dot, stateStyle(state, colors)]} />;
 }
 
 /**
  * One member on one verse in Who's where, a tile labelled for VoiceOver ("Dana, Romans 8:28,
- * Mastered"). Open is a faint empty tile. Without a label it's the legend's swatch, hidden from VoiceOver.
+ * Mastered"). Without a label it's the legend's swatch, hidden from VoiceOver.
  */
 export function MemberStateSquare({ state, label }: { state: MemberState; label?: string }) {
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -48,8 +44,7 @@ export function MemberStateSquare({ state, label }: { state: MemberState; label?
     <View
       accessible={Boolean(label)}
       accessibilityLabel={label ? `${label}, ${MEMBER_STATE_LABEL[state]}` : undefined}
-      style={[label ? styles.tile : styles.swatch,
-        { backgroundColor: state === 'open' ? colors.cardAlt : memberStateFill(state, colors) }]}
+      style={[label ? styles.tile : styles.swatch, stateStyle(state, colors)]}
     />
   );
 }
@@ -74,14 +69,18 @@ export function GroupCount({ states, unavailable }: { states: MemberState[] | nu
   const mastered = states.filter(isMasteredState).length;
   const all = mastered === states.length;
   const allEngraved = states.every((s) => s === 'engraved');
+  const allColor = allEngraved ? colors.tint : colors.success;
   const segments = barSegments(states);
   return (
     <View style={styles.group}>
-      <Text
-        accessibilityLabel={all ? `Group: everyone ${allEngraved ? 'engraved' : 'mastered'}` : `Group: ${mastered} of ${states.length} mastered`}
-        style={[styles.count, { color: all ? (allEngraved ? colors.tint : colors.success) : colors.text }]}>
-        {all ? '✓ All' : `${mastered}/${states.length}`}
-      </Text>
+      <View style={styles.countRow}>
+        {all && <IconSymbol name="checkmark" size={12} color={allColor} />}
+        <Text
+          accessibilityLabel={all ? `Group: everyone ${allEngraved ? 'engraved' : 'mastered'}` : `Group: ${mastered} of ${states.length} mastered`}
+          style={[styles.count, { color: all ? allColor : colors.text }]}>
+          {all ? 'All' : `${mastered}/${states.length}`}
+        </Text>
+      </View>
       {segments && (
         <View style={[styles.bar, { backgroundColor: colors.borderLight }]}>
           {segments.map((state, index) => (
@@ -94,11 +93,12 @@ export function GroupCount({ states, unavailable }: { states: MemberState[] | nu
 }
 
 const styles = StyleSheet.create({
-  dot: { width: 12, height: 12, borderRadius: Radius.full, borderWidth: 1.5 },
-  tile: { width: 24, height: 24, borderRadius: Radius.sm },
+  dot: { width: 12, height: 12, borderRadius: Radius.full },
+  tile: { width: 20, height: 20, borderRadius: Radius.xs },
   swatch: { width: 12, height: 12, borderRadius: Radius.xs },
   group: { width: 44, alignItems: 'flex-end', gap: 5 },
-  count: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  countRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  count: { fontSize: 15, lineHeight: 20, fontWeight: '600', fontVariant: ['tabular-nums'] },
   bar: { flexDirection: 'row', width: 36, height: 4, borderRadius: Radius.xs, overflow: 'hidden' },
   segment: { flex: 1 },
 });

@@ -155,7 +155,7 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   no name, then `shareCollection` and the members sheet. At 20 groups it toasts.
 - **Members sheet** (`SharedCollectionSheet`, from the strip under the header): members and
   roles. The owner also gets the code, `com.biblemem://join/<code>`, days left, Copy link, Share,
-  New link (confirmed; the old code dies), and per member Make editor / Make member and Remove.
+  New link (confirmed; the old code dies), and the [member actions](group-progress.md#whos-where).
   Copy and Share send `Join "<name>" on Bread: <link> — or enter code <code> in Bread`:
   chat apps rarely make custom-scheme links tappable. Members get Leave collection.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, from "Have an invite

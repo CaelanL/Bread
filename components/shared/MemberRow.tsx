@@ -1,5 +1,6 @@
+import { InitialDot } from '@/components/shared/MemberDots';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Radius } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SharedMember } from '@/lib/shared/invites';
 import type { SharedRole } from '@/lib/storage';
@@ -25,13 +26,12 @@ export function MemberRow({ member, you, manageable, disabled, onPress }: {
       onPress={onPress}
       style={[styles.member, { borderColor: colors.borderLight }]}
     >
-      <View style={[styles.dot, { backgroundColor: colors.primaryLight }]}>
-        <Text style={[styles.initial, { color: colors.text }]}>{member.displayName.charAt(0).toUpperCase()}</Text>
+      <InitialDot name={member.displayName} you={you} large />
+      <View style={styles.name}>
+        <Text style={[styles.memberName, { color: colors.text }]} numberOfLines={1}>{member.displayName}</Text>
+        {you && <Text style={[styles.secondary, { color: colors.icon }]}>You</Text>}
       </View>
-      <Text style={[styles.memberName, { color: colors.text }]} numberOfLines={1}>
-        {member.displayName}{you ? ' (you)' : ''}
-      </Text>
-      <Text style={[styles.role, { color: colors.icon }]}>{ROLE_LABEL[member.role]}</Text>
+      <Text style={[styles.secondary, { color: colors.icon }]}>{ROLE_LABEL[member.role]}</Text>
       {manageable && <IconSymbol name="ellipsis" size={16} color={colors.icon} />}
     </Pressable>
   );
@@ -45,8 +45,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  dot: { width: 32, height: 32, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
-  initial: { fontSize: 13, fontWeight: '600' },
-  memberName: { flex: 1, fontSize: 16 },
-  role: { fontSize: 14 },
+  name: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  memberName: { flexShrink: 1, fontSize: 15, lineHeight: 20 },
+  secondary: { fontSize: 13, lineHeight: 18 },
 });

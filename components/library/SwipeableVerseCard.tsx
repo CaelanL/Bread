@@ -294,6 +294,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   youColumn: {
+    width: 24,
+    alignItems: 'center',
     paddingTop: 4,
   },
   iconContainer: {

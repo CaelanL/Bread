@@ -68,6 +68,10 @@ export default function CollectionScreen() {
   const { user } = useAuth();
   const [openOnly, setOpenOnly] = useState(false);
   const { sharedProgress, grid } = useSharedGrid(sharedId, collectionVerses);
+  const stripMembers = useMemo(() => {
+    const members = (sharedProgress?.members ?? []).map((m) => ({ name: m.displayName, you: m.userId === user?.id }));
+    return [...members.filter((m) => m.you), ...members.filter((m) => !m.you)];
+  }, [sharedProgress, user]);
   const groupRows = useMemo(() => new Map(grid?.rows.map((row) => [row.key, row])), [grid]);
   const openKeys = useMemo(
     () => new Set(grid && user ? openVersesFor(user.id, grid).map(referenceKey) : []),
@@ -287,7 +291,7 @@ export default function CollectionScreen() {
 
       {sharedId && (
         <SharedStrip
-          memberNames={sharedProgress?.fetchedAt ? sharedProgress.members.map((m) => m.displayName) : null}
+          members={sharedProgress?.fetchedAt ? stripMembers : null}
           memberCount={sharedProgress?.fetchedAt ? sharedProgress.members.length : shared?.memberCount ?? 1}
           verseCount={sharedProgress?.fetchedAt ? sharedProgress.references.length : shared?.verseCount ?? verses.length}
           progress={grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null}
@@ -456,9 +460,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   columnLabel: {
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '600',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   versesAbovePractice: {

@@ -8,7 +8,7 @@ import {
   cellState,
   everyoneEngraved,
   everyoneMastered,
-  GRID_FIT_MEMBERS,
+  GRID_PITCH,
   gridScrolls,
   groupProgress,
   masteredByEveryoneCount,
@@ -163,10 +163,12 @@ test("Who's where lists references in Bible order, whatever order they were adde
   assert.deepEqual(columns[0].states, ['open', 'mastered', 'open', 'open', 'open', 'open']);
 });
 
-test("Who's where fits eight members across and scrolls sideways from nine", () => {
-  assert.equal(gridScrolls(1), false);
-  assert.equal(gridScrolls(GRID_FIT_MEMBERS), false);
-  assert.equal(GRID_FIT_MEMBERS, 8);
-  assert.equal(gridScrolls(9), true);
-  assert.equal(gridScrolls(30), true);
+test("Who's where scrolls when the columns are wider than the space measured for them", () => {
+  // A 393 pt phone: 393 - 32 page - 28 card - 124 references - 12 = 197 pt for columns.
+  assert.equal(GRID_PITCH, 26);
+  assert.equal(gridScrolls(7, 197), false);
+  assert.equal(gridScrolls(8, 197), true);
+  assert.equal(gridScrolls(2, 197), false);
+  assert.equal(gridScrolls(30, 197), true);
+  assert.equal(gridScrolls(8, 8 * GRID_PITCH), false);
 });

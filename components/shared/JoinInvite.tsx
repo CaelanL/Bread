@@ -86,7 +86,7 @@ export function JoinInvite({ code: raw }: { code: string }) {
         <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{preview.name}</Text>
         <Text style={[styles.meta, { color: colors.icon }]}>{verses} · {plural(preview.memberCount, 'member')}</Text>
         <View style={styles.dots}>
-          <MemberDots names={[preview.inviterName]} count={preview.memberCount} />
+          <MemberDots members={[{ name: preview.inviterName }]} count={preview.memberCount} />
         </View>
         <Text style={[styles.copy, { color: colors.icon }]}>
           {preview.verseCount === 1

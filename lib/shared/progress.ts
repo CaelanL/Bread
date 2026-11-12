@@ -135,11 +135,12 @@ export function openVersesFor(userId: string, grid: Grid): SharedReference[] {
   return grid.rows.filter((row) => !isMasteredState(row.states[column])).map((row) => row.reference);
 }
 
-/** Who's where fits up to this many member columns across the screen; more scroll sideways. */
-export const GRID_FIT_MEMBERS = 8;
+/** One Who's where column (and row): a 20 pt tile and a 6 pt gap. Columns never stretch. */
+export const GRID_PITCH = 26;
 
-export function gridScrolls(memberCount: number): boolean {
-  return memberCount > GRID_FIT_MEMBERS;
+/** The member columns scroll sideways when they're wider than the measured space beside the references. */
+export function gridScrolls(memberCount: number, availableWidth: number): boolean {
+  return memberCount * GRID_PITCH > availableWidth;
 }
 
 export interface GridMember {

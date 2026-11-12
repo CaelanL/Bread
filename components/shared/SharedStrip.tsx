@@ -19,8 +19,9 @@ export function groupProgressLabel(progress: GroupProgressValue | null, verseCou
  * all squares). The members line opens `onOpen` (the members sheet), the progress `onShowGrid`
  * (Who's where); a failed grid read shows Retry instead of the numbers.
  */
-export function SharedStrip({ memberNames, memberCount, verseCount, progress, failed, onOpen, onShowGrid, onRetry }: {
-  memberNames: string[] | null;
+export function SharedStrip({ members, memberCount, verseCount, progress, failed, onOpen, onShowGrid, onRetry }: {
+  /** Yours first. Null until the grid's first read. */
+  members: { name: string; you: boolean }[] | null;
   memberCount: number;
   verseCount: number;
   /** Null while the grid loads. */
@@ -44,7 +45,7 @@ export function SharedStrip({ memberNames, memberCount, verseCount, progress, fa
         onPress={onOpen}
         style={styles.header}
       >
-        {memberNames && <MemberDots names={memberNames} count={memberCount} />}
+        {members && <MemberDots members={members} count={memberCount} />}
         <Text style={[styles.members, { color: colors.icon }]} numberOfLines={1}>
           {heading}
         </Text>
@@ -106,17 +107,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  members: { flex: 1, fontSize: 13, fontWeight: '500' },
+  members: { flex: 1, fontSize: 13, lineHeight: 18 },
   progress: { gap: 8 },
   progressTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  label: { fontSize: 13, fontWeight: '500' },
-  percent: { fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  label: { fontSize: 15, lineHeight: 20 },
+  percent: { fontSize: 22, fontWeight: '600', fontVariant: ['tabular-nums'] },
   track: { height: 6, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
-  summary: { fontSize: 13 },
+  summary: { fontSize: 13, lineHeight: 18 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   summaryText: { flex: 1 },
   retry: { gap: 4, paddingVertical: 4 },
-  retryText: { fontSize: 14, fontWeight: '600' },
+  retryText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
   staleRetry: { flexDirection: 'row', gap: 8, alignItems: 'center' },
 });

@@ -32,12 +32,13 @@ looks as it always did.
   `progress.test.ts`). Your own squares come from your verses in this collection, so they move the
   moment a session saves. A failed read keeps the last grid and shows Retry on the strip; until a
   grid arrives the Group column reads "–" (loading, or unavailable after a failure).
-- **Strip** (`SharedStrip`, under the header): member initials, "Shared · N members · V verses", the group
-  percentage with its bar, and "K of V verses mastered by everyone". The members line opens the
+- **Strip** (`SharedStrip`, under the header): member initials (yours first and solid),
+  "Shared · N members · V verses", the group percentage with its bar, and "K of V verses mastered
+  by everyone". The members line opens the
   members sheet (invite, Leave); the progress opens [Who's where](#whos-where).
-- **Cards**: a You dot on the left (`MemberStateDot`: open ring, amber learning ring, green
-  mastered, gold engraved) and a Group column on the right (`GroupCount`: "mastered/members" over
-  a bar of every member's state, or "✓ All" when everyone has mastered it). The bar shows up to 8
+- **Cards**: a You dot on the left (`MemberStateDot`, the tile fills below as a dot) and a Group
+  column on the right (`GroupCount`: "mastered/members" over a bar of every member's state, or a
+  checkmark and "All" when everyone has mastered it). The bar shows up to 8
   members (`MAX_BAR_MEMBERS`); above that only the count. The review badge stays.
 - **Open verses**: the ones you haven't mastered. "Open · N" filters the list to them, and
   "Practice your N open verses" opens setup on the first of them in the list's order, the same
@@ -50,17 +51,20 @@ collection, as on the collection screen. It reads the same grid (`useSharedGrid`
 your verses), nothing new.
 
 - **Grid**: one card, the group progress line on top, then members across and references down.
-  Your column comes first and reads "You" under your initial, then the owner and the rest by join
-  (`whoIsWhere` in `lib/shared/progress.ts`). References are in Bible order, as text only. Each
-  square is a tile in its state's colour (`MemberStateSquare`: Open a faint empty tile, Learning
-  amber, Mastered green, Engraved gold), labelled for VoiceOver "Dana, Romans 8:28, Mastered". A
-  "Mastered" row under the tiles counts each member's mastered squares. A legend of the four
-  states closes the card. Tiles don't press.
-- **Wide groups**: up to 8 members (`GRID_FIT_MEMBERS`) the columns share the width; above that
-  they scroll sideways and the reference column stays put.
-- **Members**: the members sheet's rows (`MemberRow`): name, role, and for the owner the same
-  Make editor / Make member and Remove (`manageMember` in `components/shared/member-actions.ts`,
-  the store's `setSharedMemberRole` and `removeSharedMember`). Invite and Leave stay on the sheet.
+  Your column comes first, marked by the only solid initial circle, then the owner and the rest by
+  join (`whoIsWhere` in `lib/shared/progress.ts`). References are in Bible order, as text only, one
+  line in a 124 pt column. Each square is a 20 pt tile (`MemberStateSquare`, fills from
+  `memberStateFill`): Open `cardAlt` with a hairline, Learning `warning`, Mastered `success`,
+  Engraved `tint`. Tiles are labelled for VoiceOver "Dana, Romans 8:28, Mastered" and don't press.
+  A "Mastered" row under the tiles counts each member's mastered squares, and a legend of the
+  four states closes the card.
+- **Wide groups**: columns sit at a fixed 26 pt pitch (`GRID_PITCH`) and never stretch. When they
+  are wider than the space measured beside the references (`gridScrolls`), they scroll sideways
+  and the reference column stays put; 7 fit on a 393 pt phone.
+- **Members**: `MemberRow`, the same rows as the members sheet: name ("You" after yours) and
+  role. The owner taps another member for Make editor / Make member and Remove (`manageMember`
+  in `components/shared/member-actions.ts`, the store's `setSharedMemberRole` and
+  `removeSharedMember`), here and on the sheet. Invite and Leave stay on the sheet.
 - **Reads**: each visit reads the grid once (`fetchSharedProgress`); pull to refresh runs the
   collection screen's refresh, sync and grid read. A failed read keeps the last grid with
   "Couldn't refresh. Retry"; with none yet it shows "Couldn't load Who's where." and Retry.
@@ -81,4 +85,7 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 - 2026-11-11 · Your own squares on the collection screen come from your local verses, the rest from the grid · Your You dot, review badge and open count then agree, and a session's result shows without a refetch.
 - 2026-11-11 · Who's where puts your column first and lists references in Bible order · You look for yourself first; the collection screen keeps your own sort, the grid is a fixed table.
 - 2026-11-11 · Who's where reads the collection screen's grid and opens from the strip's progress; the members line still opens the sheet · One read path, and invite and Leave stay where slice 2 put them.
-- 2026-11-11 · Column headers carry the initial (and "You"), with mastered counts in a row under the tiles; owner and editor show in the member list, not the header · A role badge and a count don't fit a 30 px column at 8 members.
+- 2026-11-11 · Column headers carry only the initial, mastered counts sit in a row under the tiles, and roles show in the member list · A role badge and a count don't fit a 26 pt column.
+- 2026-11-11 · Learning is solid `warning`, not 30% alpha · The alpha tint turned brown on dark and read as a darker Engraved.
+- 2026-11-11 · Your column is marked by a solid `primary` circle, not a caption · One marker, no extra row, the same mark on the strip and the member rows.
+- 2026-11-11 · Columns keep a fixed 26 pt pitch and scroll from the measured width · Stretched columns spread a two-member grid across the card, and a member-count cutoff overlapped columns beside long references.

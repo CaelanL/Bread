@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth';
 import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import {
   groupProgress,
+  GRID_PITCH,
   gridScrolls,
   masteredByEveryoneCount,
   whoIsWhere,
@@ -44,6 +45,7 @@ export default function WhoIsWhereScreen() {
   const { sharedProgress, grid } = useSharedGrid(sharedId, ownVerses);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [columnsWidth, setColumnsWidth] = useState(0);
 
   const view = useMemo(
     () => (grid && sharedProgress ? whoIsWhere(grid, sharedProgress.members, user?.id) : null),
@@ -98,19 +100,18 @@ export default function WhoIsWhereScreen() {
 
   const failed = sharedProgress?.failed ?? false;
   const verseCount = view?.rows.length ?? 0;
-  const scrolls = gridScrolls(view?.columns.length ?? 0);
+  const scrolls = gridScrolls(view?.columns.length ?? 0, columnsWidth);
   const percent = progress ? Math.round(progress.ratio * 100) : 0;
 
-  // Tiles don't press: the grid only shows. Your column reads "You" under your circle.
+  // Fixed-pitch columns, yours first with the solid circle. Tiles don't press: the grid only shows.
   const renderColumn = (column: GridColumn) => (
-    <View key={column.userId} style={scrolls ? styles.columnFixed : styles.columnFit}>
+    <View key={column.userId} style={styles.column}>
       <View
         accessible
         accessibilityLabel={`${column.you ? 'You' : column.displayName}, ${ROLE_LABEL[column.role]}, ${column.masteredCount} of ${verseCount} mastered`}
-        style={styles.columnHeader}
+        style={styles.header}
       >
-        <InitialDot name={column.displayName} />
-        <Text style={[styles.caption, { color: colors.icon }]}>{column.you ? 'You' : ' '}</Text>
+        <InitialDot name={column.displayName} you={column.you} />
       </View>
       {view?.rows.map((row, index) => (
         <View key={row.key} style={styles.cell}>
@@ -120,9 +121,11 @@ export default function WhoIsWhereScreen() {
           />
         </View>
       ))}
-      <View style={styles.cell}>
-        <Text style={[styles.secondary, { color: colors.icon }]}>{column.masteredCount}</Text>
-      </View>
+      {verseCount > 0 && (
+        <View style={[styles.cell, styles.footer]}>
+          <Text style={[styles.count, { color: colors.icon }]}>{column.masteredCount}</Text>
+        </View>
+      )}
     </View>
   );
 
@@ -161,8 +164,8 @@ export default function WhoIsWhereScreen() {
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View accessible accessibilityLabel={groupProgressLabel(progress, verseCount)} style={styles.progress}>
                 <View style={styles.progressTop}>
-                  <Text style={[styles.label, { color: colors.text }]}>Group progress</Text>
-                  <Text style={[styles.label, styles.tabular, { color: colors.text }]}>{percent}%</Text>
+                  <Text style={[styles.data, { color: colors.text }]}>Group progress</Text>
+                  <Text style={[styles.data, styles.figure, { color: colors.text }]}>{percent}%</Text>
                 </View>
                 <View style={[styles.track, { backgroundColor: colors.borderLight }]}>
                   <View style={[styles.fill, { width: `${percent}%`, backgroundColor: colors.success }]} />
@@ -174,29 +177,32 @@ export default function WhoIsWhereScreen() {
 
               <View style={styles.grid}>
                 <View style={styles.references}>
-                  <View style={styles.columnHeader} />
+                  <View style={styles.header} />
                   {view.rows.map((row) => (
                     <View key={row.key} style={styles.cell}>
-                      <Text style={[styles.reference, { color: colors.text }]} numberOfLines={1}>
+                      <Text style={[styles.data, { color: colors.text }]} numberOfLines={1}>
                         {formatVerseReference(row.reference)}
                       </Text>
                     </View>
                   ))}
-                  <View style={styles.cell}>
-                    <Text style={[styles.secondary, { color: colors.icon }]}>Mastered</Text>
-                  </View>
+                  {verseCount > 0 ? (
+                    <View style={[styles.cell, styles.footer]}>
+                      <Text style={[styles.secondary, { color: colors.icon }]}>Mastered</Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.secondary, { color: colors.icon }]}>No verses yet</Text>
+                  )}
                 </View>
-                {scrolls ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {view.columns.map(renderColumn)}
-                  </ScrollView>
-                ) : (
-                  <View style={styles.columnsFit}>{view.columns.map(renderColumn)}</View>
-                )}
+                <ScrollView
+                  horizontal
+                  scrollEnabled={scrolls}
+                  showsHorizontalScrollIndicator={false}
+                  onLayout={(event) => setColumnsWidth(event.nativeEvent.layout.width)}
+                >
+                  {view.columns.map(renderColumn)}
+                </ScrollView>
               </View>
-              {verseCount === 0 && (
-                <Text style={[styles.secondary, { color: colors.icon }]}>No verses yet</Text>
-              )}
+
               <View style={styles.legend}>
                 {LEGEND.map((state) => (
                   <View key={state} style={styles.legendItem}>
@@ -208,7 +214,7 @@ export default function WhoIsWhereScreen() {
             </View>
 
             <View>
-              <Text style={[styles.sectionLabel, { color: colors.icon }]}>Members</Text>
+              <Text style={[styles.eyebrow, { color: colors.icon }]}>Members</Text>
               {sharedProgress?.members.map((member) => {
                 const you = member.userId === user?.id;
                 return (
@@ -224,38 +230,31 @@ export default function WhoIsWhereScreen() {
   );
 }
 
-// One gap for tiles, rows and columns.
-const GAP = 8;
-const TILE = 24;
-const DOT = 30;
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 48, gap: 16 },
   loading: { paddingVertical: 48 },
-  message: { fontSize: 15, textAlign: 'center' },
+  message: { fontSize: 15, lineHeight: 20, textAlign: 'center' },
   retry: { alignItems: 'center', gap: 6, paddingVertical: 48 },
-  retryText: { fontSize: 14, fontWeight: '600' },
-  staleRetry: { flexDirection: 'row', gap: GAP, alignItems: 'center' },
-  // The slice-3 strip's card.
+  retryText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  staleRetry: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  // The strip's card.
   card: { borderRadius: Radius.xxl, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, gap: 16 },
-  progress: { gap: GAP },
+  progress: { gap: 8 },
   progressTop: { flexDirection: 'row', justifyContent: 'space-between' },
-  label: { fontSize: 13, fontWeight: '500' },
-  tabular: { fontVariant: ['tabular-nums'] },
+  data: { fontSize: 15, lineHeight: 20 },
+  figure: { fontWeight: '600', fontVariant: ['tabular-nums'] },
+  secondary: { fontSize: 13, lineHeight: 18 },
+  count: { fontSize: 13, lineHeight: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 },
   track: { height: 6, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
-  secondary: { fontSize: 13 },
   grid: { flexDirection: 'row' },
-  references: { maxWidth: 160, paddingRight: 12 },
-  reference: { fontSize: 15 },
-  columnsFit: { flex: 1, flexDirection: 'row' },
-  columnFit: { flex: 1, alignItems: 'center' },
-  columnFixed: { width: DOT + GAP, alignItems: 'center' },
-  columnHeader: { height: DOT + GAP + 16, alignItems: 'center', gap: 2 },
-  caption: { fontSize: 11, lineHeight: 14 },
-  cell: { height: TILE + GAP, justifyContent: 'center' },
-  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: GAP * 2, rowGap: GAP },
+  references: { width: 124, marginRight: 12 },
+  column: { width: GRID_PITCH, alignItems: 'center' },
+  header: { height: GRID_PITCH, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
+  cell: { height: GRID_PITCH, justifyContent: 'center' },
+  footer: { marginTop: 6 },
+  legend: { flexDirection: 'row', gap: 16 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 },
 });
