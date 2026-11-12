@@ -52,9 +52,9 @@ actions to move up or down. Each drop saves the order, with rollback on failure.
 Tap Done to return to opening collections by tapping their rows.
 
 Each card: the icon square, name, a subtitle (verse count; "<owner's name> · M members" once someone else
-is in a shared one), then on the right the due pill on Mastered, a mastered check or engraved glyph,
-and a chevron. A collection whose every verse is mastered or engraved gets that glyph, and engraved
-fills the square; see [group progress](group-progress.md#library-cards).
+is in a shared one), then the due pill on Mastered, a check or engraved glyph once every verse is
+mastered or engraved (engraved also fills the square; see
+[group progress](group-progress.md#library-cards)), and a chevron.
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
