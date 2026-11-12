@@ -12,7 +12,7 @@ test('joining and leaving a shared collection', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-shared-test-'));
   const platform = join(fixture, 'platform.cjs');
   const storage = join(fixture, 'storage.cjs');
-  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} };');
+  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.TurboModuleRegistry = { get() { return null; } };');
   writeFileSync(storage, `const values = new Map(); module.exports = {
     async getItem(key) { return values.get(key) ?? null; },
     async setItem(key, value) { values.set(key, value); },
@@ -36,6 +36,7 @@ test('joining and leaving a shared collection', async (t) => {
     progress: { easy: { bestAccuracy: null, completed: false }, medium: { bestAccuracy: null, completed: false },
       hard: { bestAccuracy: null, completed: false } }, deleted_at: null };
   let joined = false;
+  let progressFails = false;
   let copyRow = null;
   const rpcs = [];
   const reads = [];
@@ -52,6 +53,14 @@ test('joining and leaving a shared collection', async (t) => {
       rpcs.push([name, init.body ? JSON.parse(init.body) : null]);
       if (name === 'join_shared_collection') { joined = true; copyRow = copy; return json(copy.client_id); }
       if (name === 'leave_shared_collection') { joined = false; copyRow = null; return new Response(null, { status: 204 }); }
+      if (name === 'get_shared_members') {
+        return json([{ user_id: 'C', display_name: 'Cara', role: 'owner', joined_at: '2026-11-01T00:00:00Z' },
+          { user_id: 'D', display_name: 'Dana', role: 'member', joined_at: '2026-11-05T00:00:00Z' }]);
+      }
+      if (name === 'get_shared_progress') {
+        if (progressFails) return json({ code: '57014', message: 'canceling statement due to statement timeout' }, 500);
+        return json([{ user_id: 'C', book: 'Romans', chapter: 8, verse_start: 28, verse_end: 28, practiced: true, mastered: true, engraved: false }]);
+      }
       if (name === 'get_shared_status') {
         return json(joined ? [{ shared_id: group, member_count: 2, verse_count: 1, mastered_squares: 0, engraved_squares: 0 }] : []);
       }
@@ -61,6 +70,9 @@ test('joining and leaving a shared collection', async (t) => {
     reads.push(url.pathname);
     if (url.pathname === '/rest/v1/profiles') return json({ translation: 'NIV', display_name: 'Dana' });
     if (url.pathname === '/rest/v1/user_collections') return json(copyRow ? [copyRow] : []);
+    if (url.pathname === '/rest/v1/shared_collection_verses') {
+      return json([{ book: 'Romans', chapter: 8, verse_start: 28, verse_end: 28 }]);
+    }
     if (url.pathname === '/rest/v1/shared_collections') return json(joined ? [{ id: group, owner_id: 'C', name: 'Romans 8' }] : []);
     if (url.pathname === '/rest/v1/shared_collection_members') {
       return json(joined ? [{ shared_collection_id: group, role: 'member' }] : []);
@@ -98,6 +110,31 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 1);
   });
 
+  await t.test('opening syncs once, then reads members, progress and the reference list', async () => {
+    rpcs.length = 0;
+    reads.length = 0;
+    await state().openSharedCollection(group);
+    assert.equal(rpcs[0][0], 'sync_shared_collection');
+    assert.deepEqual(rpcs[0][1], { p_shared: group, p_version: 'NIV' });
+    assert.deepEqual(rpcs.map(([name]) => name).sort(), ['get_shared_members', 'get_shared_progress', 'sync_shared_collection']);
+    assert.ok(reads.includes('/rest/v1/shared_collection_verses'));
+    const progress = state().sharedProgress[group];
+    assert.equal(progress.failed, false);
+    assert.deepEqual(progress.members.map((m) => m.displayName), ['Cara', 'Dana']);
+    assert.deepEqual(progress.references, [{ book: 'Romans', chapter: 8, verseStart: 28, verseEnd: 28 }]);
+    assert.equal(progress.cells[0].mastered, true);
+  });
+
+  await t.test('a failed grid read keeps the last grid and marks it failed; a retry clears it', async () => {
+    progressFails = true;
+    assert.equal(await state().fetchSharedProgress(group), false);
+    assert.equal(state().sharedProgress[group].failed, true);
+    assert.equal(state().sharedProgress[group].cells.length, 1);
+    progressFails = false;
+    assert.equal(await state().fetchSharedProgress(group), true);
+    assert.equal(state().sharedProgress[group].failed, false);
+  });
+
   await t.test("a member's delete is leave: the leave RPC, and the copy leaves the store", async () => {
     rpcs.length = 0;
     await state().deleteCollection(copy.client_id);
@@ -106,6 +143,7 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(state().collections.some((c) => c.id === copy.client_id), false);
     assert.equal(state().verses.some((v) => v.collectionId === copy.client_id), false);
     assert.equal(state().sharedCollections[group], undefined);
+    assert.equal(state().sharedProgress[group], undefined);
   });
 
   await t.test('leaving yourself brings no notice on the next refresh', async () => {

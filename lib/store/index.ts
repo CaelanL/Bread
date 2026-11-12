@@ -17,6 +17,8 @@ import { readCollectionSavers } from '@/lib/collections/savers';
 import type { CollectionIconKey } from '@/lib/collections/icons';
 import { BIBLE_VERSIONS, type ColorMode } from '@/lib/settings';
 import { isSharedRole, normalizeInviteCode } from '@/lib/shared/invite-code';
+import { getSharedMembers, type SharedMember } from '@/lib/shared/invites';
+import type { ProgressCell, SharedReference } from '@/lib/shared/progress';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SharedCollectionInfo, SharedRole, SortOption, VerseProgress } from '@/lib/storage';
 import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, formatVerseReference, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
@@ -82,6 +84,8 @@ interface AppState {
   curatedSaverCounts: Partial<Record<string, number>>;
   // Shared collections the user belongs to, by shared_collections.id. See docs/features/shared-collections.md.
   sharedCollections: Record<string, SharedCollectionInfo>;
+  // Members × references of a shared collection, fetched when it opens. By shared_collections.id.
+  sharedProgress: Record<string, SharedProgress>;
 
   // Settings
   colorMode: ColorMode;
@@ -134,6 +138,8 @@ interface AppState {
   mintInvite: (sharedId: string) => Promise<{ code: string; expiresAt: string }>;
   joinSharedCollection: (code: string) => Promise<string>;
   syncSharedCollection: (sharedId: string) => Promise<boolean>;
+  fetchSharedProgress: (sharedId: string) => Promise<boolean>;
+  openSharedCollection: (sharedId: string) => Promise<void>;
   leaveSharedCollection: (sharedId: string) => Promise<void>;
   removeSharedMember: (sharedId: string, userId: string) => Promise<void>;
   setSharedMemberRole: (sharedId: string, userId: string, role: Exclude<SharedRole, 'owner'>) => Promise<void>;
@@ -156,6 +162,15 @@ interface AppState {
 
   // Reset
   clear: () => void;
+}
+
+/** The grid's inputs. `failed` keeps the last good data (fetchedAt 0 if none) and asks for a retry. */
+export interface SharedProgress {
+  members: SharedMember[];
+  references: SharedReference[];
+  cells: ProgressCell[];
+  fetchedAt: number;
+  failed: boolean;
 }
 
 // ============ HELPERS ============
@@ -410,6 +425,11 @@ function sharedRole(sharedId: string): SharedRole {
   return role;
 }
 
+// After a change to the group's verses or members, the grid follows if this device has it open.
+async function refetchLoadedProgress(sharedId: string) {
+  if (useAppStore.getState().sharedProgress[sharedId]) await useAppStore.getState().fetchSharedProgress(sharedId);
+}
+
 // The groups this account was in at the last fetch, per account on this device, so a group that
 // is gone by the next fetch gets one notice. Owned groups only go by the owner's own delete.
 type KnownGroup = { id: string; name: string; owned: boolean };
@@ -465,6 +485,7 @@ async function addSharedVerse(
   // Already a reference (another editor added it): sync still links the copy.
   if (error && error.code !== '23505') throw error;
   await useAppStore.getState().syncSharedCollection(sharedId);
+  await refetchLoadedProgress(sharedId);
   const find = () => useAppStore.getState().verses.find((v) => v.collectionId === collectionId && sameReference(v, verse));
   if (!find()) await useAppStore.getState().fetchVerses();
   const added = find();
@@ -481,6 +502,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   masteredVerses: [],
   curatedSaverCounts: {},
   sharedCollections: {},
+  sharedProgress: {},
   colorMode: 'system',
   bibleVersion: 'ESV',
   displayName: null,
@@ -1239,6 +1261,56 @@ export const useAppStore = create<AppState>((set, get) => ({
     return changed;
   },
 
+  // Never throws: a failure is kept on the entry for the screen's retry.
+  fetchSharedProgress: async (sharedId) => {
+    const generation = accountGeneration;
+    try {
+      const [members, progress, references] = await Promise.all([
+        getSharedMembers(sharedId),
+        db.rpc('get_shared_progress', { p_shared: sharedId }),
+        db.from('shared_collection_verses').select('book, chapter, verse_start, verse_end')
+          .eq('shared_collection_id', sharedId).order('added_at'),
+      ]);
+      if (generation !== accountGeneration) return false;
+      if (progress.error) throw progress.error;
+      if (references.error) throw references.error;
+      const entry: SharedProgress = {
+        members,
+        references: references.data.map((r) => ({ book: r.book, chapter: r.chapter, verseStart: r.verse_start, verseEnd: r.verse_end })),
+        cells: progress.data.map((c) => ({
+          userId: c.user_id,
+          book: c.book,
+          chapter: c.chapter,
+          verseStart: c.verse_start,
+          verseEnd: c.verse_end,
+          practiced: c.practiced,
+          mastered: c.mastered,
+          engraved: c.engraved,
+        })),
+        fetchedAt: Date.now(),
+        failed: false,
+      };
+      set((state) => ({ sharedProgress: { ...state.sharedProgress, [sharedId]: entry } }));
+      return true;
+    } catch (e) {
+      if (generation !== accountGeneration) return false;
+      console.error('[STORE] Failed to fetch shared progress:', e);
+      set((state) => {
+        const prior = state.sharedProgress[sharedId] ?? { members: [], references: [], cells: [], fetchedAt: 0, failed: true };
+        return { sharedProgress: { ...state.sharedProgress, [sharedId]: { ...prior, failed: true } } };
+      });
+      return false;
+    }
+  },
+
+  // Opening a shared collection: bring the copy up to date, then read the grid. A failed sync
+  // throws after the grid is read; a failed grid read shows on the entry.
+  openSharedCollection: async (sharedId) => {
+    const synced = await get().syncSharedCollection(sharedId).then(() => null, (e: unknown) => e);
+    await get().fetchSharedProgress(sharedId);
+    if (synced) throw synced;
+  },
+
   leaveSharedCollection: async (sharedId) => {
     const { error } = await supabase.rpc('leave_shared_collection', { p_shared: sharedId });
     if (error) throw error;
@@ -1250,6 +1322,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       collections: state.collections.filter((c) => !gone.has(c.id)),
       verses: state.verses.filter((v) => !gone.has(v.collectionId)),
       sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
+      sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
     }));
     // The server applied the delete rule; a verse may now be soft-deleted or gone.
     await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
@@ -1258,7 +1331,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeSharedMember: async (sharedId, userId) => {
     const { error } = await supabase.rpc('remove_shared_member', { p_shared: sharedId, p_user: userId });
     if (error) throw error;
-    await get().fetchSharedCollections();
+    await Promise.all([get().fetchSharedCollections(), refetchLoadedProgress(sharedId)]);
   },
 
   setSharedMemberRole: async (sharedId, userId, role) => {
@@ -1269,6 +1342,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       .select('role');
     if (error) throw error;
     if (data.length !== 1) throw new Error('Only the owner can change roles.');
+    await refetchLoadedProgress(sharedId);
   },
 
   // ============ VERSE ACTIONS ============
@@ -1488,7 +1562,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           .select('book');
         if (error) throw error;
         if (data.length === 0) throw new Error('Only the owner and editors can remove verses here.');
-        await Promise.all([get().fetchVerses(), get().fetchMasteredVerses(), get().fetchSharedCollections()]);
+        await Promise.all([
+          get().fetchVerses(), get().fetchMasteredVerses(), get().fetchSharedCollections(), refetchLoadedProgress(sharedId),
+        ]);
         return { wasMastered: isMastered };
       } catch (error) {
         set({ verses: previousVerses });
@@ -1739,6 +1815,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       masteredVerses: [],
       curatedSaverCounts: {},
       sharedCollections: {},
+      sharedProgress: {},
       displayName: null,
       // Device prefs (colorMode, reviewMaxIntervalDays, masteredSort,
       // inProgressSort) and the cached account translation (bibleVersion,
