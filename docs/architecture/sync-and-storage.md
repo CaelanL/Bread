@@ -18,6 +18,7 @@ AsyncStorage holds device settings and small local caches.
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
 | Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
+| Display name (`displayName`) | ✓ (`profiles.display_name`) | ✓ | — |
 | Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
 | Virtual collection sorts | — | ✓ | ✓ (`library_sort_mastered`, `library_sort_in_progress`) |
@@ -49,6 +50,7 @@ interface AppState {
   // Settings (also in AsyncStorage)
   colorMode: 'system' | 'light' | 'dark';
   bibleVersion: BibleVersion;
+  displayName: string | null;   // profiles.display_name; not in AsyncStorage, cleared by clear()
   reviewMaxIntervalDays: number;
   masteredSort: SortOption;
   inProgressSort: SortOption;
@@ -143,7 +145,7 @@ hydrate()
   │
   ├── syncAccountTranslation (queued with other translation work)
   │     → profiles.translation into the store and cache, or the device
-  │       value into an empty profile
+  │       value into an empty profile; profiles.display_name into the store
   │     → alignVerses: collapse two translations of one verse, move
   │       every row to the account translation
   │     → on error: logged, the cached translation stands

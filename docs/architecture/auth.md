@@ -96,6 +96,10 @@ The function is `SECURITY DEFINER` so it can touch `auth.users`. It
 only deletes the calling user — there's no parameter to delete
 someone else.
 
+A shared collection the user owns cascades away with `auth.users`, and every member
+keeps their copy as a personal collection ([dissolve](../features/shared-collections.md#dissolve)).
+Memberships in other people's groups cascade too.
+
 Curated save totals follow the [anonymous retention rule](../features/home.md#community-saves).
 Intro presentation markers cascade with the account; see [Home](../features/home.md#encouragement-video).
 
@@ -160,6 +164,15 @@ fragment into query params, and calls `supabase.auth.setSession(...)`
 when it finds tokens. The link table is in
 `docs/architecture/navigation-and-routing.md`.
 
+## Display name
+
+`profiles.display_name` (1 to 40 characters, nullable) is what members of a
+[shared collection](../features/shared-collections.md) see. Settings → Account → Name
+shows it, or a muted prefill from the email handle (`prefillDisplayName` in
+`lib/shared/display-name.ts`) until the user saves; `setDisplayName` in the store
+upserts the profile and rolls back with a toast. Nothing is written until Save.
+Existing accounts get no backfill.
+
 ## Where the user ID is read
 
 Components use `useAuth().user`. Code in `lib/` reads it from
@@ -209,5 +222,7 @@ check, the database refuses the write.
 
 ## Browser checks
 
+- `npm run sim -- flow display-name`: reader-b sees "Reader" prefilled, saves "Bea", and
+  "Bea" is back after a relaunch and fresh sign-in. Needs a fresh seed.
 - `npm run sim -- flow sign-in-out`: reader-b signs in through the form, Settings shows
   `reader-b@example.test`, Sign Out returns to the Sign In screen.

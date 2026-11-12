@@ -7,7 +7,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 
 | Table | Owner | Purpose |
 |---|---|---|
-| `profiles` | per-user | `translation`: the account translation (`bible-versions.md`) |
+| `profiles` | per-user | `translation`: the account translation (`bible-versions.md`); `display_name` ([shared collections](../features/shared-collections.md)) |
 | `usage_daily` | per-user | Free/Supporter rate-limit counters (transcribe seconds, evaluate count, Bible fetch count) |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
@@ -17,6 +17,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `curated_collection_savers` | global | [All-time contribution ledger and access rules](../features/home.md#community-saves) |
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
 | `verse_collections` | per-user (via verse) | Many-to-many junction: `(verse_id, collection_id)` |
+| `shared_collections`, `shared_collection_members`, `shared_collection_verses`, `shared_invites` | per-group | [Shared collections](../features/shared-collections.md#data-model): references only, members-only reads |
 | `verse_of_month` | global | Public monthly challenge verse, optional `image_url` |
 | `user_intro_presentations` | per-user | [Intro claims](../features/home.md#encouragement-video) |
 | `session_attempts` | per-user, append-only | One row per practice session (or partial early exit). Denormalized — no FK to `user_verses`. |
@@ -47,6 +48,7 @@ Migrations: `002_user_data.sql`, `016_sort_and_last_practiced.sql`,
 | `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = client default |
 | `icon_key` | TEXT | nullable |
 | `position` | INTEGER | custom order, nullable |
+| `shared_collection_id` | UUID FK → `shared_collections` | nullable; ON DELETE SET NULL ([dissolve](../features/shared-collections.md#dissolve)) |
 | `deleted_at` | TIMESTAMPTZ | soft delete; NULL = active |
 | `updated_at` | TIMESTAMPTZ | trigger maintained |
 
@@ -112,21 +114,11 @@ The `engraved` sub-object holds spaced-repetition state. See
 `lib/store/review.ts` for the algorithm and `docs/features/review.md`
 for the rules.
 
-The legacy `months: string[]` array is preserved by migration 014 for
-cross-client safety during the App Store rollout window — old clients
-still append to it, the new client read-fallbacks from it
-(`parseEngravedProgress` uses `months.length` when `passCount` is
-missing), carries it along, but never appends. A later cleanup migration
-can drop it once no live client uses it.
+The legacy `months` array is covered in
+[review.md](../features/review.md#legacy-months).
 
-**Study prefs** (`last_chunk_size`, `last_difficulty`, migration 021):
-the setup screen's last-used values, written fire-and-forget on every
-setup edit and on session start (`setVerseStudyPrefs` store action →
-`updateVerseStudyPrefs` in `lib/storage/`, no-op when unchanged) and
-restored on next open. One `user_verses` row per reference means the
-prefs are shared across all collections containing the verse. A
-progress reset intentionally keeps them. See
-`docs/features/study-session.md`.
+**Study prefs** (`last_chunk_size`, `last_difficulty`, migration 021): see
+[study-session.md](../features/study-session.md#remembered-prefs).
 
 ### `verse_collections`
 
@@ -250,6 +242,7 @@ incrementally — the cron is the only writer.
 | `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment. See `docs/features/notifications.md` |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
 | `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction INSERT RLS checks only the verse owner) |
+| shared collection functions | invoker wrappers over `private` | [function table](../features/shared-collections.md#functions) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
 | `verse_cache_stats` | view | per-version cache stats |
@@ -263,8 +256,9 @@ incrementally — the cron is the only writer.
 
 ```
 auth.users
- ├── profiles (account translation)
- ├── user_collections (soft-delete)
+ ├── profiles (account translation, display name)
+ ├── shared_collections ── members, verses (references), invites
+ ├── user_collections (soft-delete; shared_collection_id → shared_collections)
  │     └── verse_collections (junction) ─── user_verses (soft-delete, no text)
  │                                               │
  │                                               └── (references) verse_cache (shared, LRU)
@@ -379,9 +373,8 @@ Squawk can't see SQL inside `DO $$` blocks, so check those by hand.
 | `npm run db:types` | regenerate `supabase/database.types.ts` (`-- --check` fails if stale) |
 | `npm run db:destroy` | remove the local stack and its data |
 
-**Seed.** `supabase/seed.sql` runs only on local databases. It creates
-two logins: `reader-a` with a small library and a 5-day streak, and
-`reader-b` brand new. It also unschedules any local cron job that
+**Seed.** `supabase/seed.sql` runs only on local databases. Its logins
+are described at its top. It also unschedules any local cron job that
 would call a hosted URL.
 
 **Tests.** `npm run test:db` runs the pgTAP files in `supabase/tests/`, one per
