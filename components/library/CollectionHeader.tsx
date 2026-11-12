@@ -25,7 +25,7 @@ export function groupProgressLabel(progress: { ratio: number; masteredByEveryone
 /**
  * The top of a collection's screen, in its content: the collection's accent washing down from the
  * top edge, the icon, the name, then who it's with (or the verse count), the group's progress and
- * the screen's actions as pills. `onTitleBottom` reports where the name ends, for the bar's title.
+ * the screen's actions as pills.
  */
 export function CollectionHeader({
   symbol,
@@ -34,7 +34,6 @@ export function CollectionHeader({
   iconLabel,
   onIconPress,
   name,
-  onTitleBottom,
   people,
   subtitle,
   invite,
@@ -48,7 +47,6 @@ export function CollectionHeader({
   iconLabel: string;
   onIconPress?: () => void;
   name: string;
-  onTitleBottom: (y: number) => void;
   /** Shared with others: initials (null until read) and the line beside them. */
   people?: { members: { name: string; you: boolean }[] | null; count: number; line: string; onPress: () => void };
   subtitle?: string;
@@ -86,7 +84,6 @@ export function CollectionHeader({
       <Text
         accessibilityRole="header"
         style={[styles.name, { color: colors.text }]}
-        onLayout={(event) => onTitleBottom(event.nativeEvent.layout.y + event.nativeEvent.layout.height)}
       >
         {name}
       </Text>

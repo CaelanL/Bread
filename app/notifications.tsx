@@ -151,7 +151,6 @@ function buildPatch(
 export default function NotificationsScreen() {
   const barHeight = useTopBarHeight();
   const { scrollY, onScroll } = useScrollY();
-  const [titleBottom, setTitleBottom] = useState(0);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
@@ -360,7 +359,7 @@ export default function NotificationsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]} onScroll={onScroll} scrollEventThrottle={16}>
-        <View style={styles.titleGap}><LargeTitle title="Notifications" onBottom={setTitleBottom} /></View>
+        <View style={styles.titleGap}><LargeTitle title="Notifications" /></View>
         {/* MASTER */}
         <View style={styles.section}>
           <View
@@ -587,7 +586,7 @@ export default function NotificationsScreen() {
           </>
         )}
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} title="Notifications" titleAt={titleBottom} onBack={handleBack} backLabel="Settings">
+      <TopBar scrollY={scrollY} onBack={handleBack} backLabel="Settings">
           <Pressable
             onPress={handleSave}
             disabled={!dirty || saving}

@@ -49,7 +49,6 @@ export default function WhoIsWhereScreen() {
   const [columnsWidth, setColumnsWidth] = useState(0);
   const barHeight = useTopBarHeight();
   const { scrollY, onScroll } = useScrollY();
-  const [titleBottom, setTitleBottom] = useState(0);
 
   const view = useMemo(
     () => (grid && sharedProgress ? whoIsWhere(grid, sharedProgress.members, user?.id) : null),
@@ -142,7 +141,7 @@ export default function WhoIsWhereScreen() {
         scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />}
       >
-        <LargeTitle title="Details" subtitle={collection?.name} onBottom={setTitleBottom} />
+        <LargeTitle title="Details" subtitle={collection?.name} />
         {hydrated && !sharedId ? (
           <Text style={[styles.message, { color: colors.icon }]}>
             {collection ? "This collection isn't shared." : "This collection isn't in your Library."}
@@ -235,7 +234,7 @@ export default function WhoIsWhereScreen() {
           </>
         )}
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} title="Details" titleAt={titleBottom} onBack={back} />
+      <TopBar scrollY={scrollY} onBack={back} />
     </View>
   );
 }

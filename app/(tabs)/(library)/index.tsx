@@ -116,7 +116,6 @@ export default function LibraryScreen() {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const barHeight = useTopBarHeight();
   const { scrollY, onScroll } = useScrollY();
-  const [titleBottom, setTitleBottom] = useState(0);
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
   // A link can present a modal route over the Library; its RN Modals must not stay up under it.
@@ -211,7 +210,7 @@ export default function LibraryScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
           }
         >
-          <View style={styles.titleGap}><LargeTitle root title="Library" onBottom={setTitleBottom} /></View>
+          <View style={styles.titleGap}><LargeTitle root title="Library" /></View>
           {!hydrated ? (
             <CollectionCardSkeleton count={3} />
           ) : (
@@ -247,7 +246,7 @@ export default function LibraryScreen() {
           )}
         </Animated.ScrollView>
         </GestureDetector>
-        <TopBar scrollY={scrollY} title="Library" titleAt={titleBottom}>
+        <TopBar scrollY={scrollY}>
           {(editing || customCollections.length > 0) && (
             <Pressable
               style={styles.editButton}

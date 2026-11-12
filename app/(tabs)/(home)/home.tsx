@@ -80,7 +80,6 @@ function SkeletonCard({ isDark }: { isDark: boolean }) {
 export default function HomeScreen() {
   const barHeight = useTopBarHeight();
   const { scrollY, onScroll } = useScrollY();
-  const [titleBottom, setTitleBottom] = useState(0);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -179,7 +178,7 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
       >
-        <LargeTitle root title="Home" onBottom={setTitleBottom} />
+        <LargeTitle root title="Home" />
         {/* VOTM Section */}
         {votmLoading ? (
           <SkeletonCard isDark={isDark} />
@@ -216,7 +215,7 @@ export default function HomeScreen() {
         <ExploreCollections />
         <IntroVideo blocked={expanded || collectionPickerVisible || modalTransition || expandedPresented || pickerPresented} />
       </Reanimated.ScrollView>
-      <TopBar scrollY={scrollY} title="Home" titleAt={titleBottom} />
+      <TopBar scrollY={scrollY} />
 
       {/* Expanded Verse Modal */}
       <VerseExpandModal

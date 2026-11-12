@@ -80,7 +80,6 @@ export default function CollectionScreen() {
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const barHeight = useTopBarHeight();
   const { scrollY, onScroll } = useScrollY();
-  const [titleBottom, setTitleBottom] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   // Set while search is open: where its pill sat, so the field grows from there and goes back.
@@ -376,7 +375,6 @@ export default function CollectionScreen() {
       iconLabel={`Change collection icon, ${collectionIcon.label}`}
       onIconPress={canChangeIcon ? () => setIconPickerOpen(true) : undefined}
       name={name}
-      onTitleBottom={setTitleBottom}
       people={people}
       subtitle={hydrated ? (emblem ? `${emblem === 'engraved' ? 'Engraved' : 'Mastered'} · ${verseLine}` : verseLine) : undefined}
       invite={sharedId && !withOthers && isOwner
@@ -420,7 +418,7 @@ export default function CollectionScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
       />
-      <TopBar scrollY={scrollY} title={name} titleAt={titleBottom} onBack={backToLibrary}>
+      <TopBar scrollY={scrollY} onBack={backToLibrary}>
         {isCustom && isOwner && (
           <TopBarButton testID="collection-share" icon="person.badge.plus" label={sharedId ? 'Invite and members' : 'Share'} onPress={share} />
         )}

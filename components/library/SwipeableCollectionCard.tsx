@@ -224,7 +224,7 @@ export function SwipeableCollectionCard({
     >
       {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.card, { backgroundColor: colors.card, borderColor }, cardStyle]}>
+        <Animated.View style={[styles.card, { backgroundColor: emblem ? colors.doneCard : colors.card, borderColor }, cardStyle]}>
           <Pressable
             style={styles.cardButton}
             onPress={handlePress}

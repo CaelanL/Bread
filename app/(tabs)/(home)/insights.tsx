@@ -119,7 +119,6 @@ function formatAvgTime(ms: number): string {
 export default function InsightsScreen() {
   const barHeight = useTopBarHeight();
   const { scrollY, onScroll } = useScrollY();
-  const [titleBottom, setTitleBottom] = useState(0);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -227,7 +226,7 @@ export default function InsightsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
       >
-        <LargeTitle title="Insights" onBottom={setTitleBottom} />
+        <LargeTitle title="Insights" />
         {/* Hero Stats */}
         <View style={styles.statsRow}>
           <StatCard
@@ -351,7 +350,7 @@ export default function InsightsScreen() {
           </View>
         )}
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} title="Insights" titleAt={titleBottom} onBack={() => router.back()} backLabel="Back to Home" />
+      <TopBar scrollY={scrollY} onBack={() => router.back()} backLabel="Back to Home" />
 
       {/* Time Studied Info Modal */}
       <Modal

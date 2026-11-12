@@ -147,7 +147,6 @@ function ColorModePicker({ value, onChange }: ColorModePickerProps) {
 export default function SettingsScreen() {
   const barHeight = useTopBarHeight();
   const { scrollY, onScroll } = useScrollY();
-  const [titleBottom, setTitleBottom] = React.useState(0);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -277,7 +276,7 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]} onScroll={onScroll} scrollEventThrottle={16}>
-        <View style={styles.titleGap}><LargeTitle root title="Settings" onBottom={setTitleBottom} /></View>
+        <View style={styles.titleGap}><LargeTitle root title="Settings" /></View>
         {/* Bible Settings */}
         <SettingsSection title="BIBLE">
           <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
@@ -430,7 +429,7 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} title="Settings" titleAt={titleBottom} />
+      <TopBar scrollY={scrollY} />
 
       {/* Review Info Modal (shared with study screen) */}
       <ProgressInfoModal
