@@ -19,6 +19,7 @@ export const Motion = {
   staggerMs: 100,
   spinnerMs: 900,
   sweepMs: 900,
+  sweepRestMs: 2400,
   easing: [0.2, 0, 0, 1],
 } as const;
 /**

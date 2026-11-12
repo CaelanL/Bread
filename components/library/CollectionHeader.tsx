@@ -8,7 +8,7 @@ import type { Emblem } from '@/lib/shared/progress';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ComponentProps, ReactNode, Ref } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, withRepeat, withSequence, withDelay } from 'react-native-reanimated';
 
 type IconName = ComponentProps<typeof IconSymbol>['name'];
 
@@ -160,7 +160,17 @@ function Sweep({ color }: { color: string }) {
     <View
       pointerEvents="none"
       style={StyleSheet.absoluteFill}
-      onLayout={(e) => { x.value = withTiming(e.nativeEvent.layout.width, { duration: Motion.sweepMs, easing }); }}
+      onLayout={(e) => {
+        x.value = -SWEEP_WIDTH;
+        // Sweeps, rests, sweeps again: a slow pulse for as long as the collection stays finished.
+        x.value = withRepeat(
+          withSequence(
+            withTiming(e.nativeEvent.layout.width, { duration: Motion.sweepMs, easing }),
+            withDelay(Motion.sweepRestMs, withTiming(-SWEEP_WIDTH, { duration: 0 })),
+          ),
+          -1,
+        );
+      }}
     >
       <Animated.View style={[styles.sweep, style]}>
         <LinearGradient
