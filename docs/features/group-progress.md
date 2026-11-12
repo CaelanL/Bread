@@ -88,7 +88,7 @@ your verses), nothing new.
 
 A collection whose every square is mastered or engraved says so on its Library card with a badge
 on the corner of its icon: a green check for mastered, a gold engraved glyph for engraved. An
-engraved card also takes a gold wash (`engravedCard`). A faint fan of rays (`components/ui/Rays.tsx`) rises from behind the top of a finished collection's icon on its card, green or gold. The subtitle stays as it is, and the card
+engraved card also takes a gold wash (`engravedCard`). The subtitle stays as it is, and the card
 keeps the collection's own icon. The badge reads "Mastered" or "Engraved" to VoiceOver, plus "by everyone" on a shared card. The rules are `soloEmblem` and `sharedEmblem` in
 `lib/shared/progress.ts`, on `cellState`, so the mastered and engraved tests are the grid's
 (`progress.test.ts`). A shared collection uses the shared rule only once someone else joined;

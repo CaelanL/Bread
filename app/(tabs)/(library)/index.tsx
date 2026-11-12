@@ -12,7 +12,7 @@ import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVe
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -118,9 +118,15 @@ export default function LibraryScreen() {
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
   // A link can present a modal route over the Library; its RN Modals must not stay up under it.
-  useFocusEffect(useCallback(() => () => {
-    setAddMenuOpen(false);
-    setNameDialog(null);
+  // Two quick taps on different cards would push two collections; the first push locks until the
+  // Library is focused again.
+  const opening = useRef(false);
+  useFocusEffect(useCallback(() => {
+    opening.current = false;
+    return () => {
+      setAddMenuOpen(false);
+      setNameDialog(null);
+    };
   }, []));
   const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
   const actionsDisabled = refreshing || orderSaving;
@@ -180,7 +186,8 @@ export default function LibraryScreen() {
   };
 
   const handleCollectionPress = (collection: Collection) => {
-    if (editing) return;
+    if (editing || opening.current) return;
+    opening.current = true;
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 
