@@ -114,7 +114,8 @@ select is((select name from public.shared_collections where id = current_setting
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
-select is((select count(*)::int from public.shared_invites), 1, 'the owner reads their invite');
+select is((select count(*)::int from public.shared_invites where shared_collection_id = current_setting('test.s')::uuid), 1,
+  'the owner reads their invite');
 select throws_ok(format('insert into public.shared_invites (shared_collection_id) values (%L)', current_setting('test.s')),
   '42501', null, 'the owner cannot insert an extra invite');
 select throws_ok($$update public.shared_invites set revoked_at = null$$, '42501', null,
@@ -347,7 +348,8 @@ select results_eq('select shared_id::text from public.get_shared_status()', form
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
 select public.mint_invite(current_setting('test.s')::uuid);
 select public.mint_invite(current_setting('test.s')::uuid);
-select is((select count(*)::int from public.shared_invites where revoked_at is null and expires_at > now()), 1,
+select is((select count(*)::int from public.shared_invites
+  where shared_collection_id = current_setting('test.s')::uuid and revoked_at is null and expires_at > now()), 1,
   'after any number of new links exactly one is live');
 select set_config('request.jwt.claim.sub', current_setting('test.a'), true);
 

@@ -33,7 +33,7 @@ export function DisplayNameForm({ onDone }: { onDone: () => void }) {
         Members of shared collections see this name. You can change it in Settings.
       </Text>
       <TextInput
-        testID="display-name-sheet-input"
+        testID="display-name-form-input"
         style={[modalStyles.input, styles.input, { backgroundColor: colors.input, color: colors.text, borderColor: colors.border }]}
         value={draft}
         onChangeText={setDraft}

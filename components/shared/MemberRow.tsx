@@ -9,11 +9,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 export const ROLE_LABEL: Record<SharedRole, string> = { owner: 'Owner', editor: 'Editor', member: 'Member' };
 
 /** One member in the members sheet and Who's where. The owner taps another member for role and Remove. */
-export function MemberRow({ member, you, manageable, disabled, onPress }: {
+export function MemberRow({ member, you, manageable, disabled, last, onPress }: {
   member: SharedMember;
   you: boolean;
   manageable: boolean;
   disabled: boolean;
+  /** No divider under the last row. */
+  last?: boolean;
   onPress: () => void;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -24,7 +26,7 @@ export function MemberRow({ member, you, manageable, disabled, onPress }: {
       accessibilityLabel={`${member.displayName}${you ? ', you' : ''}, ${ROLE_LABEL[member.role]}`}
       disabled={!manageable || disabled}
       onPress={onPress}
-      style={[styles.member, { borderColor: colors.borderLight }]}
+      style={[styles.member, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.borderLight }]}
     >
       <InitialDot name={member.displayName} you={you} large />
       <View style={styles.name}>
@@ -43,7 +45,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   name: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   memberName: { flexShrink: 1, fontSize: 15, lineHeight: 20 },

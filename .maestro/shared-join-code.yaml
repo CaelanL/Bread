@@ -1,5 +1,5 @@
 # Start from npm run db:reset. reader-a types the seeded code BREAD828 from the Library and joins
-# Romans 8 (their own Romans 8:28 is reused); reader-c makes a new link, so BREAD828 stops
+# Romans 8 (their own Romans 8:28 is reused); reader-c makes a new code, so BREAD828 stops
 # working for reader-b; a link opened signed out shows the join modal over the Library after
 # sign-in, and joins from there.
 appId: com.caelanliu.biblemem
@@ -52,8 +52,8 @@ name: shared-join-code
 - assertVisible: "Reader, Member"
 - tapOn:
     id: invite-new
-- assertVisible: "Make a new link?"
-- tapOn: "New link"
+- assertVisible: "Make a new code?"
+- tapOn: "New code"
 - extendedWaitUntil:
     notVisible: "BREAD828"
     timeout: 10000

@@ -80,7 +80,7 @@ function RootLayoutNav() {
   }, [isAuthenticated, isLoading, segments, pathname, navigationState?.key]);
 
   // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in,
-  // over the Library, so Not now and Join both land there. The reminders card is held before the
+  // over the Library, so the X and Join both land there. The reminders card is held before the
   // read, so it can't present first and be under (or closing under) the invite; JoinInvite then
   // holds it while mounted and releases it as it unmounts.
   useEffect(() => {

@@ -8,7 +8,9 @@
 -- "Philippians 4" (shared with reader-e and reader-f, mastered by everyone) and "Joshua 1"
 -- (shared with reader-g, engraved by everyone); and owns "Sermon on the Mount", 10 members
 -- (Cara plus reader-e to reader-m: Eli, Faith, Gabe, Hana, Isaac, Jo, Kai, Lena, Micah) on
--- 6 references in every state, so Who's where scrolls sideways. Only Romans 8 has an invite.
+-- 6 references in every state, so Who's where scrolls sideways. Each of Cara's groups has a live
+-- invite: BREAD828, MTSERMN2 (Sermon on the Mount), PHLPPNS4 (Philippians 4), JSHUA234 (Joshua 1).
+-- Most mastered rows in those groups are scheduled days ahead, so only a few read as due.
 
 -- Local cron must never call prod (migration 017 schedules a call to the prod URL).
 select cron.unschedule(jobname) from cron.job where command like '%supabase.co%';
@@ -179,6 +181,10 @@ insert into seed_progress values
 insert into public.shared_collections (id, owner_id, name, icon_key, created_at)
 select id, 'cccccccc-0000-4000-8000-000000000001', name, icon_key, created_at from seed_groups where id is not null;
 
+insert into public.shared_invites (shared_collection_id, code, created_at, expires_at)
+select sg.id, i.code, now() - interval '1 day', now() + interval '13 days'
+from seed_groups sg join (values (32, 'MTSERMN2'), (33, 'PHLPPNS4'), (34, 'JSHUA234')) as i(g, code) using (g);
+
 insert into public.shared_collection_members (shared_collection_id, user_id, role, joined_at)
 select sg.id, p.user_id, c.role, c.joined_at
 from seed_cells c join seed_groups sg using (g) join seed_people p using (n)
@@ -198,7 +204,13 @@ from seed_cells c join seed_groups sg using (g) join seed_people p using (n);
 
 insert into public.user_verses (id, user_id, client_id, book, chapter, verse_start, verse_end, version, progress, created_at, last_practiced_at)
 select md5(p.user_id::text || r.g || '-' || r.ord)::uuid, p.user_id, format('seed-%s-%s', r.g, r.ord),
-  r.book, r.chapter, r.vs, r.ve, p.translation, sp.progress, sg.created_at,
+  r.book, r.chapter, r.vs, r.ve, p.translation,
+  -- Mastered and engraved rows come due days ahead, except about one in four.
+  case when sp.code in ('m', 'e') and (p.n + r.ord) % 4 <> 0
+    then jsonb_set(sp.progress, '{engraved,nextDueAt}',
+      to_jsonb(to_char((now() + make_interval(days => 2 + r.ord)) at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')))
+    else sp.progress end,
+  sg.created_at,
   case when lower(substr(c.states, r.ord, 1)) = 'o' then null else now() - make_interval(days => r.ord) end
 from seed_cells c
 join seed_groups sg using (g)

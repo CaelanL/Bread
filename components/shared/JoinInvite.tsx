@@ -78,7 +78,7 @@ export function JoinInvite({ code: raw }: { code: string }) {
   } else if (!preview) {
     body = <ActivityIndicator style={styles.loading} color={colors.icon} />;
   } else {
-    const verses = plural(preview.verseCount, 'verse');
+    const verses = preview.verseCount === 0 ? 'No verses yet' : plural(preview.verseCount, 'verse');
     body = (
       <>
         <Text style={[modalStyles.eyebrow, { color: colors.icon }]}>
@@ -90,9 +90,11 @@ export function JoinInvite({ code: raw }: { code: string }) {
           <MemberDots members={[{ name: preview.inviterName }]} count={preview.memberCount} />
         </View>
         <Text style={[modalStyles.copy, styles.privacy, { color: colors.icon }]}>
-          {preview.verseCount === 1
-            ? 'Members see how far along you are on this verse, including progress you already have on it.'
-            : `Members see how far along you are on these ${verses}, including progress you already have on them.`}{' '}
+          {preview.verseCount === 0
+            ? 'Members see how far along you are on the verses added here, including progress you already have on them.'
+            : preview.verseCount === 1
+              ? 'Members see how far along you are on this verse, including progress you already have on it.'
+              : `Members see how far along you are on these ${verses}, including progress you already have on them.`}{' '}
           Nothing else in your library is shared. Verses show in your translation, {translation}.
         </Text>
         <Pressable

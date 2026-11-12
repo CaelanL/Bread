@@ -12,7 +12,8 @@ import { resolveCollectionIcon } from '@/lib/collections/icons';
 import type { Emblem } from '@/lib/shared/progress';
 import type { Collection, SharedRole } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -81,6 +82,8 @@ export function SwipeableCollectionCard({
   const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)';
   const { height: windowHeight } = useWindowDimensions();
   const [menuTop, setMenuTop] = useState<number | null>(null);
+  // Closed when the Library loses focus, so a modal route can't present over it.
+  useFocusEffect(useCallback(() => () => setMenuTop(null), []));
 
   const translateX = useSharedValue(0);
   const swipeStart = useSharedValue(0);

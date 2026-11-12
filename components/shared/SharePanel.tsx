@@ -18,7 +18,7 @@ const COPIED_MS = 1500;
 
 /**
  * Members and invite for a shared collection, inside the share modal. The owner sees the code
- * with a copy icon, days left, Share (the invite text with the link), New link, and Remove / role
+ * with a copy icon, days left, Share (the invite text with the link), New code, and Remove / role
  * changes per member; everyone else sees the list and Leave.
  */
 export function SharePanel({ collectionId, onLeft }: { collectionId: string; onLeft: () => void }) {
@@ -90,14 +90,14 @@ export function SharePanel({ collectionId, onLeft }: { collectionId: string; onL
 
   const newLink = () => {
     if (!sharedId) return;
-    Alert.alert('Make a new link?', 'The current link and code stop working.', [
+    Alert.alert('Make a new code?', 'The current code and its link stop working.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'New link',
+        text: 'New code',
         onPress: () => run(async () => {
           setInvite(await useAppStore.getState().mintInvite(sharedId));
           setCodeCopied(false);
-        }, "Couldn't make a new link. Try again."),
+        }, "Couldn't make a new code. Try again."),
       },
     ]);
   };
@@ -120,7 +120,7 @@ export function SharePanel({ collectionId, onLeft }: { collectionId: string; onL
   const memberCount = members?.length ?? shared?.memberCount ?? 0;
 
   return (
-    <ScrollView testID="shared-sheet" bounces={false} style={styles.scroll}>
+    <ScrollView testID="share-panel" bounces={false} style={styles.scroll}>
       <Text style={[modalStyles.eyebrow, { color: colors.icon }]}>Shared · {memberCount} member{memberCount === 1 ? '' : 's'}</Text>
       <Text accessibilityRole="header" style={[modalStyles.name, styles.name, { color: colors.text }]}>{name}</Text>
 
@@ -153,12 +153,12 @@ export function SharePanel({ collectionId, onLeft }: { collectionId: string; onL
               </Pressable>
             </>
           ) : members && (
-            <Text style={[modalStyles.meta, { color: colors.icon }]}>This link has expired. Make a new one to invite people.</Text>
+            <Text style={[modalStyles.meta, { color: colors.icon }]}>This code has expired. Make a new one to invite people.</Text>
           )}
           {members && (
             <Pressable testID="invite-new" accessibilityRole="button" onPress={newLink} disabled={busy} style={styles.newLink}>
               <IconSymbol name="arrow.triangle.2.circlepath" size={14} color={colors.primary} />
-              <Text style={[styles.newLinkText, { color: colors.primary }]}>New link</Text>
+              <Text style={[styles.newLinkText, { color: colors.primary }]}>New code</Text>
             </Pressable>
           )}
         </View>
@@ -172,10 +172,10 @@ export function SharePanel({ collectionId, onLeft }: { collectionId: string; onL
         </Pressable>
       ) : !members ? (
         <ActivityIndicator style={styles.retry} color={colors.icon} />
-      ) : members.map((member) => {
+      ) : members.map((member, index) => {
         const you = member.userId === user?.id;
         return (
-          <MemberRow key={member.userId} member={member} you={you} manageable={isOwner && !you}
+          <MemberRow key={member.userId} member={member} you={you} manageable={isOwner && !you} last={index === members.length - 1}
             disabled={busy} onPress={() => memberActions(member)} />
         );
       })}

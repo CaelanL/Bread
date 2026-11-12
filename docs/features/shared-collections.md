@@ -31,8 +31,7 @@ user_collections.shared_collection_id → shared_collections (nullable, ON DELET
 - `profiles.display_name` (1 to 40 characters) is the name members see. See
   [auth.md](../architecture/auth.md#display-name).
 
-Old clients see a member's copy as an ordinary collection; the next sync (below) repairs
-what they do to it.
+The next sync (below) repairs what an old client does to a member's copy.
 
 ## Access rules
 
@@ -49,12 +48,11 @@ so the members table's own policy doesn't recurse.
 | `user_collections.shared_collection_id` | owner of the row | none: insert and update are column grants that leave it out; only share, join and sync set it |
 
 Column grants back the policies: nobody can move a membership to another account or
-another group or change `owner_id`. `anon` has nothing. Groups and memberships are
-created only by `share_collection` and `join_shared_collection`, so the caps hold.
+another group or change `owner_id`. `anon` has nothing.
 
 Members never read each other's `user_verses`. Cross-user reads go through definer
 functions in `private` behind invoker wrappers in `public` (PostgREST exposes only
-`public`), the pattern `curated_collection_savers` set. They return per-member booleans
+`public`). They return per-member booleans
 per reference, never a member's progress itself, study prefs or timestamps. A removed
 member reads nothing again.
 
@@ -69,7 +67,7 @@ input; `22023` messages are written to be shown as is.
 | `mint_invite(group)` | owner | Locks the group, revokes open invites, returns a new `(code, expires_at)` |
 | `preview_invite(code)` | signed in | `(shared_id, name, inviter_name, verse_count, member_count, already_member)`. `Invite expired` / `Invite not found` (revoked reads as not found) |
 | `join_shared_collection(code, version)` | signed in, has a display name | Joins as `member` and syncs; a member's repeat join only syncs. Returns the local `client_id` |
-| `sync_shared_collection(group, version)` | member | Syncs the caller's copy. Returns `(client_id, changed)`: `changed` is true when it created, restored, renamed, linked or removed anything, the client still reloads the copy on open |
+| `sync_shared_collection(group, version)` | member | Syncs the caller's copy. Returns `(client_id, changed)`: `changed` is true when it created, restored, renamed, linked or removed anything |
 | `leave_shared_collection(group)` | non-owner member | Drops the caller's membership and copy |
 | `remove_shared_member(group, user)` | owner | Drops another member's membership and copy |
 | `get_shared_members(group)` | member | `(user_id, display_name, role, joined_at)`, owner first |
@@ -84,10 +82,7 @@ counts is in [group-progress.md](group-progress.md#squares).
 
 Every wrapper calls a `SECURITY DEFINER` body in `private` that checks the caller and
 passes `auth.uid()` on. The `private` helpers that write take the user they act for, so
-clients can't execute them; only the definer bodies and the triggers below call them.
-
-Triggers: `sync_members_before_dissolve` (see Dissolve), `remove_reference_from_copies`
-(see Sync) and `check_reference_cap` (see Caps).
+clients can't execute them; only the definer bodies and the triggers call them.
 
 ## Caps
 
@@ -116,7 +111,7 @@ writes nothing and returns `changed = false`.
    progress.
 
 It runs in join, in `sync_shared_collection`, and for every member before the group is
-deleted. It reports `changed` when any step wrote a row.
+deleted.
 
 Removing a reference doesn't wait for sync: the `remove_reference_from_copies` trigger
 applies the delete rule below to every member's copy of it at once. That is why step 3
@@ -144,7 +139,7 @@ the cascade.
 ## Privacy
 
 Squares fold every row a member holds for a reference, including progress from before
-the group existed (Q5 reuse plus Q11). An owner or editor who adds a reference can see
+the group existed. An owner or editor who adds a reference can see
 whether each member already practiced or mastered it. The join modal's privacy line says so.
 
 ## In the app
@@ -158,7 +153,7 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   ([library.md](library.md#sharing-from-the-library)), opens `app/share/[id].tsx`: a name
   (`DisplayNameForm`) once, then `shareCollection` and the panel. 20 groups toasts.
 - **Share panel** (`SharePanel`, also from the strip): members, roles. The owner also gets the
-  code with a copy icon, days left, Share, New link (confirmed; the old code dies) and the
+  code with a copy icon, days left, Share, New code (confirmed; the old code dies) and the
   [member actions](group-progress.md#whos-where). Share sends `Join "<name>" on Bread: <link> — or
   enter code <code> in Bread`: chat apps rarely make the link tappable. Members get Leave.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, Join with code on the +
@@ -168,9 +163,8 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   `dismissTo`. A member sees Open (same idempotent call); a bad code shows its message. A signed-out link's
   code waits in AsyncStorage (`lib/shared/pending-join.ts`) through sign-in, email confirmation
   or an app kill, then opens over the Library; the reminders card is held from before that read.
-- **Inside**: see [group-progress.md](group-progress.md). Only the owner and editors see + and
-  swipe-delete; only the owner renames or changes the icon.
-  `addVerse` inserts the reference and syncs; `deleteVerse` deletes it ("Remove for everyone?").
+- **Inside**: [group-progress.md](group-progress.md). Only the owner and editors see + and
+  swipe-delete; only the owner renames or changes the icon. `addVerse` inserts the reference and syncs; `deleteVerse` deletes it ("Remove for everyone?").
   Copy-to-collection skips shared collections and Add-to-collection lists only ones you edit
   (sync moves hand-linked verses to My Verses).
 - **Leave and delete**: a member's swipe and menu read Leave; the confirm counts verses lost

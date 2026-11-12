@@ -19,8 +19,9 @@ export function ModalCard({ onClose, closeDisabled, children }: {
   const colors = Colors[scheme];
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Not an accessibility element, so the card's own fields and buttons stay reachable. */}
-      <Pressable accessible={false} disabled={closeDisabled} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]}>
+      {/* Hidden from accessibility (the X closes for VoiceOver). With accessible={false} instead, a
+          card reopened after an X close left the whole window empty to VoiceOver and Maestro. */}
+      <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" disabled={closeDisabled} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]}>
         <BlurView intensity={20} tint={scheme} style={StyleSheet.absoluteFill} />
       </Pressable>
       <View accessibilityViewIsModal style={[styles.card, { backgroundColor: colors.card }]}>

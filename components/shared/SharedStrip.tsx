@@ -11,6 +11,7 @@ export type GroupProgressValue = { ratio: number; masteredByEveryone: number };
 /** "Group progress 50%. 1 of 3 verses mastered by everyone", or the loading label. */
 export function groupProgressLabel(progress: GroupProgressValue | null, verseCount: number): string {
   if (!progress) return 'Group progress loading';
+  if (verseCount === 0) return 'Group progress. No verses yet';
   return `Group progress ${Math.round(progress.ratio * 100)}%. ${progress.masteredByEveryone} of ${plural(verseCount, 'verse')} mastered by everyone`;
 }
 
@@ -33,8 +34,8 @@ export function SharedStrip({ members, memberCount, verseCount, progress, failed
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const percent = progress ? Math.round(progress.ratio * 100) : 0;
-  const heading = `Shared · ${plural(memberCount, 'member')} · ${plural(verseCount, 'verse')}`;
-  const summary = progress ? `${progress.masteredByEveryone} of ${plural(verseCount, 'verse')} mastered by everyone` : '';
+  const heading = `Shared · ${plural(memberCount, 'member')} · ${verseCount === 0 ? 'No verses yet' : plural(verseCount, 'verse')}`;
+  const summary = progress && verseCount > 0 ? `${progress.masteredByEveryone} of ${plural(verseCount, 'verse')} mastered by everyone` : '';
 
   return (
     <View style={[styles.strip, { backgroundColor: colors.card, borderColor: colors.border }]}>

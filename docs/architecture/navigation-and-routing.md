@@ -84,14 +84,22 @@ the share modal, and Open leaves both with one `router.dismissTo(<collection>)`.
 
 Don't hold an RN `Modal` in a screen's state while a modal route can present over it. The
 native dismiss takes the RN modal's view controller with it, React still thinks it's shown, and
-that screen can't present another RN `Modal` (the Library's + did nothing). And don't chain
+that screen can't present another RN `Modal` (the Library's + did nothing). So the Library closes its +
+menu, name modal and card menus when it loses focus. And don't chain
 `router.dismissAll()` with `router.push()`: the push is resolved against the modal still on
 top, so it pushes a second copy of `(tabs)` onto the root stack.
 
-A modal route reopened after one was closed with the X can be hidden from VoiceOver and Maestro
-(the whole app reads as empty). native-stack sets `aria-hidden` on a closing screen, and Fabric
-recycles that `RNSScreen` view for the next one without resetting it, because `false` is the
-default. Flows relaunch the app after an X close. A real fix is native (react-native-screens).
+`ModalCard`'s backdrop is hidden from accessibility (`accessibilityElementsHidden`,
+`importantForAccessibility="no-hide-descendants"`), never `accessible={false}`. With
+`accessible={false}`, a modal route reopened after an X close read as an empty window to
+VoiceOver and Maestro, on both `transparentModal` and `containedTransparentModal` but not
+`modal`. Bisected on the simulator: the card without that backdrop, or with it hidden as above,
+stays reachable. It isn't react-native-screens recycling the screen (`RNSScreen` returns NO from
+`shouldBeRecycled`) or native-stack's `aria-hidden` (Fabric doesn't parse it on a screen; removing
+it changed nothing). The UIKit step that empties the window is unproven. One path still reads
+empty: after an X close, New collection (an RN `Modal`) then the long-press Share… opens a share
+modal Maestro can't see, so `library-plus` relaunches before that leg. Flow: `library-plus`
+closes the share modal and Join with code with the X and reopens Join with code.
 
 `app/notifications.tsx` and `app/reset-password.tsx` are plain root
 Stack screens.

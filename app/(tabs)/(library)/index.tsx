@@ -11,8 +11,8 @@ import { sharedEmblem, soloEmblem } from '@/lib/shared/progress';
 import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useVersesByCollection, useVersesLostWith } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
-import { router } from 'expo-router';
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -115,6 +115,11 @@ export default function LibraryScreen() {
   const [addMenuTop, setAddMenuTop] = useState<number | null>(null);
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
+  // A link can present a modal route over the Library; its RN Modals must not stay up under it.
+  useFocusEffect(useCallback(() => () => {
+    setAddMenuTop(null);
+    setNameDialog(null);
+  }, []));
   const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
   const actionsDisabled = refreshing || orderSaving;
   const scrollGesture = useMemo(() => Gesture.Native(), []);
