@@ -6,7 +6,7 @@ import { AccentAlpha, Colors, Radius, withAlpha } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Emblem } from '@/lib/shared/progress';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ComponentProps, ReactNode, Ref } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 type IconName = ComponentProps<typeof IconSymbol>['name'];
@@ -136,17 +136,21 @@ export function CollectionHeader({
 }
 
 /** A small action under the header. `primary` is the screen's one accent action. */
-export function HeaderPill({ icon, label, onPress, primary, testID, accessibilityLabel }: {
+export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessibilityLabel, hidden }: {
+  ref?: Ref<View>;
   icon: IconName;
   label?: string;
   onPress: () => void;
   primary?: boolean;
   testID?: string;
   accessibilityLabel?: string;
+  /** Kept in place but invisible, while a search grown out of it is open. */
+  hidden?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   return (
     <Pressable
+      ref={ref}
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
@@ -156,6 +160,7 @@ export function HeaderPill({ icon, label, onPress, primary, testID, accessibilit
         !label && styles.iconPill,
         { backgroundColor: primary ? colors.primaryLight : colors.fill },
         pressed && styles.pressed,
+        hidden && styles.hidden,
       ]}
     >
       <IconSymbol name={icon} size={14} color={primary ? colors.tint : colors.icon} />
@@ -182,4 +187,5 @@ const styles = StyleSheet.create({
   iconPill: { width: 32, paddingHorizontal: 0, justifyContent: 'center' },
   pillText: { fontSize: 14, fontWeight: '500' },
   pressed: { opacity: 0.6 },
+  hidden: { opacity: 0 },
 });

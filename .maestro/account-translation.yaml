@@ -29,7 +29,7 @@ name: account-translation
 - tapOn:
     id: bible-translation-KJV
 - assertNotVisible: "Translation"
-- assertVisible: "Add Verse"
+- assertVisible: "Add verses"
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fmy-verses
 - extendedWaitUntil:
     visible: ".*John 3:16 · KJV.*"

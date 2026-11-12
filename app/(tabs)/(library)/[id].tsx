@@ -6,10 +6,11 @@ import { InviteLine } from '@/components/shared/InviteLine';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
+import { SearchTakeover, type SearchOrigin } from '@/components/ui/SearchTakeover';
 import { TopBar, TopBarButton, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
-import { Colors, Radius, InputText } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useAuth } from '@/lib/auth';
@@ -31,10 +32,10 @@ import type { SymbolViewProps } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
+  FlatList,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
   RefreshControl,
 } from 'react-native';
@@ -82,7 +83,12 @@ export default function CollectionScreen() {
   const [titleBottom, setTitleBottom] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [searching, setSearching] = useState(false);
+  // Set while search is open: where its pill sat, so the field grows from there and goes back.
+  const [searchOrigin, setSearchOrigin] = useState<SearchOrigin | null>(null);
+  const searchPill = useRef<View>(null);
+  const openSearch = () => {
+    searchPill.current?.measureInWindow((x, y, width, height) => setSearchOrigin({ x, y, width, height }));
+  };
   // A modal route (the share card) can present over this screen; its RN Modals must not stay up under it.
   useFocusEffect(useCallback(() => () => {
     setMenuOpen(false);
@@ -226,6 +232,8 @@ export default function CollectionScreen() {
   // Sort verses based on sortBy
   const now = useReviewNow();
   const sortedVerses = sortVerses(filteredVerses, sortBy, now);
+  // The list under the header; search shows `sortedVerses` in its own list over it.
+  const allSorted = searchQuery ? sortVerses(verses, sortBy, now) : sortedVerses;
 
   const dueCount = useMemo(
     () => (isMasteredCollection ? sortedVerses.filter((v) => isDueForReview(v, now)).length : 0),
@@ -337,6 +345,26 @@ export default function CollectionScreen() {
       : { label: 'Delete', icon: 'trash', onPress: removeCollection, destructive: true }] : []),
   ];
 
+  const renderVerse = ({ item }: { item: SavedVerse }) => (
+    <SwipeableVerseCard
+      verse={item}
+      onPress={() => handleVersePress(item)}
+      onDelete={() => handleDeleteVerse(item.id)}
+      onCopy={() => {
+        setCopyNotice(null);
+        setCopyingVerse(item);
+      }}
+      disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
+      collectionCount={getVerseCollectionCount(item)}
+      sharedMemberCount={withOthers ? shared?.memberCount : undefined}
+      group={withOthers ? {
+        states: groupRows.get(referenceKey(item))?.states ?? null,
+        unavailable: sharedProgress?.failed ?? false,
+      } : undefined}
+    />
+    );
+  const divider = () => <View style={[styles.divider, { backgroundColor: colors.border }]} />;
+
   const header = (
     <CollectionHeader
       symbol={symbol}
@@ -359,35 +387,14 @@ export default function CollectionScreen() {
         onRetry: () => void useAppStore.getState().fetchSharedProgress(sharedId),
       } : undefined}
     >
-      {hydrated && verses.length > 0 && (searching ? (
-        <View style={styles.searchRow}>
-          <View style={[styles.searchBar, { backgroundColor: colors.fill }]}>
-            <IconSymbol name="magnifyingglass" size={16} color={colors.icon} />
-            <TextInput
-              testID="collection-search"
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search verses"
-              placeholderTextColor={colors.icon}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-            />
-          </View>
-          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => { setSearchQuery(''); setSearching(false); }}>
-            <Text style={[styles.cancel, { color: colors.tint }]}>Cancel</Text>
-          </Pressable>
-        </View>
-      ) : (
+      {hydrated && verses.length > 0 && (
         <>
-          <HeaderPill testID="collection-search-open" icon="magnifyingglass" label="Search" onPress={() => setSearching(true)} />
+          <HeaderPill ref={searchPill} testID="collection-search-open" icon="magnifyingglass" label="Search" onPress={openSearch} hidden={Boolean(searchOrigin)} />
           <HeaderPill testID="collection-sort" icon="arrow.up.arrow.down" label={sortLabel} accessibilityLabel={`Sort, ${sortLabel}`} onPress={cycleSortBy} />
           <View style={styles.spacer} />
           {!collection?.isVirtual && canEdit && <HeaderPill testID="collection-add" icon="plus" label="Add" accessibilityLabel="Add verses" onPress={handleAddVerse} primary />}
         </>
-      ))}
+      )}
     </CollectionHeader>
   );
 
@@ -395,31 +402,14 @@ export default function CollectionScreen() {
     <ReviewNowProvider value={now}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.FlatList
-        data={hydrated ? sortedVerses : []}
+        data={hydrated ? allSorted : []}
         onScroll={onScroll}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         ListHeaderComponent={header}
-        renderItem={({ item }) => (
-          <SwipeableVerseCard
-            verse={item}
-            onPress={() => handleVersePress(item)}
-            onDelete={() => handleDeleteVerse(item.id)}
-            onCopy={() => {
-              setCopyNotice(null);
-              setCopyingVerse(item);
-            }}
-            disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
-            collectionCount={getVerseCollectionCount(item)}
-            sharedMemberCount={withOthers ? shared?.memberCount : undefined}
-            group={withOthers ? {
-              states: groupRows.get(referenceKey(item))?.states ?? null,
-              unavailable: sharedProgress?.failed ?? false,
-            } : undefined}
-          />
-        )}
-        ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+        renderItem={renderVerse}
+        ItemSeparatorComponent={divider}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
         ListEmptyComponent={hydrated ? renderEmptyState : <VerseCardSkeleton count={3} />}
@@ -435,6 +425,26 @@ export default function CollectionScreen() {
           <TopBarButton testID="collection-menu" icon="ellipsis" label="More" onPress={() => setMenuOpen(true)} />
         )}
       </TopBar>
+      {searchOrigin && (
+        <SearchTakeover
+          origin={searchOrigin}
+          query={searchQuery}
+          onChangeQuery={setSearchQuery}
+          onClose={() => setSearchOrigin(null)}
+          placeholder="Search verses"
+        >
+          <FlatList
+            data={sortedVerses}
+            renderItem={renderVerse}
+            ItemSeparatorComponent={divider}
+            keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={styles.content}
+            ListEmptyComponent={<Text style={[styles.noMatches, { color: colors.icon }]}>No matches</Text>}
+          />
+        </SearchTakeover>
+      )}
       <PopoverMenu
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -504,32 +514,13 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     marginLeft: 20,
   },
-  searchRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  cancel: {
-    fontSize: 17,
+  noMatches: {
+    fontSize: 15,
+    textAlign: 'center',
+    paddingTop: 32,
   },
   spacer: {
     flex: 1,
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    height: 36,
-    borderRadius: Radius.lg,
-    gap: 8,
-  },
-  searchInput: {
-    ...InputText,
-    flex: 1,
-    fontSize: 15,
-    padding: 0,
   },
   emptyState: {
     alignItems: 'center',

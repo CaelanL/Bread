@@ -161,7 +161,7 @@ export function QuickAddField({
       </View>
 
       {searching && (
-        <View style={styles.body}>
+        <Animated.View entering={FadeIn.duration(Motion.expandMs)} exiting={FadeOut.duration(Motion.exitMs)} style={styles.body}>
           {!input.trim() && rows.length > 0 && (
             <Text style={[styles.sectionLabel, { color: colors.primary }]}>Recent</Text>
           )}
@@ -207,7 +207,7 @@ export function QuickAddField({
               </Animated.View>
             </KeyboardStickyView>
           )}
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
   },

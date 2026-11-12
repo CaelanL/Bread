@@ -39,6 +39,6 @@ name: add-double-tap
     visible: "Ruth 1"
     timeout: 20000
 - tapOn: Back
-- assertVisible: "Add Verse"
+- assertVisible: "Add verses"
 - assertNotVisible: "Ruth 1"
 - takeScreenshot: add-double-tap

@@ -201,6 +201,7 @@ have hex literals; don't copy them.
 | `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
 | `ModalCard.tsx` | `ModalCard` (a centered card on a dimmed backdrop, with an X) and `modalStyles` (its type, input and button), for modal routes |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
+| `SearchTakeover.tsx` | Search that grows out of its pill to the top and covers the screen; Cancel plays it back |
 | `TopBar.tsx` | `TopBar`, `TopBarButton`, `useScrollY`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
 
 If you're building a new reusable primitive, add it here with a
@@ -244,6 +245,10 @@ so the spinner shows below the bar, not behind the Dynamic Island.
 The collection screen's top is `CollectionHeader` (`components/library/`): the accent washing down
 from the top edge (an `expo-linear-gradient`, solid above the bar for a pull), a 56 pt icon square,
 the name at 28/600, a secondary line, and `HeaderPill`s (one `primary`, the rest on `fill`).
+
+Search is ours, not `headerSearchBarOptions`: the native search bar needs the native header
+(off app-wide) and lives in the bar, not in a pill under a header, and the iOS 26 placements
+can't be checked on the iOS 18 simulator.
 
 ## Haptics
 

@@ -7,7 +7,7 @@ rest of the Library are in `docs/features/library.md`.
 ## Browsing a chapter
 
 `add.tsx` is the quick-add field over a book and chapter list (Browse, below), with the account
-translation picker in the header. Tapping a chapter opens `add/[book]/[chapter].tsx`,
+translation picker as a pill in the bar. Tapping a chapter opens `add/[book]/[chapter].tsx`,
 which loads with `fetchChapter`, and the user selects one continuous range:
 
 1. **Long press, 250 ms.** Starts a selection, with a haptic.
@@ -45,9 +45,11 @@ The field at the top of `add.tsx` is `components/library/QuickAddField.tsx`. The
 two modes, like an iOS search controller, and they never share the screen:
 
 - **Browse.** The field isn't focused. The book and chapter list shows under it, as above.
-- **Search.** Focusing the field hides the book list and puts Cancel right of the field. The
-  body shows only suggestion rows. Cancel clears the field, drops focus and goes back to
-  Browse. Dismissing the keyboard any other way stays in Search.
+- **Search.** Focusing the field lifts it to the top: the bar (back, the translation pill) and
+  the "Add verses" title over "to <collection>" slide up and fade, the book list fades out, Cancel
+  sits right of the field and only suggestion rows show. Cancel clears the field, drops focus and
+  plays it back. Dismissing the keyboard any other way stays in Search. Reduced motion: no lift,
+  fades only.
 
 There's no hint text, only the field's "Search" placeholder.
 

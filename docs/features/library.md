@@ -134,9 +134,8 @@ store's `updateVerseProgress` writes it on every completed session, full or part
 whether or not the score improved. Practicing a verse floats it under Recent in every
 collection it's in. `resetVerseProgress` clears it. The column was never backfilled.
 
-Sorting and search run in JS on the in-memory list, with no database index. Search on
-`[id].tsx` is `filterVerses` in `lib/search.ts`, which matches a book prefix, then
-chapter and verse.
+Sort and search run in JS in memory. Search (`SearchTakeover`) grows from its pill and takes
+the screen; `filterVerses` (`lib/search.ts`) matches a book prefix, then chapter and verse.
 
 ## Adding a verse
 
