@@ -466,9 +466,10 @@ begin
     raise exception 'Authentication required' using errcode = '42501';
   end if;
   invite := private.find_invite(p_code);
-  perform pg_advisory_xact_lock(hashtextextended('curated-collection:' || me::text, 0));
-  -- Serializes joins to one group so the member cap holds.
+  -- Serializes joins to one group so the member cap holds. The group lock comes before the
+  -- account lock, the order a dissolve takes them in, so a join and a delete can't deadlock.
   perform 1 from public.shared_collections s where s.id = invite.shared_collection_id for update;
+  perform pg_advisory_xact_lock(hashtextextended('curated-collection:' || me::text, 0));
 
   if not exists (select 1 from public.shared_collection_members m
     where m.shared_collection_id = invite.shared_collection_id and m.user_id = me) then

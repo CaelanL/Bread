@@ -148,6 +148,27 @@ select is((select count(*)::int from public.user_verses where verse_start = 31),
   'an editor''s removal reaches every copy at once with today''s rule (unmastered: gone)');
 select results_eq(format('select changed from public.sync_shared_collection(%L, ''ESV'')', current_setting('test.s')),
   $$values (false)$$, 'nothing is left for the next sync');
+
+-- A removed reference the member also holds in another collection survives there.
+select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
+insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end)
+values (current_setting('test.s')::uuid, 'Romans', 8, 34, 34);
+select changed from public.sync_shared_collection(current_setting('test.s')::uuid, 'NIV');
+insert into public.user_collections (id, user_id, client_id, name)
+values ('dddddddd-0000-4000-8000-000000000098', current_setting('test.d')::uuid, 'keep', 'Keep');
+insert into public.verse_collections (verse_id, collection_id)
+select id, 'dddddddd-0000-4000-8000-000000000098' from public.user_verses
+where user_id = current_setting('test.d')::uuid and verse_start = 34;
+delete from public.shared_collection_verses where verse_start = 34;
+select results_eq($$select c.client_id, v.deleted_at is null from public.verse_collections vc
+  join public.user_collections c on c.id = vc.collection_id join public.user_verses v on v.id = vc.verse_id
+  where v.user_id = current_setting('test.d')::uuid and v.verse_start = 34$$,
+  $$values ('keep'::text, true)$$, 'a removed reference the member also holds in another collection survives there');
+reset role;
+delete from public.user_verses where user_id = current_setting('test.d')::uuid and verse_start = 34;
+delete from public.user_collections where id = 'dddddddd-0000-4000-8000-000000000098';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
 update public.shared_collection_members set role = 'member' where user_id = current_setting('test.d')::uuid;
 
 -- An old client put a verse of the member's own into the copy: sync moves it to My Verses.
