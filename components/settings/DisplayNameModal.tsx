@@ -35,7 +35,7 @@ export function DisplayNameModal({ visible, savedName, prefill, onSave, onClose 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable accessible={false} style={styles.overlay} onPress={onClose}>
           <View
             style={[styles.container, { backgroundColor: colors.cardAlt }]}
             onStartShouldSetResponder={() => true}
