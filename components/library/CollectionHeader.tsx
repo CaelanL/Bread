@@ -2,18 +2,21 @@ import { MemberDots } from '@/components/shared/MemberDots';
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useTopBarHeight } from '@/components/ui/TopBar';
-import { AccentAlpha, Colors, Radius, withAlpha } from '@/constants/theme';
+import { AccentAlpha, Colors, Motion, Radius, withAlpha } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Emblem } from '@/lib/shared/progress';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ComponentProps, ReactNode, Ref } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 type IconName = ComponentProps<typeof IconSymbol>['name'];
 
 // The wash runs this far below the bar, and stays solid this far above it for a pull to refresh.
 const WASH = 220;
 const OVERSCROLL = 400;
+const SWEEP_WIDTH = 48;
+const easing = Easing.bezier(...Motion.easing);
 
 /** "Group progress 50%. 1 of 3 verses mastered by everyone", or the loading label. */
 export function groupProgressLabel(progress: { ratio: number; masteredByEveryone: number } | null, verseCount: number): string {
@@ -61,8 +64,9 @@ export function CollectionHeader({
   const percent = progress?.ratio == null ? 0 : Math.round(progress.ratio * 100);
   const washTop = barHeight + OVERSCROLL;
 
-  const finished = emblem ? (engraved ? colors.tint : colors.success) : null;
-  const glowing = finished && percent === 100 ? finished : null;
+  const complete = emblem && percent === 100 && !progress?.failed;
+  const doneColor = engraved ? colors.tint : colors.success;
+  const doneText = engraved ? 'Engraved by everyone' : 'Mastered by everyone';
   const icon = (
     <View style={[styles.icon, { backgroundColor: engraved ? colors.engravedFill : withAlpha(accent, AccentAlpha.fill) }]}>
       <IconSymbol name={symbol} size={28} color={engraved ? colors.tint : accent} />
@@ -110,31 +114,62 @@ export function CollectionHeader({
         <Pressable
           testID={progress.failed ? 'shared-progress-retry' : 'shared-progress'}
           accessibilityRole="button"
-          accessibilityLabel={progress.failed ? "Couldn't load group progress. Retry" : progress.label}
+          accessibilityLabel={progress.failed ? "Couldn't load group progress. Retry" : complete ? `Group progress. ${doneText}` : progress.label}
           accessibilityHint={progress.failed ? undefined : 'Shows details'}
           onPress={progress.failed ? progress.onRetry : progress.onPress}
           style={({ pressed }) => [styles.progress, pressed && styles.pressed]}
         >
-          {/* At 100% the bar glows: green when everyone mastered every verse, gold when everyone engraved them. */}
-          <View style={[styles.trackSlot, glowing && [styles.glow, { shadowColor: glowing }]]}>
-            <View style={[styles.track, { backgroundColor: colors.border }]}>
-              <View style={[styles.fill, { width: `${percent}%`, backgroundColor: glowing ?? colors.success }]} />
-            </View>
+          <View style={[styles.track, { backgroundColor: colors.border }]}>
+            {complete ? (
+              <>
+                <LinearGradient
+                  colors={engraved ? [colors.engravedBarStart, colors.engravedBarEnd] : [colors.masteredBarStart, colors.masteredBarEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Sweep color={colors.white} />
+              </>
+            ) : (
+              <View style={[styles.fill, { width: `${percent}%`, backgroundColor: colors.success }]} />
+            )}
           </View>
           {progress.failed ? (
             <Text style={[styles.progressText, { color: colors.primary }]}>Couldn&apos;t load · Retry</Text>
           ) : (
-            <Text style={[styles.progressText, { color: glowing ?? colors.icon }, glowing && [styles.textGlow, { textShadowColor: glowing }]]}>
-              {progress.ratio == null ? '–' : `${percent}%`}
+            <Text style={[styles.progressText, { color: complete ? doneColor : colors.icon }]}>
+              {complete ? doneText : progress.ratio == null ? '–' : `${percent}%`}
             </Text>
           )}
-          <View style={glowing && [styles.glow, { shadowColor: glowing }]}>
-            <IconSymbol name="chevron.right" size={12} color={glowing ?? colors.icon} />
-          </View>
+          <IconSymbol name="chevron.right" size={12} color={colors.icon} />
         </Pressable>
       )}
 
       {children && <View style={styles.pills}>{children}</View>}
+    </View>
+  );
+}
+
+/** One soft highlight across the finished line when it first shows, then it rests off the end. */
+function Sweep({ color }: { color: string }) {
+  const reduced = useReducedMotion();
+  const x = useSharedValue(-SWEEP_WIDTH);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  if (reduced) return null;
+  return (
+    <View
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+      onLayout={(e) => { x.value = withTiming(e.nativeEvent.layout.width, { duration: Motion.sweepMs, easing }); }}
+    >
+      <Animated.View style={[styles.sweep, style]}>
+        <LinearGradient
+          colors={[withAlpha(color, 0), withAlpha(color, 0.7), withAlpha(color, 0)]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -186,11 +221,9 @@ const styles = StyleSheet.create({
   metaText: { flexShrink: 1, fontSize: 15, lineHeight: 20 },
   invite: { marginTop: 8 },
   progress: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  trackSlot: { flex: 1 },
-  glow: { shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 8 },
-  textGlow: { textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3 },
-  track: { height: 4, borderRadius: Radius.full, overflow: 'hidden' },
+  track: { flex: 1, height: 4, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
+  sweep: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SWEEP_WIDTH },
   progressText: { fontSize: 13, lineHeight: 18, fontWeight: '500', fontVariant: ['tabular-nums'] },
   pills: { marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 8 },
   pill: { height: 32, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: Radius.full },

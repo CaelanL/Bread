@@ -18,6 +18,7 @@ export const Motion = {
   expandMs: 200,
   staggerMs: 100,
   spinnerMs: 900,
+  sweepMs: 900,
   easing: [0.2, 0, 0, 1],
 } as const;
 /**
@@ -58,6 +59,11 @@ export const Colors = {
     primaryLight: 'rgba(176,141,87,0.12)',
     engravedFill: 'rgba(245,158,11,0.12)', // Engraved pill and engraved collection icon
     engravedCard: '#fef8ee',       // Library card of an engraved collection: card + a gold wash, opaque over the swipe action
+    // A shared collection's group progress line at 100%: light to deep green, champagne to bronze
+    masteredBarStart: '#86efac',
+    masteredBarEnd: '#16a34a',
+    engravedBarStart: '#e8d4a9',
+    engravedBarEnd: '#987142',
 
     // Surfaces
     card: '#ffffff',              // Pure white cards for contrast
@@ -96,6 +102,10 @@ export const Colors = {
     primaryLight: 'rgba(201,169,98,0.15)',
     engravedFill: 'rgba(245,158,11,0.15)',
     engravedCard: '#393022',
+    masteredBarStart: '#86efac',
+    masteredBarEnd: '#22c55e',
+    engravedBarStart: '#e7ce96',
+    engravedBarEnd: '#b08d57',
 
     // Surfaces
     card: '#242424',              // Dark charcoal card
