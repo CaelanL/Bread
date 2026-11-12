@@ -107,14 +107,6 @@ function everyone(grid: Grid, test: (state: MemberState) => boolean): (row: Grid
   return (row) => grid.memberIds.length > 0 && row.states.every(test);
 }
 
-export function rowMasteredByEveryone(grid: Grid, row: GridRow): boolean {
-  return everyone(grid, isMasteredState)(row);
-}
-
-export function rowEngravedByEveryone(grid: Grid, row: GridRow): boolean {
-  return everyone(grid, (s) => s === 'engraved')(row);
-}
-
 /** References every member has mastered. */
 export function masteredByEveryoneCount(grid: Grid): number {
   return grid.rows.filter(everyone(grid, isMasteredState)).length;
