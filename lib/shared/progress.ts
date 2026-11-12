@@ -1,6 +1,7 @@
 // lib-ok: Pure reading of a shared collection's members × references grid from the server's per-square booleans.
+import { BIBLE_BOOKS } from '@/lib/bible/books';
 import { hasPracticed } from '@/lib/store/review';
-import type { VerseProgress } from '@/lib/storage';
+import type { SharedRole, VerseProgress } from '@/lib/storage';
 
 /** A member's state on one reference. Due and Locked (spaced review) are Mastered. */
 export type MemberState = 'open' | 'learning' | 'mastered' | 'engraved';
@@ -132,4 +133,49 @@ export function openVersesFor(userId: string, grid: Grid): SharedReference[] {
   const column = grid.memberIds.indexOf(userId);
   if (column < 0) return [];
   return grid.rows.filter((row) => !isMasteredState(row.states[column])).map((row) => row.reference);
+}
+
+/** Who's where fits up to this many member columns across the screen; more scroll sideways. */
+export const GRID_FIT_MEMBERS = 8;
+
+export function gridScrolls(memberCount: number): boolean {
+  return memberCount > GRID_FIT_MEMBERS;
+}
+
+export interface GridMember {
+  userId: string;
+  displayName: string;
+  role: SharedRole;
+}
+
+export interface GridColumn extends GridMember {
+  you: boolean;
+  /** One state per row of the Who's where grid, in its row order. */
+  states: MemberState[];
+  /** Squares mastered, engraved included. */
+  masteredCount: number;
+}
+
+const BOOK_ORDER: readonly string[] = BIBLE_BOOKS;
+
+function bibleOrder(a: SharedReference, b: SharedReference): number {
+  return BOOK_ORDER.indexOf(a.book) - BOOK_ORDER.indexOf(b.book)
+    || a.chapter - b.chapter || a.verseStart - b.verseStart || a.verseEnd - b.verseEnd;
+}
+
+/**
+ * The Who's where grid: references down in Bible order, members across with your column first,
+ * then everyone else in `members` order (owner first, then by join). Members missing from the
+ * grid get no column.
+ */
+export function whoIsWhere(grid: Grid, members: GridMember[], youId: string | undefined): { rows: GridRow[]; columns: GridColumn[] } {
+  const rows = [...grid.rows].sort((a, b) => bibleOrder(a.reference, b.reference));
+  const ordered = [...members.filter((m) => m.userId === youId), ...members.filter((m) => m.userId !== youId)];
+  const columns = ordered.flatMap((member) => {
+    const index = grid.memberIds.indexOf(member.userId);
+    if (index < 0) return [];
+    const states = rows.map((row) => row.states[index]);
+    return [{ ...member, you: member.userId === youId, states, masteredCount: states.filter(isMasteredState).length }];
+  });
+  return { rows, columns };
 }

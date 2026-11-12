@@ -8,11 +8,14 @@ import {
   cellState,
   everyoneEngraved,
   everyoneMastered,
+  GRID_FIT_MEMBERS,
+  gridScrolls,
   groupProgress,
   masteredByEveryoneCount,
   openVersesFor,
   progressFlags,
   replaceMemberCells,
+  whoIsWhere,
   type ProgressCell,
   type SharedReference,
 } from './progress';
@@ -128,4 +131,42 @@ test('the Group bar orders members by state and stops at eight members', () => {
   assert.deepEqual(barSegments(['open', 'engraved', 'learning', 'mastered']), ['engraved', 'mastered', 'learning', 'open']);
   assert.equal(barSegments(Array<'open'>(8).fill('open'))?.length, 8);
   assert.equal(barSegments(Array<'open'>(9).fill('open')), null);
+});
+
+const cara = { userId: 'C', displayName: 'Cara', role: 'owner' as const };
+const dana = { userId: 'D', displayName: 'Dana', role: 'member' as const };
+
+test("Who's where puts your column first, then the owner and members in join order", () => {
+  const asDana = whoIsWhere(seed, [cara, dana], 'D');
+  assert.deepEqual(asDana.columns.map((c) => [c.displayName, c.you]), [['Dana', true], ['Cara', false]]);
+  assert.deepEqual(asDana.columns[0].states, ['engraved', 'learning', 'open']);
+  assert.deepEqual(asDana.columns.map((c) => c.masteredCount), [1, 2]);
+
+  const asCara = whoIsWhere(seed, [cara, dana], 'C');
+  assert.deepEqual(asCara.columns.map((c) => [c.displayName, c.you]), [['Cara', true], ['Dana', false]]);
+  assert.deepEqual(asCara.columns[0].states, ['engraved', 'mastered', 'open']);
+});
+
+test("Who's where has no You column for someone outside the grid, and skips members it has no squares for", () => {
+  const eve = { userId: 'E', displayName: 'Eve', role: 'editor' as const };
+  const { columns } = whoIsWhere(seed, [cara, eve, dana], 'stranger');
+  assert.deepEqual(columns.map((c) => [c.displayName, c.you]), [['Cara', false], ['Dana', false]]);
+});
+
+test("Who's where lists references in Bible order, whatever order they were added", () => {
+  const john316 = { book: 'John', chapter: 3, verseStart: 16, verseEnd: 16 };
+  const gen11 = { book: 'Genesis', chapter: 1, verseStart: 1, verseEnd: 1 };
+  const r82830 = { ...r828, verseEnd: 30 };
+  const grid = buildGrid(['C'], [r838, john316, r82830, r828, gen11, r81], [cell('C', john316, mastered)]);
+  const { rows, columns } = whoIsWhere(grid, [cara], 'C');
+  assert.deepEqual(rows.map((row) => row.reference), [gen11, john316, r81, r828, r82830, r838]);
+  assert.deepEqual(columns[0].states, ['open', 'mastered', 'open', 'open', 'open', 'open']);
+});
+
+test("Who's where fits eight members across and scrolls sideways from nine", () => {
+  assert.equal(gridScrolls(1), false);
+  assert.equal(gridScrolls(GRID_FIT_MEMBERS), false);
+  assert.equal(GRID_FIT_MEMBERS, 8);
+  assert.equal(gridScrolls(9), true);
+  assert.equal(gridScrolls(30), true);
 });
