@@ -200,14 +200,16 @@ Swipe a custom collection or a verse in a real collection left to reveal Delete.
 The same inset action opens the confirmation on both types of card. Collection
 actions also offer Delete on long press.
 
-The store's `deleteCollection` returns early for My Verses. It then finds the row and,
-for each verse, applies the same rule as above: remove the junction, and soft-delete or
-hard-delete if no other collection holds it. Last it sets `deleted_at` on the collection
-and updates local state. The virtual collections never get here, because the card
-disables their swipe. If they did, the row lookup would throw `Collection not found`.
-
-One swipe can fan out to many writes, one verse at a time, with no transaction and no
-optimistic update.
+The store's `deleteCollection` returns early for My Verses. A shared collection is left
+(member) or stops sharing first (owner). Then one call to `public.delete_collection`
+(`supabase/migrations/20261112190000_delete_collection.sql`) does the rest in one
+transaction: every verse leaves the collection, a verse no other collection holds is
+soft-deleted if mastered and hard-deleted otherwise, and the collection gets `deleted_at`.
+It succeeds whole or changes nothing, and a retry after success is a no-op. The function
+refuses My Verses and a collection still linked to a shared group. Only after it succeeds
+does the store drop the collection and its cards locally. The virtual collections never get
+here, because the card disables their swipe; if they did, the function would answer
+`Collection not found`.
 
 ## Reset progress
 
@@ -240,9 +242,6 @@ way a verse leaves Mastered.
   `resetVerseProgress` works out `wasMastered` from `verses` alone, and such a verse is only
   in `masteredVerses`. It stays listed with old progress until the next fetch. After that the
   row stays soft-deleted, in no list, until the user re-adds it.
-- **A failed collection delete can leave partial writes.** The per-verse writes don't check
-  errors. Only the final collection update throws, and by then verses may already be gone
-  while the local state is unchanged.
 - **Re-adding a soft-deleted verse restores it.** That's intended, because it preserves
   mastery, but a "new" verse can arrive with progress.
 - **A-Z isn't numeric.** `localeCompare` on the reference puts John 10 before John 3.

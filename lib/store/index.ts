@@ -1105,86 +1105,23 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().stopSharing(sharedId);
     }
 
-    // Get server UUID for this collection
-    const { data: collection, error: collectionError } = await supabase
-      .from('user_collections')
-      .select('id')
-      .eq('client_id', id)
-      .is('deleted_at', null)
-      .single();
-
-    if (collectionError || !collection) {
-      console.error('[STORE] Collection not found for deletion:', id);
-      throw new Error('Collection not found');
-    }
-
-    // Get all verses in this collection with their details
-    const { data: verseLinks } = await supabase
-      .from('verse_collections')
-      .select(`
-        verse_id,
-        user_verses!inner (
-          id,
-          client_id,
-          progress
-        )
-      `)
-      .eq('collection_id', collection.id);
-
-    // Process each verse
-    for (const link of verseLinks || []) {
-      const verse = link.user_verses as any;
-      const verseServerId = verse.id;
-      const isMastered = verse.progress?.hard?.completed === true;
-
-      // Check if verse is in other collections
-      const { count: otherCollectionCount } = await supabase
-        .from('verse_collections')
-        .select('*', { count: 'exact', head: true })
-        .eq('verse_id', verseServerId)
-        .neq('collection_id', collection.id);
-
-      // Remove from this collection's junction
-      await supabase
-        .from('verse_collections')
-        .delete()
-        .eq('verse_id', verseServerId)
-        .eq('collection_id', collection.id);
-
-      // If verse is not in any other collection, handle deletion
-      if ((otherCollectionCount || 0) === 0) {
-        if (isMastered) {
-          // Soft delete - keep for Mastered list
-          await supabase
-            .from('user_verses')
-            .update({ deleted_at: new Date().toISOString() })
-            .eq('id', verseServerId);
-        } else {
-          // Hard delete - remove completely
-          await hardDeleteVerses([verseServerId]);
-        }
-      }
-    }
-
-    // Soft-delete the collection
-    const { error: deleteError } = await supabase
-      .from('user_collections')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', collection.id);
-
-    if (deleteError) {
-      console.error('[STORE] Failed to delete collection:', deleteError);
+    // One transaction on the server: every verse leaves, held-elsewhere verses stay, and the
+    // collection goes, or nothing changes (supabase/migrations/*_delete_collection.sql).
+    const generation = accountGeneration;
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) return;
+    const { error } = await supabase.rpc('delete_collection', { collection_client_id: id })
+      .setHeader('Authorization', `Bearer ${session.access_token}`);
+    if (generation !== accountGeneration) return;
+    if (error) {
+      console.error('[STORE] Failed to delete collection:', error);
       throw new Error('Failed to delete collection');
     }
 
-    // Update local state - remove collection and its verses
-    const versesInCollection = get().verses.filter((v) => v.collectionId === id);
-    const verseIdsToRemove = new Set(versesInCollection.map((v) => v.id));
-
+    // Mastered verses held nowhere else stay on the Mastered list (soft-deleted).
     set((state) => ({
       collections: state.collections.filter((c) => c.id !== id),
       verses: state.verses.filter((v) => v.collectionId !== id),
-      // Keep mastered verses in masteredVerses list (they're soft-deleted)
     }));
   },
 
@@ -1483,7 +1420,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // A held verse is reused; otherwise the best soft-deleted row comes back.
     const { data: rows, error: lookupError } = await supabase
       .from('user_verses')
-      .select(VERSE_IDENTITY_COLUMNS)
+      .select(`${VERSE_IDENTITY_COLUMNS}, last_practiced_at, last_chunk_size, last_difficulty`)
       .eq('user_id', userId)
       .eq('book', verse.book)
       .eq('chapter', verse.chapter)
@@ -1500,6 +1437,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     let clientId: string;
     let version = translation;
     let progress: SavedVerse['progress'] = DEFAULT_PROGRESS;
+    const existingRow = existing && rows.find((r) => r.id === existing.id);
 
     if (existing) {
       verseId = existing.id;
@@ -1585,14 +1523,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       version,
       createdAt: createdAt.getTime(),
       progress,
+      ...(existingRow ? parseVerseRowExtras(existingRow) : {}),
     };
 
-    // Optimistic update - add to local state
-    set((state) => ({
-      verses: [resultVerse, ...state.verses],
-    }));
+    // Adding a verse the collection already holds keeps the one card it has.
+    const isThisMembership = (v: SavedVerse) => v.id === clientId && v.collectionId === collectionId;
+    set((state) => state.verses.some(isThisMembership)
+      ? state
+      : { verses: [resultVerse, ...state.verses] });
 
-    return resultVerse;
+    return get().verses.find(isThisMembership) ?? resultVerse;
   },
 
   deleteVerse: async (id: string, collectionId: string): Promise<{ wasMastered: boolean }> => {

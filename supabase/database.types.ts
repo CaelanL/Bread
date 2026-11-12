@@ -403,6 +403,9 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"delete_collection":
+{ Args: { "collection_client_id": string }; Returns: undefined
+                           },
 "delete_own_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
