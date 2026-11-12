@@ -1,4 +1,5 @@
 import { confirmLeave } from '@/components/shared/confirm-removal';
+import { shareInvite, useCopyCode } from '@/components/shared/invite-actions';
 import { manageMember } from '@/components/shared/member-actions';
 import { MemberRow, MemberRowPlaceholder } from '@/components/shared/MemberRow';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -7,15 +8,13 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
-import { daysLeft, inviteMessage, sharedErrorMessage } from '@/lib/shared/invite-code';
-import { copyText, getLiveInvite, getSharedMembers, type LiveInvite, type SharedMember } from '@/lib/shared/invites';
+import { daysLeft, sharedErrorMessage } from '@/lib/shared/invite-code';
+import { getLiveInvite, getSharedMembers, type LiveInvite, type SharedMember } from '@/lib/shared/invites';
 import { useAppStore, useCollection, useSharedCollection, useVersesLostWith } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
-import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-const COPIED_MS = 1500;
 // The code's and the days-left line's heights, which their stand-ins keep while the code loads.
 const CODE_LINE = 36;
 const META_LINE = 18;
@@ -50,11 +49,7 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
   const [invite, setInvite] = useState<LiveInvite | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
-  const codeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (codeTimer.current) clearTimeout(codeTimer.current);
-  }, []);
+  const { copied: codeCopied, copy, reset: resetCopied } = useCopyCode();
 
   const load = useCallback(async () => {
     if (!sharedId) return;
@@ -84,23 +79,11 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
   };
 
   const copyCode = () => {
-    if (!invite) return;
-    try {
-      copyText(invite.code);
-      if (process.env.EXPO_OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setCodeCopied(true);
-      if (codeTimer.current) clearTimeout(codeTimer.current);
-      codeTimer.current = setTimeout(() => setCodeCopied(false), COPIED_MS);
-    } catch {
-      showErrorToast("Couldn't copy the code. Use Share instead.");
-    }
+    if (invite) copy(invite.code);
   };
 
   const share = () => {
-    if (!invite) return;
-    Share.share({ message: inviteMessage(name, invite.code) }).catch(() => {
-      showErrorToast("Couldn't open sharing. Copy the code instead.");
-    });
+    if (invite) shareInvite(name, invite.code);
   };
 
   const newLink = () => {
@@ -111,7 +94,7 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
         text: 'New code',
         onPress: () => run(async () => {
           setInvite(await useAppStore.getState().mintInvite(sharedId));
-          setCodeCopied(false);
+          resetCopied();
         }, "Couldn't make a new code. Try again."),
       },
     ]);

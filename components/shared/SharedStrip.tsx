@@ -21,7 +21,7 @@ export function groupProgressLabel(progress: GroupProgressValue | null, verseCou
  * all squares). The rest of the card opens Who's where; a failed grid read shows Retry instead.
  */
 export function SharedStrip({ ownerName, members, memberCount, verseCount, progress, failed, onMembers, onSettings, onShowGrid, onRetry }: {
-  /** Null until the grid's first read. */
+  /** Null until known (the group list or the grid). */
   ownerName: string | null;
   /** Yours first. Null until the grid's first read. */
   members: { name: string; you: boolean }[] | null;

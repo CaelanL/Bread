@@ -8,7 +8,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
 import { hasOtherMembers, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
-import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useVersesByCollection, useVersesLostWith } from '@/lib/store';
+import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useSharedOwnerName, useVersesByCollection, useVersesLostWith } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useFocusEffect } from 'expo-router';
@@ -54,6 +54,7 @@ function CollectionCard({
   const now = useReviewNowValue();
   const dueCounts = useDueCounts(now);
   const shared = useSharedCollection(collection.id);
+  const ownerName = useSharedOwnerName(collection.id);
   const lostCount = useVersesLostWith(collection.id);
 
   const verseCount = isMastered
@@ -86,6 +87,7 @@ function CollectionCard({
       onShare={onShare}
       emblem={emblem}
       memberCount={group?.memberCount}
+      ownerName={group ? ownerName : undefined}
     />
   );
 }

@@ -111,10 +111,10 @@ name: shared-collections
 # Library shows it as shared; leaving from the swipe takes the unmastered verse.
 - openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Psalms, Shared · 2 members.*"
+    visible: ".*Psalms, Reader · 2 members.*"
     timeout: 15000
 - swipe:
-    from: ".*Psalms, Shared · 2 members.*"
+    from: ".*Psalms, Reader · 2 members.*"
     direction: LEFT
 - takeScreenshot: shared-6-swipe-leave
 - tapOn:
@@ -148,7 +148,7 @@ name: shared-collections
 # and goes back to the Library. Then reader-b joins again.
 - openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Psalms, Shared · 2 members.*"
+    visible: ".*Psalms, Reader · 2 members.*"
     timeout: 15000
 - runScript:
     file: scripts/shared-collections.js
@@ -157,7 +157,7 @@ name: shared-collections
       MODE: remove-members
 # The toast lasts 3 s, so the tap doesn't wait for the screen to settle.
 - tapOn:
-    text: ".*Psalms, Shared · 2 members.*"
+    text: ".*Psalms, Reader · 2 members.*"
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: ".*You were removed from Psalms.*"
@@ -181,9 +181,9 @@ name: shared-collections
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Psalms, Shared · 2 members.*"
+    visible: ".*Psalms, Reader · 2 members.*"
     timeout: 20000
-- longPressOn: ".*Psalms, Shared · 2 members.*"
+- longPressOn: ".*Psalms, Reader · 2 members.*"
 - tapOn: Delete
 - assertVisible: "Delete for everyone?"
 - assertVisible: ".*Members keep their own copy.*"

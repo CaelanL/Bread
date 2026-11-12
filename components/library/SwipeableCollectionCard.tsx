@@ -58,6 +58,8 @@ interface SwipeableCollectionCardProps {
   emblem?: Emblem | null;
   /** Set once someone besides the owner is in the shared collection, from `get_shared_status`. */
   memberCount?: number;
+  /** The shared collection's owner, shown before the member count; null until known. */
+  ownerName?: string | null;
 }
 
 export function SwipeableCollectionCard({
@@ -75,6 +77,7 @@ export function SwipeableCollectionCard({
   onShare,
   emblem,
   memberCount,
+  ownerName,
 }: SwipeableCollectionCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -99,7 +102,7 @@ export function SwipeableCollectionCard({
   const subtitle = emblem
     ? memberCount !== undefined ? `${emblemLabel} by everyone` : `${emblemLabel} · ${verseCount}`
     : memberCount !== undefined
-      ? `Shared · ${memberCount} member${memberCount !== 1 ? 's' : ''}`
+      ? [ownerName, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
       : verseCount;
 
   useEffect(() => {

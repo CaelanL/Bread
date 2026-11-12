@@ -129,6 +129,7 @@ test('joining and leaving a shared collection', async (t) => {
     const collection = state().collections.find((c) => c.id === copy.client_id);
     assert.equal(collection?.sharedId, group);
     assert.equal(state().sharedCollections[group]?.role, 'member');
+    assert.equal(state().sharedCollections[group]?.ownerName, 'Cara');
     assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 1);
   });
 
@@ -139,7 +140,7 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(rpcs[0][0], 'sync_shared_collection');
     assert.deepEqual(rpcs[0][1], { p_shared: group, p_version: 'NIV' });
     assert.deepEqual(rpcs.map(([name]) => name).sort(),
-      ['get_shared_members', 'get_shared_progress', 'get_shared_status', 'sync_shared_collection']);
+      ['get_shared_members', 'get_shared_members', 'get_shared_progress', 'get_shared_status', 'sync_shared_collection']);
     assert.ok(reads.includes('/rest/v1/shared_collection_verses'));
     const progress = state().sharedProgress[group];
     assert.equal(progress.failed, false);
@@ -184,7 +185,7 @@ test('joining and leaving a shared collection', async (t) => {
     await state().updateVerseProgress('verse-1', 'easy', 60);
     assert.deepEqual(rpcs, []);
     await state().updateVerseProgress('verse-1', 'hard', 95, true);
-    assert.deepEqual(rpcs.map(([name]) => name), ['get_shared_status']);
+    assert.deepEqual(rpcs.map(([name]) => name), ['get_shared_status', 'get_shared_members']);
   });
 
   await t.test("a member's delete is leave: the leave RPC, and the copy leaves the store", async () => {

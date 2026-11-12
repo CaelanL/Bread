@@ -1,6 +1,6 @@
 # Start from npm run db:reset. Critique pass 1 (C1, C2): reader-c Cara's long-press menu on a card
 # low on the screen stays fully visible; Share… on her personal "Psalm 23" makes a code but the card
-# stays personal ("Not shared yet"); Stop sharing kills that code. Then Stop sharing on
+# stays personal ("Not shared yet") and its screen shows the code; Stop sharing kills that code. Then Stop sharing on
 # "Philippians 4" (two members): her card and reader-e's copy are both personal again.
 # docs/features/shared-collections.md
 appId: com.caelanliu.biblemem
@@ -9,7 +9,7 @@ name: shared-stop
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, Shared · 2 members.*"
+    visible: ".*Romans 8, Cara · 2 members.*"
     timeout: 20000
 - scrollUntilVisible:
     element: ".*Psalm 23, .*Mastered.*"
@@ -35,7 +35,16 @@ name: shared-stop
 - extendedWaitUntil:
     visible: ".*Psalm 23, .*Mastered · .* verses.*"
     timeout: 10000
-- assertNotVisible: ".*Psalm 23, Shared.*"
+- assertNotVisible: ".*Psalm 23, .*members.*"
+# Inside, the code sits where the group card would.
+- tapOn: ".*Psalm 23, .*Mastered.*"
+- extendedWaitUntil:
+    visible:
+      id: strip-invite-code
+    timeout: 10000
+- assertVisible: "Invite code · No one has joined yet"
+- takeScreenshot: stop-2b-invite-in-collection
+- tapOn: "Back"
 - longPressOn: ".*Psalm 23, .*Mastered.*"
 - tapOn: "Share…"
 - extendedWaitUntil:

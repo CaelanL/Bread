@@ -1,5 +1,6 @@
 import { AppHeader } from '@/components/app-header';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
+import { InviteStrip } from '@/components/shared/InviteStrip';
 import { SharedStrip } from '@/components/shared/SharedStrip';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -14,7 +15,7 @@ import { groupProgress, hasOtherMembers, masteredByEveryoneCount, referenceKey }
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useVerses, useVersesByCollection } from '@/lib/store';
+import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
@@ -64,7 +65,8 @@ export default function CollectionScreen() {
     const members = (sharedProgress?.members ?? []).map((m) => ({ name: m.displayName, you: m.userId === user?.id }));
     return [...members.filter((m) => m.you), ...members.filter((m) => !m.you)];
   }, [sharedProgress, user]);
-  const ownerName = sharedProgress?.members.find((m) => m.role === 'owner')?.displayName ?? null;
+  const storedOwnerName = useSharedOwnerName(id || '');
+  const ownerName = (sharedProgress?.fetchedAt ? sharedProgress.members.find((m) => m.role === 'owner')?.displayName : null) ?? storedOwnerName;
   const groupRows = useMemo(() => new Map(grid?.rows.map((row) => [row.key, row])), [grid]);
 
   // Count how many collections each verse is in (by matching book/chapter/verse/version)
@@ -271,7 +273,7 @@ export default function CollectionScreen() {
 
       {withOthers && sharedId && (
         <SharedStrip
-          ownerName={sharedProgress?.fetchedAt ? ownerName : null}
+          ownerName={ownerName}
           members={sharedProgress?.fetchedAt ? stripMembers : null}
           memberCount={sharedProgress?.fetchedAt ? sharedProgress.members.length : shared?.memberCount ?? 1}
           verseCount={sharedProgress?.fetchedAt ? sharedProgress.references.length : shared?.verseCount ?? verses.length}
@@ -282,6 +284,10 @@ export default function CollectionScreen() {
           onShowGrid={showGrid}
           onRetry={() => void useAppStore.getState().fetchSharedProgress(sharedId)}
         />
+      )}
+
+      {sharedId && !withOthers && shared?.role === 'owner' && (
+        <InviteStrip sharedId={sharedId} name={collection?.name ?? shared.name} onSettings={() => router.push(`/share/${id}`)} />
       )}
 
       {/* Search and Sort Bar */}

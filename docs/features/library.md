@@ -51,7 +51,7 @@ inside the safe area, so a card near the bottom gets it moved up rather than cut
 actions to move up or down. Each drop saves the order, with rollback on failure.
 Tap Done to return to opening collections by tapping their rows.
 
-Each card: the icon square, name, a subtitle (verse count; "Shared · M members" once someone else
+Each card: the icon square, name, a subtitle (verse count; "<owner's name> · M members" once someone else
 is in a shared one), the due pill on Mastered, and a chevron. A collection whose every verse is
 mastered or engraved says so in the subtitle, and engraved fills the square; see
 [group progress](group-progress.md#library-cards).

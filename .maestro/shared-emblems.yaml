@@ -1,5 +1,5 @@
 # Start from npm run db:reset. Library-card emblems on the seeded "Romans 8" (reader-c Cara owns,
-# reader-d Dana is a member): plain "Shared · 2 members" from the seed, "Mastered by everyone" once
+# reader-d Dana is a member): plain "Cara · 2 members" from the seed, "Mastered by everyone" once
 # the script masters every square and "Engraved by everyone" once it engraves them, the personal
 # "Engraved" on Dana's copy after Cara deletes for everyone, and reader-a's Psalms mastered solo. docs/features/group-progress.md
 appId: com.caelanliu.biblemem
@@ -8,7 +8,7 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, Shared · 2 members.*"
+    visible: ".*Romans 8, Cara · 2 members.*"
     timeout: 20000
 - takeScreenshot: emblems-1-shared-plain
 

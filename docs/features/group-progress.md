@@ -30,17 +30,23 @@ shared collection looks like a personal one, and a personal collection looks as 
   sync; a copy no longer shared drops its grid), and pull to refresh runs it again. When the reload
   shows you were removed, the sync's error is dropped: the "You were removed" notice is the one
   message, and the screen goes back to the Library (a dissolved copy stays open, now personal). An add or remove by you, and the owner's role or member changes,
-  refetch the grid if it's loaded. Nothing beyond `get_shared_status` is read on the Library list.
+  refetch the grid if it's loaded. The Library list reads `get_shared_status`, plus `get_shared_members`
+  once per group you joined, for the owner's name (`profiles` is private to each user).
 - **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
   group's `shared_collection_verses`, turned into squares by `lib/shared/progress.ts` (pure,
   `progress.test.ts`). Your own squares come from your verses in this collection, so they move the
   moment a session saves. A failed read keeps the last grid and shows Retry on the group card; until a
   grid arrives the Group column reads "–" (loading, or unavailable after a failure).
 - **Group card** (`SharedStrip`, under the header): member initials (yours first and solid) and
-  "<owner's name> · N members · V verses" (no name until the grid loads), which open the member list (`app/share/[id]?view=members`:
+  "<owner's name> · N members · V verses" (the Library's name until the grid loads), which open the member list (`app/share/[id]?view=members`:
   names and roles, the owner's member actions); a gear, which opens the share panel
   (`app/share/[id].tsx`: invite, Stop sharing or Leave); and the group percentage with its bar and
   "Details". Every other point of the card opens [Who's where](#whos-where), titled "Details".
+- **Invite card** (`InviteStrip`): in the group card's place for the owner while no one else is in
+  it: "Invite code · No one has joined yet", the gear (share panel), and the code with copy
+  (`square.on.square`) and share (`square.and.arrow.up`), the panel's actions
+  (`components/shared/invite-actions.ts`). It reads `getLiveInvite` on each focus, so a new code
+  made on the panel shows on return; an expired code offers New code (the panel).
 - **Cards**: the same rows as a personal collection (book icon, difficulty dot or check, review
   badge), plus the group's count on the right (`GroupCount`): members who mastered the verse,
   engraved included, over all members, "8/10", the same on every row.
@@ -85,7 +91,7 @@ before that it follows the personal one.
 | Personal, engraved | The same, every verse Engraved | `engravedFill` behind the icon in `tint`, the engraved verse pill's colours | `EngravedIcon` in `tint`, "Engraved · N verses" |
 | Shared, mastered by everyone | `get_shared_status`: mastered squares = members × verses, above 0 | Unchanged | `checkmark`, "Mastered by everyone" |
 | Shared, engraved by everyone | Engraved squares = members × verses | As personal engraved | `EngravedIcon`, "Engraved by everyone" |
-| Shared, not yet | Anything else, or no status row yet | Unchanged | "Shared · M members" |
+| Shared, not yet | Anything else, or no status row yet | Unchanged | "<owner's name> · M members" (`useSharedOwnerName`; the count alone if the name couldn't be read) |
 
 Virtual collections never get one. A shared card reads the status from the last hydrate, refresh
 or collection visit, and a session that turns one of your squares mastered or engraved refetches it
@@ -105,7 +111,7 @@ Dana: the group card, Group counts, the members line opens the member list, the 
 panel, Details Who's where, Cara makes Dana an editor, Dana adds Romans 8:31, Cara sees it);
 `npm run sim -- flow shared-grid` (Dana opens Who's where from the group card: four states, your
 column first, member list; Cara opens it by link and makes Dana an editor there);
-`npm run sim -- flow shared-emblems` (the seeded group reads "Shared · 2 members", its script
+`npm run sim -- flow shared-emblems` (the seeded group reads "Cara · 2 members", its script
 masters and then engraves every square, "Engraved by everyone", Cara deletes for everyone and
 Dana's copy reads "Engraved · 3 verses", reader-a's Psalms reads "Mastered · 1 verse"). Shots:
 `npm run sim -- shot "/(tabs)/(library)" --as reader-c` (the card without an emblem),
@@ -126,4 +132,6 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 - 2026-11-11 · Your column is marked by a solid `primary` circle, not a caption · One marker, no extra row, the same mark on the group card and the member rows.
 - 2026-11-11 · Columns keep a fixed 26 pt pitch and scroll from the measured width · Stretched columns spread a two-member grid across the card, and a member-count cutoff overlapped columns beside long references.
 - 2026-11-12 · Done collections keep their own icon; mastered adds a check to the subtitle, engraved fills the square like the engraved verse pill; no ring, the same on personal and shared cards · Caelan's phone pass: the swapped check or cross lost the collection's identity, and the green square and ring read as a highlight. Replaces the emblem square and ring of 2026-11-11.
-- 2026-11-11 · A shared card without the emblem reads "Shared · M members" instead of the verse count · Shared and personal collections read differently at a glance; the verse count is on the group card. A collection only its owner is in reads as personal.
+- 2026-11-12 · A shared card without the emblem reads "<owner's name> · M members" instead of the verse count, like the group card · Shared and personal collections read differently at a glance, and Caelan's pass 2 wanted the owner's name in place of "Shared"; the verse count is on the group card. A collection only its owner is in reads as personal (its verse count), even with a code out.
+- 2026-11-12 · Before anyone joins, the owner's collection screen shows the code in the group card's place · Caelan's pass 2: the code must be findable inside the collection, not only from Share again.
+- 2026-11-12 · A joined group's owner name comes from `get_shared_members`, one read per joined group on each Library load (20 at most) · No schema change while the branch's migration is on testers' databases. If it ever costs, add the owner's name to `get_shared_status`.

@@ -79,6 +79,8 @@ export type SharedRole = 'owner' | 'editor' | 'member';
 export interface SharedCollectionInfo {
   id: string;
   ownerId: string;
+  /** The owner's display name for a group you joined; null for your own (read `displayName`) or when it couldn't be read. */
+  ownerName: string | null;
   name: string;
   role: SharedRole;
   memberCount: number;

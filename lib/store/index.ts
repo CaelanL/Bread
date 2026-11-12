@@ -701,6 +701,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const roles = new Map(mine.data.map((m) => [m.shared_collection_id, m.role]));
       const counts = new Map(status.data.map((row) => [row.shared_id, row]));
+      // Library cards name the owner. `profiles` is private to each user, so a joined group's owner
+      // comes from its member list, one read per joined group (20 at most); a failed read leaves no name.
+      const ownerNames = new Map(await Promise.all(groups.data
+        .filter((group) => roles.get(group.id) !== 'owner' && counts.has(group.id))
+        .map(async (group) => [group.id, await getSharedMembers(group.id)
+          .then((members) => members.find((m) => m.role === 'owner')?.displayName ?? null, () => null)] as const)));
+      if (generation !== accountGeneration) return false;
       const sharedCollections: Record<string, SharedCollectionInfo> = {};
       for (const group of groups.data) {
         const role = roles.get(group.id);
@@ -709,6 +716,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sharedCollections[group.id] = {
           id: group.id,
           ownerId: group.owner_id,
+          ownerName: ownerNames.get(group.id) ?? null,
           name: group.name,
           role,
           memberCount: count.member_count,
@@ -1951,6 +1959,16 @@ export function useSharedCollection(collectionId: string): SharedCollectionInfo 
   return useAppStore((state) => {
     const sharedId = state.collections.find((c) => c.id === collectionId)?.sharedId;
     return sharedId ? state.sharedCollections[sharedId] : undefined;
+  });
+}
+
+/** The owner's display name for a shared collection (yours when you own it), or null. */
+export function useSharedOwnerName(collectionId: string): string | null {
+  return useAppStore((state) => {
+    const sharedId = state.collections.find((c) => c.id === collectionId)?.sharedId;
+    const shared = sharedId ? state.sharedCollections[sharedId] : undefined;
+    if (!shared) return null;
+    return shared.role === 'owner' ? state.displayName : shared.ownerName;
   });
 }
 
