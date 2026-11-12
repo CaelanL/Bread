@@ -80,6 +80,18 @@ test('monthly loads publish reference metadata promptly and keep text with its c
     pending.reply.resolve(Response.json({ reference: 'Psalms 23:1', version: 'ESV', text: 'Old response', verses: { 1: 'Old response' } }));
     await old; assert.equal(updates.at(-1).text, 'Synthetic NLT');
   });
+  await t.test('a translation switch clears the old words at once, and neither a failed newer read nor a late older reply brings them back', async () => {
+    reset(); const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));
+    await loader.load('ESV', november); assert.equal(updates.at(-1).text, 'Synthetic ESV');
+    clearSessionCache(); const pending = hold('ESV'); const old = loader.load('ESV', november); await pending.sent.promise;
+    failText = true; const switched = updates.length; const nlt = loader.load('NLT', november);
+    assert.equal(updates.at(-1).text, null); assert.equal(updates.at(-1).votm, null);
+    await nlt;
+    assert.equal(updates.at(-1).text, null); assert.match(updates.at(-1).error, /verse text/);
+    pending.reply.resolve(Response.json({ reference: 'Psalms 23:1', version: 'ESV', text: 'Old response', verses: { 1: 'Old response' } }));
+    await old;
+    for (const state of updates.slice(switched)) assert.equal(state.text, null);
+  });
   await t.test('month changes clear the prior verse immediately and fetch the new month', async () => {
     reset(); const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));
     await loader.load('ESV', november);

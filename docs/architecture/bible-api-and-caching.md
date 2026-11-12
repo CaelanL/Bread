@@ -50,6 +50,14 @@ cleared on restart:
 No eviction — relies on app restart. No TTL. The session cache is
 why opening the same verse twice in a session never hits the network.
 
+Identical reads still in progress share one promise (`inFlight` in
+`lib/api/bible.ts`), keyed by passage or chapter, reference and
+translation. Store hydrate asks for every collection membership at
+once, so a passage in three collections makes one request, not three.
+The entry is removed when the read succeeds or fails, so a failure
+never blocks a retry. `clearSessionCache` doesn't touch in-flight
+entries. Regression tests: `tests/bible-in-flight.test.mjs`.
+
 Two rules, both from the Psalm 103 bug (see Decisions):
 
 - **`verseCache` entries are always single-verse text.** Range fetches
