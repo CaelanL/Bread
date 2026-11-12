@@ -61,7 +61,7 @@ collection, as on the collection screen. It reads the same grid (`useSharedGrid`
 your verses), nothing new.
 
 - **Layout**: flat on the page, no cards: `TopBar` (back) over a large "Details" with the
-  collection's name under it, then "47% together" (28 pt figure, the header's 4 pt line, "N of M
+  collection's name under it, then "47%" (28 pt figure, the header's 4 pt line, "N of M
   verses mastered by everyone"), then Verses and Members under small uppercase labels.
 - **Grid**: members across and references down.
   Your column comes first, marked by the only solid initial circle, then the owner and the rest by

@@ -169,7 +169,7 @@ export default function WhoIsWhereScreen() {
 
             <View accessible accessibilityLabel={groupProgressLabel(progress, verseCount)} style={styles.progress}>
               <Text style={[styles.figure, { color: colors.text }]}>
-                {percent}%<Text style={[styles.figureLabel, { color: colors.icon }]}> together</Text>
+                {percent}%
               </Text>
               <View style={[styles.track, { backgroundColor: colors.border }]}>
                 <View style={[styles.fill, { width: `${percent}%`, backgroundColor: colors.success }]} />
@@ -252,7 +252,6 @@ const styles = StyleSheet.create({
   staleRetry: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   progress: { gap: 10, marginTop: -8 },
   figure: { fontSize: 28, lineHeight: 34, fontWeight: '600', fontVariant: ['tabular-nums'], letterSpacing: -0.3 },
-  figureLabel: { fontSize: 15, fontWeight: '400', letterSpacing: 0 },
   section: { gap: 10 },
   data: { fontSize: 15, lineHeight: 20 },
   secondary: { fontSize: 13, lineHeight: 18 },
