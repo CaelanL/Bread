@@ -7,7 +7,13 @@ appId: com.caelanliu.biblemem
 name: quick-add
 ---
 - runFlow: subflows/open-app.yaml
-- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)%2Fmy-verses
+# My Verses opened by tapping it: opened straight from the dev-sign-in link it is the Library
+# stack's only screen, and its cards don't take the cleanup swipe (F49).
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*My Verses.*"
+    timeout: 20000
+- tapOn: ".*My Verses.*"
 - waitForAnimationToEnd
 # A failed earlier run can leave the verses behind.
 - runFlow:
@@ -90,16 +96,12 @@ name: quick-add
     visible: ".*Romans 8:1 • .*"
     timeout: 20000
 - assertNotVisible: ".*Romans 8:1-4 • .*"
-# Right after Back the first swipe can land before the card takes gestures.
-- retry:
-    maxRetries: 2
-    commands:
-      - waitForAnimationToEnd
-      - swipe:
-          from: ".*Romans 8:1 • .*"
-          direction: LEFT
-      - tapOn:
-          id: swipe-delete
+- waitForAnimationToEnd
+- swipe:
+    from: ".*Romans 8:1 • .*"
+    direction: LEFT
+- tapOn:
+    id: swipe-delete
 - assertVisible: "Delete verse?"
 - tapOn:
     text: Delete

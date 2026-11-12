@@ -2,6 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, InputText, Motion, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { completeBook, MAX_ROWS, parseQuickAdd, quickAddRows, type QuickAddReference, type QuickAddRow } from '@/lib/bible/quick-add';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import { formatVerseReference, type SavedVerse } from '@/lib/storage';
 import { useAppStore, useVersesByCollection } from '@/lib/store';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -98,7 +99,7 @@ export function QuickAddField({
       setToast({ message: `Added ${reference}`, added });
     } catch (error) {
       console.error('Failed to add verse:', error);
-      setToast({ message: `Could not add ${reference}. Please try again.`, error: true });
+      setToast({ message: sharedErrorMessage(error, `Could not add ${reference}. Please try again.`), error: true });
     } finally {
       pending.current.delete(key);
     }

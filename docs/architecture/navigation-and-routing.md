@@ -97,8 +97,12 @@ VoiceOver and Maestro, on both `transparentModal` and `containedTransparentModal
 stays reachable. It isn't react-native-screens recycling the screen (`RNSScreen` returns NO from
 `shouldBeRecycled`) or native-stack's `aria-hidden` (Fabric doesn't parse it on a screen; removing
 it changed nothing). The UIKit step that empties the window is unproven. One path still reads
-empty: after an X close, New collection (an RN `Modal`) then the long-press Share… opens a share
-modal Maestro can't see, so `library-plus` relaunches before that leg. Flow: `library-plus`
+empty: after an X close, opening and cancelling New collection's name modal (an RN `Modal`; a
+bare one holding only a View and Cancel does the same, the + menu doesn't) makes the next modal
+route (Share…, Join with code) read as empty to Maestro, and so likely to VoiceOver. Touch still
+works, and the modal route after that one reads normally. Hiding the name modal's backdrop,
+dropping its blur, Reanimated view or autoFocus, and keeping it mounted changed nothing, so
+`library-plus` still relaunches before that leg. Flow: `library-plus`
 closes the share modal and Join with code with the X and reopens Join with code.
 
 `app/notifications.tsx` and `app/reset-password.tsx` are plain root

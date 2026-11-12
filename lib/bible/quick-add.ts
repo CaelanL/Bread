@@ -50,8 +50,11 @@ function splitBook(input: string): { query: string; rest: string } {
 export function parseQuickAdd(input: string): QuickAddParse {
   if (!input.trim()) return { kind: 'empty' };
 
-  const { query, rest } = splitBook(input);
+  const { query, rest: typed } = splitBook(input);
   const matches = matchBooks(query);
+  // A one-chapter book is cited by verse alone: "Jude 24" is Jude 1:24, "Jude 3-5" is Jude 1:3-5.
+  const versesOnly = matches.length === 1 && getChapterCount(matches[0]) === 1 && /^\D*\d+(\s*[-–—]\s*\d*)?\D*$/.test(typed);
+  const rest = versesOnly ? `1:${typed}` : typed;
   // parts alternates separator, number, separator, number, ...
   const parts = rest.split(/(\d+)/);
   const numbers = parts.filter((_, i) => i % 2 === 1).map(Number);
@@ -116,6 +119,15 @@ export function quickAddRows(input: string): QuickAddRow[] {
       return firstNumbers(getVerseCount(book, chapter) - verseStart + 1).map((length) => ({
         kind: 'add', book, chapter, verseStart, verseEnd: verseStart + length - 1,
       }));
+    }
+    case 'error': {
+      // A range end still being typed (8:28-3 on the way to 8:28-30): the ranges it can become.
+      if (parse.reason !== 'reversed') return [];
+      const { book, chapter, verseStart, verseEnd, verseCount } = parse;
+      return Array.from({ length: verseCount - verseStart }, (_, i) => verseStart + 1 + i)
+        .filter((end) => String(end).startsWith(String(verseEnd)))
+        .slice(0, MAX_ROWS)
+        .map((end) => ({ kind: 'add', book, chapter, verseStart, verseEnd: end }));
     }
     default:
       return [];

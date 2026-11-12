@@ -66,6 +66,16 @@ describe('parseQuickAdd', () => {
     assert.deepEqual(parseQuickAdd('Gen 5'), { kind: 'chapter', book: 'Genesis', chapter: 5, verseCount: 32 });
   });
 
+  it('reads a lone number in a one-chapter book as a verse', () => {
+    assert.deepEqual(parseQuickAdd('Jude 24'), { kind: 'verse', book: 'Jude', chapter: 1, verseStart: 24, verseEnd: 24 });
+    for (const [text, book, verse] of [['Obadiah 3', 'Obadiah', 3], ['Philemon 6', 'Philemon', 6], ['2 John 5', '2 John', 5], ['3 John 4', '3 John', 4]] as const) {
+      assert.deepEqual(parseQuickAdd(text), { kind: 'verse', book, chapter: 1, verseStart: verse, verseEnd: verse }, text);
+    }
+    assert.deepEqual(parseQuickAdd('Jude 3-5'), { kind: 'verse', book: 'Jude', chapter: 1, verseStart: 3, verseEnd: 5 });
+    assert.deepEqual(parseQuickAdd('Jude 1:24'), { kind: 'verse', book: 'Jude', chapter: 1, verseStart: 24, verseEnd: 24 });
+    assert.equal(reason(parseQuickAdd('Jude 30')), 'verse');
+  });
+
   it('flags a chapter or verse out of range', () => {
     assert.deepEqual(parseQuickAdd('John 22 1'), {
       kind: 'error', reason: 'chapter', book: 'John', chapter: 22, chapterCount: 21, verseStart: 1, verseEnd: 1,
@@ -124,8 +134,19 @@ describe('quickAddRows', () => {
     assert.deepEqual(adds('Romans 8:1-4'), ['8:1-4']);
   });
 
+  it('offers the ranges a partly typed end can become', () => {
+    assert.deepEqual(adds('Romans 8:28-3'), ['8:28-30', '8:28-31', '8:28-32', '8:28-33', '8:28-34', '8:28-35']);
+    assert.deepEqual(adds('Romans 8:3-1'), ['8:3-10', '8:3-11', '8:3-12', '8:3-13', '8:3-14', '8:3-15']);
+    assert.deepEqual(adds('Romans 8:28-2'), ['8:28-29']);
+    assert.deepEqual(adds('Jude 24-2'), ['1:24-25']);
+  });
+
+  it('offers verses of a one-chapter book from a lone number', () => {
+    assert.deepEqual(adds('Jude 24'), ['1:24-24', '1:24-25']);
+  });
+
   it('shows nothing for no match or a reference outside the book', () => {
-    for (const text of ['', 'xq', 'Romans 17', 'Romans 8:40', 'Romans 8:4-1', 'Romans 8:30-9:2']) {
+    for (const text of ['', 'xq', 'Romans 17', 'Romans 8:40', 'Romans 8:28-27', 'Romans 8:30-9:2', 'Jude 30']) {
       assert.deepEqual(quickAddRows(text), [], text);
     }
   });

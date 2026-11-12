@@ -64,7 +64,9 @@ keystroke.
 | `Romans 8` | Romans 8:1 to 8:6, each filling `Romans 8:1` |
 | `Romans 8:1` | Romans 8:1 on top, then 8:1-2 up to 8:1-6, all adds |
 | `Romans 8:1-4` | That range alone, as an add |
-| No match, a chapter or verse outside the book, a reversed range, a range across chapters | None |
+| `Romans 8:28-3` | An end still being typed: the ranges it can become, 8:28-30 up to 8:28-35, all adds |
+| `Jude 24`, `Jude 3-5` | A one-chapter book (Obadiah, Philemon, 2 John, 3 John, Jude) takes a lone number or range as verses: Jude 1:24 and 1:24-25 |
+| No match, a chapter or verse outside the book, a reversed range no end can complete (`Romans 8:28-27`), a range across chapters | None |
 
 - **Fill rows** end in an up-left arrow (`arrow.up.left`) and rewrite the field, so the next
   rows narrow. **Add rows** end in a plus.
@@ -88,7 +90,8 @@ An add row calls `addVerse` once, the same store action, account translation and
 as the chapter screen. No verse text is read. The field clears and the keyboard stays up. On
 success a toast says "Added Romans 8:1" with Undo for 4 seconds; Undo calls `deleteVerse` for
 that verse in this collection. A failed add or undo shows its error in the same toast, since the
-app's global error toast sits under the keyboard. The toast rides above the keyboard
+app's global error toast sits under the keyboard. A shared collection's own refusal (the
+200-verse cap) shows as written, through `sharedErrorMessage`. The toast rides above the keyboard
 (`KeyboardStickyView`), and Cancel dismisses it.
 
 A reference already in the collection, worked out from the store, shows "Already in this
