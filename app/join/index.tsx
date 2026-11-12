@@ -1,3 +1,4 @@
+import { JoinInvite } from '@/components/shared/JoinInvite';
 import { SheetLayout } from '@/components/ui/BottomSheet';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -10,6 +11,7 @@ import { Pressable, StyleSheet, Text, TextInput } from 'react-native';
 export default function JoinCodeScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const [code, setCode] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const ready = code.length === INVITE_CODE_LENGTH;
 
   const close = () => {
@@ -17,9 +19,12 @@ export default function JoinCodeScreen() {
     else router.replace('/(tabs)/(library)');
   };
 
+  // The invite opens in place: replacing this modal with the link route hid the new one from accessibility.
   const next = () => {
-    if (ready) router.replace(`/join/${code}`);
+    if (ready) setSubmitted(true);
   };
+
+  if (submitted) return <JoinInvite code={code} />;
 
   return (
     <SheetLayout onClose={close}>

@@ -1,0 +1,102 @@
+# Start from npm run db:reset. reader-a types the seeded code BREAD828 from the Library and joins
+# Romans 8 (their own Romans 8:28 is reused); reader-c makes a new link, so BREAD828 stops
+# working for reader-b; a link opened signed out shows the join modal after sign-in.
+appId: com.caelanliu.biblemem
+name: shared-join-code
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Psalms, 1 verse.*"
+    timeout: 20000
+- tapOn: "New collection"
+- tapOn: "Have an invite code?"
+- extendedWaitUntil:
+    visible:
+      id: join-code-input
+    timeout: 8000
+- inputText: "bread-828"
+- assertVisible: "BREAD828"
+- takeScreenshot: join-code-1-typed
+- tapOn:
+    id: join-code-continue
+- extendedWaitUntil:
+    visible: "CARA INVITED YOU"
+    timeout: 15000
+- assertVisible: "Romans 8"
+- assertVisible: "3 verses · 2 members"
+- tapOn:
+    id: join-button
+- tapOn:
+    id: display-name-continue
+- extendedWaitUntil:
+    visible: "Shared, 3 members.*"
+    timeout: 20000
+- assertVisible: ".*Romans 8:28 • ESV.*"
+- takeScreenshot: join-code-2-joined
+
+# The owner replaces the link; the old code stops working.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fseed-romans-8
+- extendedWaitUntil:
+    visible:
+      id: shared-row
+    timeout: 20000
+- tapOn:
+    id: shared-row
+- extendedWaitUntil:
+    visible: "BREAD828"
+    timeout: 10000
+- assertVisible: "Reader, Member"
+- tapOn:
+    id: invite-new
+- assertVisible: "Make a new link?"
+- tapOn: "New link"
+- extendedWaitUntil:
+    notVisible: "BREAD828"
+    timeout: 10000
+- runScript:
+    file: scripts/shared-collections.js
+    env:
+      READER: reader-c
+      MODE: invite
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fjoin
+- extendedWaitUntil:
+    visible:
+      id: join-code-input
+    timeout: 20000
+- inputText: "BREAD828"
+- tapOn:
+    id: join-code-continue
+- extendedWaitUntil:
+    visible: "Invite unavailable"
+    timeout: 15000
+- assertVisible: ".*doesn't match an invite.*"
+- takeScreenshot: join-code-3-revoked
+- tapOn:
+    id: join-not-now
+
+# Signed out: the link waits through sign-in, then the modal opens.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://join/${output.code}
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 15000
+# Not subflows/sign-in.yaml: it waits for the tab bar, which the modal covers.
+- tapOn: "Email"
+- inputText: reader-b@example.test
+- tapOn: "Password"
+- inputText: password123 # local seed users only, see supabase/seed.sql
+- hideKeyboard
+- tapOn: "Sign In"
+- extendedWaitUntil:
+    visible: "CARA INVITED YOU"
+    timeout: 30000
+- tapOn:
+    text: "Maybe later"
+    optional: true
+- assertVisible: "3 verses · 3 members"
+- takeScreenshot: join-code-4-after-sign-in
+- tapOn:
+    id: join-not-now
