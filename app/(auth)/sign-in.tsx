@@ -98,6 +98,9 @@ export default function SignInScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="emailAddress"
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
@@ -124,6 +127,9 @@ export default function SignInScreen() {
               onBlur={() => setPasswordFocused(false)}
               secureTextEntry={!showPassword}
               autoComplete="password"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="password"
               returnKeyType="done"
               onSubmitEditing={handleSignIn}
             />

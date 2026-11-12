@@ -117,6 +117,9 @@ export default function ForgotPasswordScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="emailAddress"
               returnKeyType="done"
               onSubmitEditing={handleResetPassword}
             />

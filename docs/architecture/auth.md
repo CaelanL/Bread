@@ -226,3 +226,7 @@ check, the database refuses the write.
   "Bea" is back after a relaunch and fresh sign-in. Needs a fresh seed.
 - `npm run sim -- flow sign-in-out`: reader-b signs in through the form, Settings shows
   `reader-b@example.test`, Sign Out returns to the Sign In screen.
+
+## Decisions
+
+- 2026-11-12 · Credential fields (sign-in, sign-up, forgot and reset password) set `autoCorrect={false}`, `spellCheck={false}` and their `textContentType` · The predictive bar changed the keyboard's height on the first letter of each word, and `KeyboardAwareScrollView` re-scrolled each time (the screen jittered on a phone). It already scrolls only when the field is covered, so the scroll view is unchanged.

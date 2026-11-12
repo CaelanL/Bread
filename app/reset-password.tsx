@@ -116,6 +116,9 @@ export default function ResetPasswordScreen() {
               onFocus={() => setPasswordFocused(true)}
               onBlur={() => setPasswordFocused(false)}
               secureTextEntry
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               autoCapitalize="none"
               returnKeyType="next"
               onSubmitEditing={() => confirmRef.current?.focus()}
@@ -142,6 +145,9 @@ export default function ResetPasswordScreen() {
               onFocus={() => setConfirmFocused(true)}
               onBlur={() => setConfirmFocused(false)}
               secureTextEntry
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               autoCapitalize="none"
               returnKeyType="done"
               onSubmitEditing={handleResetPassword}

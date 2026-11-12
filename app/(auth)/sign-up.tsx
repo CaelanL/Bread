@@ -108,6 +108,9 @@ export default function SignUpScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="emailAddress"
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
@@ -134,6 +137,9 @@ export default function SignUpScreen() {
               onBlur={() => setPasswordFocused(false)}
               secureTextEntry={!showPassword}
               autoComplete="new-password"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               returnKeyType="next"
               onSubmitEditing={() => confirmRef.current?.focus()}
             />
@@ -167,6 +173,9 @@ export default function SignUpScreen() {
               onBlur={() => setConfirmFocused(false)}
               secureTextEntry={!showConfirmPassword}
               autoComplete="new-password"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               returnKeyType="done"
               onSubmitEditing={handleSignUp}
             />
