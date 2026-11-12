@@ -1,12 +1,11 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Fonts, InputText, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { BlurView } from 'expo-blur';
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 /**
- * A card centered on a blurred, dimmed backdrop with an X to close. Render it from a route
+ * A card centered on a dimmed backdrop with an X to close. Render it from a route
  * presented as a native transparentModal, never inside an RN Modal: an RN Modal under a native
  * modal is dismissed natively while React still holds it, and the screen can't present another.
  */
@@ -21,9 +20,9 @@ export function ModalCard({ onClose, closeDisabled, children }: {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Hidden from accessibility (the X closes for VoiceOver). With accessible={false} instead, a
           card reopened after an X close left the whole window empty to VoiceOver and Maestro. */}
-      <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" disabled={closeDisabled} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]}>
-        <BlurView intensity={20} tint={scheme} style={StyleSheet.absoluteFill} />
-      </Pressable>
+      {/* A dim, no blur: the route fades in and out natively, and a blur view under a fading parent
+          drops its effect for the whole fade, so closing flashed from blurred to sharp (C17). */}
+      <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" disabled={closeDisabled} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
       <View accessibilityViewIsModal style={[styles.card, { backgroundColor: colors.card }]}>
         {children}
         <Pressable

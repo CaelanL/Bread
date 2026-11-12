@@ -199,7 +199,7 @@ have hex literals; don't copy them.
 | `IntroVideoModal.tsx` | Dark video surface, captions, close and playback controls |
 | `AddToCollectionModal.tsx` | Pick collection(s) for a verse |
 | `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
-| `ModalCard.tsx` | `ModalCard` (a centered card on a blurred, dimmed backdrop, with an X) and `modalStyles` (its type, input and button), for modal routes |
+| `ModalCard.tsx` | `ModalCard` (a centered card on a dimmed backdrop, with an X) and `modalStyles` (its type, input and button), for modal routes |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
 | `TopBar.tsx` | `TopBar`, `TopBarButton`, `useScrollY`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
 
@@ -313,3 +313,4 @@ Invariant 8 is above. Also:
 ## Decisions
 
 - 2026-11-10 · Translation-picker backdrops are not accessibility elements · Settings' outer Pressable otherwise grouped the entire popup, hiding individual translation choices from native accessibility and UI automation. `accessible={false}` preserves the existing layout and dismissal behavior while exposing the option rows.
+- 2026-11-12 · `ModalCard`'s backdrop is a plain dim, no `BlurView` · Its routes fade natively, and a blur view under a fading parent drops its effect for the whole fade, so closing the share card flashed from blurred to sharp (Caelan's pass 3, C17).
