@@ -70,6 +70,21 @@ export interface Collection {
   iconColor?: string; // Hex color for icon
   createdAt: number;
   sortPreference?: SortOption; // Per-collection sort, NULL = default
+  sharedId?: string; // shared_collections.id when this is a member's copy of a shared collection
+}
+
+export type SharedRole = 'owner' | 'editor' | 'member';
+
+/** One shared collection the user belongs to, from shared_collections and get_shared_status(). */
+export interface SharedCollectionInfo {
+  id: string;
+  ownerId: string;
+  name: string;
+  role: SharedRole;
+  memberCount: number;
+  verseCount: number;
+  masteredSquares: number;
+  engravedSquares: number;
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -164,6 +179,7 @@ export function parseCollectionRow(row: {
   created_at: string;
   sort_preference?: unknown;
   icon_key?: unknown;
+  shared_collection_id?: string | null;
 }): Collection {
   return {
     id: row.client_id,
@@ -172,6 +188,7 @@ export function parseCollectionRow(row: {
     createdAt: new Date(row.created_at).getTime(),
     sortPreference: parseSortPreference(row.sort_preference),
     iconKey: !row.is_default && isCollectionIconKey(row.icon_key) ? row.icon_key : undefined,
+    sharedId: row.shared_collection_id ?? undefined,
   };
 }
 

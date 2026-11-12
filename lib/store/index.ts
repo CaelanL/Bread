@@ -9,13 +9,15 @@
 import { ensureAuth } from '@/lib/api';
 import { fetchVerse, getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 import { importCollection } from '@/lib/collections/import';
 import { validateCollectionPassages } from '@/lib/collections/passages';
 import { readCollectionSavers } from '@/lib/collections/savers';
 import type { CollectionIconKey } from '@/lib/collections/icons';
 import { BIBLE_VERSIONS, type ColorMode } from '@/lib/settings';
-import type { BibleVersion, Collection, Difficulty, SavedVerse, SortOption, VerseProgress } from '@/lib/storage';
+import { isSharedRole, normalizeInviteCode } from '@/lib/shared/invite-code';
+import type { BibleVersion, Collection, Difficulty, SavedVerse, SharedCollectionInfo, SharedRole, SortOption, VerseProgress } from '@/lib/storage';
 import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, formatVerseReference, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
@@ -78,6 +80,8 @@ interface AppState {
   verses: SavedVerse[];
   masteredVerses: SavedVerse[];
   curatedSaverCounts: Partial<Record<string, number>>;
+  // Shared collections the user belongs to, by shared_collections.id. See docs/features/shared-collections.md.
+  sharedCollections: Record<string, SharedCollectionInfo>;
 
   // Settings
   colorMode: ColorMode;
@@ -105,6 +109,7 @@ interface AppState {
   fetchVerses: () => Promise<boolean>;
   fetchMasteredVerses: () => Promise<boolean>;
   fetchCuratedSaverCounts: (signal?: AbortSignal) => Promise<boolean>;
+  fetchSharedCollections: () => Promise<boolean>;
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -123,6 +128,15 @@ interface AppState {
   reorderCollections: (ids: string[]) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   setCollectionSort: (collectionId: string, sort: SortOption) => Promise<void>;
+
+  // Actions - Shared collections. Every failure throws for the caller's toast; nothing is queued.
+  shareCollection: (collectionId: string) => Promise<{ sharedId: string; code: string }>;
+  mintInvite: (sharedId: string) => Promise<{ code: string; expiresAt: string }>;
+  joinSharedCollection: (code: string) => Promise<string>;
+  syncSharedCollection: (sharedId: string) => Promise<boolean>;
+  leaveSharedCollection: (sharedId: string) => Promise<void>;
+  removeSharedMember: (sharedId: string, userId: string) => Promise<void>;
+  setSharedMemberRole: (sharedId: string, userId: string, role: Exclude<SharedRole, 'owner'>) => Promise<void>;
 
   // Actions - Verses
   addVerse: (
@@ -168,6 +182,8 @@ async function getCollectionWriteSession(generation: number) {
 }
 
 type VerseRow = Database['public']['Tables']['user_verses']['Row'];
+// The shared client isn't typed with Database; this view of it is, for the shared-collection calls.
+const db: SupabaseClient<Database> = supabase;
 type VerseMembershipRow = { user_verses: VerseRow; added_at: string };
 
 function parseVerseMembership(row: VerseRow, collectionId: string, addedAt: string): SavedVerse {
@@ -382,6 +398,46 @@ async function syncAccountTranslation(generation: number) {
   if (generation === accountGeneration) await tellKeptVerses(kept, translation);
 }
 
+// ============ SHARED COLLECTIONS ============
+
+function sharedIdOf(collectionId: string): string | undefined {
+  return useAppStore.getState().collections.find((c) => c.id === collectionId)?.sharedId;
+}
+
+function sharedRole(sharedId: string): SharedRole {
+  const role = useAppStore.getState().sharedCollections[sharedId]?.role;
+  if (!role) throw new Error("This shared collection hasn't loaded. Pull to refresh.");
+  return role;
+}
+
+function sameReference(a: Pick<SavedVerse, 'book' | 'chapter' | 'verseStart' | 'verseEnd'>, b: typeof a) {
+  return a.book === b.book && a.chapter === b.chapter && a.verseStart === b.verseStart && a.verseEnd === b.verseEnd;
+}
+
+// Owners and editors add to the group's reference list; sync then makes their own copy match.
+async function addSharedVerse(
+  sharedId: string,
+  collectionId: string,
+  verse: Pick<SavedVerse, 'book' | 'chapter' | 'verseStart' | 'verseEnd'>,
+): Promise<SavedVerse> {
+  if (sharedRole(sharedId) === 'member') throw new Error('Only the owner and editors can add verses here.');
+  const { error } = await db.from('shared_collection_verses').insert({
+    shared_collection_id: sharedId,
+    book: verse.book,
+    chapter: verse.chapter,
+    verse_start: verse.verseStart,
+    verse_end: verse.verseEnd,
+  });
+  // Already a reference (another editor added it): sync still links the copy.
+  if (error && error.code !== '23505') throw error;
+  await useAppStore.getState().syncSharedCollection(sharedId);
+  const find = () => useAppStore.getState().verses.find((v) => v.collectionId === collectionId && sameReference(v, verse));
+  if (!find()) await useAppStore.getState().fetchVerses();
+  const added = find();
+  if (!added) throw new Error('Failed to add verse to collection');
+  return added;
+}
+
 // ============ STORE ============
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -390,6 +446,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   verses: [],
   masteredVerses: [],
   curatedSaverCounts: {},
+  sharedCollections: {},
   colorMode: 'system',
   bibleVersion: 'ESV',
   displayName: null,
@@ -561,6 +618,47 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  fetchSharedCollections: async () => {
+    const generation = accountGeneration;
+    try {
+      const userId = await getCurrentUserId();
+      const [groups, mine, status] = await Promise.all([
+        db.from('shared_collections').select('id, owner_id, name'),
+        db.from('shared_collection_members').select('shared_collection_id, role').eq('user_id', userId),
+        db.rpc('get_shared_status'),
+      ]);
+      if (generation !== accountGeneration) return false;
+      if (groups.error) throw groups.error;
+      if (mine.error) throw mine.error;
+      if (status.error) throw status.error;
+
+      const roles = new Map(mine.data.map((m) => [m.shared_collection_id, m.role]));
+      const counts = new Map(status.data.map((row) => [row.shared_id, row]));
+      const sharedCollections: Record<string, SharedCollectionInfo> = {};
+      for (const group of groups.data) {
+        const role = roles.get(group.id);
+        const count = counts.get(group.id);
+        if (!isSharedRole(role) || !count) continue;
+        sharedCollections[group.id] = {
+          id: group.id,
+          ownerId: group.owner_id,
+          name: group.name,
+          role,
+          memberCount: count.member_count,
+          verseCount: count.verse_count,
+          masteredSquares: count.mastered_squares,
+          engravedSquares: count.engraved_squares,
+        };
+      }
+      set({ sharedCollections });
+      return true;
+    } catch (e) {
+      if (generation !== accountGeneration) return false;
+      console.error('[STORE] Failed to fetch shared collections:', e);
+      return false;
+    }
+  },
+
   hydrate: async () => {
     const generation = accountGeneration;
     // Load settings from AsyncStorage (doesn't require auth)
@@ -603,21 +701,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     // The cached translation stands in when the profile can't be read (offline).
     await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure);
     if (generation !== accountGeneration) return;
-    let [collectionsOk, versesOk, masteredOk] = await Promise.all([
+    let [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),
       get().fetchMasteredVerses(),
+      get().fetchSharedCollections(),
     ]);
     if (generation !== accountGeneration) return;
 
     // Retry once after short delay if any fetch failed (handles auth propagation race)
-    if (!collectionsOk || !versesOk || !masteredOk) {
+    if (!collectionsOk || !versesOk || !masteredOk || !sharedOk) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       if (generation !== accountGeneration) return;
-      [collectionsOk, versesOk, masteredOk] = await Promise.all([
+      [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
         collectionsOk ? true : get().fetchCollections(),
         versesOk ? true : get().fetchVerses(),
         masteredOk ? true : get().fetchMasteredVerses(),
+        sharedOk ? true : get().fetchSharedCollections(),
       ]);
       if (generation !== accountGeneration) return;
     }
@@ -626,7 +726,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ hydrated: true });
 
     // Show toast only if retry also failed
-    if (!collectionsOk || !versesOk || !masteredOk) {
+    if (!collectionsOk || !versesOk || !masteredOk || !sharedOk) {
       showErrorToast('Some data failed to load. Pull to refresh.');
     } else {
       set({ error: null });
@@ -649,6 +749,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchVerses(),
       get().fetchMasteredVerses(),
       get().fetchCuratedSaverCounts(),
+      get().fetchSharedCollections(),
     ]);
   },
 
@@ -819,6 +920,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const session = await getCollectionWriteSession(generation);
     if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
+    // Members' copies follow on their next sync.
+    if (collection.sharedId) {
+      if (sharedRole(collection.sharedId) !== 'owner') throw new Error('Only the owner can change this icon.');
+      const { data: group, error: groupError } = await db.from('shared_collections')
+        .update({ icon_key: iconKey }).eq('id', collection.sharedId).select('id');
+      if (groupError || group.length !== 1) throw new Error('Could not save the collection icon. Try again.');
+    }
     const { data, error } = await supabase
       .from('user_collections')
       .update({ icon_key: iconKey })
@@ -847,6 +955,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const session = await getCollectionWriteSession(generation);
     if (!session || generation !== accountGeneration) return;
+    // Members' copies follow on their next sync.
+    if (collection.sharedId) {
+      if (sharedRole(collection.sharedId) !== 'owner') throw new Error('Only the owner can rename this collection.');
+      const { data: group, error: groupError } = await db.from('shared_collections')
+        .update({ name: trimmed }).eq('id', collection.sharedId).select('id');
+      if (groupError) throw groupError;
+      if (group.length !== 1) throw new Error('Could not rename this collection.');
+    }
     const { data, error } = await supabase.from('user_collections')
       .update({ name: trimmed })
       .eq('user_id', session.user.id)
@@ -899,6 +1015,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteCollection: async (id: string) => {
     if (id === DEFAULT_COLLECTION_ID) return;
+
+    // A member's delete is leave. The owner's dissolves the group: every member keeps their
+    // copy (docs/features/shared-collections.md#dissolve), then the owner's goes as below.
+    const sharedId = sharedIdOf(id);
+    if (sharedId) {
+      if (sharedRole(sharedId) !== 'owner') {
+        await get().leaveSharedCollection(sharedId);
+        return;
+      }
+      const { data: group, error: groupError } = await db.from('shared_collections').delete().eq('id', sharedId).select('id');
+      if (groupError) throw groupError;
+      if (group.length !== 1) throw new Error('Could not delete the shared collection.');
+      set((state) => ({
+        collections: state.collections.map((c) => c.id === id ? { ...c, sharedId: undefined } : c),
+        sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
+      }));
+    }
 
     // Get server UUID for this collection
     const { data: collection, error: collectionError } = await supabase
@@ -1021,6 +1154,83 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  // ============ SHARED COLLECTION ACTIONS ============
+
+  shareCollection: async (collectionId) => {
+    const generation = accountGeneration;
+    const { data, error } = await db.rpc('share_collection', { p_collection_client_id: collectionId });
+    if (error) throw error;
+    const row = data[0];
+    if (!row) throw new Error('Could not share this collection.');
+    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    set((state) => ({
+      collections: state.collections.map((c) => c.id === collectionId ? { ...c, sharedId: row.shared_id } : c),
+    }));
+    await get().fetchSharedCollections();
+    return { sharedId: row.shared_id, code: row.code };
+  },
+
+  mintInvite: async (sharedId) => {
+    const { data, error } = await db.rpc('mint_invite', { p_shared: sharedId });
+    if (error) throw error;
+    if (!data[0]) throw new Error('Could not make a new link.');
+    return { code: data[0].code, expiresAt: data[0].expires_at };
+  },
+
+  // Returns the joined collection's client_id. Joining twice only syncs.
+  joinSharedCollection: async (code) => {
+    const { data, error } = await db.rpc('join_shared_collection', {
+      p_code: normalizeInviteCode(code),
+      p_version: get().bibleVersion,
+    });
+    if (error) throw error;
+    await get().refresh();
+    return data;
+  },
+
+  // Makes the user's copy match the group; refetches only when the server changed something.
+  syncSharedCollection: async (sharedId) => {
+    const { data, error } = await db.rpc('sync_shared_collection', {
+      p_shared: sharedId,
+      p_version: get().bibleVersion,
+    });
+    if (error) throw error;
+    const changed = data[0]?.changed ?? false;
+    if (changed) {
+      await Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]);
+    }
+    return changed;
+  },
+
+  leaveSharedCollection: async (sharedId) => {
+    const { error } = await supabase.rpc('leave_shared_collection', { p_shared: sharedId });
+    if (error) throw error;
+    const gone = new Set(get().collections.filter((c) => c.sharedId === sharedId).map((c) => c.id));
+    set((state) => ({
+      collections: state.collections.filter((c) => !gone.has(c.id)),
+      verses: state.verses.filter((v) => !gone.has(v.collectionId)),
+      sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
+    }));
+    // The server applied the delete rule; a verse may now be soft-deleted or gone.
+    await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
+  },
+
+  removeSharedMember: async (sharedId, userId) => {
+    const { error } = await supabase.rpc('remove_shared_member', { p_shared: sharedId, p_user: userId });
+    if (error) throw error;
+    await get().fetchSharedCollections();
+  },
+
+  setSharedMemberRole: async (sharedId, userId, role) => {
+    const { data, error } = await db.from('shared_collection_members')
+      .update({ role })
+      .eq('shared_collection_id', sharedId)
+      .eq('user_id', userId)
+      .select('role');
+    if (error) throw error;
+    if (data.length !== 1) throw new Error('Only the owner can change roles.');
+  },
+
   // ============ VERSE ACTIONS ============
 
   copyVerseToCollection: async (verseId, collectionId) => {
@@ -1044,6 +1254,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addVerse: async (verse, collectionId) => {
+    const sharedId = sharedIdOf(collectionId);
+    if (sharedId) return addSharedVerse(sharedId, collectionId, verse);
     const userId = await getCurrentUserId();
     const createdAt = new Date();
     const translation = get().bibleVersion;
@@ -1220,6 +1432,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       verses: state.verses.filter((v) => !(v.id === id && v.collectionId === collectionId)),
       // Don't remove from masteredVerses - mastery is permanent
     }));
+
+    // Shared: the reference leaves the group, and a trigger applies the same rule to every
+    // member's copy, this one included (docs/features/shared-collections.md#sync).
+    const sharedId = sharedIdOf(collectionId);
+    if (sharedId) {
+      try {
+        if (!verse) throw new Error('Verse not found');
+        const { data, error } = await db.from('shared_collection_verses').delete()
+          .eq('shared_collection_id', sharedId)
+          .eq('book', verse.book)
+          .eq('chapter', verse.chapter)
+          .eq('verse_start', verse.verseStart)
+          .eq('verse_end', verse.verseEnd)
+          .select('book');
+        if (error) throw error;
+        if (data.length === 0) throw new Error('Only the owner and editors can remove verses here.');
+        await Promise.all([get().fetchVerses(), get().fetchMasteredVerses(), get().fetchSharedCollections()]);
+        return { wasMastered: isMastered };
+      } catch (error) {
+        set({ verses: previousVerses });
+        throw error;
+      }
+    }
 
     try {
       // Get server IDs for verse and collection
@@ -1463,6 +1698,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       verses: [],
       masteredVerses: [],
       curatedSaverCounts: {},
+      sharedCollections: {},
       displayName: null,
       // Device prefs (colorMode, reviewMaxIntervalDays, masteredSort,
       // inProgressSort) and the cached account translation (bibleVersion,
@@ -1538,6 +1774,38 @@ export function useCollection(id: string) {
     () => collections.find((c) => c.id === id),
     [collections, id]
   );
+}
+
+/** The shared collection a local collection is a copy of, or undefined for a personal one. */
+export function useSharedCollection(collectionId: string): SharedCollectionInfo | undefined {
+  return useAppStore((state) => {
+    const sharedId = state.collections.find((c) => c.id === collectionId)?.sharedId;
+    return sharedId ? state.sharedCollections[sharedId] : undefined;
+  });
+}
+
+export function useSharedRole(collectionId: string): SharedRole | undefined {
+  return useSharedCollection(collectionId)?.role;
+}
+
+/** Real collections the user may add verses to: personal ones, and shared ones they own or edit. */
+export function useAddableCollections() {
+  const collections = useAppStore(useShallow((state) => state.collections));
+  const shared = useAppStore((state) => state.sharedCollections);
+  return useMemo(() => collections.filter((c) => !c.isVirtual && (!c.sharedId
+    || shared[c.sharedId]?.role === 'owner' || shared[c.sharedId]?.role === 'editor')), [collections, shared]);
+}
+
+/**
+ * Verses that deleting or leaving this collection would lose: not mastered and in no other
+ * collection (the delete rule in docs/features/library.md#deleting-a-verse).
+ */
+export function useVersesLostWith(collectionId: string) {
+  const verses = useAppStore(useShallow((state) => state.verses));
+  return useMemo(() => {
+    const elsewhere = new Set(verses.filter((v) => v.collectionId !== collectionId).map((v) => v.id));
+    return verses.filter((v) => v.collectionId === collectionId && !elsewhere.has(v.id) && !v.progress.hard.completed).length;
+  }, [verses, collectionId]);
 }
 
 /**
