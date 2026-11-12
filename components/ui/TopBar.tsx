@@ -14,9 +14,10 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const BAR_HEIGHT = 44;
-// Scroll distance over which the bar's surface, and then its title, fade in.
-const EDGE = 8;
-const TITLE_FADE = 12;
+// Scroll distance over which the bar's surface fades in, and over which its title fades in as the
+// large title passes under the bar.
+const EDGE = 32;
+const TITLE_FADE = 24;
 
 /** The bar's full height (status bar included): a scroll view's top padding under it. */
 export function useTopBarHeight() {
@@ -34,8 +35,8 @@ export function useScrollY() {
 
 /**
  * A screen's bar, floating over its scroll view. It has no surface until content scrolls under it,
- * then takes the page colour and a hairline. The screen's title lives in its content; the bar's small
- * copy fades in, left-aligned, once that title has scrolled under the bar (`titleAt`, in scroll offset).
+ * then the page colour fades in, with no hairline. The screen's title lives in its content; the bar's
+ * small copy fades in, left-aligned, as that title scrolls under the bar (`titleAt`, in scroll offset).
  */
 export function TopBar({ scrollY, title, titleAt, onBack, backLabel = 'Back', children }: {
   scrollY: SharedValue<number>;
@@ -59,7 +60,7 @@ export function TopBar({ scrollY, title, titleAt, onBack, backLabel = 'Back', ch
     <View pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top }]}>
       <Animated.View
         pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.surface, { backgroundColor: colors.background, borderBottomColor: colors.border }, surface]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }, surface]}
       />
       <View pointerEvents="box-none" style={styles.row}>
         {onBack && <TopBarButton icon="chevron.left" label={backLabel} onPress={onBack} />}
@@ -122,7 +123,6 @@ export function TopBarButton({ icon, label, onPress, testID, disabled }: {
 
 const styles = StyleSheet.create({
   bar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
-  surface: { borderBottomWidth: StyleSheet.hairlineWidth },
   row: { height: BAR_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
   title: { flex: 1, fontSize: 17, lineHeight: 22, fontWeight: '600' },
   titleAlone: { paddingLeft: 14 },

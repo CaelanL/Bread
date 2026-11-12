@@ -236,9 +236,9 @@ on Android / web.
 
 A screen's title lives in its content, never centered in a bar. `TopBar` floats over the scroll
 view (absolute, under the status bar): back on the left, icon actions (`TopBarButton`) on the
-right, and no surface until content scrolls under it, then the page colour and a hairline. Its
-small title fades in, left-aligned, once the large title has scrolled under it (`titleAt`, from
-the title's `onLayout`). The scroll view is a Reanimated one with `onScroll` from `useScrollY`,
+right, and no surface until content scrolls under it, then the page colour fades in over the
+first 32 pt of scroll, with no hairline. Its small title fades in, left-aligned, over the 24 pt in
+which the large title passes under it (`titleAt`, from the title's `onLayout`). The scroll view is a Reanimated one with `onScroll` from `useScrollY`,
 `paddingTop: useTopBarHeight()` and the same value as its `RefreshControl`'s `progressViewOffset`,
 so the spinner shows below the bar, not behind the Dynamic Island.
 
@@ -327,4 +327,5 @@ Invariant 8 is above. Also:
 
 - 2026-11-10 · Translation-picker backdrops are not accessibility elements · Settings' outer Pressable otherwise grouped the entire popup, hiding individual translation choices from native accessibility and UI automation. `accessible={false}` preserves the existing layout and dismissal behavior while exposing the option rows.
 - 2026-11-12 · `ModalCard`'s backdrop is a plain dim, no `BlurView` · Its routes fade natively, and a blur view under a fading parent drops its effect for the whole fade, so closing the share card flashed from blurred to sharp (Caelan's pass 3, C17).
-- 2026-11-12 · Depth comes from the screen tops, not entrances: the collection's accent wash, a bar that gains the page colour and a hairline only once content is under it, and a pressed-row fill · Caelan's pass 3 (C20) asked for software-like depth, kept restrained; the lists are opened many times a day, so their rows don't animate in. Everything is scroll- or touch-driven, so reduced motion has nothing to turn off; the one autoplaying motion, search lifting to the top, fades instead under reduced motion.
+- 2026-11-12 · Depth comes from the screen tops, not entrances: the collection's accent wash, a bar that gains the page colour only once content is under it, and a pressed-row fill · Caelan's pass 3 (C20) asked for software-like depth, kept restrained; the lists are opened many times a day, so their rows don't animate in. Everything is scroll- or touch-driven, so reduced motion has nothing to turn off; the one autoplaying motion, search lifting to the top, fades instead under reduced motion.
+- 2026-11-12 · The bar has no hairline, and its surface and small title fade in over 32 and 24 pt of scroll, not 8 and 12 · Caelan's pass 4 (C26): the opaque band and hairline arriving within 8 pt read as the old nav bar popping back in. The bar's surface and title now track the scroll, the way the iOS large title collapses.
