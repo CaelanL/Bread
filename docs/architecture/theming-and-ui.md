@@ -202,7 +202,7 @@ have hex literals; don't copy them.
 | `ModalCard.tsx` | `ModalCard` (a centered card on a dimmed backdrop, with an X) and `modalStyles` (its type, input and button), for modal routes |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
 | `SearchTakeover.tsx` | Search that grows out of its pill to the top and covers the screen; Cancel plays it back |
-| `TopBar.tsx` | `TopBar`, `TopBarButton`, `useScrollY`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
+| `TopBar.tsx` | `TopBar`, `TopBarButton`, `LargeTitle`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
 
 If you're building a new reusable primitive, add it here with a
 `.tsx` (and `.ios.tsx` if it needs platform divergence). Pull
@@ -236,12 +236,9 @@ on Android / web.
 
 A screen's title lives in its content, never centered in a bar. `TopBar` floats over the scroll
 view (absolute, under the status bar): back on the left, icon actions (`TopBarButton`) on the
-right, and no surface until content scrolls under it, then the page colour fades in over the
-first 32 pt of scroll, with no hairline. That surface (an `expo-linear-gradient`) is solid to 8 pt
-above the bar's bottom and clears 20 pt below it, so content fades out into the bar rather than
-meeting an edge (scroll-edge fade). The bar never shows a title; the screen's title lives only in
-its content (`LargeTitle`). The tab bar has no hairline either: its background
-(`tabBarBackground` in `app/(tabs)/_layout.tsx`) fades content out over the 28 pt above it. The scroll view is a Reanimated one with `onScroll` from `useScrollY`,
+right, and no surface at all: content scrolls under the icons. The bar never shows a title; the
+screen's title lives only in its content (`LargeTitle`). The tab bar has no hairline either: its
+background (`tabBarBackground` in `app/(tabs)/_layout.tsx`) fades content out over the 28 pt above it. The scroll view takes
 `paddingTop: useTopBarHeight()` and the same value as its `RefreshControl`'s `progressViewOffset`,
 so the spinner shows below the bar, not behind the Dynamic Island.
 
@@ -331,6 +328,6 @@ Invariant 8 is above. Also:
 - 2026-11-10 · Translation-picker backdrops are not accessibility elements · Settings' outer Pressable otherwise grouped the entire popup, hiding individual translation choices from native accessibility and UI automation. `accessible={false}` preserves the existing layout and dismissal behavior while exposing the option rows.
 - 2026-11-12 · `ModalCard`'s backdrop is a plain dim, no `BlurView` · Its routes fade natively, and a blur view under a fading parent drops its effect for the whole fade, so closing the share card flashed from blurred to sharp (Caelan's pass 3, C17).
 - 2026-11-12 · Depth comes from the screen tops, not entrances: the collection's accent wash, a bar that gains the page colour only once content is under it, and a pressed-row fill · Caelan's pass 3 (C20) asked for software-like depth, kept restrained; the lists are opened many times a day, so their rows don't animate in. Everything is scroll- or touch-driven, so reduced motion has nothing to turn off; the one autoplaying motion, search lifting to the top, fades instead under reduced motion.
-- 2026-11-12 · The bar has no hairline and no small title; its surface fades in over 32 pt of scroll · Caelan's pass 4 (C26): the band arriving within 8 pt read as the old nav bar popping back in, and the small title still read as a nav bar ("I wanted that small title gone").
+- 2026-11-12 · The top bar has no surface, hairline or small title · Caelan's pass 4 (C26): any band or title appearing on scroll read as the old nav bar coming back ("the white fade box is still there").
 - 2026-11-12 · Content fades out above the tab bar, which lost its hairline · Caelan wanted things scrolling under Home, Library and Settings to fade, on every screen.
 - 2026-11-12 · Content fades out into the bar (a page-colour gradient under it), on every `TopBar` screen · Caelan's pass 4 (C28) asked for it in collections and the Library; one bar, one behaviour, so Home, Settings, Insights, Notifications and Details get it too.

@@ -14,7 +14,7 @@ import {
   Alert,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { DisplayNameModal } from '@/components/settings/DisplayNameModal';
 import { ReviewIntervalModal } from '@/components/settings/ReviewIntervalModal';
 import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
@@ -146,7 +146,6 @@ function ColorModePicker({ value, onChange }: ColorModePickerProps) {
 
 export default function SettingsScreen() {
   const barHeight = useTopBarHeight();
-  const { scrollY, onScroll } = useScrollY();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -275,7 +274,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]} onScroll={onScroll} scrollEventThrottle={16}>
+      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]}>
         <View style={styles.titleGap}><LargeTitle root title="Settings" /></View>
         {/* Bible Settings */}
         <SettingsSection title="BIBLE">
@@ -429,7 +428,7 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} />
+      <TopBar />
 
       {/* Review Info Modal (shared with study screen) */}
       <ProgressInfoModal

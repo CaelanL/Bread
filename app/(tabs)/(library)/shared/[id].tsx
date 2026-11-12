@@ -3,7 +3,7 @@ import { manageMember } from '@/components/shared/member-actions';
 import { InitialDot } from '@/components/shared/MemberDots';
 import { MemberRow, ROLE_LABEL } from '@/components/shared/MemberRow';
 import { MEMBER_STATE_LABEL, MemberStateSquare } from '@/components/shared/MemberState';
-import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSharedGrid } from '@/hooks/use-shared-grid';
@@ -48,7 +48,6 @@ export default function WhoIsWhereScreen() {
   const [busy, setBusy] = useState(false);
   const [columnsWidth, setColumnsWidth] = useState(0);
   const barHeight = useTopBarHeight();
-  const { scrollY, onScroll } = useScrollY();
 
   const view = useMemo(
     () => (grid && sharedProgress ? whoIsWhere(grid, sharedProgress.members, user?.id) : null),
@@ -137,8 +136,6 @@ export default function WhoIsWhereScreen() {
       <Animated.ScrollView
         testID="whos-where"
         contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />}
       >
         <LargeTitle title="Details" subtitle={collection?.name} />
@@ -234,7 +231,7 @@ export default function WhoIsWhereScreen() {
           </>
         )}
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} onBack={back} />
+      <TopBar onBack={back} />
     </View>
   );
 }

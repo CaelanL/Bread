@@ -68,7 +68,7 @@ import {
   View,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -150,7 +150,6 @@ function buildPatch(
 
 export default function NotificationsScreen() {
   const barHeight = useTopBarHeight();
-  const { scrollY, onScroll } = useScrollY();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
@@ -358,7 +357,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]} onScroll={onScroll} scrollEventThrottle={16}>
+      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]}>
         <View style={styles.titleGap}><LargeTitle title="Notifications" /></View>
         {/* MASTER */}
         <View style={styles.section}>
@@ -586,7 +585,7 @@ export default function NotificationsScreen() {
           </>
         )}
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} onBack={handleBack} backLabel="Settings">
+      <TopBar onBack={handleBack} backLabel="Settings">
           <Pressable
             onPress={handleSave}
             disabled={!dirty || saving}

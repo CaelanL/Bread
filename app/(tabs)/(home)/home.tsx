@@ -1,7 +1,7 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@/lib/auth';
 import type { VOTM } from '@/lib/api/votm';
-import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { ExploreCollections } from '@/components/home/ExploreCollections';
 import { InsightsCard, type InsightsCardRef } from '@/components/home/InsightsCard';
 import { IntroVideo } from '@/components/home/IntroVideo';
@@ -79,7 +79,6 @@ function SkeletonCard({ isDark }: { isDark: boolean }) {
 
 export default function HomeScreen() {
   const barHeight = useTopBarHeight();
-  const { scrollY, onScroll } = useScrollY();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -172,8 +171,6 @@ export default function HomeScreen() {
       <Reanimated.ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
@@ -215,7 +212,7 @@ export default function HomeScreen() {
         <ExploreCollections />
         <IntroVideo blocked={expanded || collectionPickerVisible || modalTransition || expandedPresented || pickerPresented} />
       </Reanimated.ScrollView>
-      <TopBar scrollY={scrollY} />
+      <TopBar />
 
       {/* Expanded Verse Modal */}
       <VerseExpandModal

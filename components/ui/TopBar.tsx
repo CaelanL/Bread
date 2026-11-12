@@ -1,69 +1,27 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, withAlpha } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { ComponentProps, ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  type SharedValue,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const BAR_HEIGHT = 44;
-// Scroll distance over which the bar's surface fades in.
-const EDGE = 32;
-// The surface fades from the page colour to clear over this far, from just above the bar's bottom
-// edge, so content scrolls out into the bar instead of under a hard line.
-const FADE_ABOVE = 8;
-const FADE_BELOW = 20;
 
 /** The bar's full height (status bar included): a scroll view's top padding under it. */
 export function useTopBarHeight() {
   return useSafeAreaInsets().top + BAR_HEIGHT;
 }
 
-/** The scroll offset a `TopBar` reads. Spread `onScroll` on a Reanimated scroll view. */
-export function useScrollY() {
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler((event) => {
-    scrollY.value = event.contentOffset.y;
-  });
-  return { scrollY, onScroll };
-}
-
-/**
- * A screen's bar, floating over its scroll view. It has no surface until content scrolls under it,
- * then the page colour fades in, ending in a soft fade instead of an edge, so content scrolls out into
- * it. The screen's title lives only in its content; the bar never shows one.
- */
-export function TopBar({ scrollY, onBack, backLabel = 'Back', children }: {
-  scrollY: SharedValue<number>;
+/** A screen's bar, floating over its scroll view with no surface: back on the left, icon actions on the right. The screen's title lives only in its content. */
+export function TopBar({ onBack, backLabel = 'Back', children }: {
   onBack?: () => void;
   backLabel?: string;
   children?: ReactNode;
 }) {
-  const colors = Colors[useColorScheme() ?? 'light'];
   const insets = useSafeAreaInsets();
-  const solid = insets.top + BAR_HEIGHT - FADE_ABOVE;
-  const height = solid + FADE_ABOVE + FADE_BELOW;
-  const surface = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, EDGE], [0, 1], Extrapolation.CLAMP),
-  }));
 
   return (
     <View pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top }]}>
-      <Animated.View pointerEvents="none" style={[styles.surface, { height }, surface]}>
-        <LinearGradient
-          colors={[colors.background, colors.background, withAlpha(colors.background, 0)]}
-          locations={[0, solid / height, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
       <View pointerEvents="box-none" style={styles.row}>
         {onBack && <TopBarButton icon="chevron.left" label={backLabel} onPress={onBack} />}
         <View style={styles.spacer} />
@@ -113,7 +71,6 @@ export function TopBarButton({ icon, label, onPress, testID, disabled }: {
 
 const styles = StyleSheet.create({
   bar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
-  surface: { position: 'absolute', top: 0, left: 0, right: 0 },
   row: { height: BAR_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
   spacer: { flex: 1 },
   actions: { flexDirection: 'row', alignItems: 'center' },

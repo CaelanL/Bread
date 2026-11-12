@@ -7,7 +7,7 @@ import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { SearchTakeover, type SearchOrigin } from '@/components/ui/SearchTakeover';
-import { TopBar, TopBarButton, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
+import { TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors, Radius } from '@/constants/theme';
@@ -79,7 +79,6 @@ export default function CollectionScreen() {
   const lostCount = useVersesLostWith(id || '');
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const barHeight = useTopBarHeight();
-  const { scrollY, onScroll } = useScrollY();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   // Set while search is open: where its pill sat, so the field grows from there and goes back.
@@ -404,8 +403,6 @@ export default function CollectionScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.FlatList
         data={hydrated ? allSorted : []}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         ListHeaderComponent={header}
@@ -418,7 +415,7 @@ export default function CollectionScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
       />
-      <TopBar scrollY={scrollY} onBack={backToLibrary}>
+      <TopBar onBack={backToLibrary}>
         {isCustom && isOwner && (
           <TopBarButton testID="collection-share" icon="person.badge.plus" label={sharedId ? 'Invite and members' : 'Share'} onPress={share} />
         )}

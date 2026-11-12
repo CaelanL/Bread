@@ -57,7 +57,8 @@ export const Colors = {
     recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(176,141,87,0.12)',
     engravedFill: 'rgba(245,158,11,0.12)', // Engraved pill and engraved collection icon
-    doneCard: '#f0fbf4',           // Library card of a mastered or engraved collection: card + a green wash, opaque over the swipe action
+    doneCard: '#f0fbf4',           // Library card of a mastered collection: card + a green wash, opaque over the swipe action
+    engravedCard: '#fef8ee',       // Library card of an engraved collection: card + a gold wash
 
     // Surfaces
     card: '#ffffff',              // Pure white cards for contrast
@@ -96,6 +97,7 @@ export const Colors = {
     primaryLight: 'rgba(201,169,98,0.15)',
     engravedFill: 'rgba(245,158,11,0.15)',
     doneCard: '#24342a',
+    engravedCard: '#393022',
 
     // Surfaces
     card: '#242424',              // Dark charcoal card

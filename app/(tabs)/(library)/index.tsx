@@ -2,7 +2,7 @@ import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
-import { LargeTitle, TopBar, TopBarButton, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
+import { LargeTitle, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
@@ -115,7 +115,6 @@ export default function LibraryScreen() {
   const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const barHeight = useTopBarHeight();
-  const { scrollY, onScroll } = useScrollY();
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
   // A link can present a modal route over the Library; its RN Modals must not stay up under it.
@@ -204,8 +203,6 @@ export default function LibraryScreen() {
         <Animated.ScrollView
           style={styles.scrollView}
           contentContainerStyle={[styles.collectionsContainer, { paddingTop: barHeight }]}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
           }
@@ -246,7 +243,7 @@ export default function LibraryScreen() {
           )}
         </Animated.ScrollView>
         </GestureDetector>
-        <TopBar scrollY={scrollY}>
+        <TopBar>
           {(editing || customCollections.length > 0) && (
             <Pressable
               style={styles.editButton}

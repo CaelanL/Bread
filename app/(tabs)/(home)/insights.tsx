@@ -1,4 +1,4 @@
-import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { AddToCollectionModal } from '@/components/ui/AddToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { VerseExpandModal, VerseData } from '@/components/ui/VerseExpandModal';
@@ -118,7 +118,6 @@ function formatAvgTime(ms: number): string {
 
 export default function InsightsScreen() {
   const barHeight = useTopBarHeight();
-  const { scrollY, onScroll } = useScrollY();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -220,8 +219,6 @@ export default function InsightsScreen() {
       <Animated.ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
@@ -350,7 +347,7 @@ export default function InsightsScreen() {
           </View>
         )}
       </Animated.ScrollView>
-      <TopBar scrollY={scrollY} onBack={() => router.back()} backLabel="Back to Home" />
+      <TopBar onBack={() => router.back()} backLabel="Back to Home" />
 
       {/* Time Studied Info Modal */}
       <Modal
