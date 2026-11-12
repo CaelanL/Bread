@@ -1,6 +1,7 @@
 import { InitialDot } from '@/components/shared/MemberDots';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SharedMember } from '@/lib/shared/invites';
 import type { SharedRole } from '@/lib/storage';
@@ -36,6 +37,17 @@ export function MemberRow({ member, you, manageable, disabled, last, onPress }: 
       <Text style={[styles.secondary, { color: colors.icon }]}>{ROLE_LABEL[member.role]}</Text>
       {manageable && <IconSymbol name="ellipsis" size={16} color={colors.icon} />}
     </Pressable>
+  );
+}
+
+/** A member row's stand-in while the list loads, the same height, so the modal doesn't grow. */
+export function MemberRowPlaceholder({ last }: { last?: boolean }) {
+  const colors = Colors[useColorScheme() ?? 'light'];
+  return (
+    <View style={[styles.member, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.borderLight }]}>
+      <Skeleton width={32} height={32} borderRadius={Radius.full} />
+      <Skeleton width="40%" height={16} />
+    </View>
   );
 }
 

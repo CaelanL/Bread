@@ -1,8 +1,9 @@
 import { confirmLeave } from '@/components/shared/confirm-removal';
 import { manageMember } from '@/components/shared/member-actions';
-import { MemberRow } from '@/components/shared/MemberRow';
+import { MemberRow, MemberRowPlaceholder } from '@/components/shared/MemberRow';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { modalStyles } from '@/components/ui/ModalCard';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
@@ -12,9 +13,12 @@ import { useAppStore, useCollection, useSharedCollection, useVersesLostWith } fr
 import { showErrorToast } from '@/lib/toast';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 const COPIED_MS = 1500;
+// The code's and the days-left line's heights, which their stand-ins keep while the code loads.
+const CODE_LINE = 36;
+const META_LINE = 18;
 
 /**
  * Members and invite for a shared collection, inside the share modal. The owner sees the code
@@ -22,6 +26,8 @@ const COPIED_MS = 1500;
  * changes per member and Stop sharing; everyone else sees the list and Leave. `members` shows
  * the member list alone (the collection screen's members line).
  * The name stays put above the scrolling part, so nothing scrolls under the modal's X.
+ * It opens at its final size: members come from the group's grid when this device has it, or
+ * stand-in rows for the known count, and the code and its days left are stand-ins of their height.
  */
 export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
   collectionId: string;
@@ -38,8 +44,10 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
   const isOwner = shared?.role === 'owner';
   const name = collection?.name ?? shared?.name ?? '';
 
-  const [members, setMembers] = useState<SharedMember[] | null>(null);
-  const [invite, setInvite] = useState<LiveInvite | null>(null);
+  const [members, setMembers] = useState<SharedMember[] | null>(
+    () => (sharedId && useAppStore.getState().sharedProgress[sharedId]?.members) || null);
+  // Undefined until loaded; null when the code has expired.
+  const [invite, setInvite] = useState<LiveInvite | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
@@ -154,15 +162,19 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
       <ScrollView testID="share-panel" bounces={false} style={modalStyles.edgeScroll} contentContainerStyle={modalStyles.edgeScrollContent}>
         {isOwner && view === 'all' && (
           <View style={[styles.invite, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
-            {invite ? (
+            {invite !== null ? (
               <>
                 <Text style={[modalStyles.eyebrow, { color: colors.icon }]}>Invite code</Text>
                 <View style={styles.codeRow}>
-                  <Text testID="invite-code" selectable numberOfLines={1} adjustsFontSizeToFit style={[styles.code, { color: colors.text }]}>{invite.code}</Text>
+                  {invite
+                    ? <Text testID="invite-code" selectable numberOfLines={1} adjustsFontSizeToFit style={[styles.code, { color: colors.text }]}>{invite.code}</Text>
+                    : <Skeleton width={180} height={CODE_LINE} />}
                   <Pressable
                     testID="invite-copy-code"
                     accessibilityRole="button"
                     accessibilityLabel={codeCopied ? 'Code copied' : 'Copy code'}
+                    accessibilityState={{ disabled: !invite }}
+                    disabled={!invite}
                     onPress={copyCode}
                     hitSlop={12}
                     style={styles.copyCode}
@@ -171,27 +183,27 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
                     {codeCopied && <Text style={[modalStyles.meta, styles.copied, { color: colors.success }]}>Copied</Text>}
                   </Pressable>
                 </View>
-                <Text style={[modalStyles.meta, { color: colors.icon }]}>
-                  Expires in {daysLeft(invite.expiresAt)} day{daysLeft(invite.expiresAt) === 1 ? '' : 's'}
-                </Text>
-                {members && !othersJoined && (
+                {invite ? (
+                  <Text style={[modalStyles.meta, { color: colors.icon }]}>
+                    Expires in {daysLeft(invite.expiresAt)} day{daysLeft(invite.expiresAt) === 1 ? '' : 's'}
+                  </Text>
+                ) : <Skeleton width={120} height={META_LINE} />}
+                {!othersJoined && (
                   <Text style={[modalStyles.meta, { color: colors.icon }]}>It stays a normal collection until someone joins.</Text>
                 )}
-                <Pressable testID="invite-share" accessibilityRole="button" onPress={share}
+                <Pressable testID="invite-share" accessibilityRole="button" accessibilityState={{ disabled: !invite }} disabled={!invite} onPress={share}
                   style={[modalStyles.button, styles.share, { backgroundColor: colors.text }]}>
                   <IconSymbol name="square.and.arrow.up" size={18} color={colors.background} />
                   <Text style={[modalStyles.buttonText, { color: colors.background }]}>Share</Text>
                 </Pressable>
               </>
-            ) : members && (
+            ) : (
               <Text style={[modalStyles.meta, { color: colors.icon }]}>This code has expired. Make a new one to invite people.</Text>
             )}
-            {members && (
-              <Pressable testID="invite-new" accessibilityRole="button" onPress={newLink} disabled={busy} style={styles.newLink}>
-                <IconSymbol name="arrow.triangle.2.circlepath" size={14} color={colors.primary} />
-                <Text style={[styles.newLinkText, { color: colors.primary }]}>New code</Text>
-              </Pressable>
-            )}
+            <Pressable testID="invite-new" accessibilityRole="button" onPress={newLink} disabled={busy || invite === undefined} style={styles.newLink}>
+              <IconSymbol name="arrow.triangle.2.circlepath" size={14} color={colors.primary} />
+              <Text style={[styles.newLinkText, { color: colors.primary }]}>New code</Text>
+            </Pressable>
           </View>
         )}
 
@@ -202,7 +214,7 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
             <Text style={[styles.newLinkText, { color: colors.primary }]}>Retry</Text>
           </Pressable>
         ) : !members ? (
-          <ActivityIndicator style={styles.retry} color={colors.icon} />
+          Array.from({ length: memberCount }, (_, index) => <MemberRowPlaceholder key={index} last={index === memberCount - 1} />)
         ) : members.map((member, index) => {
           const you = member.userId === user?.id;
           return (
@@ -232,7 +244,7 @@ const styles = StyleSheet.create({
   name: { marginBottom: 20 },
   invite: { borderRadius: Radius.xxl, borderWidth: 1, padding: 16, marginBottom: 24 },
   codeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8, marginBottom: 4 },
-  code: { flexShrink: 1, fontSize: 30, fontWeight: '600', letterSpacing: 4, fontVariant: ['tabular-nums'] },
+  code: { flexShrink: 1, fontSize: 30, lineHeight: CODE_LINE, fontWeight: '600', letterSpacing: 4, fontVariant: ['tabular-nums'] },
   copyCode: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   copied: { fontWeight: '600' },
   share: { flexDirection: 'row', gap: 8, marginTop: 16 },
