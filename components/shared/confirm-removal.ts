@@ -1,3 +1,4 @@
+import { listNames } from '@/lib/shared/display-name';
 import { Alert } from 'react-native';
 
 // Same rule and wording as today's collection delete (docs/features/library.md#deleting-a-collection),
@@ -31,9 +32,12 @@ export function confirmDeleteCollection(name: string, verseCount: number, onConf
   ]);
 }
 
-export function confirmStopSharing(name: string, othersJoined: boolean, onConfirm: () => void) {
-  Alert.alert(`Stop sharing "${name}"?`, othersJoined
-    ? 'The code stops working, and each member keeps their own copy. The collection stays in your Library.'
+/** `others`: the other members' names once read, else how many there are. */
+export function confirmStopSharing(name: string, others: string[] | number, onConfirm: () => void) {
+  const count = typeof others === 'number' ? others : others.length;
+  const who = typeof others !== 'number' ? listNames(others) : `The other ${count === 1 ? 'member' : `${count} members`}`;
+  Alert.alert(`Stop sharing "${name}"?`, count > 0
+    ? `${who} will keep their own copy, but you'll stop seeing each other's progress. The code stops working.`
     : 'The code stops working. The collection stays in your Library.', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Stop sharing', style: 'destructive', onPress: onConfirm },

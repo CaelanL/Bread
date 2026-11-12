@@ -120,7 +120,8 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
 
   const stopSharing = () => {
     if (!sharedId) return;
-    confirmStopSharing(name, othersJoined, () => run(async () => {
+    const others = members ? members.filter((m) => m.userId !== user?.id).map((m) => m.displayName) : Math.max(memberCount - 1, 0);
+    confirmStopSharing(name, others, () => run(async () => {
       await useAppStore.getState().stopSharing(sharedId);
       onStopped();
     }, "Couldn't stop sharing. Try again."));

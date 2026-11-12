@@ -88,7 +88,7 @@ name: shared-stop
 - assertVisible: "SHARED · 3 MEMBERS"
 - tapOn:
     id: stop-sharing
-- assertVisible: ".*each member keeps their own copy.*"
+- assertVisible: ".*will keep their own copy, but you'll stop seeing each other's progress.*"
 - takeScreenshot: stop-4-confirm-with-members
 # The alert's button, not the panel's own Stop sharing behind it.
 - tapOn:

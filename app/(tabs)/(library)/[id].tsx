@@ -201,7 +201,10 @@ export default function CollectionScreen() {
 
   const stopSharing = () => {
     if (!collection || !sharedId) return;
-    confirmStopSharing(collection.name, withOthers, async () => {
+    const others = sharedProgress?.fetchedAt
+      ? sharedProgress.members.filter((m) => m.userId !== user?.id).map((m) => m.displayName)
+      : Math.max((shared?.memberCount ?? 1) - 1, 0);
+    confirmStopSharing(collection.name, withOthers ? others : 0, async () => {
       try {
         await useAppStore.getState().stopSharing(sharedId);
       } catch (e) {
