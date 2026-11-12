@@ -345,7 +345,6 @@ export default function VerseSelectScreen() {
           accessibilityLabel: `Translation, ${selectedVersion}`,
           testID: 'verse-translation-picker',
           onPress: () => setVersionPickerVisible(true),
-          variant: 'text',
         }}
       />
 

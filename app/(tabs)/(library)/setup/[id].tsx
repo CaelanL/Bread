@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/app-header';
+import { BAR_HEIGHT } from '@/components/ui/TopBar';
 import { ChunkSizeModal } from '@/components/study/ChunkSizeModal';
 import { ProgressCard } from '@/components/study/ProgressCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -203,29 +204,23 @@ export default function StudySetupScreen() {
 
   if (!verse) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
-        <AppHeader title="Setup" />
-        <Text style={{ color: colors.text }}>Verse not found</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <AppHeader />
+        <View style={[styles.container, styles.centered]}>
+          <Text style={{ color: colors.text }}>Verse not found</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader
-        title="Setup"
-        rightButton={{
-          label: '',
-          icon: 'ellipsis',
-          onPress: () => setMenuVisible(true),
-          variant: 'text',
-        }}
-      />
+      <AppHeader rightButton={{ icon: 'ellipsis', accessibilityLabel: 'More', onPress: () => setMenuVisible(true) }} />
 
       <PopoverMenu
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
-        anchorPosition={{ top: 105, right: 16 }}
+        anchorPosition={{ top: insets.top + BAR_HEIGHT, right: 12 }}
         items={[
           {
             label: 'Reset Progress',

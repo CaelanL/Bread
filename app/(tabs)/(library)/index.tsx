@@ -1,8 +1,8 @@
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
+import { LargeTitle, TopBar, TopBarButton, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
@@ -12,10 +12,9 @@ import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVe
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -114,14 +113,15 @@ export default function LibraryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
-  // The + menu, anchored under the button.
-  const addButton = useRef<View>(null);
-  const [addMenuTop, setAddMenuTop] = useState<number | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const barHeight = useTopBarHeight();
+  const { scrollY, onScroll } = useScrollY();
+  const [titleBottom, setTitleBottom] = useState(0);
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
   // A link can present a modal route over the Library; its RN Modals must not stay up under it.
   useFocusEffect(useCallback(() => () => {
-    setAddMenuTop(null);
+    setAddMenuOpen(false);
     setNameDialog(null);
   }, []));
   const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
@@ -181,16 +181,11 @@ export default function LibraryScreen() {
     router.push(`/share/${collectionId}`);
   };
 
-  const openAddMenu = () => {
-    addButton.current?.measureInWindow((_x, y, _width, height) => setAddMenuTop(y + height + 4));
-  };
-
   const handleCollectionPress = (collection: Collection) => {
     if (editing) return;
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 
-  const primaryColor = colors.primary;
 
   const renderEmptyHint = () => (
     <Animated.View
@@ -206,41 +201,17 @@ export default function LibraryScreen() {
   return (
     <ReviewNowProvider value={now}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Library</Text>
-          <View style={styles.headerActions}>
-            {(editing || customCollections.length > 0) && (
-              <Pressable
-                style={styles.editButton}
-                onPress={() => setEditing(!editing)}
-                accessibilityRole="button"
-                disabled={actionsDisabled}
-              >
-                <Text style={[styles.editLabel, { color: colors.text }]}>{editing ? 'Done' : 'Edit'}</Text>
-              </Pressable>
-            )}
-            <Pressable
-              ref={addButton}
-              style={styles.addButton}
-              accessibilityRole="button"
-              accessibilityLabel="Add"
-              testID="library-add"
-              onPress={openAddMenu}
-              disabled={actionsDisabled}
-            >
-              <IconSymbol name="plus" size={28} color={primaryColor} />
-            </Pressable>
-          </View>
-        </View>
-
         <GestureDetector gesture={scrollGesture}>
-        <ScrollView
+        <Animated.ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.collectionsContainer}
+          contentContainerStyle={[styles.collectionsContainer, { paddingTop: barHeight }]}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
           }
         >
+          <View style={styles.titleGap}><LargeTitle root title="Library" onBottom={setTitleBottom} /></View>
           {!hydrated ? (
             <CollectionCardSkeleton count={3} />
           ) : (
@@ -274,8 +245,21 @@ export default function LibraryScreen() {
               {collections.length <= 1 && renderEmptyHint()}
             </>
           )}
-        </ScrollView>
+        </Animated.ScrollView>
         </GestureDetector>
+        <TopBar scrollY={scrollY} title="Library" titleAt={titleBottom}>
+          {(editing || customCollections.length > 0) && (
+            <Pressable
+              style={styles.editButton}
+              onPress={() => setEditing(!editing)}
+              accessibilityRole="button"
+              disabled={actionsDisabled}
+            >
+              <Text style={[styles.editLabel, { color: colors.text }]}>{editing ? 'Done' : 'Edit'}</Text>
+            </Pressable>
+          )}
+          <TopBarButton testID="library-add" icon="plus" label="Add" onPress={() => setAddMenuOpen(true)} disabled={actionsDisabled} />
+        </TopBar>
 
         {nameDialog && (
           <AddCollectionModal
@@ -288,9 +272,9 @@ export default function LibraryScreen() {
           />
         )}
         <PopoverMenu
-          visible={addMenuTop !== null}
-          onClose={() => setAddMenuTop(null)}
-          anchorPosition={addMenuTop === null ? undefined : { top: addMenuTop, right: 16 }}
+          visible={addMenuOpen}
+          onClose={() => setAddMenuOpen(false)}
+          anchorPosition={{ top: barHeight, right: 12 }}
           items={[
             { label: 'New collection', icon: 'folder.fill', onPress: () => setNameDialog({}) },
             { label: 'New shared collection', icon: 'person.2.fill', onPress: () => handleShare('new') },
@@ -306,25 +290,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: 'bold',
-  },
-  addButton: {
-    padding: 8,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  titleGap: {
+    paddingHorizontal: 4,
+    marginBottom: 4,
   },
   editButton: {
     padding: 10,

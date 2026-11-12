@@ -475,9 +475,9 @@ export default function StudySessionScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
         title={formatVerseReference(session.verse)}
-        showBack={false}
         leftButton={{
           icon: 'xmark',
+          label: 'Close',
           onPress: () => {
             if (closingRef.current) return;
             closingRef.current = true;

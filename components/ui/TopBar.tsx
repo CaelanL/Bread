@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { ComponentProps, ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -77,6 +77,26 @@ export function TopBar({ scrollY, title, titleAt, onBack, backLabel = 'Back', ch
   );
 }
 
+/**
+ * A screen's title in its content, where the bar's small title comes from. `root` is a tab's
+ * first screen (34/700), otherwise a pushed page (28/600). `onBottom` reports where it ends, for
+ * `TopBar`'s `titleAt`.
+ */
+export function LargeTitle({ title, subtitle, root, onBottom }: {
+  title: string;
+  subtitle?: string;
+  root?: boolean;
+  onBottom: (y: number) => void;
+}) {
+  const colors = Colors[useColorScheme() ?? 'light'];
+  return (
+    <View style={styles.large} onLayout={(event) => onBottom(event.nativeEvent.layout.y + event.nativeEvent.layout.height)}>
+      <Text accessibilityRole="header" style={[root ? styles.rootTitle : styles.pageTitle, { color: colors.text }]}>{title}</Text>
+      {subtitle && <Text style={[styles.subtitle, { color: colors.icon }]}>{subtitle}</Text>}
+    </View>
+  );
+}
+
 /** An icon button in the bar, in the text colour. */
 export function TopBarButton({ icon, label, onPress, testID, disabled }: {
   icon: ComponentProps<typeof IconSymbol>['name'];
@@ -109,4 +129,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center' },
   button: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
+  large: { gap: 2 },
+  rootTitle: { fontSize: 34, lineHeight: 41, fontWeight: '700', letterSpacing: -0.4 },
+  pageTitle: { fontSize: 28, lineHeight: 34, fontWeight: '600', letterSpacing: -0.3 },
+  subtitle: { fontSize: 15, lineHeight: 20 },
 });

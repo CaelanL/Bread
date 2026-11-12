@@ -242,6 +242,14 @@ the title's `onLayout`). The scroll view is a Reanimated one with `onScroll` fro
 `paddingTop: useTopBarHeight()` and the same value as its `RefreshControl`'s `progressViewOffset`,
 so the spinner shows below the bar, not behind the Dynamic Island.
 
+Each screen picks its title. A tab's first screen (Home, Library, Settings) has `LargeTitle root`
+(34/700); a pushed page (Insights, Notifications) has `LargeTitle` (28/600); the collection
+screen has its name. `AppHeader` is the same bar in the layout flow, for screens whose top stays
+put: the title sits beside the back button, a labelled action is a `HeaderPill`, an icon one a
+`TopBarButton`. It carries a title only when the title says something the screen doesn't (a
+session's reference, a chapter's "John 3"). Setup and a curated collection drop theirs: the verse
+card and the collection's own name already say it.
+
 The collection screen's top is `CollectionHeader` (`components/library/`): the accent washing down
 from the top edge (an `expo-linear-gradient`, solid above the bar for a pull), a 56 pt icon square,
 the name at 28/600, a secondary line, and `HeaderPill`s (one `primary`, the rest on `fill`).

@@ -136,7 +136,7 @@ export function CollectionHeader({
 }
 
 /** A small action under the header. `primary` is the screen's one accent action. */
-export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessibilityLabel, hidden }: {
+export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessibilityLabel, hidden, disabled }: {
   ref?: Ref<View>;
   icon: IconName;
   label?: string;
@@ -146,6 +146,7 @@ export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessi
   accessibilityLabel?: string;
   /** Kept in place but invisible, while a search grown out of it is open. */
   hidden?: boolean;
+  disabled?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   return (
@@ -154,6 +155,7 @@ export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessi
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.pill,
@@ -161,6 +163,7 @@ export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessi
         { backgroundColor: primary ? colors.primaryLight : colors.fill },
         pressed && styles.pressed,
         hidden && styles.hidden,
+        disabled && styles.disabled,
       ]}
     >
       <IconSymbol name={icon} size={14} color={primary ? colors.tint : colors.icon} />
@@ -188,4 +191,5 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 14, fontWeight: '500' },
   pressed: { opacity: 0.6 },
   hidden: { opacity: 0 },
+  disabled: { opacity: 0.4 },
 });

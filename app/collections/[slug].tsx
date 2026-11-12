@@ -97,11 +97,9 @@ function CollectionIntroduction({ collection, accountVersion }: {
   return (
     <>
       <AppHeader
-        title="Collection"
         leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }}
         rightButton={{
           label: version,
-          variant: 'text',
           accessibilityLabel: `Translation, ${version}`,
           testID: 'curated-translation-picker',
           disabled: working,
@@ -189,7 +187,7 @@ export default function CuratedCollectionScreen() {
         />
       ) : (
         <>
-          <AppHeader title="Collection" leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }} />
+          <AppHeader leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }} />
           {collection ? (
             <ActivityIndicator color={colors.primary} style={styles.loading} />
           ) : (

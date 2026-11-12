@@ -13,6 +13,8 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
 import { DisplayNameModal } from '@/components/settings/DisplayNameModal';
 import { ReviewIntervalModal } from '@/components/settings/ReviewIntervalModal';
 import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
@@ -143,6 +145,9 @@ function ColorModePicker({ value, onChange }: ColorModePickerProps) {
 }
 
 export default function SettingsScreen() {
+  const barHeight = useTopBarHeight();
+  const { scrollY, onScroll } = useScrollY();
+  const [titleBottom, setTitleBottom] = React.useState(0);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -271,12 +276,8 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
-      </View>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]} onScroll={onScroll} scrollEventThrottle={16}>
+        <View style={styles.titleGap}><LargeTitle root title="Settings" onBottom={setTitleBottom} /></View>
         {/* Bible Settings */}
         <SettingsSection title="BIBLE">
           <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
@@ -428,7 +429,8 @@ export default function SettingsScreen() {
             Delete Account
           </Text>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
+      <TopBar scrollY={scrollY} title="Settings" titleAt={titleBottom} />
 
       {/* Review Info Modal (shared with study screen) */}
       <ProgressInfoModal
@@ -644,14 +646,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 34,
-    fontWeight: 'bold',
+  titleGap: {
+    marginBottom: 4,
   },
   scrollView: {
     flex: 1,

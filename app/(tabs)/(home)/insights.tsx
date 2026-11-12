@@ -1,4 +1,4 @@
-import { AppHeader } from '@/components/app-header';
+import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
 import { AddToCollectionModal } from '@/components/ui/AddToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { VerseExpandModal, VerseData } from '@/components/ui/VerseExpandModal';
@@ -11,7 +11,8 @@ import { getPopularRanges, formatRange, PopularRange } from '@/lib/api/popular-v
 import { useAppStore, useInsightsStats, useMostMemorizedBooks, useVerses } from '@/lib/store';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 interface StatCardProps {
   value: number | string;
@@ -116,6 +117,9 @@ function formatAvgTime(ms: number): string {
 }
 
 export default function InsightsScreen() {
+  const barHeight = useTopBarHeight();
+  const { scrollY, onScroll } = useScrollY();
+  const [titleBottom, setTitleBottom] = useState(0);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -214,14 +218,16 @@ export default function InsightsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Insights" leftButton={{ icon: 'chevron.left', label: 'Back to Home', onPress: () => router.back() }} />
-      <ScrollView
+      <Animated.ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
       >
+        <LargeTitle title="Insights" onBottom={setTitleBottom} />
         {/* Hero Stats */}
         <View style={styles.statsRow}>
           <StatCard
@@ -344,7 +350,8 @@ export default function InsightsScreen() {
             </View>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+      <TopBar scrollY={scrollY} title="Insights" titleAt={titleBottom} onBack={() => router.back()} backLabel="Back to Home" />
 
       {/* Time Studied Info Modal */}
       <Modal
