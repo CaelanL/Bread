@@ -1,20 +1,54 @@
-# Start from npm run db:reset. reader-c's + menu: New collection, then Share… and the invite opened
-# by link over the share modal ("You're in", Open); the Library tab then pops to the Library and +
-# still opens (round 6 step 38). Then New shared collection lands on the code, with Copy, and Join
-# with code opens the code entry. docs/features/library.md
+# Start from npm run db:reset. reader-b's + menu (round 6): New shared collection asks for a name
+# first, then the collection's name, and lands on the code with its own Copy. New collection, then
+# Share… and the invite opened by link over the share modal ("You're in", Open): the Library tab
+# then pops to the Library and + still opens (step 38). Join with code opens the code entry.
+# docs/features/library.md
 appId: com.caelanliu.biblemem
 name: library-plus
 ---
 - runFlow: subflows/open-app.yaml
-- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, Shared.*"
+    visible: ".*My Verses.*"
     timeout: 20000
 - tapOn:
     id: library-add
-- assertVisible: "New shared collection"
+- assertVisible: "New collection"
 - assertVisible: "Join with code"
 - takeScreenshot: plus-1-menu
+
+# New shared collection: display name, collection name, then the code.
+- tapOn: "New shared collection"
+- extendedWaitUntil:
+    visible: "What should friends call you?"
+    timeout: 8000
+- tapOn:
+    id: display-name-continue
+- extendedWaitUntil:
+    visible:
+      id: collection-name
+    timeout: 8000
+- inputText: "Psalm 91"
+- tapOn:
+    id: create-shared
+- extendedWaitUntil:
+    visible:
+      id: invite-code
+    timeout: 15000
+- assertVisible: "Psalm 91"
+- tapOn:
+    id: invite-copy-code
+- assertVisible: "Code copied"
+- takeScreenshot: plus-2-share-modal
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Psalm 91, Shared · 1 member.*"
+    timeout: 20000
+
+# New collection, Share…, then the invite by link while the share modal is up.
+- tapOn:
+    id: library-add
 - tapOn: "New collection"
 - tapOn:
     id: collection-name
@@ -24,18 +58,12 @@ name: library-plus
 - extendedWaitUntil:
     visible: ".*Hebrews, 0 verses.*"
     timeout: 10000
-
-# Share, then open the invite by link while the share modal is up.
 - longPressOn: ".*Hebrews, 0 verses.*"
 - tapOn: "Share…"
 - extendedWaitUntil:
     visible:
       id: invite-code
     timeout: 15000
-- tapOn:
-    id: invite-copy-code
-- assertVisible: "Code copied"
-- takeScreenshot: plus-2-share-modal
 - copyTextFrom:
     id: invite-code
 - openLink: com.biblemem://join/${maestro.copiedText}
@@ -64,30 +92,13 @@ name: library-plus
     timeout: 5000
 - tapOn: "Cancel"
 
-# New shared collection: name it, land on the code.
-- tapOn:
-    id: library-add
-- tapOn: "New shared collection"
+# Join with code. A fresh app: after an X close, the next modal route is hidden from accessibility
+# (react-native-screens recycles the closed screen's view with aria-hidden set; see the doc).
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: "New shared collection"
-    timeout: 8000
-- tapOn:
-    id: collection-name
-- inputText: "Psalm 91"
-- tapOn:
-    id: create-shared
-- extendedWaitUntil:
-    visible:
-      id: invite-code
-    timeout: 15000
-- assertVisible: "Psalm 91"
-- tapOn:
-    id: modal-close
-- extendedWaitUntil:
-    visible: ".*Psalm 91, Shared · 1 member.*"
-    timeout: 10000
-
-# Join with code.
+    visible: ".*Hebrews, Shared · 1 member.*"
+    timeout: 20000
 - tapOn:
     id: library-add
 - tapOn: "Join with code"

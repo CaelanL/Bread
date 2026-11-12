@@ -21,12 +21,11 @@ name: shared-collections
     visible:
       id: invite-code
     timeout: 15000
-- assertVisible: ".*com.biblemem://join/.*"
 - assertVisible: "Expires in 14 days"
 - takeScreenshot: shared-2-owner-sheet
 - tapOn:
-    id: invite-copy
-- assertVisible: ".*Copied"
+    id: invite-copy-code
+- assertVisible: "Code copied"
 - runScript:
     file: scripts/shared-collections.js
     env:
@@ -113,6 +112,9 @@ name: shared-collections
       MODE: no-copy
 
 # Rejoin, then the owner deletes for everyone.
+# A fresh app: a modal route reopened after an X close is hidden from accessibility (see
+# docs/architecture/navigation-and-routing.md#modal-routes).
+- runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fjoin%2F${output.code}
 - extendedWaitUntil:
     visible:

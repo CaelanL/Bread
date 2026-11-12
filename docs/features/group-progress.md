@@ -97,6 +97,11 @@ group, a member's copy is personal and follows the personal rules.
 
 ## Browser checks
 
+The seed (header of `supabase/seed.sql`) gives Cara one collection per emblem ("Psalm 23", "John 15",
+"Philippians 4", "Joshua 1") and "Sermon on the Mount": 10 members (reader-e to reader-m) on 6
+references in every state, so Who's where scrolls sideways
+(`"/(tabs)/(library)/shared/seed-sermon-mount" --as reader-c`).
+
 After `npm run db:reset`: `npm run sim -- flow shared-progress` (the seeded Romans 8 as Cara and
 Dana: strip, You and Group values, open filter, Practice, Cara makes Dana an editor, Dana adds
 Romans 8:31, Cara sees it); `npm run sim -- flow shared-grid` (Dana opens Who's where from the

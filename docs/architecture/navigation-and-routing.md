@@ -88,6 +88,11 @@ that screen can't present another RN `Modal` (the Library's + did nothing). And 
 `router.dismissAll()` with `router.push()`: the push is resolved against the modal still on
 top, so it pushes a second copy of `(tabs)` onto the root stack.
 
+A modal route reopened after one was closed with the X can be hidden from VoiceOver and Maestro
+(the whole app reads as empty). native-stack sets `aria-hidden` on a closing screen, and Fabric
+recycles that `RNSScreen` view for the next one without resetting it, because `false` is the
+default. Flows relaunch the app after an X close. A real fix is native (react-native-screens).
+
 `app/notifications.tsx` and `app/reset-password.tsx` are plain root
 Stack screens.
 

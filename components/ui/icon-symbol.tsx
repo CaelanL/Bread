@@ -48,6 +48,7 @@ const MAPPING = {
   'person.2.fill': 'group',
   'doc.on.doc': 'content-copy',
   'number': 'tag',
+  'square.on.square': 'filter-none',
   'square.and.arrow.up': 'ios-share',
   'ellipsis': 'more-horiz',
   'arrow.triangle.2.circlepath': 'autorenew',

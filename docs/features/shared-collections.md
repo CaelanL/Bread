@@ -158,10 +158,9 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   ([library.md](library.md#sharing-from-the-library)), opens `app/share/[id].tsx`: a name
   (`DisplayNameForm`) once, then `shareCollection` and the panel. 20 groups toasts.
 - **Share panel** (`SharePanel`, also from the strip): members, roles. The owner also gets the
-  code with its own Copy, the link, days left, Copy link, Share, New link (confirmed; the old code
-  dies) and the [member actions](group-progress.md#whos-where). Copy link and Share send
-  `Join "<name>" on Bread: <link> — or enter code <code> in Bread`: chat apps rarely make
-  custom-scheme links tappable. Members get Leave collection.
+  code with a copy icon, days left, Share, New link (confirmed; the old code dies) and the
+  [member actions](group-progress.md#whos-where). Share sends `Join "<name>" on Bread: <link> — or
+  enter code <code> in Bread`: chat apps rarely make the link tappable. Members get Leave.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, Join with code on the +
   menu) show `JoinInvite`: inviter, name, counts, inviter's initial and "+N", the privacy line
   with the account translation, and Join. Join asks for a name if needed, calls
@@ -187,6 +186,7 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 `supabase/seed.sql`: `reader-c` (Cara, ESV) owns "Romans 8" and `reader-d` (Dana, NIV) is
 a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for Dana,
 8:38-39 untouched. Invite code `BREAD828`. `reader-a` and `reader-b` belong to no group.
+More: [group-progress.md](group-progress.md#browser-checks).
 
 ## Sharp edges
 

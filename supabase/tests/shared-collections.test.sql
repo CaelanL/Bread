@@ -105,8 +105,8 @@ select throws_ok(format('delete from public.shared_collection_members where user
   '42501', null, 'a member cannot drop their membership row directly (leave takes the copy too)');
 delete from public.shared_collections;
 reset role;
-select results_eq($$select role from public.shared_collection_members order by joined_at$$,
-  $$values ('owner'::text), ('member')$$, 'non-owners changed no roles and removed nobody');
+select results_eq(format('select role from public.shared_collection_members where shared_collection_id = %L order by joined_at',
+  current_setting('test.s')), $$values ('owner'::text), ('member')$$, 'non-owners changed no roles and removed nobody');
 select is((select name from public.shared_collections where id = current_setting('test.s')::uuid), 'Romans 8',
   'nobody but the owner renames or deletes the group');
 
@@ -123,8 +123,10 @@ select throws_ok(format('insert into public.shared_collection_verses (shared_col
   current_setting('test.s')), '23514', null, 'a reference needs a canonical book name');
 select throws_ok(format('update public.shared_collection_members set user_id = %L', current_setting('test.a')),
   '42501', null, 'the owner cannot move a membership to another account');
-update public.shared_collection_members set role = 'member' where user_id = current_setting('test.c')::uuid;
-select is((select role from public.shared_collection_members where user_id = current_setting('test.c')::uuid), 'owner',
+update public.shared_collection_members set role = 'member' where user_id = current_setting('test.c')::uuid
+  and shared_collection_id = current_setting('test.s')::uuid;
+select is((select role from public.shared_collection_members where user_id = current_setting('test.c')::uuid
+  and shared_collection_id = current_setting('test.s')::uuid), 'owner',
   'the owner row keeps its role');
 update public.shared_collection_members set role = 'editor' where user_id = current_setting('test.d')::uuid;
 
