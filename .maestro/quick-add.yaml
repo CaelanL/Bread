@@ -1,5 +1,8 @@
-# reader-b types two references and one out-of-range one into the add screen's quick-add
-# field, peeks a chip, adds both good ones with one tap, then deletes them again.
+# reader-b's quick add (round 7). Focusing the field hides the books and shows Cancel. "rom" and
+# Return fill Romans, "8" and Return fill Romans 8:1, the Romans 8:1-4 row adds at once with an
+# Added toast, and Undo takes it back. Then Romans 8:1 and Return add a single verse, which reads
+# "Already in this collection" when typed again. Cancel shows the books.
+# docs/features/adding-verses.md
 appId: com.caelanliu.biblemem
 name: quick-add
 ---
@@ -9,10 +12,10 @@ name: quick-add
 # A failed earlier run can leave the verses behind.
 - runFlow:
     when:
-      visible: ".*Ruth 2:1-2 • (ESV|KJV).*"
+      visible: ".*Romans 8:1-4 • .*"
     commands:
       - swipe:
-          from: ".*Ruth 2:1-2 • (ESV|KJV).*"
+          from: ".*Romans 8:1-4 • .*"
           direction: LEFT
       - tapOn:
           id: swipe-delete
@@ -22,63 +25,85 @@ name: quick-add
       - waitForAnimationToEnd
 - runFlow:
     when:
-      visible: ".*Ruth 1:1 • (ESV|KJV).*"
-    file: subflows/delete-ruth.yaml
+      visible: ".*Romans 8:1 • .*"
+    commands:
+      - swipe:
+          from: ".*Romans 8:1 • .*"
+          direction: LEFT
+      - tapOn:
+          id: swipe-delete
+      - tapOn:
+          text: Delete
+          below: "Delete verse?"
+      - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "No verses yet"
     timeout: 20000
 - tapOn: ".*Add Verse"
-# Bundled KJV, so the peek reads without the network.
-- tapOn:
-    id: add-translation-picker
-- scrollUntilVisible:
-    element:
-      id: bible-translation-KJV
-    direction: DOWN
-    visibilityPercentage: 100
-- tapOn:
-    id: bible-translation-KJV
-- assertNotVisible: "Translation"
+- assertVisible: "Genesis.*"
+- assertNotVisible:
+    id: quick-add-cancel
 - tapOn:
     id: quick-add-field
-- inputText: "Ru"
 - assertVisible:
-    id: quick-add-suggestion-Ruth
-- tapOn:
-    id: quick-add-suggestion-Ruth
-- inputText: "1 1"
+    id: quick-add-cancel
+- assertNotVisible: "Genesis.*"
+- inputText: "rom"
+- assertVisible:
+    id: quick-add-row-Romans
+- pressKey: Enter
+- inputText: "8"
+- assertVisible:
+    id: quick-add-row-Romans-8:1
 - pressKey: Enter
 - assertVisible:
-    id: quick-add-chip-Ruth-1-1-1
-- inputText: "Ruth 2:1-2"
-- pressKey: Enter
-- inputText: "John 22 1"
-- pressKey: Enter
-- assertVisible: "John has 21 chapters"
-- assertVisible: "Add 2"
-- takeScreenshot: quick-add-1-chips
-- longPressOn:
-    id: quick-add-chip-Ruth-1-1-1
+    id: quick-add-row-Romans-8:1-4
+- tapOn:
+    id: quick-add-row-Romans-8:1-4
 - extendedWaitUntil:
-    visible: ".*judges ruled.*"
+    visible: "Added Romans 8:1-4"
     timeout: 20000
-- takeScreenshot: quick-add-2-peek
+- takeScreenshot: quick-add-1-added
 - tapOn:
-    id: verse-expand-close
-- tapOn:
-    id: quick-add-submit
+    id: quick-add-undo
+- assertNotVisible: "Added Romans 8:1-4"
+- inputText: "Romans 8:1-4"
 - extendedWaitUntil:
-    visible: ".*Ruth 1:1 • KJV.*"
+    visible: "Add Romans 8:1-4"
     timeout: 20000
-- assertVisible: ".*Ruth 2:1-2 • KJV.*"
-- takeScreenshot: quick-add-3-added
-- swipe:
-    from: ".*Ruth 2:1-2 • KJV.*"
-    direction: LEFT
+- eraseText: 20
+- inputText: "Romans 8:1"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Added Romans 8:1"
+    timeout: 20000
+- inputText: "Romans 8:1"
+- assertVisible: "Romans 8:1, already in this collection"
+- takeScreenshot: quick-add-2-already
 - tapOn:
-    id: swipe-delete
+    id: quick-add-cancel
+- assertVisible: "Genesis.*"
+- assertNotVisible:
+    id: quick-add-cancel
+- tapOn: Back
+- extendedWaitUntil:
+    visible: ".*Romans 8:1 • .*"
+    timeout: 20000
+- assertNotVisible: ".*Romans 8:1-4 • .*"
+# Right after Back the first swipe can land before the card takes gestures.
+- retry:
+    maxRetries: 2
+    commands:
+      - waitForAnimationToEnd
+      - swipe:
+          from: ".*Romans 8:1 • .*"
+          direction: LEFT
+      - tapOn:
+          id: swipe-delete
 - assertVisible: "Delete verse?"
 - tapOn:
     text: Delete
     below: "Delete verse?"
-- runFlow: subflows/delete-ruth.yaml
+- extendedWaitUntil:
+    visible: "No verses yet"
+    timeout: 20000

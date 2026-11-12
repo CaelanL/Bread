@@ -29,7 +29,7 @@ export default function AddVerseScreen() {
 
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
+  const [searching, setSearching] = useState(false);
 
   // Ignores only a quick re-tap of the same book; a tap on another book goes through.
   const lastBookPress = useRef({ book: '', at: 0 });
@@ -126,14 +126,14 @@ export default function AddVerseScreen() {
         accountNote
       />
 
-      <QuickAddField collectionId={collectionId} onTypingChange={setIsTyping} />
+      <QuickAddField collectionId={collectionId} searching={searching} onSearchChange={setSearching} />
 
-      <ScrollView style={[styles.scrollView, { opacity: isTyping ? 0.55 : 1 }]} keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
-        {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+      {!searching && (
+        <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      )}
     </View>
   );
 }

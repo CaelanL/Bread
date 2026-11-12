@@ -1,12 +1,12 @@
 # Adding verses
 
 How verses get into a collection: the add screen reached from a collection's +, with
-the quick-add field on top and the book and chapter list below it. Collections and the
+the quick-add search field on top and the book and chapter list below it. Collections and the
 rest of the Library are in `docs/features/library.md`.
 
 ## Browsing a chapter
 
-`add.tsx` is the quick-add field over a book and chapter list, with the account
+`add.tsx` is the quick-add field over a book and chapter list (Browse, below), with the account
 translation picker in the header. Tapping a chapter opens `add/[book]/[chapter].tsx`,
 which loads with `fetchChapter`, and the user selects one continuous range:
 
@@ -41,30 +41,60 @@ path means a soft-deleted row never blocks a re-add.
 
 ## Quick add
 
-The field at the top of `add.tsx` is `components/library/QuickAddField.tsx`. The parser is
-`parseQuickAdd` in `lib/bible/quick-add.ts`, pure and unit-tested. It reparses the whole
-field text on every keystroke.
+The field at the top of `add.tsx` is `components/library/QuickAddField.tsx`. The screen has
+two modes, like an iOS search controller, and they never share the screen:
 
-- **Book.** Matches by prefix over `BIBLE_BOOKS` with spaces ignored, so `1t` and `1 t` offer
-  1 Thessalonians and 1 Timothy, or by an exact `BOOK_ALIASES` key (`gn`, `jn`). Up to five
-  suggestion rows show, the typed part tinted. Tapping one, or a space or digit typed after a
-  book with one match, rewrites the field to the full name (`completeBook`).
-- **Numbers.** The first run of anything that isn't a letter or digit splits chapter and
-  verse. Only a dash before a third number makes a range. Counts come from `getChapterCount`
-  and `getVerseCount`.
-- **Enter.** Takes the top suggestion while the book is unsettled, otherwise turns the
-  reference into a chip and clears the field. The keyboard stays up. A chapter alone adds
-  nothing; the hint says how many verses it has.
-- **Chips.** Green is ready. Red is out of range, a reversed range or a range across chapters;
-  the hint line lists why. Grey "already here" is a verse already in the collection, worked
-  out from the store, never sent. The same reference twice makes one chip. Long-press a green
-  or grey chip to read it in `VerseExpandModal` through `fetchVerse`.
-- **Add N.** Calls `addVerse` once per green chip, in order. Each saved chip leaves at once.
-  When all saved it goes back to the collection like the chapter screen; otherwise it stays
-  with the failed chips and one toast names the first failure.
+- **Browse.** The field isn't focused. The book and chapter list shows under it, as above.
+- **Search.** Focusing the field hides the book list and puts Cancel right of the field. The
+  body shows only suggestion rows. Cancel clears the field, drops focus and goes back to
+  Browse. Dismissing the keyboard any other way stays in Search.
 
-While the field has text the book list dims and stays tappable. Chips live in the
-component and go when the screen is popped.
+There's no hint text, only the field's "Search" placeholder.
+
+### Rows
+
+`quickAddRows` in `lib/bible/quick-add.ts` turns the field text into at most six rows, top row
+first. It's pure and unit-tested, and reparses the whole text with `parseQuickAdd` on every
+keystroke.
+
+| Field | Rows |
+|---|---|
+| `R` | Matching books: Ruth, Romans, Revelation, in Bible order. Each fills `Romans ` |
+| `Romans ` | Romans 1 to Romans 6, each filling the field |
+| `Romans 8` | Romans 8:1 to 8:6, each filling `Romans 8:1` |
+| `Romans 8:1` | Romans 8:1 on top, then 8:1-2 up to 8:1-6, all adds |
+| `Romans 8:1-4` | That range alone, as an add |
+| No match, a chapter or verse outside the book, a reversed range, a range across chapters | None |
+
+- **Fill rows** end in an up-left arrow (`arrow.up.left`) and rewrite the field, so the next
+  rows narrow. **Add rows** end in a plus.
+- **Return** takes the top row, which is highlighted. So `rom`, Return, `8`, Return, Return
+  adds Romans 8:1.
+- **Book matching** is prefix over `BIBLE_BOOKS` with spaces ignored, so `1t` and `1 t` offer
+  1 Thessalonians and 1 Timothy, or an exact `BOOK_ALIASES` key (`gn`, `jn`). A space or digit
+  typed after a book with one match rewrites it to the full name (`completeBook`).
+- **Numbers.** The first run of anything that isn't a letter or digit splits chapter and verse,
+  so `Rom 8 28` works. Only a dash before a third number makes a range. Counts come from
+  `getChapterCount` and `getVerseCount`.
+- **No whole-chapter row.** Nothing adds a whole chapter today, so a bare chapter offers its
+  first verses instead.
+- **Empty field.** Up to six recent references from the store's verses, newest `createdAt`
+  first, leaving out ones already in this collection, under "Recent". It's derived, never
+  stored. These wait for a tap: Return on an empty field does nothing.
+
+### Adding
+
+An add row calls `addVerse` once, the same store action, account translation and verse identity
+as the chapter screen. No verse text is read. The field clears and the keyboard stays up. On
+success a toast says "Added Romans 8:1" with Undo for 4 seconds; Undo calls `deleteVerse` for
+that verse in this collection. A failed add or undo shows its error in the same toast, since the
+app's global error toast sits under the keyboard. The toast rides above the keyboard
+(`KeyboardStickyView`), and Cancel dismisses it.
+
+A reference already in the collection, worked out from the store, shows "Already in this
+collection" in place of the plus, and tapping it or Return does nothing. A reference already
+being saved is ignored too, so a double tap adds once. The screen stays open after an add;
+Back returns to the collection.
 
 ## Double taps
 
@@ -72,7 +102,6 @@ component and go when the screen is popped.
 one hook instance, so every chapter shares one 500 ms window and a quick tap on a second
 chapter is ignored too. Book rows open in place, so `handleBookPress` in `add.tsx` ignores
 only a re-tap of the same book inside 500 ms; a quick tap on another book goes through.
-Dragging the book list closes the keyboard; tapping a book or chapter keeps it up.
 
 ## Sharp edges
 
@@ -87,7 +116,7 @@ Dragging the book list closes the keyboard; tapping a book or chapter keeps it u
 ## Browser checks
 
 - `npm run sim -- flow add-verse`: reader-b uses the shared picker, adds bundled KJV Ruth 1:1 with a tap, sees the card, then deletes it back to "No verses yet".
-- `npm run sim -- flow quick-add`: reader-b picks Ruth from a suggestion, makes Ruth 1:1, Ruth 2:1-2 and a red John 22:1, peeks a chip, taps Add 2, sees both KJV cards, then deletes them.
+- `npm run sim -- flow quick-add`: reader-b focuses the field (books hidden, Cancel shown), types `rom`, Return, `8`, Return, taps Romans 8:1-4, sees "Added Romans 8:1-4", Undo, then adds Romans 8:1 with Return, sees "Already in this collection" for it, Cancel shows the books, and the card is deleted from My Verses.
 - `npm run sim -- flow add-double-tap`: a quick tap on a second book opens it; reader-b double-taps Ruth and its chapter 1, Ruth stays open and one Back returns to the add screen.
 - Tap path: +, a book, a chapter, long-press and drag across three verses, Add. One new card shows the range.
 
@@ -95,6 +124,6 @@ Dragging the book list closes the keyboard; tapping a book or chapter keeps it u
 
 - 2026-11-11 · Book matching is prefix or an exact known abbreviation, never fuzzy · misspellings were out of scope; `gn` works because it's in `BOOK_ALIASES`.
 - 2026-11-11 · Only a dash makes a range, and one saved verse stays inside one chapter · Caelan: "then you need a dash".
-- 2026-11-11 · Add returns to the collection once every chip saved · same as the chapter screen.
 - 2026-11-11 · Book rows ignore only a quick re-tap of the same book, chapters share one window · a book row stays on screen, so a fast tap on another book is a real choice; a chapter tap leaves the screen.
-- 2026-11-11 · The Add pill sits in the field row, not the header · the header holds the account translation picker.
+- 2026-11-12 · Quick add is a search mode with immediate adds, no chips · Caelan found chips over the book list incoherent.
+- 2026-11-12 · Recent rows and Return on an empty field add nothing until tapped · Return on an empty field shouldn't add a verse the user didn't type.

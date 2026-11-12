@@ -70,8 +70,10 @@ name: shared-progress
     id: quick-add-field
 - inputText: "Romans 8:31"
 - pressKey: Enter
-- tapOn:
-    id: quick-add-submit
+- extendedWaitUntil:
+    visible: "Added Romans 8:31"
+    timeout: 20000
+- tapOn: Back
 - extendedWaitUntil:
     visible: "You: Open.*Romans 8:31 •.*Group: 0 of 2 mastered"
     timeout: 20000

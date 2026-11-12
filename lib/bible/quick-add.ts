@@ -88,31 +88,36 @@ export function completeBook(input: string, book?: string): string | null {
   return `${name} ${rest.trimStart()}`;
 }
 
-/** The one-line hint under the field. */
-export function hintFor(parse: QuickAddParse): string | null {
+export type QuickAddReference = { book: string; chapter: number; verseStart: number; verseEnd: number };
+
+/** A row that rewrites the field to `text`, or one that adds a whole reference. */
+export type QuickAddRow = { kind: 'fill'; text: string } | ({ kind: 'add' } & QuickAddReference);
+
+export const MAX_ROWS = 6;
+
+const firstNumbers = (count: number) => Array.from({ length: Math.min(count, MAX_ROWS) }, (_, i) => i + 1);
+
+/** The suggestion rows for the field text, top row first. They narrow book, chapter, verse, range. */
+export function quickAddRows(input: string): QuickAddRow[] {
+  const parse = parseQuickAdd(input);
   switch (parse.kind) {
-    case 'empty':
-      return null;
-    case 'book':
-      if (parse.matches.length === 0) return 'No book matches';
-      if (parse.matches.length > 1) return 'Keep typing to pick one book';
-      return squash(parse.query) === squash(parse.matches[0]) ? '2 5-7 for a range' : 'Space picks it · 2 5-7 for a range';
-    case 'chapter':
-      return `${parse.book} ${parse.chapter} has ${parse.verseCount} verses`;
-    case 'verse': {
-      const range = parse.verseEnd === parse.verseStart ? `${parse.verseStart}` : `${parse.verseStart}-${parse.verseEnd}`;
-      return `Return adds ${parse.book} ${parse.chapter}:${range}`;
-    }
-    case 'error':
-      switch (parse.reason) {
-        case 'chapter':
-          return `${parse.book} has ${parse.chapterCount} chapters`;
-        case 'verse':
-          return `${parse.book} ${parse.chapter} has ${parse.verseCount} verses`;
-        case 'reversed':
-          return `Start before end: try ${parse.chapter}:${parse.verseEnd}-${parse.verseStart}`;
-        case 'cross-chapter':
-          return `One chapter per verse: try ${parse.chapter}:${Math.min(parse.verseStart, parse.verseCount)}-${parse.verseCount}`;
+    case 'book': {
+      const [book] = parse.matches;
+      if (parse.matches.length === 1 && completeBook(input) === input) {
+        return firstNumbers(getChapterCount(book)).map((chapter) => ({ kind: 'fill', text: `${book} ${chapter}` }));
       }
+      return parse.matches.slice(0, MAX_ROWS).map((match) => ({ kind: 'fill', text: completeBook(input, match) ?? match }));
+    }
+    case 'chapter':
+      return firstNumbers(parse.verseCount).map((verse) => ({ kind: 'fill', text: `${parse.book} ${parse.chapter}:${verse}` }));
+    case 'verse': {
+      const { book, chapter, verseStart, verseEnd } = parse;
+      if (verseEnd !== verseStart) return [{ kind: 'add', book, chapter, verseStart, verseEnd }];
+      return firstNumbers(getVerseCount(book, chapter) - verseStart + 1).map((length) => ({
+        kind: 'add', book, chapter, verseStart, verseEnd: verseStart + length - 1,
+      }));
+    }
+    default:
+      return [];
   }
 }

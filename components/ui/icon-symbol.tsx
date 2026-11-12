@@ -32,6 +32,7 @@ const MAPPING = {
   'play.fill': 'play-arrow',
   'pause.fill': 'pause',
   'arrow.up.right': 'north-east',
+  'arrow.up.left': 'north-west',
   'xmark': 'close',
   'magnifyingglass': 'search',
   'checkmark': 'check',

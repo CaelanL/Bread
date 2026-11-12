@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { completeBook, hintFor, matchBooks, parseQuickAdd } from './quick-add';
+import { completeBook, matchBooks, parseQuickAdd, quickAddRows } from './quick-add';
 
 describe('matchBooks', () => {
   it('matches ordinals with or without a space', () => {
@@ -62,7 +62,7 @@ describe('parseQuickAdd', () => {
     assert.equal(reason(parseQuickAdd('Gen 5 30 31')), 'cross-chapter');
   });
 
-  it('gives a chapter hint for a chapter alone', () => {
+  it('reads a chapter alone', () => {
     assert.deepEqual(parseQuickAdd('Gen 5'), { kind: 'chapter', book: 'Genesis', chapter: 5, verseCount: 32 });
   });
 
@@ -93,19 +93,41 @@ describe('completeBook', () => {
   });
 });
 
-describe('hintFor', () => {
-  it('words each state', () => {
-    assert.equal(hintFor(parseQuickAdd('')), null);
-    assert.equal(hintFor(parseQuickAdd('1t')), 'Keep typing to pick one book');
-    assert.equal(hintFor(parseQuickAdd('1th')), 'Space picks it · 2 5-7 for a range');
-    assert.equal(hintFor(parseQuickAdd('1 Thessalonians ')), '2 5-7 for a range');
-    assert.equal(hintFor(parseQuickAdd('xq')), 'No book matches');
-    assert.equal(hintFor(parseQuickAdd('Gen 5')), 'Genesis 5 has 32 verses');
-    assert.equal(hintFor(parseQuickAdd('Gen 5:5-10')), 'Return adds Genesis 5:5-10');
-    assert.equal(hintFor(parseQuickAdd('John 22 1')), 'John has 21 chapters');
-    assert.equal(hintFor(parseQuickAdd('John 3 37')), 'John 3 has 36 verses');
-    assert.equal(hintFor(parseQuickAdd('Gen 5:5-3')), 'Start before end: try 5:3-5');
-    assert.equal(hintFor(parseQuickAdd('Gen 5:30-6:2')), 'One chapter per verse: try 5:30-32');
+describe('quickAddRows', () => {
+  const fills = (input: string) => quickAddRows(input).map((row) => (row.kind === 'fill' ? row.text : row.kind));
+  const adds = (input: string) =>
+    quickAddRows(input).map((row) => (row.kind === 'add' ? `${row.chapter}:${row.verseStart}-${row.verseEnd}` : row.kind));
+
+  it('offers matching books that fill the field', () => {
+    assert.deepEqual(fills('R'), ['Ruth ', 'Romans ', 'Revelation ']);
+    assert.deepEqual(fills('1t 2 3'), ['1 Thessalonians 2 3', '1 Timothy 2 3']);
+    assert.deepEqual(fills('Romans'), ['Romans ']);
+  });
+
+  it('offers the first chapters once the book is filled', () => {
+    assert.deepEqual(fills('Romans '), ['Romans 1', 'Romans 2', 'Romans 3', 'Romans 4', 'Romans 5', 'Romans 6']);
+    assert.deepEqual(fills('Jude '), ['Jude 1']);
+  });
+
+  it('offers the first verses of a chapter as fills, never an add', () => {
+    assert.deepEqual(fills('Romans 8'), ['Romans 8:1', 'Romans 8:2', 'Romans 8:3', 'Romans 8:4', 'Romans 8:5', 'Romans 8:6']);
+    assert.deepEqual(fills('Rom 8:'), fills('Romans 8'));
+  });
+
+  it('puts the verse itself on top, then ranges from it', () => {
+    assert.deepEqual(adds('Romans 8:1'), ['8:1-1', '8:1-2', '8:1-3', '8:1-4', '8:1-5', '8:1-6']);
+    assert.deepEqual(adds('Rom 8 28'), ['8:28-28', '8:28-29', '8:28-30', '8:28-31', '8:28-32', '8:28-33']);
+    assert.deepEqual(adds('Romans 8:38'), ['8:38-38', '8:38-39']);
+  });
+
+  it('offers a typed range alone', () => {
+    assert.deepEqual(adds('Romans 8:1-4'), ['8:1-4']);
+  });
+
+  it('shows nothing for no match or a reference outside the book', () => {
+    for (const text of ['', 'xq', 'Romans 17', 'Romans 8:40', 'Romans 8:4-1', 'Romans 8:30-9:2']) {
+      assert.deepEqual(quickAddRows(text), [], text);
+    }
   });
 });
 
