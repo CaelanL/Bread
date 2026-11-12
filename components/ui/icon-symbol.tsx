@@ -44,6 +44,7 @@ const MAPPING = {
   'trash': 'delete-outline',
   'heart.fill': 'favorite',
   'folder.fill': 'folder',
+  'person.crop.circle.fill': 'account-circle',
 } as IconMapping;
 
 /**

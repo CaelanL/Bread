@@ -13,6 +13,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { DisplayNameModal } from '@/components/settings/DisplayNameModal';
 import { ReviewIntervalModal } from '@/components/settings/ReviewIntervalModal';
 import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -22,6 +23,7 @@ import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion, type ColorMode } from '
 import { useAuth } from '@/lib/auth';
 import { useAppStore } from '@/lib/store';
 import { MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from '@/lib/store/review-config';
+import { prefillDisplayName } from '@/lib/shared/display-name';
 import {
   getPermissionStatus,
   markSettingsVisited,
@@ -151,7 +153,11 @@ export default function SettingsScreen() {
   const setBibleVersion = useAppStore((state) => state.setBibleVersion);
   const reviewMaxIntervalDays = useAppStore((state) => state.reviewMaxIntervalDays);
   const setReviewMaxIntervalDays = useAppStore((state) => state.setReviewMaxIntervalDays);
+  const displayName = useAppStore((state) => state.displayName);
+  const setDisplayName = useAppStore((state) => state.setDisplayName);
   const { user, signOut, updatePassword, deleteAccount } = useAuth();
+  const namePrefill = prefillDisplayName(user?.email);
+  const [nameModalVisible, setNameModalVisible] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
   const [copyrightVisible, setCopyrightVisible] = React.useState(false);
@@ -347,6 +353,23 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <SettingsSection title="ACCOUNT">
+          <Pressable testID="settings-display-name" onPress={() => setNameModalVisible(true)}>
+            <SettingsRow
+              icon="person.crop.circle.fill"
+              label="Name"
+              description="What friends see in shared collections"
+            >
+              <View style={styles.dropdownTrigger}>
+                <Text
+                  style={[styles.dropdownValue, { color: displayName ? colors.text : colors.icon }]}
+                  numberOfLines={1}
+                >
+                  {displayName ?? namePrefill}
+                </Text>
+                <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+              </View>
+            </SettingsRow>
+          </Pressable>
           <SettingsRow
             icon="person.fill"
             label="Email"
@@ -491,6 +514,14 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <DisplayNameModal
+        visible={nameModalVisible}
+        savedName={displayName}
+        prefill={namePrefill}
+        onSave={setDisplayName}
+        onClose={() => setNameModalVisible(false)}
+      />
 
       {/* Review Interval Modal */}
       <ReviewIntervalModal
