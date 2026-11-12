@@ -1,9 +1,9 @@
-import { AppHeader } from '@/components/app-header';
 import { groupProgressLabel } from '@/components/library/CollectionHeader';
 import { manageMember } from '@/components/shared/member-actions';
 import { InitialDot } from '@/components/shared/MemberDots';
 import { MemberRow, ROLE_LABEL } from '@/components/shared/MemberRow';
 import { MEMBER_STATE_LABEL, MemberStateSquare } from '@/components/shared/MemberState';
+import { LargeTitle, TopBar, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSharedGrid } from '@/hooks/use-shared-grid';
@@ -24,6 +24,7 @@ import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 const LEGEND: MemberState[] = ['open', 'learning', 'mastered', 'engraved'];
 
@@ -46,6 +47,9 @@ export default function WhoIsWhereScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [columnsWidth, setColumnsWidth] = useState(0);
+  const barHeight = useTopBarHeight();
+  const { scrollY, onScroll } = useScrollY();
+  const [titleBottom, setTitleBottom] = useState(0);
 
   const view = useMemo(
     () => (grid && sharedProgress ? whoIsWhere(grid, sharedProgress.members, user?.id) : null),
@@ -131,12 +135,14 @@ export default function WhoIsWhereScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Details" leftButton={{ icon: 'chevron.left', label: 'Back', onPress: back }} />
-      <ScrollView
+      <Animated.ScrollView
         testID="whos-where"
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />}
+        contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />}
       >
+        <LargeTitle title="Details" subtitle={collection?.name} onBottom={setTitleBottom} />
         {hydrated && !sharedId ? (
           <Text style={[styles.message, { color: colors.icon }]}>
             {collection ? "This collection isn't shared." : "This collection isn't in your Library."}
@@ -161,20 +167,20 @@ export default function WhoIsWhereScreen() {
               </Pressable>
             )}
 
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View accessible accessibilityLabel={groupProgressLabel(progress, verseCount)} style={styles.progress}>
-                <View style={styles.progressTop}>
-                  <Text style={[styles.data, { color: colors.text }]}>Group progress</Text>
-                  <Text style={[styles.data, styles.figure, { color: colors.text }]}>{percent}%</Text>
-                </View>
-                <View style={[styles.track, { backgroundColor: colors.borderLight }]}>
-                  <View style={[styles.fill, { width: `${percent}%`, backgroundColor: colors.success }]} />
-                </View>
-                <Text style={[styles.secondary, { color: colors.icon }]}>
-                  {progress?.masteredByEveryone ?? 0} of {verseCount} verse{verseCount === 1 ? '' : 's'} mastered by everyone
-                </Text>
+            <View accessible accessibilityLabel={groupProgressLabel(progress, verseCount)} style={styles.progress}>
+              <Text style={[styles.figure, { color: colors.text }]}>
+                {percent}%<Text style={[styles.figureLabel, { color: colors.icon }]}> together</Text>
+              </Text>
+              <View style={[styles.track, { backgroundColor: colors.border }]}>
+                <View style={[styles.fill, { width: `${percent}%`, backgroundColor: colors.success }]} />
               </View>
+              <Text style={[styles.secondary, { color: colors.icon }]}>
+                {progress?.masteredByEveryone ?? 0} of {verseCount} verse{verseCount === 1 ? '' : 's'} mastered by everyone
+              </Text>
+            </View>
 
+            <View style={styles.section}>
+              <Text style={[styles.eyebrow, { color: colors.icon }]}>Verses</Text>
               <View style={styles.grid}>
                 <View style={styles.references}>
                   <View style={styles.header} />
@@ -199,7 +205,7 @@ export default function WhoIsWhereScreen() {
                   showsHorizontalScrollIndicator={false}
                   style={styles.columns}
                   contentContainerStyle={styles.columnsContent}
-                  onLayout={(event) => setColumnsWidth(event.nativeEvent.layout.width - CARD_PADDING)}
+                  onLayout={(event) => setColumnsWidth(event.nativeEvent.layout.width - SIDE)}
                 >
                   {view.columns.map(renderColumn)}
                 </ScrollView>
@@ -215,49 +221,50 @@ export default function WhoIsWhereScreen() {
               </View>
             </View>
 
-            <View>
+            <View style={styles.section}>
               <Text style={[styles.eyebrow, { color: colors.icon }]}>Members</Text>
-              {sharedProgress?.members.map((member) => {
+              {sharedProgress?.members.map((member, index) => {
                 const you = member.userId === user?.id;
                 return (
                   <MemberRow key={member.userId} member={member} you={you} manageable={isOwner && !you}
+                    last={index === sharedProgress.members.length - 1}
                     disabled={busy} onPress={() => sharedId && manageMember(sharedId, member, run)} />
                 );
               })}
             </View>
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+      <TopBar scrollY={scrollY} title="Details" titleAt={titleBottom} onBack={back} />
     </View>
   );
 }
 
-const CARD_PADDING = 14;
+const SIDE = 20;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, paddingBottom: 48, gap: 16 },
+  content: { paddingHorizontal: SIDE, paddingBottom: 48, gap: 28 },
   loading: { paddingVertical: 48 },
   message: { fontSize: 15, lineHeight: 20, textAlign: 'center' },
   retry: { alignItems: 'center', gap: 6, paddingVertical: 48 },
   retryText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
   staleRetry: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  // The strip's card.
-  card: { borderRadius: Radius.xxl, borderWidth: 1, paddingHorizontal: CARD_PADDING, paddingVertical: 12, gap: 16 },
-  progress: { gap: 8 },
-  progressTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  progress: { gap: 10, marginTop: -8 },
+  figure: { fontSize: 28, lineHeight: 34, fontWeight: '600', fontVariant: ['tabular-nums'], letterSpacing: -0.3 },
+  figureLabel: { fontSize: 15, fontWeight: '400', letterSpacing: 0 },
+  section: { gap: 10 },
   data: { fontSize: 15, lineHeight: 20 },
-  figure: { fontWeight: '600', fontVariant: ['tabular-nums'] },
   secondary: { fontSize: 13, lineHeight: 18 },
   count: { fontSize: 13, lineHeight: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 },
-  track: { height: 6, borderRadius: Radius.full, overflow: 'hidden' },
+  eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
+  track: { height: 4, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
   grid: { flexDirection: 'row' },
   references: { width: 124, marginRight: 12 },
-  // The columns scroll to the card's edge, so a column cut by scrolling is cut at the border.
-  columns: { marginRight: -CARD_PADDING },
-  columnsContent: { paddingRight: CARD_PADDING },
+  // The columns scroll to the screen's edge, so a column cut by scrolling is cut there.
+  columns: { marginRight: -SIDE },
+  columnsContent: { paddingRight: SIDE },
   column: { width: GRID_PITCH, alignItems: 'center' },
   header: { height: GRID_PITCH, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
   cell: { height: GRID_PITCH, justifyContent: 'center' },

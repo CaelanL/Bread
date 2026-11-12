@@ -60,18 +60,21 @@ shared collection looks like a personal one, and a personal collection looks as 
 collection, as on the collection screen. It reads the same grid (`useSharedGrid`, your squares from
 your verses), nothing new.
 
-- **Grid**: one card, the group progress line on top, then members across and references down.
+- **Layout**: flat on the page, no cards: `TopBar` (back) over a large "Details" with the
+  collection's name under it, then "47% together" (28 pt figure, the header's 4 pt line, "N of M
+  verses mastered by everyone"), then Verses and Members under small uppercase labels.
+- **Grid**: members across and references down.
   Your column comes first, marked by the only solid initial circle, then the owner and the rest by
   join (`whoIsWhere` in `lib/shared/progress.ts`). References are in Bible order, as text only, one
   line in a 124 pt column. Each square is a 20 pt tile (`MemberStateSquare`, fills from
   `memberStateFill`): Open `cardAlt` with a hairline, Learning `warning`, Mastered `success`,
   Engraved `tint`. Tiles are labelled for VoiceOver "Dana, Romans 8:28, Mastered" and don't press.
   A "Mastered" row under the tiles counts each member's mastered squares, and a legend of the
-  four states closes the card.
+  four states closes the section.
 - **Wide groups**: columns sit at a fixed 26 pt pitch (`GRID_PITCH`) and never stretch. When they
   are wider than the space measured beside the references (`gridScrolls`), they scroll sideways
   and the reference column stays put; 7 fit on a 393 pt phone. The scrolling part reaches the
-  card's edge, so a cut column is cut at the border and reads as more to scroll.
+  screen's edge, so a cut column is cut there and reads as more to scroll.
 - **Members**: `MemberRow`, the same rows as the share panel: name ("You" after yours) and
   role. The owner taps another member for Make editor / Make member and Remove (`manageMember`
   in `components/shared/member-actions.ts`, the store's `setSharedMemberRole` and
