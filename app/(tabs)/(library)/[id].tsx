@@ -1,6 +1,7 @@
 import { AppHeader } from '@/components/app-header';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
 import { SharedCollectionSheet } from '@/components/shared/SharedCollectionSheet';
+import { SharedStrip } from '@/components/shared/SharedStrip';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
@@ -8,6 +9,17 @@ import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
+import { useAuth } from '@/lib/auth';
+import {
+  buildGrid,
+  cellState,
+  groupProgress,
+  masteredByEveryoneCount,
+  openVersesFor,
+  progressFlags,
+  referenceKey,
+  replaceMemberCells,
+} from '@/lib/shared/progress';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
@@ -17,6 +29,7 @@ import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -54,6 +67,25 @@ export default function CollectionScreen() {
   // Plain members of a shared collection read it; the owner and editors add and remove.
   const canEdit = !sharedId || shared?.role === 'owner' || shared?.role === 'editor';
   const [sharedSheetOpen, setSharedSheetOpen] = useState(false);
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const sharedProgress = useAppStore((s) => (sharedId ? s.sharedProgress[sharedId] : undefined));
+  const [openOnly, setOpenOnly] = useState(false);
+
+  // Members × references, with your own squares from your verses here so they match your cards
+  // the moment a session saves.
+  const grid = useMemo(() => {
+    if (!sharedId || !user || !sharedProgress?.fetchedAt) return null;
+    const own = collectionVerses.map((v) => ({ userId: user.id, book: v.book, chapter: v.chapter,
+      verseStart: v.verseStart, verseEnd: v.verseEnd, ...progressFlags(v.progress) }));
+    return buildGrid(sharedProgress.members.map((m) => m.userId), sharedProgress.references,
+      replaceMemberCells(sharedProgress.cells, user.id, own));
+  }, [sharedId, user, sharedProgress, collectionVerses]);
+  const groupRows = useMemo(() => new Map(grid?.rows.map((row) => [row.key, row])), [grid]);
+  const openKeys = useMemo(
+    () => new Set(grid && user ? openVersesFor(user.id, grid).map(referenceKey) : []),
+    [grid, user],
+  );
 
   // Count how many collections each verse is in (by matching book/chapter/verse/version)
   const getVerseCollectionCount = (verse: SavedVerse): number => {
@@ -92,11 +124,12 @@ export default function CollectionScreen() {
     return () => clearTimeout(timer);
   }, [copyNotice]);
 
-  // Opening a shared collection brings this copy up to date with the group, once per visit.
+  // Opening a shared collection brings this copy up to date with the group, then reads the grid,
+  // once per visit.
   const syncedId = useRef<string | null>(null);
   const syncShared = async (target: string) => {
     try {
-      await useAppStore.getState().syncSharedCollection(target);
+      await useAppStore.getState().openSharedCollection(target);
     } catch {
       showErrorToast("Couldn't update this shared collection. Pull to refresh to try again.");
     }
@@ -140,7 +173,11 @@ export default function CollectionScreen() {
   const primaryColor = colors.primary;
 
   // Filter verses by search query (progressive filtering)
-  const filteredVerses = filterVerses(verses, searchQuery);
+  const showOpenOnly = openOnly && openKeys.size > 0;
+  const filteredVerses = filterVerses(
+    showOpenOnly ? verses.filter((v) => openKeys.has(referenceKey(v))) : verses,
+    searchQuery,
+  );
 
   // Sort verses based on sortBy
   const now = useReviewNow();
@@ -158,6 +195,12 @@ export default function CollectionScreen() {
   };
 
   const sortLabel = getSortLabel(sortBy);
+
+  // Today's session on your first open verse, in this list's order: the same setup screen a tap opens.
+  const practiceOpen = useDebouncedPress(() => {
+    const first = sortVerses(verses.filter((v) => openKeys.has(referenceKey(v))), sortBy, now)[0];
+    if (first) router.push(`/(tabs)/(library)/setup/${first.id}`);
+  });
 
   const renderEmptyState = () => {
     // No search results
@@ -252,19 +295,15 @@ export default function CollectionScreen() {
       />
 
       {sharedId && (
-        <Pressable
-          testID="shared-row"
-          accessibilityRole="button"
-          accessibilityLabel={`Shared, ${shared?.memberCount ?? ''} members. Show members`}
-          onPress={() => setSharedSheetOpen(true)}
-          style={[styles.sharedRow, { backgroundColor: colors.primaryLight }]}
-        >
-          <IconSymbol name="person.2.fill" size={16} color={colors.primary} />
-          <Text style={[styles.sharedText, { color: colors.text }]}>
-            Shared{shared ? ` · ${shared.memberCount} member${shared.memberCount === 1 ? '' : 's'}` : ''}
-          </Text>
-          <IconSymbol name="chevron.right" size={14} color={colors.icon} />
-        </Pressable>
+        <SharedStrip
+          memberNames={sharedProgress?.fetchedAt ? sharedProgress.members.map((m) => m.displayName) : null}
+          memberCount={sharedProgress?.fetchedAt ? sharedProgress.members.length : shared?.memberCount ?? 1}
+          verseCount={sharedProgress?.fetchedAt ? sharedProgress.references.length : shared?.verseCount ?? verses.length}
+          progress={grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null}
+          failed={sharedProgress?.failed ?? false}
+          onOpen={() => setSharedSheetOpen(true)}
+          onRetry={() => void useAppStore.getState().fetchSharedProgress(sharedId)}
+        />
       )}
 
       {/* Search and Sort Bar */}
@@ -283,6 +322,18 @@ export default function CollectionScreen() {
               clearButtonMode="while-editing"
             />
           </View>
+          {openKeys.size > 0 && (
+            <Pressable
+              testID="open-verses-filter"
+              accessibilityRole="button"
+              accessibilityState={{ selected: showOpenOnly }}
+              accessibilityLabel={`Only your open verses, ${openKeys.size}`}
+              style={[styles.sortButton, { backgroundColor: showOpenOnly ? colors.primary : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
+              onPress={() => setOpenOnly(!showOpenOnly)}
+            >
+              <Text style={[styles.sortLabel, { color: showOpenOnly ? colors.white : colors.icon }]}>Open · {openKeys.size}</Text>
+            </Pressable>
+          )}
           <Pressable
             style={[styles.sortButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
             onPress={cycleSortBy}
@@ -312,15 +363,41 @@ export default function CollectionScreen() {
               disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
               collectionCount={getVerseCollectionCount(item)}
               sharedMemberCount={sharedId ? shared?.memberCount ?? 1 : undefined}
+              group={sharedId ? {
+                you: cellState(progressFlags(item.progress)),
+                states: groupRows.get(referenceKey(item))?.states ?? null,
+              } : undefined}
             />
           )}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
+          contentContainerStyle={sortedVerses.length === 0
+            ? styles.emptyContainer
+            : [styles.versesContainer, openKeys.size > 0 && styles.versesAbovePractice]}
+          ListHeaderComponent={sharedId && sortedVerses.length > 0 ? (
+            <View style={styles.columns}>
+              <Text style={[styles.columnLabel, { color: colors.icon }]}>You · Verse</Text>
+              <Text style={[styles.columnLabel, { color: colors.icon }]}>Group</Text>
+            </View>
+          ) : undefined}
           ListEmptyComponent={renderEmptyState}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
           }
         />
+      )}
+      {sharedId && openKeys.size > 0 && (
+        <View style={[styles.practiceWrap, { bottom: Math.max(insets.bottom - 8, 4) + 12 }]} pointerEvents="box-none">
+          <Pressable
+            testID="practice-open"
+            accessibilityRole="button"
+            onPress={practiceOpen}
+            style={({ pressed }) => [styles.practice, { backgroundColor: colors.text, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Text style={[styles.practiceText, { color: colors.background }]}>
+              Practice your {openKeys.size} open verse{openKeys.size === 1 ? '' : 's'}
+            </Text>
+          </Pressable>
+        </View>
       )}
       {iconPickerOpen && canChangeIcon && (
         <CollectionIconPicker
@@ -380,20 +457,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  sharedRow: {
+  columns: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: Radius.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
   },
-  sharedText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
+  columnLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  versesAbovePractice: {
+    paddingBottom: 96,
+  },
+  practiceWrap: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+  },
+  practice: {
+    height: 48,
+    paddingHorizontal: 28,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  practiceText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   searchContainer: {
     flexDirection: 'row',

@@ -83,10 +83,9 @@ function RootLayoutNav() {
   // over the Library, so Not now and Join both land there. The reminders card is held before the
   // read, so it can't present first and be under (or closing under) the invite; JoinInvite then
   // holds it while mounted and releases it as it unmounts.
-  const inviteCheck = useRef(0);
   useEffect(() => {
     if (!isAuthenticated || !navigationState?.key) return;
-    const run = ++inviteCheck.current;
+    let settled = false;
     const flags = useUxFlagsStore.getState();
     flags.setInviteOpen(true);
     readPendingJoin()
@@ -95,8 +94,8 @@ function RootLayoutNav() {
         return null;
       })
       .then((invite) => {
-        if (run !== inviteCheck.current) return;
-        inviteCheck.current++;
+        if (settled) return;
+        settled = true;
         if (!invite) {
           flags.setInviteOpen(false);
           return;
@@ -107,8 +106,8 @@ function RootLayoutNav() {
       });
     return () => {
       // Still reading: this run won't push, so it lets go of the card.
-      if (run !== inviteCheck.current) return;
-      inviteCheck.current++;
+      if (settled) return;
+      settled = true;
       flags.setInviteOpen(false);
     };
   }, [isAuthenticated, navigationState?.key]);
