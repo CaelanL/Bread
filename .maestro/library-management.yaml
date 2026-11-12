@@ -7,6 +7,8 @@ name: library-management
 - extendedWaitUntil:
     visible: ".*Psalms, 1 verse.*"
     timeout: 20000
+- tapOn:
+    id: library-add
 - tapOn: "New collection"
 - tapOn:
     id: collection-name

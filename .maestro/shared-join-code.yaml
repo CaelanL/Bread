@@ -10,8 +10,9 @@ name: shared-join-code
 - extendedWaitUntil:
     visible: ".*Psalms, 1 verse.*"
     timeout: 20000
-- tapOn: "New collection"
-- tapOn: "Have an invite code?"
+- tapOn:
+    id: library-add
+- tapOn: "Join with code"
 - extendedWaitUntil:
     visible:
       id: join-code-input
@@ -76,10 +77,10 @@ name: shared-join-code
 - assertVisible: ".*doesn't match an invite.*"
 - takeScreenshot: join-code-3-revoked
 - tapOn:
-    id: join-not-now
+    id: modal-close
 
 # Signed out: the link waits through sign-in, then the modal opens over the Library. Twice:
-# Not now lands on the Library (the modal hides it from accessibility), then Join from there.
+# Closing lands on the Library (the modal hides it from accessibility), then Join from there.
 - runFlow:
     file: subflows/invite-signed-out.yaml
     env:
@@ -87,13 +88,14 @@ name: shared-join-code
 - assertVisible: "3 verses · 3 members"
 - takeScreenshot: join-code-4-after-sign-in
 - tapOn:
-    id: join-not-now
+    id: modal-close
 # The reminders card follows the modal, over the Library.
 - extendedWaitUntil:
     visible: "Maybe later"
     timeout: 10000
 - tapOn: "Maybe later"
-- assertVisible: "New collection"
+- assertVisible:
+    id: library-add
 - assertNotVisible: "Sign In"
 - runFlow:
     file: subflows/invite-signed-out.yaml
@@ -110,5 +112,6 @@ name: shared-join-code
 - assertVisible: "Shared · 4 members.*"
 - takeScreenshot: join-code-5-joined-after-sign-in
 - tapOn: Back
-- assertVisible: "New collection"
+- assertVisible:
+    id: library-add
 - assertVisible: ".*Romans 8.*"

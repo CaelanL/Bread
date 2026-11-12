@@ -2,19 +2,17 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
-import { DisplayNameSheet } from '@/components/shared/DisplayNameSheet';
-import { SharedCollectionSheet } from '@/components/shared/SharedCollectionSheet';
+import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { MAX_SHARED_COLLECTIONS } from '@/lib/shared/constants';
 import { sharedEmblem, soloEmblem } from '@/lib/shared/progress';
-import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useVersesByCollection, useVersesLostWith } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router } from 'expo-router';
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -112,8 +110,9 @@ export default function LibraryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
-  // Sharing a collection: the one-time name step if needed, then the members sheet with the link.
-  const [sharing, setSharing] = useState<{ collectionId: string; step: 'name' | 'sheet' } | null>(null);
+  // The + menu, anchored under the button.
+  const addButton = useRef<View>(null);
+  const [addMenuTop, setAddMenuTop] = useState<number | null>(null);
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
   const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
@@ -164,23 +163,17 @@ export default function LibraryScreen() {
     }
   };
 
-  const shareCollection = async (collectionId: string) => {
-    try {
-      await useAppStore.getState().shareCollection(collectionId);
-      setSharing({ collectionId, step: 'sheet' });
-    } catch (e) {
-      setSharing(null);
-      showErrorToast(sharedErrorMessage(e, "Couldn't share this collection. Try again."));
-    }
-  };
-
+  // The share modal is a route, never an RN Modal held here: see ModalCard. `new` names one first.
   const handleShare = (collectionId: string) => {
     if (sharedCount >= MAX_SHARED_COLLECTIONS) {
       showErrorToast(`${MAX_SHARED_COLLECTIONS} shared collections is the limit.`);
       return;
     }
-    if (useAppStore.getState().displayName === null) setSharing({ collectionId, step: 'name' });
-    else void shareCollection(collectionId);
+    router.push(`/share/${collectionId}`);
+  };
+
+  const openAddMenu = () => {
+    addButton.current?.measureInWindow((_x, y, _width, height) => setAddMenuTop(y + height + 4));
   };
 
   const handleCollectionPress = (collection: Collection) => {
@@ -218,10 +211,12 @@ export default function LibraryScreen() {
               </Pressable>
             )}
             <Pressable
+              ref={addButton}
               style={styles.addButton}
               accessibilityRole="button"
-              accessibilityLabel="New collection"
-              onPress={() => setNameDialog({})}
+              accessibilityLabel="Add"
+              testID="library-add"
+              onPress={openAddMenu}
               disabled={actionsDisabled}
             >
               <IconSymbol name="plus" size={28} color={primaryColor} />
@@ -281,25 +276,18 @@ export default function LibraryScreen() {
             onAdd={renamingCollection
               ? (name) => renameCollection(renamingCollection.id, name)
               : handleAddCollection}
-            onInviteCode={renamingCollection ? undefined : () => {
-              setNameDialog(null);
-              router.push('/join');
-            }}
           />
         )}
-        {sharing?.step === 'name' && (
-          <DisplayNameSheet
-            onClose={() => setSharing(null)}
-            onDone={() => void shareCollection(sharing.collectionId)}
-          />
-        )}
-        {sharing?.step === 'sheet' && (
-          <SharedCollectionSheet
-            collectionId={sharing.collectionId}
-            onClose={() => setSharing(null)}
-            onLeft={() => setSharing(null)}
-          />
-        )}
+        <PopoverMenu
+          visible={addMenuTop !== null}
+          onClose={() => setAddMenuTop(null)}
+          anchorPosition={addMenuTop === null ? undefined : { top: addMenuTop, right: 16 }}
+          items={[
+            { label: 'New collection', icon: 'folder.fill', onPress: () => setNameDialog({}) },
+            { label: 'New shared collection', icon: 'person.2.fill', onPress: () => handleShare('new') },
+            { label: 'Join with code', icon: 'number', onPress: () => router.push('/join') },
+          ]}
+        />
       </View>
     </ReviewNowProvider>
   );

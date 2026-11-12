@@ -26,11 +26,9 @@ interface AddCollectionModalProps {
   initialName?: string;
   onClose: () => void;
   onAdd: (name: string) => Promise<void>;
-  /** Shown when creating: opens the typed invite code entry instead. */
-  onInviteCode?: () => void;
 }
 
-export function AddCollectionModal({ visible, initialName, onClose, onAdd, onInviteCode }: AddCollectionModalProps) {
+export function AddCollectionModal({ visible, initialName, onClose, onAdd }: AddCollectionModalProps) {
   const [name, setName] = useState(initialName ?? '');
   const [renameFailed, setRenameFailed] = useState(false);
   const renaming = initialName !== undefined;
@@ -144,11 +142,6 @@ export function AddCollectionModal({ visible, initialName, onClose, onAdd, onInv
               <Text style={[styles.hint, { color: colors.icon }]}>
                 Create a collection to organize verses by theme, book, or study plan.
               </Text>
-            )}
-            {onInviteCode && (
-              <Pressable accessibilityRole="button" onPress={onInviteCode} disabled={submitting} style={styles.inviteLink}>
-                <Text style={[styles.hint, styles.inviteText, { color: primaryColor }]}>Have an invite code?</Text>
-              </Pressable>
             )}
             {renameFailed && (
               <Text style={[styles.hint, { color: colors.error }]} accessibilityLiveRegion="polite">
@@ -273,12 +266,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   submitButton: {},
-  inviteLink: {
-    alignSelf: 'flex-start',
-  },
-  inviteText: {
-    fontWeight: '600',
-  },
   buttonText: {
     fontSize: 16,
     fontWeight: '600',

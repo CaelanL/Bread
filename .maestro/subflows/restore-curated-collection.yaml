@@ -5,6 +5,8 @@ appId: com.caelanliu.biblemem
     when:
       notVisible: ".*Reading list.*0 verses.*"
     commands:
+      - tapOn:
+          id: library-add
       - tapOn: "New collection"
       - tapOn:
           id: collection-name

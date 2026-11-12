@@ -28,7 +28,7 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 
 | Route (`app/(tabs)/(library)/`) | Purpose |
 |---|---|
-| `index.tsx` | Collection list, pull to refresh, Edit, and + to create |
+| `index.tsx` | Collection list, pull to refresh, Edit, and the + menu |
 | `[id].tsx` | One collection: icon picker, search, sort pill, verse list, + to add, and long press to copy |
 | `add.tsx` | Quick-add field, then pick a book and chapter. Its picker sets the account translation. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
@@ -87,6 +87,22 @@ engraved shows an emblem in the square instead; see
   it, so check for it before you assume the store's list is what's on screen.
 - It has no + button and no swipe. Verses live in real collections, and this is a view.
 - It isn't part of review scheduling.
+
+## Sharing from the Library
+
++ opens a `PopoverMenu` under the button (`library-add`) with three rows:
+
+| Row | Opens |
+|---|---|
+| New collection | `AddCollectionModal`, as before |
+| New shared collection | `app/share/new`: your display name if you have none, then the collection's name, then it creates and shares it in one go and shows the code |
+| Join with code | `app/join/index.tsx`, the typed code |
+
+Share… on a personal collection's long-press menu opens `app/share/<id>`, which shares it and
+shows the same panel. Both check the 20-group cap first. The share, join and name steps are
+`ModalCard`s in native modal routes, never RN `Modal`s held in the Library's state; see
+[navigation](../architecture/navigation-and-routing.md#modal-routes) for why. What the panel shows
+is in [shared collections](shared-collections.md#in-the-app).
 
 ## Sorting verses
 
@@ -241,6 +257,7 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
 - `npm run sim -- flow account-translation`: reader-a switches to KJV on the add screen; cards follow, mastery stays.
+- After a local reset, `npm run sim -- flow library-plus`: the + menu, Share… with the invite opened by link over it and Open, then the Library tab pops to the Library and + still opens; New shared collection lands on the code; Join with code.
 - After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
 - Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery.
 - Adding verses has its own checks in `docs/features/adding-verses.md`.

@@ -32,8 +32,9 @@ app/
 │   │   └── shared/[id].tsx            ← Who's where, pushed from a shared collection's group progress
 │   └── settings.tsx                   ← Tab: Settings
 ├── collections/[slug].tsx     ← Curated collection introduction and import
-├── join/[code].tsx            ← Shared-collection invite sheet (transparent modal)
+├── join/[code].tsx            ← Shared-collection invite (transparent modal)
 ├── join/index.tsx             ← Typed invite code entry (transparent modal)
+├── share/[id].tsx             ← Share a collection, or `new`: name, share, code and members (transparent modal)
 ├── notifications.tsx          ← Notification settings, pushed from Settings
 ├── reset-password.tsx         ← Reachable WITHOUT auth (deep link from password-reset email)
 ├── dev-sign-in.tsx            ← Reachable WITHOUT auth; dev builds against a local Supabase only
@@ -74,9 +75,18 @@ Two modal styles, both handled at the root Stack:
   Library sub-routes (`(tabs)/(library)/[id]` etc.) are NOT modals
   even though they look like them — they're nested Stack screens.
 
-`app/join/[code].tsx` and `app/join/index.tsx` are `transparentModal`
-with a fade: a dimmed sheet over whatever was open
-([shared collections](../features/shared-collections.md#in-the-app)).
+### Modal routes
+
+`app/join/[code].tsx`, `app/join/index.tsx` and `app/share/[id].tsx` are `transparentModal`
+with a fade, each a `ModalCard` over whatever was open
+([shared collections](../features/shared-collections.md#in-the-app)). An invite can open over
+the share modal, and Open leaves both with one `router.dismissTo(<collection>)`.
+
+Don't hold an RN `Modal` in a screen's state while a modal route can present over it. The
+native dismiss takes the RN modal's view controller with it, React still thinks it's shown, and
+that screen can't present another RN `Modal` (the Library's + did nothing). And don't chain
+`router.dismissAll()` with `router.push()`: the push is resolved against the modal still on
+top, so it pushes a second copy of `(tabs)` onto the root stack.
 
 `app/notifications.tsx` and `app/reset-password.tsx` are plain root
 Stack screens.
@@ -89,6 +99,7 @@ Home also presents the [intro player](../features/home.md#encouragement-video) t
 |---|---|
 | `collections/[slug].tsx` | `slug` — bundled curated collection ID |
 | `join/[code].tsx` | `code` — invite code, normalized (upper case, spaces and dashes dropped) |
+| `share/[id].tsx` | `id` — collection `client_id` to share or manage, or `new` to name and share a new one |
 | `(tabs)/(library)/[id].tsx` | `id` — collection `client_id`, or the virtual `mastered` / `in-progress` |
 | `(tabs)/(library)/add/[book]/[chapter].tsx` | `book`, `chapter` — Bible reference; query `collectionId`, `version` |
 | `(tabs)/(library)/setup/[id].tsx` | `id` — verse `client_id` |
@@ -127,7 +138,7 @@ Three states:
 A signed-out visit to `join/<code>` stashes the code in AsyncStorage (`lib/shared/pending-join.ts`)
 before the redirect, so it survives sign-up with email confirmation and an app kill. Once
 authenticated with a navigator key, an effect after the gate replaces to the Library, pushes
-`/join/<code>` and clears the stash, so Not now and Join both land on the Library.
+`/join/<code>` and clears the stash, so closing and Join both land on the Library.
 `dev-sign-in?next=/join/<code>` does the same. `Q1ExplainerCard` waits until `Motion.exitMs`
 after `JoinInvite` unmounts (`useUxFlagsStore.inviteOpen`): an RN `Modal` presented over the
 modal route, or as it closes, never shows and leaves an invisible layer that takes every tap.
@@ -147,7 +158,7 @@ Configured via Expo's URL scheme `com.biblemem://` (in
 | `com.biblemem://#access_token=...&refresh_token=...` | OAuth callback (no screen starts OAuth, see `docs/architecture/auth.md`) |
 | `com.biblemem://reset-password#access_token=...&refresh_token=...&type=recovery` | Password reset |
 | `com.biblemem://dev-sign-in?next=/settings&as=reader-b` | Dev sign-in, handled by the route itself |
-| `com.biblemem://join/<code>` | The invite sheet, routed by Expo Router to `join/[code]` |
+| `com.biblemem://join/<code>` | The invite modal, routed by Expo Router to `join/[code]` |
 
 The handler extracts tokens from the URL and calls
 `supabase.auth.setSession(...)`. Auth state change then drives the
@@ -207,3 +218,7 @@ gating logic above. A notification tap routes through
 - **The `(library)` nested Stack means going back from a
   collection detail returns to Library**, not to the root tab
   navigator. Test back navigation when adding new screens here.
+
+## Decisions
+
+- 2026-11-12 · The shared-collection modals (share, join, typed code, display name) are native modal routes rendering `ModalCard`, not RN `Modal`s in screen state · An invite opened over the RN-modal share sheet left the Library unable to present its next modal; native modal routes unwind together.

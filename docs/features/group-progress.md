@@ -38,7 +38,7 @@ looks as it always did.
 - **Strip** (`SharedStrip`, under the header): member initials (yours first and solid),
   "Shared · N members · V verses", the group percentage with its bar, and "K of V verses mastered
   by everyone". The members line opens the
-  members sheet (invite, Leave); the progress opens [Who's where](#whos-where).
+  share panel (`app/share/[id].tsx`: invite, Leave); the progress opens [Who's where](#whos-where).
 - **Cards**: a You dot on the left (`MemberStateDot`, the tile fills below as a dot) and a Group
   column on the right (`GroupCount`: "mastered/members" over a bar of every member's state, or a
   checkmark and "All" when everyone has mastered it). The bar shows up to 8
@@ -64,10 +64,10 @@ your verses), nothing new.
 - **Wide groups**: columns sit at a fixed 26 pt pitch (`GRID_PITCH`) and never stretch. When they
   are wider than the space measured beside the references (`gridScrolls`), they scroll sideways
   and the reference column stays put; 7 fit on a 393 pt phone.
-- **Members**: `MemberRow`, the same rows as the members sheet: name ("You" after yours) and
+- **Members**: `MemberRow`, the same rows as the share panel: name ("You" after yours) and
   role. The owner taps another member for Make editor / Make member and Remove (`manageMember`
   in `components/shared/member-actions.ts`, the store's `setSharedMemberRole` and
-  `removeSharedMember`), here and on the sheet. Invite and Leave stay on the sheet.
+  `removeSharedMember`), here and on the panel. Invite and Leave stay on the panel.
 - **Reads**: each visit reads the grid once (`fetchSharedProgress`); pull to refresh runs the
   collection screen's refresh, sync and grid read. A failed read keeps the last grid with
   "Couldn't refresh. Retry"; with none yet it shows "Couldn't load Who's where." and Retry.

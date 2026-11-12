@@ -1,7 +1,7 @@
-import { DisplayNameForm } from '@/components/shared/DisplayNameSheet';
+import { DisplayNameForm } from '@/components/shared/DisplayNameForm';
 import { MemberDots } from '@/components/shared/MemberDots';
-import { SheetLayout } from '@/components/ui/BottomSheet';
-import { Colors, Fonts, Radius } from '@/constants/theme';
+import { ModalCard, modalStyles } from '@/components/ui/ModalCard';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useUxFlagsStore } from '@/lib/notifications';
 import { normalizeInviteCode, sharedErrorMessage } from '@/lib/shared/invite-code';
@@ -14,7 +14,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-/** The join sheet for one code, shown by the link route and by the typed-code route. */
+/** The join modal for one code, shown by the link route and by the typed-code route. */
 export function JoinInvite({ code: raw }: { code: string }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const code = normalizeInviteCode(raw);
@@ -56,8 +56,9 @@ export function JoinInvite({ code: raw }: { code: string }) {
     setJoining(true);
     try {
       const collectionId = await useAppStore.getState().joinSharedCollection(code);
-      router.dismissAll();
-      router.push(`/(tabs)/(library)/${collectionId}`);
+      // One navigation: dismissAll then push resolves the push against the modal still on top,
+      // which stacks a second copy of the tabs over the first.
+      router.dismissTo(`/(tabs)/(library)/${collectionId}`);
     } catch (e) {
       showErrorToast(sharedErrorMessage(e, "Couldn't join. Try again."));
       setJoining(false);
@@ -70,8 +71,8 @@ export function JoinInvite({ code: raw }: { code: string }) {
   } else if (error) {
     body = (
       <>
-        <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Invite unavailable</Text>
-        <Text testID="join-error" style={[styles.copy, { color: colors.icon }]}>{error}</Text>
+        <Text accessibilityRole="header" style={[modalStyles.title, { color: colors.text }]}>Invite unavailable</Text>
+        <Text testID="join-error" style={[modalStyles.copy, styles.error, { color: colors.icon }]}>{error}</Text>
       </>
     );
   } else if (!preview) {
@@ -80,15 +81,15 @@ export function JoinInvite({ code: raw }: { code: string }) {
     const verses = plural(preview.verseCount, 'verse');
     body = (
       <>
-        <Text style={[styles.eyebrow, { color: colors.icon }]}>
+        <Text style={[modalStyles.eyebrow, { color: colors.icon }]}>
           {preview.alreadyMember ? "You're in" : `${preview.inviterName} invited you`}
         </Text>
-        <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{preview.name}</Text>
-        <Text style={[styles.meta, { color: colors.icon }]}>{verses} · {plural(preview.memberCount, 'member')}</Text>
+        <Text accessibilityRole="header" style={[modalStyles.name, { color: colors.text }]}>{preview.name}</Text>
+        <Text style={[modalStyles.copy, { color: colors.icon }]}>{verses} · {plural(preview.memberCount, 'member')}</Text>
         <View style={styles.dots}>
           <MemberDots members={[{ name: preview.inviterName }]} count={preview.memberCount} />
         </View>
-        <Text style={[styles.copy, { color: colors.icon }]}>
+        <Text style={[modalStyles.copy, styles.privacy, { color: colors.icon }]}>
           {preview.verseCount === 1
             ? 'Members see how far along you are on this verse, including progress you already have on it.'
             : `Members see how far along you are on these ${verses}, including progress you already have on them.`}{' '}
@@ -100,42 +101,26 @@ export function JoinInvite({ code: raw }: { code: string }) {
           accessibilityState={{ disabled: !hydrated || joining, busy: joining }}
           disabled={!hydrated || joining}
           onPress={join}
-          style={[styles.button, { backgroundColor: colors.text }]}
+          style={[modalStyles.button, { backgroundColor: colors.text }]}
         >
           {joining || !hydrated
             ? <ActivityIndicator color={colors.background} />
-            : <Text style={[styles.buttonText, { color: colors.background }]}>{preview.alreadyMember ? 'Open' : 'Join'}</Text>}
+            : <Text style={[modalStyles.buttonText, { color: colors.background }]}>{preview.alreadyMember ? 'Open' : 'Join'}</Text>}
         </Pressable>
       </>
     );
   }
 
   return (
-    <SheetLayout onClose={close}>
+    <ModalCard onClose={close} closeDisabled={joining}>
       {body}
-      {step === 'invite' && (
-        <Pressable testID="join-not-now" accessibilityRole="button" onPress={close} disabled={joining} style={styles.ghost}>
-          <Text style={[styles.ghostText, { color: colors.icon }]}>Not now</Text>
-        </Pressable>
-      )}
-    </SheetLayout>
+    </ModalCard>
   );
 }
 
 const styles = StyleSheet.create({
   loading: { paddingVertical: 48 },
-  eyebrow: { fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase' },
-  title: { fontFamily: Fonts.serif, fontSize: 26, marginTop: 4, marginBottom: 4 },
-  meta: { fontSize: 15 },
-  dots: { marginTop: 12, marginBottom: 16 },
-  copy: { fontSize: 14, lineHeight: 21, marginBottom: 20 },
-  button: {
-    height: 52,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: { fontSize: 16, fontWeight: '600' },
-  ghost: { alignItems: 'center', paddingTop: 14, paddingBottom: 4 },
-  ghostText: { fontSize: 15, fontWeight: '500' },
+  error: { marginTop: 6 },
+  dots: { marginTop: 16, marginBottom: 16 },
+  privacy: { marginBottom: 24 },
 });

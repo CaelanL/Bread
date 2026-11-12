@@ -1,0 +1,111 @@
+# Start from npm run db:reset. reader-c's + menu: New collection, then Share… and the invite opened
+# by link over the share modal ("You're in", Open); the Library tab then pops to the Library and +
+# still opens (round 6 step 38). Then New shared collection lands on the code, with Copy, and Join
+# with code opens the code entry. docs/features/library.md
+appId: com.caelanliu.biblemem
+name: library-plus
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Romans 8, Shared.*"
+    timeout: 20000
+- tapOn:
+    id: library-add
+- assertVisible: "New shared collection"
+- assertVisible: "Join with code"
+- takeScreenshot: plus-1-menu
+- tapOn: "New collection"
+- tapOn:
+    id: collection-name
+- assertNotVisible: "Have an invite code?"
+- inputText: "Hebrews"
+- tapOn: "Create Collection"
+- extendedWaitUntil:
+    visible: ".*Hebrews, 0 verses.*"
+    timeout: 10000
+
+# Share, then open the invite by link while the share modal is up.
+- longPressOn: ".*Hebrews, 0 verses.*"
+- tapOn: "Share…"
+- extendedWaitUntil:
+    visible:
+      id: invite-code
+    timeout: 15000
+- tapOn:
+    id: invite-copy-code
+- assertVisible: "Code copied"
+- takeScreenshot: plus-2-share-modal
+- copyTextFrom:
+    id: invite-code
+- openLink: com.biblemem://join/${maestro.copiedText}
+- extendedWaitUntil:
+    visible: "YOU'RE IN"
+    timeout: 15000
+- waitForAnimationToEnd
+- takeScreenshot: plus-3-join-over-share
+- tapOn:
+    id: join-button
+- extendedWaitUntil:
+    visible: "Shared · 1 member.*"
+    timeout: 15000
+# One tab navigator: the tab pops to the Library, and + opens its menu and the name modal.
+- tapOn:
+    id: tab-library
+- extendedWaitUntil:
+    visible: ".*Hebrews, Shared · 1 member.*"
+    timeout: 10000
+- tapOn:
+    id: library-add
+- tapOn: "New collection"
+- extendedWaitUntil:
+    visible:
+      id: collection-name
+    timeout: 5000
+- tapOn: "Cancel"
+
+# New shared collection: name it, land on the code.
+- tapOn:
+    id: library-add
+- tapOn: "New shared collection"
+- extendedWaitUntil:
+    visible: "New shared collection"
+    timeout: 8000
+- tapOn:
+    id: collection-name
+- inputText: "Psalm 91"
+- tapOn:
+    id: create-shared
+- extendedWaitUntil:
+    visible:
+      id: invite-code
+    timeout: 15000
+- assertVisible: "Psalm 91"
+- tapOn:
+    id: modal-close
+- extendedWaitUntil:
+    visible: ".*Psalm 91, Shared · 1 member.*"
+    timeout: 10000
+
+# Join with code.
+- tapOn:
+    id: library-add
+- tapOn: "Join with code"
+- extendedWaitUntil:
+    visible:
+      id: join-code-input
+    timeout: 8000
+- takeScreenshot: plus-4-join-code
+- tapOn:
+    id: modal-close
+- extendedWaitUntil:
+    notVisible:
+      id: join-code-input
+    timeout: 5000
+- tapOn:
+    id: library-add
+- tapOn: "New collection"
+- extendedWaitUntil:
+    visible:
+      id: collection-name
+    timeout: 5000

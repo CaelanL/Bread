@@ -1,6 +1,5 @@
 import { AppHeader } from '@/components/app-header';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
-import { SharedCollectionSheet } from '@/components/shared/SharedCollectionSheet';
 import { SharedStrip } from '@/components/shared/SharedStrip';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -64,7 +63,6 @@ export default function CollectionScreen() {
   const sharedId = collection?.sharedId;
   // Plain members of a shared collection read it; the owner and editors add and remove.
   const canEdit = !sharedId || shared?.role === 'owner' || shared?.role === 'editor';
-  const [sharedSheetOpen, setSharedSheetOpen] = useState(false);
   const { user } = useAuth();
   const [openOnly, setOpenOnly] = useState(false);
   const { sharedProgress, grid } = useSharedGrid(sharedId, collectionVerses);
@@ -297,7 +295,7 @@ export default function CollectionScreen() {
           verseCount={sharedProgress?.fetchedAt ? sharedProgress.references.length : shared?.verseCount ?? verses.length}
           progress={grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null}
           failed={sharedProgress?.failed ?? false}
-          onOpen={() => setSharedSheetOpen(true)}
+          onOpen={() => router.push(`/share/${id}`)}
           onShowGrid={showGrid}
           onRetry={() => void useAppStore.getState().fetchSharedProgress(sharedId)}
         />
@@ -402,16 +400,6 @@ export default function CollectionScreen() {
           currentKey={collection.iconKey}
           onClose={() => setIconPickerOpen(false)}
           onSave={(key) => useAppStore.getState().setCollectionIcon(collection.id, key)}
-        />
-      )}
-      {sharedSheetOpen && id && (
-        <SharedCollectionSheet
-          collectionId={id}
-          onClose={() => setSharedSheetOpen(false)}
-          onLeft={() => {
-            setSharedSheetOpen(false);
-            backToLibrary();
-          }}
         />
       )}
       {copyNotice && (

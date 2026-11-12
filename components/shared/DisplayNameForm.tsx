@@ -1,5 +1,5 @@
-import { BottomSheet } from '@/components/ui/BottomSheet';
-import { Colors, Radius } from '@/constants/theme';
+import { modalStyles } from '@/components/ui/ModalCard';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
 import { MAX_DISPLAY_NAME_LENGTH, prefillDisplayName } from '@/lib/shared/display-name';
@@ -28,13 +28,13 @@ export function DisplayNameForm({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>What should friends call you?</Text>
-      <Text style={[styles.copy, { color: colors.icon }]}>
+      <Text accessibilityRole="header" style={[modalStyles.title, { color: colors.text }]}>What should friends call you?</Text>
+      <Text style={[modalStyles.copy, styles.copy, { color: colors.icon }]}>
         Members of shared collections see this name. You can change it in Settings.
       </Text>
       <TextInput
         testID="display-name-sheet-input"
-        style={[styles.input, { backgroundColor: colors.input, color: colors.text, borderColor: colors.border }]}
+        style={[modalStyles.input, styles.input, { backgroundColor: colors.input, color: colors.text, borderColor: colors.border }]}
         value={draft}
         onChangeText={setDraft}
         placeholder="Name"
@@ -52,39 +52,17 @@ export function DisplayNameForm({ onDone }: { onDone: () => void }) {
         accessibilityState={{ disabled: !name || saving, busy: saving }}
         disabled={!name || saving}
         onPress={save}
-        style={[styles.button, { backgroundColor: name ? colors.text : colors.borderLight }]}
+        style={[modalStyles.button, { backgroundColor: name ? colors.text : colors.borderLight }]}
       >
         {saving
           ? <ActivityIndicator color={colors.background} />
-          : <Text style={[styles.buttonText, { color: colors.background }]}>Continue</Text>}
+          : <Text style={[modalStyles.buttonText, { color: colors.background }]}>Continue</Text>}
       </Pressable>
     </>
   );
 }
 
-export function DisplayNameSheet({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
-  return (
-    <BottomSheet onClose={onClose}>
-      <DisplayNameForm onDone={onDone} />
-    </BottomSheet>
-  );
-}
-
 const styles = StyleSheet.create({
-  title: { fontSize: 20, fontWeight: '600', marginBottom: 6 },
-  copy: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
-  input: {
-    padding: 14,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  button: {
-    height: 50,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: { fontSize: 16, fontWeight: '600' },
+  copy: { marginTop: 6, marginBottom: 20 },
+  input: { marginBottom: 16 },
 });

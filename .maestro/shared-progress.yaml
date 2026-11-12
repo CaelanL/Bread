@@ -57,7 +57,7 @@ name: shared-progress
     visible: "Dana, Editor"
     timeout: 10000
 - tapOn:
-    point: "50%, 10%"
+    id: modal-close
 
 # Dana, now an editor, adds Romans 8:31; the group grows to four verses.
 - runFlow: subflows/open-app.yaml

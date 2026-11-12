@@ -47,6 +47,7 @@ const MAPPING = {
   'person.crop.circle.fill': 'account-circle',
   'person.2.fill': 'group',
   'doc.on.doc': 'content-copy',
+  'number': 'tag',
   'square.and.arrow.up': 'ios-share',
   'ellipsis': 'more-horiz',
   'arrow.triangle.2.circlepath': 'autorenew',

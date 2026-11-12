@@ -154,18 +154,19 @@ State and actions live in the store ([sync-and-storage.md](../architecture/sync-
 group) is read on hydrate and refresh. Failures throw for a toast, nothing queued;
 `sharedErrorMessage` (`lib/shared/invite-code.ts`) shows `22023` text as is.
 
-- **Share**: long-press a personal collection → Share…. `DisplayNameSheet` asks once if there's
-  no name, then `shareCollection` and the members sheet. At 20 groups it toasts.
-- **Members sheet** (`SharedCollectionSheet`, from the strip under the header): members and
-  roles. The owner also gets the code, `com.biblemem://join/<code>`, days left, Copy link, Share,
-  New link (confirmed; the old code dies), and the [member actions](group-progress.md#whos-where).
-  Copy and Share send `Join "<name>" on Bread: <link> — or enter code <code> in Bread`:
-  chat apps rarely make custom-scheme links tappable. Members get Leave collection.
-- **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, from "Have an invite
-  code?" in New Collection) show `JoinInvite`: inviter, name, counts, inviter's initial and "+N",
-  the privacy line with the account translation, Join and Not now. Join asks for a name if
-  needed, calls `joinSharedCollection` (account translation, then `refresh`) and opens the copy.
-  A member sees Open (same idempotent call); a bad code shows its message. A signed-out link's
+- **Share**: Share… on a personal collection, or New shared collection on the Library's + menu
+  ([library.md](library.md#sharing-from-the-library)), opens `app/share/[id].tsx`: a name
+  (`DisplayNameForm`) once, then `shareCollection` and the panel. 20 groups toasts.
+- **Share panel** (`SharePanel`, also from the strip): members, roles. The owner also gets the
+  code with its own Copy, the link, days left, Copy link, Share, New link (confirmed; the old code
+  dies) and the [member actions](group-progress.md#whos-where). Copy link and Share send
+  `Join "<name>" on Bread: <link> — or enter code <code> in Bread`: chat apps rarely make
+  custom-scheme links tappable. Members get Leave collection.
+- **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, Join with code on the +
+  menu) show `JoinInvite`: inviter, name, counts, inviter's initial and "+N", the privacy line
+  with the account translation, and Join. Join asks for a name if needed, calls
+  `joinSharedCollection` (account translation, then `refresh`) and opens the copy with one
+  `dismissTo`. A member sees Open (same idempotent call); a bad code shows its message. A signed-out link's
   code waits in AsyncStorage (`lib/shared/pending-join.ts`) through sign-in, email confirmation
   or an app kill, then opens over the Library; the reminders card is held from before that read.
 - **Inside**: see [group-progress.md](group-progress.md). Only the owner and editors see + and
@@ -203,7 +204,7 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 After `npm run db:reset` each: `npm run sim -- flow shared-collections` (share, copy, join by
 link, both in the list, leave, rejoin, delete for everyone, personal copy) and
 `npm run sim -- flow shared-join-code` (typed code, revoked code, link across sign-in to the
-modal over the Library, Not now, Join).
+modal over the Library, close, Join).
 
 ## Decisions
 

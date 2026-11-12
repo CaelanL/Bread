@@ -208,6 +208,7 @@ function RootLayoutNav() {
         <Stack.Screen name="session" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="join/[code]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="join/index" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="share/[id]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <Q1ExplainerCard isAuthenticated={isAuthenticated} />
