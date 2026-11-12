@@ -20,6 +20,7 @@ AsyncStorage holds device settings and small local caches.
 | Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
 | Display name (`displayName`) | ✓ (`profiles.display_name`) | ✓ | — |
 | [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ last seen ids and names (`shared_known_groups:<user>`) |
+| [Group progress](../features/shared-collections.md#collection-screen) | ✓ (read) | ✓ (`sharedProgress`) | — |
 | Invite from a signed-out link | — | — | ✓ (`shared_pending_join`) |
 | Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
@@ -49,6 +50,7 @@ interface AppState {
   verses: SavedVerse[];
   masteredVerses: SavedVerse[];
   sharedCollections: Record<string, SharedCollectionInfo>; // by group id, see shared-collections.md
+  sharedProgress: Record<string, SharedProgress>; // members × references, read when a shared collection opens
 
   // Settings (also in AsyncStorage)
   colorMode: 'system' | 'light' | 'dark';
@@ -89,6 +91,8 @@ interface AppState {
   mintInvite: (sharedId) => Promise<{ code: string; expiresAt: string }>;
   joinSharedCollection: (code) => Promise<string>;   // the copy's client_id
   syncSharedCollection: (sharedId) => Promise<boolean>; // true when something changed
+  fetchSharedProgress: (sharedId) => Promise<boolean>;  // never throws; a failure sets `failed` on the entry
+  openSharedCollection: (sharedId) => Promise<void>;    // sync, then fetchSharedProgress
   leaveSharedCollection: (sharedId) => Promise<void>;
   removeSharedMember: (sharedId, userId) => Promise<void>;
   setSharedMemberRole: (sharedId, userId, role) => Promise<void>;
