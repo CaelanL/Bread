@@ -1,7 +1,6 @@
 import { MemberDots } from '@/components/shared/MemberDots';
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Rays } from '@/components/ui/Rays';
 import { useTopBarHeight } from '@/components/ui/TopBar';
 import { AccentAlpha, Colors, Radius, withAlpha } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -63,12 +62,10 @@ export function CollectionHeader({
   const washTop = barHeight + OVERSCROLL;
 
   const finished = emblem ? (engraved ? colors.tint : colors.success) : null;
+  const glowing = finished && percent === 100 ? finished : null;
   const icon = (
-    <View>
-      {finished && <Rays size={100} color={finished} />}
-      <View style={[styles.icon, { backgroundColor: engraved ? colors.engravedFill : withAlpha(accent, AccentAlpha.fill) }]}>
-        <IconSymbol name={symbol} size={28} color={engraved ? colors.tint : accent} />
-      </View>
+    <View style={[styles.icon, { backgroundColor: engraved ? colors.engravedFill : withAlpha(accent, AccentAlpha.fill) }]}>
+      <IconSymbol name={symbol} size={28} color={engraved ? colors.tint : accent} />
     </View>
   );
 
@@ -119,19 +116,21 @@ export function CollectionHeader({
           style={({ pressed }) => [styles.progress, pressed && styles.pressed]}
         >
           {/* At 100% the bar glows: green when everyone mastered every verse, gold when everyone engraved them. */}
-          <View style={[styles.trackSlot, finished && percent === 100 && [styles.glow, { shadowColor: finished }]]}>
+          <View style={[styles.trackSlot, glowing && [styles.glow, { shadowColor: glowing }]]}>
             <View style={[styles.track, { backgroundColor: colors.border }]}>
-              <View style={[styles.fill, { width: `${percent}%`, backgroundColor: finished && percent === 100 ? finished : colors.success }]} />
+              <View style={[styles.fill, { width: `${percent}%`, backgroundColor: glowing ?? colors.success }]} />
             </View>
           </View>
           {progress.failed ? (
             <Text style={[styles.progressText, { color: colors.primary }]}>Couldn&apos;t load · Retry</Text>
           ) : (
-            <Text style={[styles.progressText, { color: colors.icon }]}>
+            <Text style={[styles.progressText, { color: glowing ?? colors.icon }, glowing && [styles.textGlow, { textShadowColor: glowing }]]}>
               {progress.ratio == null ? '–' : `${percent}%`}
             </Text>
           )}
-          <IconSymbol name="chevron.right" size={12} color={colors.icon} />
+          <View style={glowing && [styles.glow, { shadowColor: glowing }]}>
+            <IconSymbol name="chevron.right" size={12} color={glowing ?? colors.icon} />
+          </View>
         </Pressable>
       )}
 
@@ -189,6 +188,7 @@ const styles = StyleSheet.create({
   progress: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   trackSlot: { flex: 1 },
   glow: { shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 6 },
+  textGlow: { textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 },
   track: { height: 4, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
   progressText: { fontSize: 13, lineHeight: 18, fontWeight: '500', fontVariant: ['tabular-nums'] },

@@ -42,8 +42,8 @@ shared collection looks like a personal one, and a personal collection looks as 
   solid) and "Cara and Dana · 3 verses" (`listNames`; "<owner's name> · N members" until the grid
   loads), opens the member list (`app/share/[id]?view=members`); under it a thin progress line,
   "50%" and a chevron (mastered squares over all), which opens [Who's where](#whos-where), or "Couldn't
-  load · Retry" after a failed read. At 100% the line glows: green when everyone mastered every verse,
-  gold when everyone engraved them.
+  load · Retry" after a failed read. At 100% the line, the figure and the chevron glow: green when
+  everyone mastered every verse, gold when everyone engraved them.
 - **Invite line** (`InviteLine`): for the owner while no one else is in it, "Invite code", the
   code, copy (`square.on.square`) and share (`square.and.arrow.up`), the share card's actions
   (`components/shared/invite-actions.ts`). It reads `getLiveInvite` on each focus, so a new code
@@ -88,7 +88,7 @@ your verses), nothing new.
 
 A collection whose every square is mastered or engraved says so on its Library card with a badge
 on the corner of its icon: a green check for mastered, a gold engraved glyph for engraved. An
-engraved card also takes a gold wash (`engravedCard`). Faint rays (`components/ui/Rays.tsx`) sit behind a finished collection's icon, on its card and in its header, green or gold. The subtitle stays as it is, and the card
+engraved card also takes a gold wash (`engravedCard`). A faint fan of rays (`components/ui/Rays.tsx`) rises from behind the top of a finished collection's icon on its card, green or gold. The subtitle stays as it is, and the card
 keeps the collection's own icon. The badge reads "Mastered" or "Engraved" to VoiceOver, plus "by everyone" on a shared card. The rules are `soloEmblem` and `sharedEmblem` in
 `lib/shared/progress.ts`, on `cellState`, so the mastered and engraved tests are the grid's
 (`progress.test.ts`). A shared collection uses the shared rule only once someone else joined;

@@ -239,7 +239,7 @@ export function SwipeableCollectionCard({
             <View style={styles.cardLeft}>
               {/* Engraved fills the square like the engraved pill on a verse; the icon stays the collection's own. */}
               <View>
-              {emblem && <Rays size={84} color={engraved ? colors.tint : colors.success} />}
+              {emblem && <Rays length={42} color={engraved ? colors.tint : colors.success} />}
               <View style={[
                 styles.iconContainer,
                 {
