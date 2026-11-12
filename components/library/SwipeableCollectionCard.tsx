@@ -224,7 +224,7 @@ export function SwipeableCollectionCard({
     >
       {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.card, { backgroundColor: engraved ? colors.engravedCard : emblem ? colors.doneCard : colors.card, borderColor }, cardStyle]}>
+        <Animated.View style={[styles.card, { backgroundColor: engraved ? colors.engravedCard : colors.card, borderColor }, cardStyle]}>
           <Pressable
             style={styles.cardButton}
             onPress={handlePress}
@@ -254,6 +254,19 @@ export function SwipeableCollectionCard({
                   size={24}
                   color={engraved ? colors.tint : collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
                 />
+                {emblem && (
+                  <View
+                    accessibilityLabel={emblemLabel}
+                    style={[
+                      styles.badge,
+                      { backgroundColor: engraved ? colors.tint : colors.success, borderColor: engraved ? colors.engravedCard : colors.card },
+                    ]}
+                  >
+                    {engraved
+                      ? <EngravedIcon size={11} color={colors.card} />
+                      : <IconSymbol name="checkmark" size={11} color={colors.card} weight="bold" />}
+                  </View>
+                )}
               </View>
               <View style={styles.cardText}>
                 <Text style={[styles.collectionName, { color: colors.text }]} numberOfLines={1}>
@@ -265,13 +278,6 @@ export function SwipeableCollectionCard({
             {!editing && (
               <View style={styles.cardRight}>
                 <DueCountPill count={dueCount} />
-                {emblem && (
-                  <View accessibilityLabel={emblemLabel} style={styles.emblem}>
-                    {engraved
-                      ? <EngravedIcon size={16} color={colors.tint} />
-                      : <IconSymbol name="checkmark" size={16} color={colors.success} />}
-                  </View>
-                )}
                 <IconSymbol name="chevron.right" size={18} color={colors.icon} />
               </View>
             )}
@@ -374,8 +380,16 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 14,
   },
-  emblem: {
-    width: 20,
+  // Corner badge on the icon, the way iOS marks a finished item: green check for mastered, gold for engraved.
+  badge: {
+    position: 'absolute',
+    right: -5,
+    bottom: -5,
+    width: 22,
+    height: 22,
+    borderRadius: Radius.full,
+    borderWidth: 2,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   dragHandle: {
