@@ -1,0 +1,63 @@
+# Start from npm run db:reset. Who's where on the seeded "Romans 8" (reader-c Cara owns, reader-d
+# Dana is a member): Dana opens it from the strip and sees all four states and the member list;
+# Cara opens it by link and makes Dana an editor from its member list. docs/features/group-progress.md
+appId: com.caelanliu.biblemem
+name: shared-grid
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)%2Fshared-cccccccc-0000-4000-8000-000000000031
+- extendedWaitUntil:
+    visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
+    timeout: 20000
+- tapOn:
+    id: shared-progress
+- extendedWaitUntil:
+    visible: "Cara, Romans 8:28, Mastered"
+    timeout: 15000
+- assertVisible: "Group progress 50%. 1 of 3 verses mastered by everyone"
+# Your column first, then the owner; verses in Bible order.
+- assertVisible: "You, Member, 1 of 3 mastered"
+- assertVisible: "Cara, Owner, 2 of 3 mastered"
+- assertVisible: "You, Romans 8:1, Engraved"
+- assertVisible: "Cara, Romans 8:1, Engraved"
+- assertVisible: "You, Romans 8:28, Learning"
+- assertVisible: "You, Romans 8:38-39, Open"
+- assertVisible: "Cara, Romans 8:38-39, Open"
+- assertVisible: "Cara, Owner"
+- assertVisible: "Dana, you, Member"
+- takeScreenshot: shared-grid-1-member
+# Pull to refresh keeps the grid.
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 70%"
+- extendedWaitUntil:
+    visible: "Cara, Romans 8:28, Mastered"
+    timeout: 15000
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Shared · 2 members · 3 verses. Show members"
+    timeout: 10000
+
+# Cara opens Who's where straight from a link and makes Dana an editor from the member list.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fshared%2Fseed-romans-8
+- extendedWaitUntil:
+    visible: "Dana, Member"
+    timeout: 20000
+- assertVisible: "You, Owner, 2 of 3 mastered"
+- assertVisible: "You, Romans 8:28, Mastered"
+- assertVisible: "Dana, Romans 8:28, Learning"
+- assertVisible: "Cara, you, Owner"
+- tapOn:
+    id: member-Dana
+- tapOn: "Make editor"
+- extendedWaitUntil:
+    visible: "Dana, Editor"
+    timeout: 10000
+- assertVisible: "Dana, Editor, 1 of 3 mastered"
+- takeScreenshot: shared-grid-2-owner-made-editor
+# Opened by link, Back lands on the collection.
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Shared · 2 members · 3 verses. Show members"
+    timeout: 10000

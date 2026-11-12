@@ -28,7 +28,8 @@ app/
 │   │   ├── [id].tsx                   ← Collection detail
 │   │   ├── add.tsx                    ← Add a verse: quick-add field, version, book and chapter
 │   │   ├── add/[book]/[chapter].tsx   ← Verse picker for a chapter
-│   │   └── setup/[id].tsx             ← Difficulty + chunk-size picker before starting a session
+│   │   ├── setup/[id].tsx             ← Difficulty + chunk-size picker before starting a session
+│   │   └── shared/[id].tsx            ← Who's where, pushed from a shared collection's group progress
 │   └── settings.tsx                   ← Tab: Settings
 ├── collections/[slug].tsx     ← Curated collection introduction and import
 ├── join/[code].tsx            ← Shared-collection invite sheet (transparent modal)
@@ -91,6 +92,7 @@ Home also presents the [intro player](../features/home.md#encouragement-video) t
 | `(tabs)/(library)/[id].tsx` | `id` — collection `client_id`, or the virtual `mastered` / `in-progress` |
 | `(tabs)/(library)/add/[book]/[chapter].tsx` | `book`, `chapter` — Bible reference; query `collectionId`, `version` |
 | `(tabs)/(library)/setup/[id].tsx` | `id` — verse `client_id` |
+| `(tabs)/(library)/shared/[id].tsx` | `id` — the shared collection's local `client_id` (as `[id].tsx`); opened with nothing under it, Back replaces to that collection |
 
 `(tabs)/(library)/add.tsx` takes an optional `collectionId` query
 param. `session.tsx` reads its config from query params, not path
