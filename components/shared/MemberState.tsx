@@ -38,13 +38,15 @@ export function MemberStateDot({ state }: { state: MemberState }) {
   );
 }
 
+// The labels sit on leaf views: a card reads its children's labels, but not a label on a view with children.
+
 /** The group's count on a verse: "1/2" over a bar of every member's state, or "All" when everyone mastered it. */
 export function GroupCount({ states }: { states: MemberState[] | null }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   if (!states || states.length === 0) {
     return (
-      <View style={styles.group} accessibilityLabel="Group: loading">
-        <Text style={[styles.count, { color: colors.icon }]}>–</Text>
+      <View style={styles.group}>
+        <Text accessibilityLabel="Group: loading" style={[styles.count, { color: colors.icon }]}>–</Text>
       </View>
     );
   }
@@ -54,11 +56,10 @@ export function GroupCount({ states }: { states: MemberState[] | null }) {
   const order: MemberState[] = ['engraved', 'mastered', 'learning', 'open'];
   const sorted = [...states].sort((a, b) => order.indexOf(a) - order.indexOf(b));
   return (
-    <View
-      style={styles.group}
-      accessibilityLabel={all ? `Group: everyone ${allEngraved ? 'engraved' : 'mastered'}` : `Group: ${mastered} of ${states.length} mastered`}
-    >
-      <Text style={[styles.count, { color: all ? (allEngraved ? colors.tint : colors.success) : colors.text }]}>
+    <View style={styles.group}>
+      <Text
+        accessibilityLabel={all ? `Group: everyone ${allEngraved ? 'engraved' : 'mastered'}` : `Group: ${mastered} of ${states.length} mastered`}
+        style={[styles.count, { color: all ? (allEngraved ? colors.tint : colors.success) : colors.text }]}>
         {all ? '✓ All' : `${mastered}/${states.length}`}
       </Text>
       <View style={[styles.bar, { backgroundColor: colors.borderLight }]}>

@@ -29,7 +29,6 @@ import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -68,7 +67,6 @@ export default function CollectionScreen() {
   const canEdit = !sharedId || shared?.role === 'owner' || shared?.role === 'editor';
   const [sharedSheetOpen, setSharedSheetOpen] = useState(false);
   const { user } = useAuth();
-  const insets = useSafeAreaInsets();
   const sharedProgress = useAppStore((s) => (sharedId ? s.sharedProgress[sharedId] : undefined));
   const [openOnly, setOpenOnly] = useState(false);
 
@@ -386,7 +384,7 @@ export default function CollectionScreen() {
         />
       )}
       {sharedId && openKeys.size > 0 && (
-        <View style={[styles.practiceWrap, { bottom: Math.max(insets.bottom - 8, 4) + 12 }]} pointerEvents="box-none">
+        <View style={styles.practiceWrap} pointerEvents="box-none">
           <Pressable
             testID="practice-open"
             accessibilityRole="button"
@@ -473,6 +471,7 @@ const styles = StyleSheet.create({
   },
   practiceWrap: {
     position: 'absolute',
+    bottom: 16,
     left: 20,
     right: 20,
     alignItems: 'center',
