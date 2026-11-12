@@ -65,7 +65,8 @@ export function CopyToCollectionModal({
             />
           </View>
           <ScrollView style={styles.destinations}>
-            {collections.filter((c) => !c.isVirtual).map((collection) => {
+            {/* A shared collection holds the group's references only; adding goes through its + button. */}
+            {collections.filter((c) => !c.isVirtual && !c.sharedId).map((collection) => {
               const alreadyAdded = memberships.has(collection.id);
               const disabled = alreadyAdded || copyingTo !== null;
               return (

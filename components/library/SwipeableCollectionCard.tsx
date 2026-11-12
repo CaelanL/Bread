@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { confirmDeleteForEveryone, confirmLeave } from '@/components/shared/confirm-removal';
 import { DueCountPill } from '@/components/library/DueCountPill';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -7,7 +8,7 @@ import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
-import type { Collection } from '@/lib/storage';
+import type { Collection, SharedRole } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -44,6 +45,12 @@ interface SwipeableCollectionCardProps {
   reorder?: CollectionReorder;
   actionsDisabled: boolean;
   dueCount?: number;
+  /** Set for a shared collection: a member's delete is Leave, the owner's deletes for everyone. */
+  sharedRole?: SharedRole;
+  /** Verses deleting or leaving would lose (not mastered, in no other collection). */
+  lostCount?: number;
+  /** Shown for a personal collection; opens sharing. */
+  onShare?: () => void;
 }
 
 export function SwipeableCollectionCard({
@@ -56,6 +63,9 @@ export function SwipeableCollectionCard({
   reorder,
   actionsDisabled,
   dueCount = 0,
+  sharedRole,
+  lostCount = 0,
+  onShare,
 }: SwipeableCollectionCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -71,6 +81,7 @@ export function SwipeableCollectionCard({
   const isCustom = !collection.isDefault && !collection.isVirtual;
   const editing = Boolean(reorder);
   const canSwipe = isCustom && !editing && !actionsDisabled;
+  const isLeave = Boolean(collection.sharedId) && sharedRole !== 'owner';
 
   useEffect(() => {
     if (!canSwipe) translateX.value = 0;
@@ -158,6 +169,15 @@ export function SwipeableCollectionCard({
   };
 
   const handleDelete = () => {
+    const confirm = async () => {
+      try {
+        await onDelete();
+      } catch {
+        closeSwipe();
+      }
+    };
+    if (collection.sharedId && sharedRole === 'owner') return confirmDeleteForEveryone(lostCount, confirm, closeSwipe);
+    if (collection.sharedId) return confirmLeave(collection.name, lostCount, confirm, closeSwipe);
     const title = `Delete "${collection.name}"?`;
     const message = collection.verseCount > 0
       ? 'Verses not mastered or in another collection will be deleted and lose progress.'
@@ -199,7 +219,7 @@ export function SwipeableCollectionCard({
       onLayout={(event) => { rowHeight.value = event.nativeEvent.layout.height; }}
       style={[styles.container, reorder && dragStyle]}
     >
-      {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} />}
+      {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.card, { backgroundColor: colors.card, borderColor }, cardStyle]}>
           <Pressable
@@ -234,7 +254,7 @@ export function SwipeableCollectionCard({
                   {collection.name}
                 </Text>
                 <Text style={[styles.verseCount, { color: colors.icon }]}>
-                  {collection.verseCount} verse{collection.verseCount !== 1 ? 's' : ''}
+                  {collection.verseCount} verse{collection.verseCount !== 1 ? 's' : ''}{collection.sharedId ? ' · Shared' : ''}
                 </Text>
               </View>
             </View>
@@ -276,9 +296,13 @@ export function SwipeableCollectionCard({
           onClose={() => setMenuTop(null)}
           anchorPosition={menuTop === null ? undefined : { top: menuTop, right: 16 }}
           items={[
-            { label: 'Rename', icon: 'pencil', onPress: onRename },
+            // A member's copy takes its name from the group, so only the owner renames it.
+            ...(isLeave ? [] : [{ label: 'Rename', icon: 'pencil', onPress: onRename }]),
+            ...(onShare && !collection.sharedId ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
             { label: 'Reorder', icon: 'line.3.horizontal', onPress: onReorder },
-            { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true },
+            isLeave
+              ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: handleDelete, destructive: true }
+              : { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true },
           ]}
         />
       )}

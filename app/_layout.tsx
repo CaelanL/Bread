@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, router, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack, router, usePathname, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -18,6 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
+import { stashPendingJoin, takePendingJoin } from '@/lib/shared/pending-join';
 import {
   installDevTools as installNotifDevTools,
   registerDeepLinkHandler,
@@ -55,6 +56,7 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { isAuthenticated, isLoading } = useAuth();
   const segments = useSegments();
+  const pathname = usePathname();
   const navigationState = useRootNavigationState();
 
   // Handle navigation based on auth state
@@ -66,13 +68,23 @@ function RootLayoutNav() {
     const isDevSignIn = segments[0] === 'dev-sign-in';
 
     if (!isAuthenticated && !inAuthGroup && !isResetPassword && !isDevSignIn) {
+      // An invite link opened signed out joins after sign-in (effect below).
+      const invite = pathname.match(/^\/join\/([^/]+)/)?.[1];
+      if (invite) stashPendingJoin(invite);
       // Not authenticated and not on auth screen - redirect to sign in
       router.replace('/(auth)/sign-in');
     } else if (isAuthenticated && inAuthGroup) {
       // Authenticated but on auth screen - redirect to main app
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, segments, navigationState?.key]);
+  }, [isAuthenticated, isLoading, segments, pathname, navigationState?.key]);
+
+  // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in.
+  useEffect(() => {
+    if (!isAuthenticated || !navigationState?.key) return;
+    const invite = takePendingJoin();
+    if (invite) router.push(`/join/${invite}`);
+  }, [isAuthenticated, navigationState?.key]);
 
   // Hydrate store and run migration when authenticated. Sequenced as
   // an inline async so a fast sign-out → sign-in cycle can't race the
@@ -168,6 +180,8 @@ function RootLayoutNav() {
         <Stack.Screen name="notifications" />
         <Stack.Screen name="collections/[slug]" />
         <Stack.Screen name="session" options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="join/[code]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="join/index" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <Q1ExplainerCard isAuthenticated={isAuthenticated} />

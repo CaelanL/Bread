@@ -2,10 +2,14 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
+import { DisplayNameSheet } from '@/components/shared/DisplayNameSheet';
+import { SharedCollectionSheet } from '@/components/shared/SharedCollectionSheet';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
-import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useDueCounts, useInProgressVerseCount, useMasteredVerseCount } from '@/lib/store';
+import { MAX_SHARED_COLLECTIONS } from '@/lib/shared/constants';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
+import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedRole, useVersesLostWith } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router } from 'expo-router';
@@ -29,6 +33,7 @@ function CollectionCard({
   onDelete,
   onRename,
   onReorder,
+  onShare,
   reorder,
   actionsDisabled,
 }: {
@@ -38,6 +43,7 @@ function CollectionCard({
   onDelete: () => Promise<void>;
   onRename: () => void;
   onReorder: () => void;
+  onShare: () => void;
   reorder?: CollectionReorder;
   actionsDisabled: boolean;
 }) {
@@ -48,6 +54,8 @@ function CollectionCard({
   const inProgressVerseCount = useInProgressVerseCount();
   const now = useReviewNowValue();
   const dueCounts = useDueCounts(now);
+  const sharedRole = useSharedRole(collection.id);
+  const lostCount = useVersesLostWith(collection.id);
 
   const verseCount = isMastered
     ? masteredVerseCount
@@ -67,6 +75,9 @@ function CollectionCard({
       reorder={reorder}
       actionsDisabled={actionsDisabled}
       dueCount={dueCount}
+      sharedRole={sharedRole}
+      lostCount={lostCount}
+      onShare={onShare}
     />
   );
 }
@@ -93,6 +104,9 @@ export default function LibraryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
+  // Sharing a collection: the one-time name step if needed, then the members sheet with the link.
+  const [sharing, setSharing] = useState<{ collectionId: string; step: 'name' | 'sheet' } | null>(null);
+  const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
   const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
   const actionsDisabled = refreshing || orderSaving;
@@ -140,6 +154,25 @@ export default function LibraryScreen() {
       showErrorToast('Failed to delete collection.');
       throw e;
     }
+  };
+
+  const shareCollection = async (collectionId: string) => {
+    try {
+      await useAppStore.getState().shareCollection(collectionId);
+      setSharing({ collectionId, step: 'sheet' });
+    } catch (e) {
+      setSharing(null);
+      showErrorToast(sharedErrorMessage(e, "Couldn't share this collection. Try again."));
+    }
+  };
+
+  const handleShare = (collectionId: string) => {
+    if (sharedCount >= MAX_SHARED_COLLECTIONS) {
+      showErrorToast(`${MAX_SHARED_COLLECTIONS} shared collections is the limit.`);
+      return;
+    }
+    if (useAppStore.getState().displayName === null) setSharing({ collectionId, step: 'name' });
+    else void shareCollection(collectionId);
   };
 
   const handleCollectionPress = (collection: Collection) => {
@@ -211,6 +244,7 @@ export default function LibraryScreen() {
                     onDelete={() => handleDeleteCollection(collection.id)}
                     onRename={() => setNameDialog({ collection })}
                     onReorder={() => setEditing(true)}
+                    onShare={() => handleShare(collection.id)}
                     actionsDisabled={actionsDisabled}
                     reorder={editing && customIndex >= 0 ? {
                       index: customIndex,
@@ -239,6 +273,23 @@ export default function LibraryScreen() {
             onAdd={renamingCollection
               ? (name) => renameCollection(renamingCollection.id, name)
               : handleAddCollection}
+            onInviteCode={renamingCollection ? undefined : () => {
+              setNameDialog(null);
+              router.push('/join');
+            }}
+          />
+        )}
+        {sharing?.step === 'name' && (
+          <DisplayNameSheet
+            onClose={() => setSharing(null)}
+            onDone={() => void shareCollection(sharing.collectionId)}
+          />
+        )}
+        {sharing?.step === 'sheet' && (
+          <SharedCollectionSheet
+            collectionId={sharing.collectionId}
+            onClose={() => setSharing(null)}
+            onLeft={() => setSharing(null)}
           />
         )}
       </View>

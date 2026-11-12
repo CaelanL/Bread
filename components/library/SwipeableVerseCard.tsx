@@ -25,6 +25,8 @@ interface SwipeableVerseCardProps {
   disableSwipe?: boolean;
   /** Number of collections this verse is in (for accurate delete message) */
   collectionCount?: number;
+  /** Set in a shared collection: removing the verse removes it for every member. */
+  sharedMemberCount?: number;
 }
 
 export function SwipeableVerseCard({
@@ -34,6 +36,7 @@ export function SwipeableVerseCard({
   onCopy,
   disableSwipe = false,
   collectionCount = 1,
+  sharedMemberCount,
 }: SwipeableVerseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -119,6 +122,12 @@ export function SwipeableVerseCard({
       title = 'Delete verse?';
       message = "You'll lose all progress on this verse.";
       buttonText = 'Delete';
+    }
+
+    if (sharedMemberCount !== undefined) {
+      title = 'Remove for everyone?';
+      message = `It leaves this collection for all ${sharedMemberCount} member${sharedMemberCount === 1 ? '' : 's'}. For you: ${message.charAt(0).toLowerCase()}${message.slice(1)}`;
+      buttonText = 'Remove';
     }
 
     Alert.alert(title, message, [

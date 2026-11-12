@@ -11,9 +11,11 @@ export const SWIPE_DELETE_DISTANCE = 72;
 export function SwipeDeleteAction({
   offset,
   onPress,
+  label = 'Delete',
 }: {
   offset: SharedValue<number>;
   onPress: () => void;
+  label?: 'Delete' | 'Leave';
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const [revealed, setRevealed] = useState(false);
@@ -38,11 +40,11 @@ export function SwipeDeleteAction({
         style={styles.action}
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel="Delete"
+        accessibilityLabel={label}
         testID="swipe-delete"
       >
-        <IconSymbol name="trash" size={16} color={colors.white} />
-        <Text style={[styles.label, { color: colors.white }]}>Delete</Text>
+        <IconSymbol name={label === 'Leave' ? 'rectangle.portrait.and.arrow.right' : 'trash'} size={16} color={colors.white} />
+        <Text style={[styles.label, { color: colors.white }]}>{label}</Text>
       </Pressable>
     </Animated.View>
   );

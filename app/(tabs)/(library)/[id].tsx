@@ -1,5 +1,6 @@
 import { AppHeader } from '@/components/app-header';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
+import { SharedCollectionSheet } from '@/components/shared/SharedCollectionSheet';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
@@ -10,13 +11,13 @@ import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useVerses, useVersesByCollection } from '@/lib/store';
+import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useVerses, useVersesByCollection } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   FlatList,
@@ -48,6 +49,11 @@ export default function CollectionScreen() {
   const hydrated = useHydrated();
   const deleteVerse = useAppStore((s) => s.deleteVerse);
   const refresh = useAppStore((s) => s.refresh);
+  const shared = useSharedCollection(id || '');
+  const sharedId = collection?.sharedId;
+  // Plain members of a shared collection read it; the owner and editors add and remove.
+  const canEdit = !sharedId || shared?.role === 'owner' || shared?.role === 'editor';
+  const [sharedSheetOpen, setSharedSheetOpen] = useState(false);
 
   // Count how many collections each verse is in (by matching book/chapter/verse/version)
   const getVerseCollectionCount = (verse: SavedVerse): number => {
@@ -71,7 +77,8 @@ export default function CollectionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
-  const canChangeIcon = collection && !collection.isDefault && !collection.isVirtual;
+  const canChangeIcon = collection && !collection.isDefault && !collection.isVirtual
+    && (!sharedId || shared?.role === 'owner');
   const collectionIcon = resolveCollectionIcon(collection?.iconKey);
   const [copyingVerse, setCopyingVerse] = useState<SavedVerse | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
@@ -85,10 +92,31 @@ export default function CollectionScreen() {
     return () => clearTimeout(timer);
   }, [copyNotice]);
 
+  // Opening a shared collection brings this copy up to date with the group, once per visit.
+  const syncedId = useRef<string | null>(null);
+  const syncShared = async (target: string) => {
+    try {
+      await useAppStore.getState().syncSharedCollection(target);
+    } catch {
+      showErrorToast("Couldn't update this shared collection. Pull to refresh to try again.");
+    }
+  };
+  useEffect(() => {
+    if (!sharedId || syncedId.current === sharedId) return;
+    syncedId.current = sharedId;
+    void syncShared(sharedId);
+  }, [sharedId]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await refresh();
+    if (sharedId) await syncShared(sharedId);
     setRefreshing(false);
+  };
+
+  const backToLibrary = () => {
+    if ((navigation.getState()?.index ?? 0) > 0) router.back();
+    else router.replace('/(tabs)/(library)');
   };
 
   const handleAddVerse = useDebouncedPress(() => {
@@ -162,6 +190,20 @@ export default function CollectionScreen() {
       );
     }
 
+    if (!canEdit) {
+      return (
+        <View style={styles.emptyState}>
+          <View style={[styles.emptyIcon, { backgroundColor: colors.primaryLight }]}>
+            <IconSymbol name="book.closed" size={40} color={colors.icon} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No verses yet</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.icon }]}>
+            Verses the owner adds show up here
+          </Text>
+        </View>
+      );
+    }
+
     // Regular collection empty state
     return (
       <View style={styles.emptyState}>
@@ -191,10 +233,7 @@ export default function CollectionScreen() {
         leftButton={{
           icon: 'chevron.left',
           label: 'Back',
-          onPress: () => {
-            if ((navigation.getState()?.index ?? 0) > 0) router.back();
-            else router.replace('/(tabs)/(library)');
-          },
+          onPress: backToLibrary,
         }}
         titleIcon={canChangeIcon ? {
           name: collectionIcon.symbol,
@@ -202,7 +241,7 @@ export default function CollectionScreen() {
           onPress: () => setIconPickerOpen(true),
         } : undefined}
         rightButton={
-          collection?.isVirtual
+          collection?.isVirtual || !canEdit
             ? undefined
             : {
                 icon: 'plus',
@@ -211,6 +250,22 @@ export default function CollectionScreen() {
               }
         }
       />
+
+      {sharedId && (
+        <Pressable
+          testID="shared-row"
+          accessibilityRole="button"
+          accessibilityLabel={`Shared, ${shared?.memberCount ?? ''} members. Show members`}
+          onPress={() => setSharedSheetOpen(true)}
+          style={[styles.sharedRow, { backgroundColor: colors.primaryLight }]}
+        >
+          <IconSymbol name="person.2.fill" size={16} color={colors.primary} />
+          <Text style={[styles.sharedText, { color: colors.text }]}>
+            Shared{shared ? ` · ${shared.memberCount} member${shared.memberCount === 1 ? '' : 's'}` : ''}
+          </Text>
+          <IconSymbol name="chevron.right" size={14} color={colors.icon} />
+        </Pressable>
+      )}
 
       {/* Search and Sort Bar */}
       {hydrated && verses.length > 0 && (
@@ -254,8 +309,9 @@ export default function CollectionScreen() {
                 setCopyNotice(null);
                 setCopyingVerse(item);
               }}
-              disableSwipe={isMasteredCollection || isInProgressCollection}
+              disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
               collectionCount={getVerseCollectionCount(item)}
+              sharedMemberCount={sharedId ? shared?.memberCount ?? 1 : undefined}
             />
           )}
           keyExtractor={(item) => item.id}
@@ -271,6 +327,16 @@ export default function CollectionScreen() {
           currentKey={collection.iconKey}
           onClose={() => setIconPickerOpen(false)}
           onSave={(key) => useAppStore.getState().setCollectionIcon(collection.id, key)}
+        />
+      )}
+      {sharedSheetOpen && id && (
+        <SharedCollectionSheet
+          collectionId={id}
+          onClose={() => setSharedSheetOpen(false)}
+          onLeft={() => {
+            setSharedSheetOpen(false);
+            backToLibrary();
+          }}
         />
       )}
       {copyNotice && (
@@ -311,6 +377,21 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 16,
     paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  sharedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: Radius.lg,
+  },
+  sharedText: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '500',
   },

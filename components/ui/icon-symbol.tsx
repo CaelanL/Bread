@@ -45,6 +45,12 @@ const MAPPING = {
   'heart.fill': 'favorite',
   'folder.fill': 'folder',
   'person.crop.circle.fill': 'account-circle',
+  'person.2.fill': 'group',
+  'doc.on.doc': 'content-copy',
+  'square.and.arrow.up': 'ios-share',
+  'ellipsis': 'more-horiz',
+  'arrow.triangle.2.circlepath': 'autorenew',
+  'rectangle.portrait.and.arrow.right': 'logout',
 } as IconMapping;
 
 /**
