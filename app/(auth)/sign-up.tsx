@@ -111,8 +111,7 @@ export default function SignUpScreen() {
               autoCorrect={false}
               spellCheck={false}
               textContentType="emailAddress"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
+              submitBehavior="submit"
             />
           </View>
 
