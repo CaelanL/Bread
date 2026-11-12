@@ -1,0 +1,31 @@
+// Shared collection checks over local REST, signed in as a seed user. Runs only against the seed database.
+// MODE=invite: output.code is READER's newest live invite.
+// MODE=no-copy: READER holds no row for Psalm 23:1-3 (left with an unmastered verse).
+// MODE=personal-copy: READER's "Psalms" is a personal collection again, still holding Psalm 23:1-3.
+const host = (API_URL.match(/^https?:\/\/([^:/]+)/) || [])[1];
+if (host !== '127.0.0.1' && host !== 'localhost') throw new Error('shared-collections requires local Supabase');
+
+const session = json(http.post(API_URL + '/auth/v1/token?grant_type=password', {
+  headers: { apikey: ANON_KEY, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: READER + '@example.test', password: 'password123' }),
+}).body);
+if (!session.access_token) throw new Error('Local seed sign-in failed');
+const headers = { apikey: ANON_KEY, Authorization: 'Bearer ' + session.access_token };
+const get = (path) => json(http.get(API_URL + '/rest/v1/' + path, { headers: headers }).body);
+
+if (MODE === 'invite') {
+  const rows = get('shared_invites?select=code&revoked_at=is.null&order=created_at.desc&limit=1');
+  if (rows.length !== 1) throw new Error('No live invite for ' + READER);
+  output.code = rows[0].code;
+} else if (MODE === 'no-copy') {
+  const rows = get('user_verses?select=id&book=eq.Psalms&chapter=eq.23&verse_start=eq.1&verse_end=eq.3');
+  if (rows.length !== 0) throw new Error(READER + ' still holds Psalm 23:1-3 after leaving');
+} else if (MODE === 'personal-copy') {
+  const rows = get('user_collections?select=shared_collection_id,verse_collections(user_verses(book,chapter,verse_start,verse_end))&name=eq.Psalms&deleted_at=is.null');
+  if (rows.length !== 1) throw new Error('Expected one Psalms collection, got ' + rows.length);
+  if (rows[0].shared_collection_id !== null) throw new Error('Psalms is still shared');
+  const verses = rows[0].verse_collections.map((link) => link.user_verses);
+  if (verses.length !== 1 || verses[0].chapter !== 23 || verses[0].verse_end !== 3) throw new Error('Psalm 23:1-3 is missing from the copy');
+} else {
+  throw new Error('Unknown MODE ' + MODE);
+}

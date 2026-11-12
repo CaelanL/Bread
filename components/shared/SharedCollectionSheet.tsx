@@ -55,12 +55,6 @@ export function SharedCollectionSheet({ collectionId, onClose, onLeft }: {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
   const run = async (work: () => Promise<void>, fallback: string) => {
     setBusy(true);
     try {
@@ -98,6 +92,7 @@ export function SharedCollectionSheet({ collectionId, onClose, onLeft }: {
         text: 'New link',
         onPress: () => run(async () => {
           setInvite(await useAppStore.getState().mintInvite(sharedId));
+          setCopied(false);
         }, "Couldn't make a new link. Try again."),
       },
     ]);
