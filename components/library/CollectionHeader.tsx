@@ -123,7 +123,7 @@ export function CollectionHeader({
             <Text style={[styles.progressText, { color: colors.primary }]}>Couldn&apos;t load · Retry</Text>
           ) : (
             <Text style={[styles.progressText, { color: colors.icon }]}>
-              {progress.ratio == null ? '–' : `${percent}%`} together
+              {progress.ratio == null ? '–' : `${percent}%`}
             </Text>
           )}
           <IconSymbol name="chevron.right" size={12} color={colors.icon} />

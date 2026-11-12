@@ -41,7 +41,7 @@ shared collection looks like a personal one, and a personal collection looks as 
   once others are in, the people line, member initials (in `get_shared_members` order, yours
   solid) and "Cara and Dana · 3 verses" (`listNames`; "<owner's name> · N members" until the grid
   loads), opens the member list (`app/share/[id]?view=members`); under it a thin progress line,
-  "50% together" (mastered squares over all), which opens [Who's where](#whos-where), or "Couldn't
+  "50%" and a chevron (mastered squares over all), which opens [Who's where](#whos-where), or "Couldn't
   load · Retry" after a failed read.
 - **Invite line** (`InviteLine`): for the owner while no one else is in it, "Invite code", the
   code, copy (`square.on.square`) and share (`square.and.arrow.up`), the share card's actions
@@ -50,7 +50,7 @@ shared collection looks like a personal one, and a personal collection looks as 
 - **Bar**: person-plus (the owner, and any collection you could share) opens the share card
   (`app/share/[id].tsx`: invite, members and roles, Stop sharing); the dots open Details, Change
   icon, Rename, Stop sharing and Delete, or Details and Leave for a member.
-- **Rows**: the same flat rows as a personal collection (difficulty dot or check, review badge),
+- **Rows**: the same flat rows as a personal collection (difficulty dot, check or engraved glyph, review badge),
   plus the group's count on the right (`GroupCount`): members who mastered the verse, engraved
   included, over all members, "8/10", the same on every row.
 
