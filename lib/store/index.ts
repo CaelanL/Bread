@@ -1750,6 +1750,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       return { verses: updatedVerses, masteredVerses: updatedMastered };
     });
+
+    // A shared card's emblem reads `get_shared_status`, so a square that just turned mastered or
+    // engraved refetches it.
+    const engravedNow = newProgress.engraved?.completed === true && verse.progress.engraved?.completed !== true;
+    const inShared = get().verses.some((v) => v.id === id && get().collections.some((c) => c.id === v.collectionId && c.sharedId));
+    if ((justBecameMastered || engravedNow) && inShared) await get().fetchSharedCollections();
   },
 
   resetVerseProgress: async (id: string) => {
@@ -1882,14 +1888,6 @@ export function useVersesByCollection(collectionId: string) {
   );
 }
 
-export function useCollectionVerseCount(collectionId: string) {
-  const verses = useAppStore(useShallow((state) => state.verses));
-  return useMemo(
-    () => verses.filter((v) => v.collectionId === collectionId).length,
-    [verses, collectionId]
-  );
-}
-
 export function useVerse(id: string) {
   const verses = useAppStore(useShallow((state) => state.verses));
   const masteredVerses = useAppStore(useShallow((state) => state.masteredVerses));
@@ -1913,10 +1911,6 @@ export function useSharedCollection(collectionId: string): SharedCollectionInfo 
     const sharedId = state.collections.find((c) => c.id === collectionId)?.sharedId;
     return sharedId ? state.sharedCollections[sharedId] : undefined;
   });
-}
-
-export function useSharedRole(collectionId: string): SharedRole | undefined {
-  return useSharedCollection(collectionId)?.role;
 }
 
 /** Real collections the user may add verses to: personal ones, and shared ones they own or edit. */

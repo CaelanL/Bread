@@ -15,6 +15,8 @@ import {
   openVersesFor,
   progressFlags,
   replaceMemberCells,
+  sharedEmblem,
+  soloEmblem,
   whoIsWhere,
   type ProgressCell,
   type SharedReference,
@@ -171,4 +173,27 @@ test("Who's where scrolls when the columns are wider than the space measured for
   assert.equal(gridScrolls(2, 197), false);
   assert.equal(gridScrolls(30, 197), true);
   assert.equal(gridScrolls(8, 8 * GRID_PITCH), false);
+});
+
+test('a personal collection is Mastered when every verse is, and Engraved only when every verse is engraved', () => {
+  const score = (bestAccuracy: number | null, completed = false) => ({ bestAccuracy, completed });
+  const review = (completed: boolean) =>
+    ({ completed, passCount: completed ? 10 : 1, nextDueAt: null, lifetimeReviews: 1, lastReviewedAt: null, months: [] });
+  const fresh = { easy: score(null), medium: score(null), hard: score(null) };
+  const learnt = { easy: score(95, true), medium: score(94, true), hard: score(92, true), engraved: review(false) };
+  const carved = { ...learnt, engraved: review(true) };
+  assert.equal(soloEmblem([]), null);
+  assert.equal(soloEmblem([learnt, fresh]), null);
+  assert.equal(soloEmblem([learnt, { ...fresh, easy: score(80) }]), null);
+  assert.equal(soloEmblem([learnt, carved]), 'mastered');
+  assert.equal(soloEmblem([carved, carved]), 'engraved');
+});
+
+test('a shared collection needs every member on every verse: the seed has neither emblem', () => {
+  const status = { memberCount: 2, verseCount: 3, masteredSquares: 3, engravedSquares: 2 };
+  assert.equal(sharedEmblem(status), null);
+  assert.equal(sharedEmblem({ ...status, masteredSquares: 6 }), 'mastered');
+  assert.equal(sharedEmblem({ ...status, masteredSquares: 6, engravedSquares: 5 }), 'mastered');
+  assert.equal(sharedEmblem({ ...status, masteredSquares: 6, engravedSquares: 6 }), 'engraved');
+  assert.equal(sharedEmblem({ memberCount: 2, verseCount: 0, masteredSquares: 0, engravedSquares: 0 }), null);
 });

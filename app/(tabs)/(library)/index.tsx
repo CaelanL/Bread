@@ -8,8 +8,9 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { MAX_SHARED_COLLECTIONS } from '@/lib/shared/constants';
+import { sharedEmblem, soloEmblem } from '@/lib/shared/progress';
 import { sharedErrorMessage } from '@/lib/shared/invite-code';
-import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedRole, useVersesLostWith } from '@/lib/store';
+import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useVersesByCollection, useVersesLostWith } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router } from 'expo-router';
@@ -49,20 +50,25 @@ function CollectionCard({
 }) {
   const isMastered = collection.id === MASTERED_COLLECTION_ID;
   const isInProgress = collection.id === IN_PROGRESS_COLLECTION_ID;
-  const collectionVerseCount = useCollectionVerseCount(collection.id);
+  const collectionVerses = useVersesByCollection(collection.id);
   const masteredVerseCount = useMasteredVerseCount();
   const inProgressVerseCount = useInProgressVerseCount();
   const now = useReviewNowValue();
   const dueCounts = useDueCounts(now);
-  const sharedRole = useSharedRole(collection.id);
+  const shared = useSharedCollection(collection.id);
   const lostCount = useVersesLostWith(collection.id);
 
   const verseCount = isMastered
     ? masteredVerseCount
     : isInProgress
       ? inProgressVerseCount
-      : collectionVerseCount;
+      : collectionVerses.length;
   const dueCount = isMastered ? dueCounts.mastered : 0;
+  const emblem = useMemo(() => {
+    if (collection.isVirtual) return null;
+    if (collection.sharedId) return shared ? sharedEmblem(shared) : null;
+    return soloEmblem(collectionVerses.map((v) => v.progress));
+  }, [collection.isVirtual, collection.sharedId, shared, collectionVerses]);
 
   return (
     <SwipeableCollectionCard
@@ -75,9 +81,11 @@ function CollectionCard({
       reorder={reorder}
       actionsDisabled={actionsDisabled}
       dueCount={dueCount}
-      sharedRole={sharedRole}
+      sharedRole={shared?.role}
       lostCount={lostCount}
       onShare={onShare}
+      emblem={emblem}
+      memberCount={shared?.memberCount}
     />
   );
 }

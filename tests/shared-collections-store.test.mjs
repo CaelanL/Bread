@@ -145,6 +145,14 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(state().sharedProgress[group].failed, false);
   });
 
+  await t.test("mastering a shared verse refetches the group's status for the Library card; practice that masters nothing doesn't", async () => {
+    rpcs.length = 0;
+    await state().updateVerseProgress('verse-1', 'easy', 60);
+    assert.deepEqual(rpcs, []);
+    await state().updateVerseProgress('verse-1', 'hard', 95, true);
+    assert.deepEqual(rpcs.map(([name]) => name), ['get_shared_status']);
+  });
+
   await t.test("a member's delete is leave: the leave RPC, and the copy leaves the store", async () => {
     rpcs.length = 0;
     await state().deleteCollection(copy.client_id);

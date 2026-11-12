@@ -118,12 +118,12 @@ The convention is `useX(...)` selectors, not direct
 | `useVerses()` | `SavedVerse[]` |
 | `useHydrated()`, `useStoreError()` | `boolean`, `string \| null` |
 | `useVerse(id)` | one verse from `verses` or `masteredVerses` |
-| `useVersesByCollection(id)`, `useCollectionVerseCount(id)` | filtered verse list, its length |
+| `useVersesByCollection(id)` | filtered verse list |
 | `useMasteredVerses()`, `useMasteredVerseCount()` | `masteredVerses`, its count |
 | `useInProgressVerses()`, `useInProgressVerseCount()` | the virtual In Progress list, its count |
 | `useReviewMaxIntervalDays()`, `useReviewState(id)`, `useDueCounts()` | review state, see `docs/features/review.md` |
 | `useMostMemorizedBooks()` | top 5 books by mastered count |
-| `useSharedCollection(id)`, `useSharedRole(id)` | the group a collection is a copy of, and the user's role |
+| `useSharedCollection(id)` | the group a collection is a copy of: role, member and verse counts, mastered and engraved squares |
 | `useAddableCollections()`, `useVersesLostWith(id)` | collections the user may add to; verses a delete or leave would lose |
 | `useInsightsStats()` | `{ versesMastered, inProgress }` |
 

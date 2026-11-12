@@ -2,6 +2,7 @@
 // MODE=invite: output.code is READER's newest live invite.
 // MODE=no-copy: READER holds no row for Psalm 23:1-3 (left with an unmastered verse).
 // MODE=personal-copy: READER's "Psalms" is a personal collection again, still holding Psalm 23:1-3.
+// MODE=mastered|engraved: READER's verses matching FILTER (PostgREST query) get the seed's progress for that state.
 const host = (API_URL.match(/^https?:\/\/([^:/]+)/) || [])[1];
 if (host !== '127.0.0.1' && host !== 'localhost') throw new Error('shared-collections requires local Supabase');
 
@@ -26,6 +27,21 @@ if (MODE === 'invite') {
   if (rows[0].shared_collection_id !== null) throw new Error('Psalms is still shared');
   const verses = rows[0].verse_collections.map((link) => link.user_verses);
   if (verses.length !== 1 || verses[0].chapter !== 23 || verses[0].verse_end !== 3) throw new Error('Psalm 23:1-3 is missing from the copy');
+} else if (MODE === 'mastered' || MODE === 'engraved') {
+  const passes = MODE === 'engraved' ? 10 : 2;
+  const progress = {
+    easy: { bestAccuracy: 100, completed: true },
+    medium: { bestAccuracy: 98, completed: true },
+    hard: { bestAccuracy: 96, completed: true },
+    engraved: { completed: MODE === 'engraved', passCount: passes, lifetimeReviews: passes, nextDueAt: null, lastReviewedAt: null, months: [] },
+  };
+  const response = http.request(API_URL + '/rest/v1/user_verses?' + FILTER, {
+    method: 'PATCH',
+    headers: Object.assign({ 'Content-Type': 'application/json', Prefer: 'return=representation' }, headers),
+    body: JSON.stringify({ progress: progress }),
+  });
+  const rows = json(response.body);
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('No ' + READER + ' verses matched ' + FILTER + ': ' + response.body);
 } else {
   throw new Error('Unknown MODE ' + MODE);
 }

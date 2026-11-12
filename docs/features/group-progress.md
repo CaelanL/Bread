@@ -69,14 +69,39 @@ your verses), nothing new.
   collection screen's refresh, sync and grid read. A failed read keeps the last grid with
   "Couldn't refresh. Retry"; with none yet it shows "Couldn't load Who's where." and Retry.
 
+## Library cards
+
+The Library card of a collection whose every square is mastered or engraved carries an emblem in
+its icon square (`CollectionEmblem`), and the subtitle says it in words. Nothing goes on the card
+frame. The rules are `soloEmblem` and `sharedEmblem` in `lib/shared/progress.ts`, on
+`cellState`, so the mastered and engraved tests are the grid's (`progress.test.ts`).
+
+| Card | Rule | Square | Subtitle |
+|---|---|---|---|
+| Personal, mastered | A real collection, My Verses included, with at least one verse, every verse Mastered or Engraved | `MonthlyCardColors.masteredPlain`, `checkmark` in `success` | "Mastered · N verses" |
+| Personal, engraved | The same, every verse Engraved | `primaryLight`, `EngravedIcon` in `tint` | "Engraved · N verses" |
+| Shared, mastered by everyone | `get_shared_status`: mastered squares = members × verses, above 0 | The mastered square in a ring | "Mastered by everyone · Shared" |
+| Shared, engraved by everyone | Engraved squares = members × verses | The engraved square in a ring | "Engraved by everyone · Shared" |
+| Shared, not yet | Anything else, or no status row yet | The collection's own icon | "Shared · M members" |
+
+The ring is 1.5 pt in the emblem colour at `Radius.xl`, 3 pt outside the 48 pt square, so 1.5 pt
+of `card` shows between them and the card's layout doesn't move. Virtual collections never get an
+emblem. A shared card reads the status from the last hydrate, refresh or collection visit, and a session
+that turns one of your squares mastered or engraved refetches it (`updateVerseProgress`), so
+finishing the last square shows the ring on the way back. Once the owner deletes the
+group, a member's copy is personal and follows the personal rules.
+
 ## Browser checks
 
 After `npm run db:reset`: `npm run sim -- flow shared-progress` (the seeded Romans 8 as Cara and
 Dana: strip, You and Group values, open filter, Practice, Cara makes Dana an editor, Dana adds
 Romans 8:31, Cara sees it); `npm run sim -- flow shared-grid` (Dana opens Who's where from the
 strip: four states, your column first, member list; Cara opens it by link and makes Dana an editor
-there). Shots: `npm run sim -- shot "/(tabs)/(library)/seed-romans-8" --as
-reader-c` and `"/(tabs)/(library)/shared-cccccccc-0000-4000-8000-000000000031" --as reader-d`;
+there); `npm run sim -- flow shared-emblems` (the seeded group reads "Shared · 2 members", its
+script masters and then engraves every square for the ring, Cara deletes for everyone and Dana's
+copy reads "Engraved · 3 verses", reader-a's Psalms reads "Mastered · 1 verse"). Shots:
+`npm run sim -- shot "/(tabs)/(library)" --as reader-c` (the card without an emblem),
+`"/(tabs)/(library)/seed-romans-8" --as reader-c` and `"/(tabs)/(library)/shared-cccccccc-0000-4000-8000-000000000031" --as reader-d`;
 Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 `"/(tabs)/(library)/shared/shared-cccccccc-0000-4000-8000-000000000031" --as reader-d`, light and dark.
 
@@ -89,3 +114,6 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 - 2026-11-11 · Learning is solid `warning`, not 30% alpha · The alpha tint turned brown on dark and read as a darker Engraved.
 - 2026-11-11 · Your column is marked by a solid `primary` circle, not a caption · One marker, no extra row, the same mark on the strip and the member rows.
 - 2026-11-11 · Columns keep a fixed 26 pt pitch and scroll from the measured width · Stretched columns spread a two-member grid across the card, and a member-count cutoff overlapped columns beside long references.
+- 2026-11-11 · The emblem replaces the icon in the card's square and the subtitle carries the words; no tinted frame or gradient · A frame on a card that already has a 1 pt border is border-on-border, and the ring alone must never carry the meaning.
+- 2026-11-11 · A shared card without the emblem reads "Shared · M members" instead of the verse count · Shared and personal collections read differently at a glance; the verse count is on the strip.
+- 2026-11-11 · The ring sits outside the existing 48 pt square (the design note said 40 and 46) · The square keeps its size and the card's text doesn't shift.

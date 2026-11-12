@@ -1,7 +1,7 @@
 // lib-ok: Pure reading of a shared collection's members × references grid from the server's per-square booleans.
 import { BIBLE_BOOKS } from '@/lib/bible/books';
 import { hasPracticed } from '@/lib/store/review';
-import type { SharedRole, VerseProgress } from '@/lib/storage';
+import type { SharedCollectionInfo, SharedRole, VerseProgress } from '@/lib/storage';
 
 /** A member's state on one reference. Due and Locked (spaced review) are Mastered. */
 export type MemberState = 'open' | 'learning' | 'mastered' | 'engraved';
@@ -116,6 +116,28 @@ export function everyoneMastered(grid: Grid): boolean {
 /** Every square engraved. False on an empty grid. */
 export function everyoneEngraved(grid: Grid): boolean {
   return grid.rows.length > 0 && grid.rows.every(everyone(grid, (s) => s === 'engraved'));
+}
+
+/** A Library card's emblem: the whole collection mastered (engraved counts) or engraved. */
+export type Emblem = 'mastered' | 'engraved';
+
+function emblemOf(states: MemberState[]): Emblem | null {
+  if (states.length === 0 || !states.every(isMasteredState)) return null;
+  return states.every((s) => s === 'engraved') ? 'engraved' : 'mastered';
+}
+
+/** A personal collection's emblem from its verses' progress. None for an empty collection. */
+export function soloEmblem(progress: VerseProgress[]): Emblem | null {
+  return emblemOf(progress.map((p) => cellState(progressFlags(p))));
+}
+
+/** A shared collection's emblem from `get_shared_status`: every member on every reference. */
+export function sharedEmblem(
+  status: Pick<SharedCollectionInfo, 'memberCount' | 'verseCount' | 'masteredSquares' | 'engravedSquares'>,
+): Emblem | null {
+  const squares = status.memberCount * status.verseCount;
+  if (squares === 0 || status.masteredSquares !== squares) return null;
+  return status.engravedSquares === squares ? 'engraved' : 'mastered';
 }
 
 /** Above this many members a per-member bar is too thin to read, so only the count shows. */

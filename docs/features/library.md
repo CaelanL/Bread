@@ -51,6 +51,11 @@ haptic confirms the action opens. Rename prefills
 actions to move up or down. Each drop saves the order, with rollback on failure.
 Tap Done to return to opening collections by tapping their rows.
 
+Each card: the icon square, name, a subtitle (verse count; "Shared · M members" for a shared
+one), the due pill on Mastered, and a chevron. A collection whose every verse is mastered or
+engraved shows an emblem in the square instead; see
+[group progress](group-progress.md#library-cards).
+
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
 - It's created lazily by `addVerse`, `copyVerseToCollection` or `updateCollectionSort`, with `created_at`

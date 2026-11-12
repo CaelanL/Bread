@@ -173,7 +173,7 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 - **Leave and delete**: a member's swipe and menu read Leave; the confirm counts verses lost
   (`useVersesLostWith`: not mastered, in no other collection). The owner's Delete reads
   "Delete for everyone? Members keep their own copy." with the count, then dissolves. Cards
-  show "· Shared" until then.
+  read [Shared](group-progress.md#library-cards) until then.
 - **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
   toasts once, "You were removed from <name>." or, if the owner deleted it, "<name> is now your
   own copy." Not for groups you left or own.

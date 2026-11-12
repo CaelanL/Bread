@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { confirmDeleteForEveryone, confirmLeave } from '@/components/shared/confirm-removal';
+import { CollectionEmblem } from '@/components/library/CollectionEmblem';
 import { DueCountPill } from '@/components/library/DueCountPill';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -8,6 +9,7 @@ import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
+import type { Emblem } from '@/lib/shared/progress';
 import type { Collection, SharedRole } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useEffect, useState } from 'react';
@@ -51,6 +53,10 @@ interface SwipeableCollectionCardProps {
   lostCount?: number;
   /** Shown for a personal collection; opens sharing. */
   onShare?: () => void;
+  /** Every verse mastered or engraved; on a shared collection, by every member. */
+  emblem?: Emblem | null;
+  /** A shared collection's member count, from `get_shared_status`. */
+  memberCount?: number;
 }
 
 export function SwipeableCollectionCard({
@@ -66,6 +72,8 @@ export function SwipeableCollectionCard({
   sharedRole,
   lostCount = 0,
   onShare,
+  emblem,
+  memberCount,
 }: SwipeableCollectionCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -82,6 +90,13 @@ export function SwipeableCollectionCard({
   const editing = Boolean(reorder);
   const canSwipe = isCustom && !editing && !actionsDisabled;
   const isLeave = Boolean(collection.sharedId) && sharedRole !== 'owner';
+  const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
+  const emblemLabel = emblem === 'engraved' ? 'Engraved' : 'Mastered';
+  const subtitle = emblem
+    ? collection.sharedId ? `${emblemLabel} by everyone · Shared` : `${emblemLabel} · ${verseCount}`
+    : collection.sharedId
+      ? memberCount === undefined ? 'Shared' : `Shared · ${memberCount} member${memberCount !== 1 ? 's' : ''}`
+      : verseCount;
 
   useEffect(() => {
     if (!canSwipe) translateX.value = 0;
@@ -233,7 +248,7 @@ export function SwipeableCollectionCard({
             }}
           >
             <View style={styles.cardLeft}>
-              <View style={[
+              {emblem ? <CollectionEmblem emblem={emblem} ring={Boolean(collection.sharedId)} /> : <View style={[
                 styles.iconContainer,
                 {
                   backgroundColor: collection.iconColor
@@ -248,14 +263,12 @@ export function SwipeableCollectionCard({
                   size={24}
                   color={collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
                 />
-              </View>
+              </View>}
               <View style={styles.cardText}>
                 <Text style={[styles.collectionName, { color: colors.text }]} numberOfLines={1}>
                   {collection.name}
                 </Text>
-                <Text style={[styles.verseCount, { color: colors.icon }]}>
-                  {collection.verseCount} verse{collection.verseCount !== 1 ? 's' : ''}{collection.sharedId ? ' · Shared' : ''}
-                </Text>
+                <Text style={[styles.verseCount, { color: colors.icon }]}>{subtitle}</Text>
               </View>
             </View>
             {!editing && (
