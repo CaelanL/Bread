@@ -1,7 +1,7 @@
 # Start from npm run db:reset. Library-card emblems on the seeded "Romans 8" (reader-c Cara owns,
 # reader-d Dana is a member): plain "Cara · 2 members" from the seed, "Mastered by everyone" once
 # the script masters every square and "Engraved by everyone" once it engraves them, the personal
-# "Engraved" on Dana's copy after Cara deletes for everyone, and reader-a's Psalms mastered solo. docs/features/group-progress.md
+# "3 verses" and the engraved glyph (read as "Engraved") on Dana's copy after Cara deletes for everyone, and reader-a's Psalms mastered solo. docs/features/group-progress.md
 appId: com.caelanliu.biblemem
 name: shared-emblems
 ---
@@ -68,7 +68,7 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, .*Engraved · 3 verses.*"
+    visible: ".*Romans 8, 3 verses, Engraved.*"
     timeout: 20000
 - assertNotVisible: ".*Romans 8, .*Shared.*"
 - takeScreenshot: emblems-4-dissolved-solo-engraved
@@ -83,7 +83,7 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Psalms, .*Mastered · 1 verse.*"
+    visible: ".*Psalms, 1 verse, Mastered.*"
     timeout: 20000
 - assertVisible: ".*My Verses, 2 verses.*"
 - takeScreenshot: emblems-5-solo-mastered

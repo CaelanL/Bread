@@ -98,12 +98,11 @@ export function SwipeableCollectionCard({
   const isLeave = Boolean(collection.sharedId) && sharedRole !== 'owner';
   const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
   const engraved = emblem === 'engraved';
-  const emblemLabel = engraved ? 'Engraved' : 'Mastered';
-  const subtitle = emblem
-    ? memberCount !== undefined ? `${emblemLabel} by everyone` : `${emblemLabel} · ${verseCount}`
-    : memberCount !== undefined
-      ? [ownerName, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
-      : verseCount;
+  const subtitle = memberCount !== undefined
+    ? [ownerName, `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
+    : verseCount;
+  // Read into the card's label after the subtitle, so it's spoken though not written.
+  const emblemLabel = `${engraved ? 'Engraved' : 'Mastered'}${memberCount !== undefined ? ' by everyone' : ''}`;
 
   useEffect(() => {
     if (!canSwipe) translateX.value = 0;
@@ -260,16 +259,19 @@ export function SwipeableCollectionCard({
                 <Text style={[styles.collectionName, { color: colors.text }]} numberOfLines={1}>
                   {collection.name}
                 </Text>
-                <View style={styles.subtitleRow}>
-                  {emblem === 'mastered' && <IconSymbol name="checkmark" size={13} color={colors.success} />}
-                  {engraved && <EngravedIcon size={13} color={colors.tint} />}
-                  <Text style={[styles.verseCount, { color: colors.icon }]} numberOfLines={1}>{subtitle}</Text>
-                </View>
+                <Text style={[styles.verseCount, { color: colors.icon }]} numberOfLines={1}>{subtitle}</Text>
               </View>
             </View>
             {!editing && (
               <View style={styles.cardRight}>
                 <DueCountPill count={dueCount} />
+                {emblem && (
+                  <View accessibilityLabel={emblemLabel} style={styles.emblem}>
+                    {engraved
+                      ? <EngravedIcon size={16} color={colors.tint} />
+                      : <IconSymbol name="checkmark" size={16} color={colors.success} />}
+                  </View>
+                )}
                 <IconSymbol name="chevron.right" size={18} color={colors.icon} />
               </View>
             )}
@@ -368,14 +370,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
-  subtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   verseCount: {
     flexShrink: 1,
     fontSize: 14,
+  },
+  emblem: {
+    width: 20,
+    alignItems: 'center',
   },
   dragHandle: {
     width: 52,

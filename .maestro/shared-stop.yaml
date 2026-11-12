@@ -33,7 +33,7 @@ name: shared-stop
     id: modal-close
 # A code alone changes nothing on the card.
 - extendedWaitUntil:
-    visible: ".*Psalm 23, .*Mastered · .* verses.*"
+    visible: ".*Psalm 23, .* verses, Mastered.*"
     timeout: 10000
 - assertNotVisible: ".*Psalm 23, .*members.*"
 # Inside, the code sits in the header.
@@ -95,13 +95,13 @@ name: shared-stop
     text: "Stop sharing"
     index: 0
 - extendedWaitUntil:
-    visible: ".*Philippians 4, .*Mastered · .*"
+    visible: ".*Philippians 4, .*verses?, Mastered.*"
     timeout: 15000
 - assertNotVisible: ".*Philippians 4, .*everyone.*"
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-e&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Philippians 4, .*Mastered · .*"
+    visible: ".*Philippians 4, .*verses?, Mastered.*"
     timeout: 20000
 - assertNotVisible: ".*Philippians 4, .*everyone.*"
 - takeScreenshot: stop-5-member-copy-personal

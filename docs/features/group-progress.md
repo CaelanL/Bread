@@ -85,19 +85,23 @@ your verses), nothing new.
 
 ## Library cards
 
-A collection whose every square is mastered or engraved says so on its Library card. The card
-keeps the collection's own icon. The rules are `soloEmblem` and `sharedEmblem` in
+A collection whose every square is mastered or engraved says so on its Library card, with a glyph
+on the right beside the chevron; the subtitle stays as it is. The card keeps the collection's own
+icon. The glyph reads "Mastered" or "Engraved" to VoiceOver, plus "by everyone" on a shared card. The rules are `soloEmblem` and `sharedEmblem` in
 `lib/shared/progress.ts`, on `cellState`, so the mastered and engraved tests are the grid's
 (`progress.test.ts`). A shared collection uses the shared rule only once someone else joined;
 before that it follows the personal one.
 
-| Card | Rule | Icon square | Subtitle |
+| Card | Rule | Icon square | Glyph on the right |
 |---|---|---|---|
-| Personal, mastered | A real collection, My Verses included, with at least one verse, every verse Mastered or Engraved | Unchanged | `checkmark` in `success`, "Mastered · N verses" |
-| Personal, engraved | The same, every verse Engraved | `engravedFill` behind the icon in `tint`, the engraved verse pill's colours | `EngravedIcon` in `tint`, "Engraved · N verses" |
-| Shared, mastered by everyone | `get_shared_status`: mastered squares = members × verses, above 0 | Unchanged | `checkmark`, "Mastered by everyone" |
-| Shared, engraved by everyone | Engraved squares = members × verses | As personal engraved | `EngravedIcon`, "Engraved by everyone" |
-| Shared, not yet | Anything else, or no status row yet | Unchanged | "<owner's name> · M members" (`useSharedOwnerName`; the count alone if the name couldn't be read) |
+| Personal, mastered | A real collection, My Verses included, with at least one verse, every verse Mastered or Engraved | Unchanged | `checkmark` in `success` |
+| Personal, engraved | The same, every verse Engraved | `engravedFill` behind the icon in `tint` | `EngravedIcon` in `tint` |
+| Shared, mastered by everyone | `get_shared_status`: mastered squares = members × verses, above 0 | Unchanged | `checkmark` |
+| Shared, engraved by everyone | Engraved squares = members × verses | As personal engraved | `EngravedIcon` |
+| Shared, not yet | Anything else, or no status row yet | Unchanged | None |
+
+The subtitle is "N verses" on a personal card and "<owner's name> · M members" on a shared one
+with others in it (`useSharedOwnerName`; the count alone if the name couldn't be read).
 
 Virtual collections never get one. A shared card reads the status from the last hydrate, refresh
 or collection visit, and a session that turns one of your squares mastered or engraved refetches it
@@ -119,7 +123,7 @@ progress line Who's where, Cara makes Dana an editor, Dana adds Romans 8:31, Car
 column first, member list; Cara opens it by link and makes Dana an editor there);
 `npm run sim -- flow shared-emblems` (the seeded group reads "Cara · 2 members", its script
 masters and then engraves every square, "Engraved by everyone", Cara deletes for everyone and
-Dana's copy reads "Engraved · 3 verses", reader-a's Psalms reads "Mastered · 1 verse"). Shots:
+Dana's copy reads "3 verses" with the engraved glyph, reader-a's Psalms "1 verse" with the check). Shots:
 `npm run sim -- shot "/(tabs)/(library)" --as reader-c` (the card without an emblem),
 `"/(tabs)/(library)/seed-romans-8" --as reader-c` and `"/(tabs)/(library)/shared-cccccccc-0000-4000-8000-000000000031" --as reader-d`;
 Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
@@ -142,3 +146,4 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 - 2026-11-12 · A shared card without the emblem reads "<owner's name> · M members" instead of the verse count, like the group card · Shared and personal collections read differently at a glance, and Caelan's pass 2 wanted the owner's name in place of "Shared"; the verse count is on the group card. A collection only its owner is in reads as personal (its verse count), even with a code out.
 - 2026-11-12 · Before anyone joins, the owner's collection header shows the code where the people line goes · Caelan's pass 2: the code must be findable inside the collection, not only from Share again.
 - 2026-11-12 · A joined group's owner name comes from `get_shared_members`, one read per joined group on each Library load (20 at most) · No schema change while the branch's migration is on testers' databases. If it ever costs, add the owner's name to `get_shared_status`.
+- 2026-11-12 · Mastered and engraved move off the card's subtitle to a glyph beside the chevron; the subtitle keeps "N verses" or "<owner> · M members", and no card says "by everyone" · Caelan's pass 4 (C25): one place for status, the same on shared and personal cards. Replaces the subtitle check of the decision above; the engraved square stays.
