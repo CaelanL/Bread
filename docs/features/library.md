@@ -46,7 +46,8 @@ follow saved positions, then creation time and client ID. New collections append
 Long-press a custom collection for Rename, Reorder and Delete, plus Share… on a personal
 one. Shared collections change the menu, swipe, add and delete; see
 [shared collections](shared-collections.md#in-the-app). On iOS, one light
-haptic confirms the action opens. Rename prefills
+haptic confirms the action opens. The menu opens under the press and `PopoverMenu` keeps it
+inside the safe area, so a card near the bottom gets it moved up rather than cut off. Rename prefills
 `AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
 actions to move up or down. Each drop saves the order, with rollback on failure.
 Tap Done to return to opening collections by tapping their rows.

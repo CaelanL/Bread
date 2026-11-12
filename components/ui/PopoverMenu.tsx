@@ -1,7 +1,8 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Modal,
   Platform,
@@ -10,7 +11,7 @@ import {
   Text,
   View,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 
 interface PopoverMenuItem {
@@ -27,7 +28,8 @@ interface PopoverMenuProps {
   anchorPosition?: { top: number; right: number };
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Space kept between the menu and the safe area's edges.
+const EDGE_GAP = 8;
 
 export function PopoverMenu({
   visible,
@@ -38,6 +40,14 @@ export function PopoverMenu({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // Measured on first layout; the menu stays hidden until then so it never shows cut off.
+  const [menuHeight, setMenuHeight] = useState(0);
+  const top = Math.max(
+    insets.top + EDGE_GAP,
+    Math.min(anchorPosition.top, windowHeight - insets.bottom - EDGE_GAP - menuHeight),
+  );
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
@@ -99,13 +109,14 @@ export function PopoverMenu({
     >
       <Pressable accessible={false} style={styles.overlay} onPress={() => handleClose()}>
         <Animated.View
+          onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)}
           style={[
             styles.menu,
             {
               backgroundColor: menuBg,
-              top: anchorPosition.top,
+              top,
               right: anchorPosition.right,
-              opacity: fadeAnim,
+              opacity: menuHeight ? fadeAnim : 0,
               transform: [{ scale: scaleAnim }],
             },
           ]}

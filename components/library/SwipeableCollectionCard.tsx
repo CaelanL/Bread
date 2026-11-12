@@ -223,7 +223,7 @@ export function SwipeableCollectionCard({
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     closeSwipe();
-    setMenuTop(Math.min(pageY + 8, windowHeight - 180));
+    setMenuTop(pageY + 8);
   };
 
   const handlePress = () => {

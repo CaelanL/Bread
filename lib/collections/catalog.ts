@@ -236,7 +236,7 @@ export const CURATED_COLLECTIONS: readonly CuratedCollection[] = [
     id: 'gratitude-and-joy',
     title: 'Gratitude & Joy',
     subtitle: 'Make room to notice God’s goodness',
-    icon: 'sun',
+    icon: 'gift',
     introduction:
       'A good gift can pass by before we have stopped to notice it. These passages make space to remember God’s goodness and give thanks for what he has done. Some are words of celebration. Others were written by people who knew hardship and still had reasons to rejoice. Together they give you something to say in a range of seasons.\n\n' +
       'Begin with Psalm 100:4–5. Let the reasons for thanksgiving in the last verse shape your own prayer. Try saying the passage at the end of the day, then name one good thing you received. When thanks feels difficult, you can start by recalling one thing the passage tells you about God.',

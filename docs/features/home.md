@@ -42,7 +42,8 @@ Library. A failed readback after saving offers Refresh Library.
 
 The import migration adds a nullable icon key and allows the translation
 codes Bread supports. Custom icons sync with the account. Missing and
-unknown icons render the Bible symbol. Built-in collection icons are fixed.
+unknown icons render the Bible symbol. Built-in collection icons are fixed, and no two
+curated collections share a symbol (`catalog.test.ts`).
 
 ### Community saves
 
