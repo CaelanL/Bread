@@ -83,7 +83,9 @@ export function JoinInvite({ code: raw }: { code: string }) {
           <MemberDots names={[preview.inviterName]} count={preview.memberCount} />
         </View>
         <Text style={[styles.copy, { color: colors.icon }]}>
-          Members see how far along you are on these {verses}, including progress you already have on them.
+          {preview.verseCount === 1
+            ? 'Members see how far along you are on this verse, including progress you already have on it.'
+            : `Members see how far along you are on these ${verses}, including progress you already have on them.`}{' '}
           Nothing else in your library is shared. Verses show in your translation, {translation}.
         </Text>
         <Pressable

@@ -46,6 +46,7 @@ interface AppState {
   collections: Collection[];
   verses: SavedVerse[];
   masteredVerses: SavedVerse[];
+  sharedCollections: Record<string, SharedCollectionInfo>; // by group id, see shared-collections.md
 
   // Settings (also in AsyncStorage)
   colorMode: 'system' | 'light' | 'dark';
@@ -80,6 +81,9 @@ interface AppState {
   reorderCollections: (ids) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
   setCollectionSort: (collectionId, sort) => Promise<void>;
+  fetchSharedCollections, shareCollection, mintInvite, joinSharedCollection,
+  syncSharedCollection, leaveSharedCollection, removeSharedMember,
+  setSharedMemberRole   // docs/features/shared-collections.md#in-the-app
   addVerse: (verse, collectionId) => Promise<SavedVerse>;
   copyVerseToCollection: (verseId, collectionId) => Promise<void>;
   deleteVerse: (id, collectionId) => Promise<{ wasMastered: boolean }>;
@@ -107,6 +111,8 @@ The convention is `useX(...)` selectors, not direct
 | `useInProgressVerses()`, `useInProgressVerseCount()` | the virtual In Progress list, its count |
 | `useReviewMaxIntervalDays()`, `useReviewState(id)`, `useDueCounts()` | review state, see `docs/features/review.md` |
 | `useMostMemorizedBooks()` | top 5 books by mastered count |
+| `useSharedCollection(id)`, `useSharedRole(id)` | the group a collection is a copy of, and the user's role |
+| `useAddableCollections()`, `useVersesLostWith(id)` | collections the user may add to; verses a delete or leave would lose |
 | `useInsightsStats()` | `{ versesMastered, inProgress }` |
 
 ### Persistence

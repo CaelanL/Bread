@@ -116,8 +116,8 @@ match the group, under the same per-account lock as `import_curated_collection`:
 2. For each reference, links a held row (active first, then the account translation,
    then the newest), restoring a soft-deleted one, else inserts a new row in `version`.
 3. Moves any linked verse that isn't a group reference (an old client added it to the
-   copy by hand) to My Verses, creating My Verses if needed. It is never deleted, and keeps
-   its progress.
+   copy by hand) to My Verses, creating My Verses if needed. It is never deleted and keeps
+   progress.
 
 It runs inside join, whenever a member calls `sync_shared_collection`, and for every
 member just before the group is deleted. It reports `changed` when any step wrote a row.
@@ -132,7 +132,7 @@ can treat everything else in a copy as the member's own verse.
 member's copy runs `private.remove_verse_from_collection`, the SQL twin of `deleteVerse`
 in `lib/store/index.ts` ([library.md](library.md#deleting-a-verse)): drop the link; a verse
 in no other collection is soft-deleted when mastered and hard-deleted otherwise. Then it
-soft-deletes the copy, which keeps its `shared_collection_id` so a rejoin restores it.
+soft-deletes the copy, keeping its `shared_collection_id` so a rejoin restores it.
 Nothing of another member's changes. The owner can't leave or be removed.
 
 ## Dissolve
@@ -149,8 +149,39 @@ the cascade.
 
 Squares fold every row a member holds for a reference, including progress from before
 the group existed (Q5 reuse plus Q11). An owner or editor who adds a reference can see
-whether each member already practiced or mastered it. The join modal's privacy line
-(slice 2) must say that progress you already have on these verses counts.
+whether each member already practiced or mastered it. The join modal's privacy line says
+so: members see how far along you are on these verses, including progress you already have.
+
+## In the app
+
+State and actions live in the store ([sync-and-storage.md](../architecture/sync-and-storage.md#shape)):
+`Collection.sharedId` is `shared_collection_id`; `sharedCollections` (role, counts, squares per
+group) is read on hydrate and refresh. Failures throw for a toast, nothing queued;
+`sharedErrorMessage` (`lib/shared/invite-code.ts`) shows `22023` text as is.
+
+- **Share**: long-press a personal collection → Share…. `DisplayNameSheet` asks once if there's
+  no name, then `shareCollection` and the members sheet. At 20 groups it toasts.
+- **Members sheet** (`SharedCollectionSheet`, from the Shared row under the header): members and
+  roles. The owner also gets the code, `com.biblemem://join/<code>`, days left, Copy link, Share,
+  New link (confirmed; the old code dies), and per member Make editor / Make member and Remove.
+  Copy (React Native's clipboard module, no native build) and Share send
+  `Join "<name>" on Bread: <link> — or enter code <code> in Bread`: chat apps rarely make
+  custom-scheme links tappable. Members get Leave collection.
+- **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, from "Have an invite
+  code?" in New Collection) show `JoinInvite`: inviter, name, counts, inviter's initial and "+N",
+  the privacy line with the account translation, Join and Not now. Join asks for a name if
+  needed, calls `joinSharedCollection` (account translation, then `refresh`) and opens the copy.
+  A member sees Open (same idempotent call); a bad code shows its message. A signed-out link
+  waits in `lib/shared/pending-join.ts`.
+- **Inside**: opening a shared collection syncs once per visit, and pull to refresh again. Only
+  the owner and editors see + and swipe-delete; only the owner renames or changes the icon.
+  `addVerse` inserts the reference and syncs; `deleteVerse` deletes it ("Remove for everyone?").
+  Copy-to-collection skips shared collections and Add-to-collection lists only ones you edit
+  (sync moves hand-linked verses to My Verses).
+- **Leave and delete**: a member's swipe and menu read Leave; the confirm counts verses lost
+  (`useVersesLostWith`: not mastered, in no other collection). The owner's Delete reads
+  "Delete for everyone? Members keep their own copy." with the count, then dissolves. Cards
+  show "· Shared" until then.
 
 ## Seed users
 
@@ -160,6 +191,8 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 
 ## Sharp edges
 
+- A removed member gets no notice; the copy is gone on their next refresh.
+
 - A shared reference a member's translation leaves out still gets a copy in their
   translation with no text, the same as `addVerse`.
 - A member who removed a mastered copy through an old client still shows Mastered,
@@ -167,6 +200,12 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 - Dissolve restores a member's copy that an old client soft-deleted while they were
   still a member, since it runs a full sync.
 - New `user_collections` columns need adding to the insert and update column grants.
+
+## Browser checks
+
+After `npm run db:reset` each: `npm run sim -- flow shared-collections` (share, copy, join by
+link, both in the list, leave, rejoin, delete for everyone, personal copy) and
+`npm run sim -- flow shared-join-code` (typed code, revoked code, link across sign-in).
 
 ## Decisions
 

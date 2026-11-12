@@ -43,7 +43,9 @@ same as a real collection. Notification taps use that path
 `fetchCollections` pins My Verses, Mastered and In Progress. Custom collections
 follow saved positions, then creation time and client ID. New collections append.
 
-Long-press a custom collection for Rename, Reorder and Delete. On iOS, one light
+Long-press a custom collection for Rename, Reorder and Delete, plus Share… on a personal
+one. Shared collections change the menu, swipe, add and delete; see
+[shared collections](shared-collections.md#in-the-app). On iOS, one light
 haptic confirms the action opens. Rename prefills
 `AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
 actions to move up or down. Each drop saves the order, with rollback on failure.

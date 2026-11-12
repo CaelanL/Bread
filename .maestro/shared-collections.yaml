@@ -41,7 +41,7 @@ name: shared-collections
     timeout: 20000
 - assertVisible: "Psalms"
 - assertVisible: "1 verse · 1 member"
-- assertVisible: ".*progress you already have on them.*"
+- assertVisible: ".*progress you already have on it.*"
 - takeScreenshot: shared-3-join-modal
 - tapOn:
     id: join-button

@@ -192,6 +192,7 @@ have hex literals; don't copy them.
 | `IntroVideoModal.tsx` | Dark video surface, captions, close and playback controls |
 | `AddToCollectionModal.tsx` | Pick collection(s) for a verse |
 | `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
+| `BottomSheet.tsx` | `SheetLayout` (dimmed backdrop, card at the bottom) and `BottomSheet` (the same in a native modal) |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
 
 If you're building a new reusable primitive, add it here with a

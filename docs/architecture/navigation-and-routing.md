@@ -31,6 +31,8 @@ app/
 │   │   └── setup/[id].tsx             ← Difficulty + chunk-size picker before starting a session
 │   └── settings.tsx                   ← Tab: Settings
 ├── collections/[slug].tsx     ← Curated collection introduction and import
+├── join/[code].tsx            ← Shared-collection invite sheet (transparent modal)
+├── join/index.tsx             ← Typed invite code entry (transparent modal)
 ├── notifications.tsx          ← Notification settings, pushed from Settings
 ├── reset-password.tsx         ← Reachable WITHOUT auth (deep link from password-reset email)
 ├── dev-sign-in.tsx            ← Reachable WITHOUT auth; dev builds against a local Supabase only
@@ -71,6 +73,10 @@ Two modal styles, both handled at the root Stack:
   Library sub-routes (`(tabs)/(library)/[id]` etc.) are NOT modals
   even though they look like them — they're nested Stack screens.
 
+`app/join/[code].tsx` and `app/join/index.tsx` are `transparentModal`
+with a fade: a dimmed sheet over whatever was open
+([shared collections](../features/shared-collections.md#in-the-app)).
+
 `app/notifications.tsx` and `app/reset-password.tsx` are plain root
 Stack screens.
 
@@ -81,6 +87,7 @@ Home also presents the [intro player](../features/home.md#encouragement-video) t
 | Route | Param(s) |
 |---|---|
 | `collections/[slug].tsx` | `slug` — bundled curated collection ID |
+| `join/[code].tsx` | `code` — invite code, normalized (upper case, spaces and dashes dropped) |
 | `(tabs)/(library)/[id].tsx` | `id` — collection `client_id`, or the virtual `mastered` / `in-progress` |
 | `(tabs)/(library)/add/[book]/[chapter].tsx` | `book`, `chapter` — Bible reference; query `collectionId`, `version` |
 | `(tabs)/(library)/setup/[id].tsx` | `id` — verse `client_id` |
@@ -115,6 +122,10 @@ Three states:
 - Not auth'd, anywhere else: redirect to sign-in.
 - Auth'd, in `(auth)`: redirect to `/(tabs)`.
 
+A signed-out visit to `join/<code>` stashes the code (`lib/shared/pending-join.ts`) before the
+redirect; once authenticated with a navigator key, an effect after the gate pushes
+`/join/<code>`, so an invite tapped while signed out opens after sign-in.
+
 `reset-password` is whitelisted because the user reaches it from an
 email link before they have a session. `dev-sign-in` is whitelisted
 because it creates the session.
@@ -130,6 +141,7 @@ Configured via Expo's URL scheme `com.biblemem://` (in
 | `com.biblemem://#access_token=...&refresh_token=...` | OAuth callback (no screen starts OAuth, see `docs/architecture/auth.md`) |
 | `com.biblemem://reset-password#access_token=...&refresh_token=...&type=recovery` | Password reset |
 | `com.biblemem://dev-sign-in?next=/settings&as=reader-b` | Dev sign-in, handled by the route itself |
+| `com.biblemem://join/<code>` | The invite sheet, routed by Expo Router to `join/[code]` |
 
 The handler extracts tokens from the URL and calls
 `supabase.auth.setSession(...)`. Auth state change then drives the
