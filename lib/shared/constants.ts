@@ -2,3 +2,4 @@
 export const MAX_SHARED_MEMBERS = 30;
 export const MAX_SHARED_COLLECTIONS = 20;
 export const INVITE_TTL_DAYS = 14;
+export const MAX_SHARED_VERSES = 200;

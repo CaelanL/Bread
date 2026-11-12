@@ -31,8 +31,18 @@ select is(
   array(select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'private' and p.prosecdef and not coalesce(p.proconfig @> array['search_path=""'], false)),
   array[]::text[], 'every private definer pins an empty search path');
-select ok(not has_function_privilege('authenticated', 'private.member_squares(uuid)', 'EXECUTE'),
-  'clients cannot read squares without the member check');
+select ok(not has_function_privilege('authenticated', f, 'EXECUTE'), f || ': not callable by clients')
+from unnest(array['private.member_squares(uuid)', 'private.sync_member_copies(uuid,uuid,text)',
+  'private.drop_member_collection(uuid,uuid)', 'private.remove_verse_from_collection(uuid,uuid,uuid)',
+  'private.new_invite_code()', 'private.shared_limits()']) as f;
+select ok(not has_table_privilege('authenticated', 'public.shared_invites', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.shared_invites', 'UPDATE')
+  and not has_any_column_privilege('authenticated', 'public.shared_invites', 'INSERT')
+  and not has_any_column_privilege('authenticated', 'public.shared_invites', 'UPDATE'),
+  'clients only read invites');
+select ok(not has_column_privilege('authenticated', 'public.user_collections', 'shared_collection_id', 'INSERT')
+  and not has_column_privilege('authenticated', 'public.user_collections', 'shared_collection_id', 'UPDATE'),
+  'clients cannot link a collection to a group');
 
 -- ---------- Access: a non-member sees nothing
 
@@ -91,7 +101,8 @@ select throws_ok(format('insert into public.shared_collection_verses (shared_col
 select throws_ok(format('select * from public.mint_invite(%L)', current_setting('test.s')), '42501', null,
   'a member cannot mint an invite');
 update public.shared_collection_members set role = 'editor';
-delete from public.shared_collection_members where user_id = current_setting('test.c')::uuid;
+select throws_ok(format('delete from public.shared_collection_members where user_id = %L', current_setting('test.d')),
+  '42501', null, 'a member cannot drop their membership row directly (leave takes the copy too)');
 delete from public.shared_collections;
 reset role;
 select results_eq($$select role from public.shared_collection_members order by joined_at$$,
@@ -104,6 +115,12 @@ select is((select name from public.shared_collections where id = current_setting
 set local role authenticated;
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
 select is((select count(*)::int from public.shared_invites), 1, 'the owner reads their invite');
+select throws_ok(format('insert into public.shared_invites (shared_collection_id) values (%L)', current_setting('test.s')),
+  '42501', null, 'the owner cannot insert an extra invite');
+select throws_ok($$update public.shared_invites set revoked_at = null$$, '42501', null,
+  'the owner cannot revive or change an invite');
+select throws_ok(format('insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end) values (%L, ''Foo'', 1, 1, 1)',
+  current_setting('test.s')), '23514', null, 'a reference needs a canonical book name');
 select throws_ok(format('update public.shared_collection_members set user_id = %L', current_setting('test.a')),
   '42501', null, 'the owner cannot move a membership to another account');
 update public.shared_collection_members set role = 'member' where user_id = current_setting('test.c')::uuid;
@@ -127,24 +144,42 @@ select is((select count(*)::int from public.verse_collections vc join public.use
 select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
 delete from public.shared_collection_verses where verse_start = 31;
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
-select results_eq(format('select changed from public.sync_shared_collection(%L, ''ESV'')', current_setting('test.s')),
-  $$values (true)$$, 'a sync that removes a copy reports changed = true');
 select is((select count(*)::int from public.user_verses where verse_start = 31), 0,
-  'sync removes a verse that left the group with today''s rule (unmastered: gone)');
+  'an editor''s removal reaches every copy at once with today''s rule (unmastered: gone)');
+select results_eq(format('select changed from public.sync_shared_collection(%L, ''ESV'')', current_setting('test.s')),
+  $$values (false)$$, 'nothing is left for the next sync');
 update public.shared_collection_members set role = 'member' where user_id = current_setting('test.d')::uuid;
+
+-- An old client put a verse of the member's own into the copy: sync moves it to My Verses.
+select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
+insert into public.user_verses (id, user_id, client_id, book, chapter, verse_start, verse_end, version, progress)
+values ('dddddddd-0000-4000-8000-000000000099', current_setting('test.d')::uuid, 'old-client-john', 'John', 3, 16, 16, 'NIV',
+  '{"easy":{"bestAccuracy":80,"completed":false},"medium":{"bestAccuracy":null,"completed":false},"hard":{"bestAccuracy":null,"completed":false}}');
+insert into public.verse_collections (verse_id, collection_id)
+values ('dddddddd-0000-4000-8000-000000000099', 'dddddddd-0000-4000-8000-000000000012');
+select results_eq(format('select changed from public.sync_shared_collection(%L, ''NIV'')', current_setting('test.s')),
+  $$values (true)$$, 'sync reports moving a verse');
+select results_eq($$select c.client_id, v.deleted_at is null, v.progress -> 'easy' -> 'bestAccuracy'
+  from public.verse_collections vc join public.user_collections c on c.id = vc.collection_id
+  join public.user_verses v on v.id = vc.verse_id where v.id = 'dddddddd-0000-4000-8000-000000000099'$$,
+  $$values ('my-verses'::text, true, '80'::jsonb)$$, 'a verse that is not a group reference survives sync in My Verses with its progress');
+
+-- Caps on references: 200 per group.
 reset role;
+insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end)
+select current_setting('test.s')::uuid, 'Psalms', ch, 1, 1 from generate_series(1, 150) as ch
+union all select current_setting('test.s')::uuid, 'Psalms', 1, vs, vs from generate_series(2, 48) as vs;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
+select throws_ok(format('insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end) values (%L, ''Romans'', 8, 31, 31)',
+  current_setting('test.s')), '22023', 'A shared collection holds up to 200 verses', 'the 201st reference is refused');
+reset role;
+delete from public.shared_collection_verses where book = 'Psalms';
 
 -- ---------- Delete rule twin (private.remove_verse_from_collection), on reader-a's seed data
 
 insert into public.verse_collections (verse_id, collection_id)
 values ('aaaaaaaa-0000-4000-8000-000000000021', 'aaaaaaaa-0000-4000-8000-000000000012');
-set local role authenticated;
-select set_config('request.jwt.claim.sub', current_setting('test.b'), true);
-select private.remove_verse_from_collection(current_setting('test.a')::uuid,
-  'aaaaaaaa-0000-4000-8000-000000000023', 'aaaaaaaa-0000-4000-8000-000000000012');
-select set_config('request.jwt.claim.sub', current_setting('test.a'), true);
-select is((select count(*)::int from public.verse_collections where verse_id = 'aaaaaaaa-0000-4000-8000-000000000023'), 1,
-  'called by another account, the helper touches nothing (invoker + RLS)');
 select private.remove_verse_from_collection(current_setting('test.a')::uuid,
   'aaaaaaaa-0000-4000-8000-000000000021', 'aaaaaaaa-0000-4000-8000-000000000012');
 select results_eq($$select deleted_at is null, (select count(*)::int from public.verse_collections where verse_id = v.id)
@@ -158,6 +193,16 @@ select private.remove_verse_from_collection(current_setting('test.a')::uuid,
   'aaaaaaaa-0000-4000-8000-000000000023', 'aaaaaaaa-0000-4000-8000-000000000012');
 select is((select count(*)::int from public.user_verses where id = 'aaaaaaaa-0000-4000-8000-000000000023'), 0,
   'an unmastered verse in no other collection is hard-deleted');
+
+-- A client can't link its own collection to a group.
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.a'), true);
+select throws_ok(format('update public.user_collections set shared_collection_id = %L where client_id = ''seed-psalms''', current_setting('test.s')),
+  '42501', null, 'a client cannot point its collection at a group');
+select throws_ok(format('insert into public.user_collections (user_id, client_id, name, shared_collection_id) values (%L, ''x'', ''X'', %L)',
+  current_setting('test.a'), current_setting('test.s')), '42501', null, 'a client cannot create a collection linked to a group');
+select lives_ok($$update public.user_collections set name = 'Psalms' where client_id = 'seed-psalms'$$,
+  'other collection columns stay writable');
 
 -- ---------- Join
 
@@ -245,6 +290,44 @@ select set_config('request.jwt.claim.sub', current_setting('test.a'), true);
 select throws_ok($$select * from public.share_collection('my-verses')$$, '22023', 'This collection can''t be shared',
   'My Verses cannot be shared');
 
+-- ---------- Cross-group: a member of Romans 8 reaches nothing of another group
+
+reset role;
+insert into public.shared_collections (id, owner_id, name)
+values ('bbbbbbbb-0000-4000-8000-000000000031', current_setting('test.b')::uuid, 'Other');
+insert into public.shared_collection_members (shared_collection_id, user_id, role)
+values ('bbbbbbbb-0000-4000-8000-000000000031', current_setting('test.b')::uuid, 'owner');
+insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end)
+values ('bbbbbbbb-0000-4000-8000-000000000031', 'John', 3, 16, 16);
+insert into public.shared_invites (shared_collection_id, code) values ('bbbbbbbb-0000-4000-8000-000000000031', 'BGRP2345');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
+select set_config('test.other', 'bbbbbbbb-0000-4000-8000-000000000031', true);
+select is((select count(*)::int from public.shared_collections where id = current_setting('test.other')::uuid)
+  + (select count(*)::int from public.shared_collection_verses where shared_collection_id = current_setting('test.other')::uuid)
+  + (select count(*)::int from public.shared_collection_members where shared_collection_id = current_setting('test.other')::uuid)
+  + (select count(*)::int from public.shared_invites where shared_collection_id = current_setting('test.other')::uuid), 0,
+  'a member of one group reads no rows of another');
+select throws_ok(format(q, current_setting('test.other'), current_setting('test.b')), '42501', null, 'cross-group: ' || q)
+from unnest(array['select * from public.get_shared_members(%L) where %L is not null',
+  'select * from public.get_shared_progress(%L) where %L is not null',
+  'select * from public.sync_shared_collection(%L, ''NIV'') where %L is not null',
+  'select * from public.mint_invite(%L) where %L is not null',
+  'select public.leave_shared_collection(%L) where %L is not null',
+  'select public.remove_shared_member(%L, %L)',
+  'insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end) select %L, ''John'', 1, 1, 1 where %L is not null']) as q;
+select results_eq('select shared_id::text from public.get_shared_status()', format('values (%L)', current_setting('test.s')),
+  'status lists only the member''s own group');
+
+-- ---------- Invite rotation
+
+select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
+select public.mint_invite(current_setting('test.s')::uuid);
+select public.mint_invite(current_setting('test.s')::uuid);
+select is((select count(*)::int from public.shared_invites where revoked_at is null and expires_at > now()), 1,
+  'after any number of new links exactly one is live');
+select set_config('request.jwt.claim.sub', current_setting('test.a'), true);
+
 -- ---------- Leave
 
 select lives_ok(format('select public.leave_shared_collection(%L)', current_setting('test.s')), 'a member leaves');
@@ -281,7 +364,7 @@ select throws_ok(format('select * from public.get_shared_members(%L)', current_s
   'a removed member cannot list members');
 select ok((select deleted_at is not null from public.user_collections where id = 'dddddddd-0000-4000-8000-000000000012'),
   'the removed member''s local collection is soft-deleted');
-select results_eq($$select verse_start, deleted_at is not null from public.user_verses order by 1$$,
+select results_eq($$select verse_start, deleted_at is not null from public.user_verses where book = 'Romans' order by 1$$,
   $$values (1, true)$$, 'their unmastered copies are gone and the engraved one is soft-deleted');
 
 -- Rejoin with a fresh link: the old row and the kept verse come back.
@@ -291,22 +374,27 @@ select throws_ok($$select * from public.preview_invite('BREAD828')$$, '22023', '
 select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
 select is(public.join_shared_collection(current_setting('test.code'), 'NIV'), 'shared-' || current_setting('test.s'),
   'a removed member can rejoin with a new link');
-select results_eq($$select id::text, deleted_at is null from public.user_collections$$,
+select results_eq($$select id::text, deleted_at is null from public.user_collections where client_id like 'shared-%'$$,
   $$values ('dddddddd-0000-4000-8000-000000000012'::text, true)$$, 'rejoining restores the same local collection');
 select is((select progress -> 'engraved' -> 'completed' from public.user_verses where id = 'dddddddd-0000-4000-8000-000000000021'),
   'true'::jsonb, 'rejoining restores the engraved verse with its progress');
 
 -- ---------- Dissolve: owner deletes the group
 
+-- The owner adds a reference the member never syncs, then deletes the group.
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
+insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end)
+values (current_setting('test.s')::uuid, 'Romans', 8, 32, 32);
 delete from public.shared_collections where id = current_setting('test.s')::uuid;
 reset role;
 select is((select shared_collection_id from public.user_collections where id = 'dddddddd-0000-4000-8000-000000000012'), null,
   'the member''s copy becomes a personal collection');
-select is((select count(*)::int from public.verse_collections where collection_id = 'dddddddd-0000-4000-8000-000000000012'), 3,
+select is((select count(*)::int from public.verse_collections where collection_id = 'dddddddd-0000-4000-8000-000000000012'), 4,
   'the member keeps every verse link');
-select is((select count(*)::int from public.user_verses where user_id = current_setting('test.d')::uuid and deleted_at is null), 3,
+select is((select count(*)::int from public.user_verses where user_id = current_setting('test.d')::uuid and book = 'Romans' and deleted_at is null), 4,
   'the member keeps every verse');
+select is((select version from public.user_verses where user_id = current_setting('test.d')::uuid and verse_start = 32), 'NIV',
+  'a reference the member never synced reaches their copy before the group goes, in their translation');
 select is((select count(*)::int from public.shared_collection_members where shared_collection_id = current_setting('test.s')::uuid), 0,
   'memberships are gone');
 select is((select count(*)::int from public.shared_invites where shared_collection_id = current_setting('test.s')::uuid), 0,
@@ -321,14 +409,16 @@ select set_config('test.code2', (select code from public.shared_invites where sh
 select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
 select set_config('test.d_local2', public.join_shared_collection(current_setting('test.code2'), 'NIV'), true);
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
+insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end)
+values (current_setting('test.s2')::uuid, 'Romans', 8, 35, 35);
 select public.delete_own_account();
 reset role;
 select is((select shared_collection_id from public.user_collections
   where user_id = current_setting('test.d')::uuid and client_id = current_setting('test.d_local2')), null,
   'account deletion dissolves the group into the member''s personal copy');
 select is((select count(*)::int from public.verse_collections vc join public.user_collections c on c.id = vc.collection_id
-  where c.user_id = current_setting('test.d')::uuid and c.client_id = current_setting('test.d_local2')), 3,
-  'the member keeps every verse link after the owner deletes their account');
+  where c.user_id = current_setting('test.d')::uuid and c.client_id = current_setting('test.d_local2')), 4,
+  'the member keeps every verse link, the unsynced one included, after the owner deletes their account');
 select is((select count(*)::int from public.shared_collections where id = current_setting('test.s2')::uuid), 0,
   'the group is gone with its owner');
 

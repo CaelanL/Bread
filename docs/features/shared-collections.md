@@ -25,6 +25,8 @@ user_collections.shared_collection_id → shared_collections (nullable, ON DELET
   (invariant 7). No new table holds verse text (invariant 2).
 - `shared_collection_verses` is the truth for what's in the group. Its primary key is
   the group plus the exact reference: Romans 8:28-30 and Romans 8:28 are different verses.
+  `book` must be one of the 66 canonical names in `BIBLE_BOOKS` (`lib/bible/books.ts`);
+  `lib/shared/books.test.ts` keeps the SQL list in step.
 - `shared_collection_members` has one owner per group (partial unique index).
 - `profiles.display_name` (1 to 40 characters) is the name members see. See
   [auth.md](../architecture/auth.md#display-name).
@@ -41,14 +43,14 @@ so the members table's own policy doesn't recurse.
 | Table | Read | Write |
 |---|---|---|
 | `shared_collections` | members | owner updates `name`, `icon_key`; owner deletes. No client insert |
-| `shared_collection_members` | members | owner updates `role` of non-owners to editor or member; a non-owner deletes their own row. No client insert |
+| `shared_collection_members` | members | owner updates `role` of non-owners to editor or member. No client insert or delete: leaving goes through `leave_shared_collection`, so the copy always goes too |
 | `shared_collection_verses` | members | owner and editors insert (as themselves) and delete |
-| `shared_invites` | owner | owner inserts `shared_collection_id` only (code and expiry are defaults) and updates `revoked_at` |
+| `shared_invites` | owner | none: only `mint_invite` writes, so one code is live and a revoked one stays revoked |
+| `user_collections.shared_collection_id` | owner of the row | none: insert and update are column grants that leave it out; only share, join and sync set it |
 
 Column grants back the policies: nobody can move a membership to another account or
-another group, change `owner_id`, or pick their own invite code or expiry. `anon` has
-nothing. Groups and memberships are created only by `share_collection` and
-`join_shared_collection`, so the caps hold.
+another group or change `owner_id`. `anon` has nothing. Groups and memberships are
+created only by `share_collection` and `join_shared_collection`, so the caps hold.
 
 Members never read each other's `user_verses`. Cross-user reads go through definer
 functions in `private` behind invoker wrappers in `public` (PostgREST exposes only
@@ -64,7 +66,7 @@ input; `22023` messages are written to be shown as is.
 | Function | Who | Does |
 |---|---|---|
 | `share_collection(client_id)` | signed in, has a display name | Copies a custom collection's name, icon and active references into a new group, makes the caller owner, links their row, mints the first invite. Refuses My Verses, virtual ids and already-shared rows. Returns `(shared_id, code)` |
-| `mint_invite(group)` | owner | Revokes open invites, returns a new `(code, expires_at)` |
+| `mint_invite(group)` | owner | Locks the group, revokes open invites, returns a new `(code, expires_at)` |
 | `preview_invite(code)` | signed in | `(shared_id, name, inviter_name, verse_count, member_count, already_member)`. `Invite expired` / `Invite not found` (revoked reads as not found) |
 | `join_shared_collection(code, version)` | signed in, has a display name | Joins as `member` and syncs; a member's repeat join only syncs. Returns the local `client_id` |
 | `sync_shared_collection(group, version)` | member | Syncs the caller's copy. Returns `(client_id, changed)`: `changed` is true when it created, restored, renamed, linked or removed anything, so the client refetches only then |
@@ -84,19 +86,24 @@ reference, in any translation and soft-deleted ones included, are folded with `b
 `get_shared_progress`, and the client reads it as Open. `mastered_squares` counts a square
 that is mastered or engraved.
 
-Helpers in `private`: `shared_limits()`, `new_invite_code()`, `is_member`, `can_edit`,
-`remove_verse_from_collection`, `sync_member_copies`, `drop_member_collection`,
-`member_squares`, `find_invite`, and the definer bodies of the wrappers above. The
-helpers that write take the user they act for but are `SECURITY INVOKER`: called from a
-client wrapper, RLS keeps them to the caller's own rows; only the definer functions
-(join, remove) act for someone else.
+Every wrapper calls a `SECURITY DEFINER` body in `private` that checks the caller and
+passes `auth.uid()` on. Helpers in `private`: `shared_limits()`, `new_invite_code()`,
+`is_member`, `can_edit`, `remove_verse_from_collection`, `sync_member_copies`,
+`drop_member_collection`, `member_squares`, `find_invite`. The helpers that write take the
+user they act for, so clients can't execute them; only the definer bodies and the
+triggers below call them.
+
+Triggers: `sync_members_before_dissolve` (see Dissolve), `remove_reference_from_copies`
+(see Sync) and `check_reference_cap` (see Caps).
 
 ## Caps
 
 `private.shared_limits()` returns 30 members per group, 20 shared collections per
-person (owned or joined) and a 14-day invite lifetime. `lib/shared/constants.ts`
-mirrors them as `MAX_SHARED_MEMBERS`, `MAX_SHARED_COLLECTIONS` and `INVITE_TTL_DAYS`;
-change both together.
+person (owned or joined), a 14-day invite lifetime and 200 references per group.
+`lib/shared/constants.ts` mirrors them as `MAX_SHARED_MEMBERS`, `MAX_SHARED_COLLECTIONS`,
+`INVITE_TTL_DAYS` and `MAX_SHARED_VERSES`; change both together. The reference cap is a
+`BEFORE INSERT` trigger that locks the group, so it holds for editors' direct inserts and
+for `share_collection`.
 
 ## Sync
 
@@ -108,11 +115,16 @@ match the group, under the same per-account lock as `import_curated_collection`:
    group's name and icon.
 2. For each reference, links a held row (active first, then the account translation,
    then the newest), restoring a soft-deleted one, else inserts a new row in `version`.
-3. Removes each linked verse whose reference left the group, with the delete rule below.
-   This also removes a verse an old client added to a member's copy by hand.
+3. Moves any linked verse that isn't a group reference (an old client added it to the
+   copy by hand) to My Verses, creating My Verses if needed. It is never deleted, and keeps
+   its progress.
 
-It runs inside join and whenever a member calls `sync_shared_collection`, and reports
-`changed` when any step wrote a row.
+It runs inside join, whenever a member calls `sync_shared_collection`, and for every
+member just before the group is deleted. It reports `changed` when any step wrote a row.
+
+Removing a reference doesn't wait for sync: the `remove_reference_from_copies` trigger
+applies the delete rule below to every member's copy of it at once. That is why step 3
+can treat everything else in a copy as the member's own verse.
 
 ## Leave and remove
 
@@ -126,9 +138,19 @@ Nothing of another member's changes. The owner can't leave or be removed.
 ## Dissolve
 
 Deleting the group row (owner `DELETE` under RLS, or the owner's account deletion
-cascading from `auth.users`) sets every member's `shared_collection_id` to NULL through
-the foreign key, in the same statement. Each copy becomes a personal collection with its
-verses and links untouched. Memberships, references and invites cascade away.
+cascading from `auth.users`) first runs `sync_members_before_dissolve`: every member but
+the owner is synced in their `profiles.translation` (ESV when unset), so a reference they
+never opened still reaches their copy. Then the foreign key sets every member's
+`shared_collection_id` to NULL in the same statement. Each copy becomes a personal
+collection. Memberships, references and invites cascade away; the removal trigger skips
+the cascade.
+
+## Privacy
+
+Squares fold every row a member holds for a reference, including progress from before
+the group existed (Q5 reuse plus Q11). An owner or editor who adds a reference can see
+whether each member already practiced or mastered it. The join modal's privacy line
+(slice 2) must say that progress you already have on these verses counts.
 
 ## Seed users
 
@@ -138,15 +160,13 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 
 ## Sharp edges
 
-- `scripts/check-migrations.mjs` flags the migration's `delete from` statements (function
-  bodies); it needs a `-- destructive-ok` line from Caelan before release.
 - A shared reference a member's translation leaves out still gets a copy in their
   translation with no text, the same as `addVerse`.
 - A member who removed a mastered copy through an old client still shows Mastered,
   since squares read soft-deleted rows.
-- A client can set its own `user_collections.shared_collection_id` to any group id (the
-  existing update policy covers the column). It gains nothing: every shared read checks
-  membership.
+- Dissolve restores a member's copy that an old client soft-deleted while they were
+  still a member, since it runs a full sync.
+- New `user_collections` columns need adding to the insert and update column grants.
 
 ## Decisions
 
@@ -157,4 +177,7 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 - 2026-11-11 · `share_collection` is definer-backed and clients can't insert groups or memberships · Otherwise a client could create groups directly and skip the caps and the display-name rule.
 - 2026-11-11 · Shared references allow any range up to verse 176, not the curated import's two-verse limit · Users' own collections hold ranges like Psalm 23:1-3, and those must be shareable.
 - 2026-11-11 · `sync_shared_collection` returns `changed` with the local `client_id` · Opening a shared collection syncs every time; the flag lets the client skip refetching verses and collections when nothing moved.
+- 2026-11-11 · A dissolve syncs every member first (one-time fan-out) · Without it a member who never reopened the collection keeps a copy missing the latest references.
+- 2026-11-11 · An editor's removal reaches every copy at once; sync moves anything else in a copy to My Verses · Sync can't tell a removed reference from an old client's own verse, and a member's own verse is never deleted by sync.
+- 2026-11-11 · Mint, leave and sync are definer-backed; clients can't write invites, delete memberships or set `shared_collection_id` · Each direct path skipped a rule: extra or revived codes, a membership dropped without its copy, a collection linked to a group without joining.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.

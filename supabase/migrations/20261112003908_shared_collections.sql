@@ -2,15 +2,17 @@
 -- user_collections row per member, linked by shared_collection_id. Old clients see a normal
 -- collection. Reference: docs/features/shared-collections.md.
 -- The delete statements below act only on the caller's own copies, or on a removed member's
--- copies with today's remove-from-collection rule.
+-- copies and a removed reference's copies with today's remove-from-collection rule.
 
 alter table public.profiles add column display_name text
   check (display_name is null or length(btrim(display_name)) between 1 and 40);
 
--- Caps, mirrored by lib/shared/constants.ts.
-create function private.shared_limits(out members integer, out collections integer, out invite_ttl interval)
+-- Caps, mirrored by lib/shared/constants.ts: members per group, shared collections per
+-- person, invite lifetime, references per group.
+create function private.shared_limits(out members integer, out collections integer, out invite_ttl interval,
+  out verses integer)
 language sql immutable security invoker set search_path = ''
-as $$ select 30, 20, interval '14 days' $$;
+as $$ select 30, 20, interval '14 days', 200 $$;
 
 create function private.new_invite_code() returns text
 language sql volatile security invoker set search_path = ''
@@ -44,7 +46,17 @@ create unique index shared_collection_members_one_owner
 
 create table public.shared_collection_verses (
   shared_collection_id uuid not null references public.shared_collections(id) on delete cascade,
-  book text not null check (length(book) between 1 and 32 and book ~ '^([1-3] )?[A-Za-z]+( [A-Za-z]+)*$'),
+  -- Canonical names, the same list as BIBLE_BOOKS in lib/bible/books.ts (lib/shared/books.test.ts checks).
+  book text not null constraint shared_collection_verses_book_check check (book in (
+    'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
+    '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah',
+    'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon', 'Isaiah', 'Jeremiah',
+    'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah',
+    'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi', 'Matthew',
+    'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 'Galatians',
+    'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus',
+    'Philemon', 'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John',
+    'Jude', 'Revelation')),
   chapter integer not null check (chapter between 1 and 150),
   verse_start integer not null check (verse_start between 1 and 176),
   verse_end integer not null,
@@ -70,6 +82,13 @@ alter table public.user_collections add column shared_collection_id uuid
   references public.shared_collections(id) on delete set null;
 create index idx_user_collections_shared on public.user_collections (shared_collection_id)
   where shared_collection_id is not null;
+
+-- Only the definer functions link a collection to a group: clients keep every other column.
+revoke insert, update on public.user_collections from anon, authenticated;
+grant insert (id, user_id, client_id, name, is_default, deleted_at, created_at, updated_at,
+  sort_preference, position, icon_key) on public.user_collections to anon, authenticated;
+grant update (id, user_id, client_id, name, is_default, deleted_at, created_at, updated_at,
+  sort_preference, position, icon_key) on public.user_collections to anon, authenticated;
 
 create trigger update_shared_collections_updated_at
   before update on public.shared_collections
@@ -102,12 +121,10 @@ revoke all on public.shared_collections, public.shared_collection_members,
   public.shared_collection_verses, public.shared_invites from anon, authenticated;
 grant select, delete on public.shared_collections to authenticated;
 grant update (name, icon_key) on public.shared_collections to authenticated;
-grant select, delete on public.shared_collection_members to authenticated;
+grant select on public.shared_collection_members to authenticated;
 grant update (role) on public.shared_collection_members to authenticated;
 grant select, insert, delete on public.shared_collection_verses to authenticated;
 grant select on public.shared_invites to authenticated;
-grant insert (shared_collection_id) on public.shared_invites to authenticated;
-grant update (revoked_at) on public.shared_invites to authenticated;
 
 create policy "Members read their groups" on public.shared_collections
   for select to authenticated using (private.is_member(id));
@@ -125,8 +142,6 @@ create policy "Owners set member roles" on public.shared_collection_members
     where s.id = shared_collection_id and s.owner_id = (select auth.uid())))
   with check (role in ('editor', 'member') and exists (select 1 from public.shared_collections s
     where s.id = shared_collection_id and s.owner_id = (select auth.uid())));
-create policy "Members remove themselves" on public.shared_collection_members
-  for delete to authenticated using (user_id = (select auth.uid()) and role <> 'owner');
 
 create policy "Members read their groups' verses" on public.shared_collection_verses
   for select to authenticated using (private.is_member(shared_collection_id));
@@ -139,18 +154,9 @@ create policy "Editors remove verses" on public.shared_collection_verses
 create policy "Owners read invites" on public.shared_invites
   for select to authenticated using (exists (select 1 from public.shared_collections s
     where s.id = shared_collection_id and s.owner_id = (select auth.uid())));
-create policy "Owners mint invites" on public.shared_invites
-  for insert to authenticated with check (exists (select 1 from public.shared_collections s
-    where s.id = shared_collection_id and s.owner_id = (select auth.uid())));
-create policy "Owners revoke invites" on public.shared_invites
-  for update to authenticated
-  using (exists (select 1 from public.shared_collections s
-    where s.id = shared_collection_id and s.owner_id = (select auth.uid())))
-  with check (exists (select 1 from public.shared_collections s
-    where s.id = shared_collection_id and s.owner_id = (select auth.uid())));
 
--- ---------- Helpers on one account's rows. Invoker: from a client call RLS keeps them to the
--- caller's own rows; definer callers (join, remove) pass the user they act for.
+-- ---------- Helpers that write for the user they're given. Called only from the definer
+-- functions and triggers below; clients can't execute them.
 
 -- SQL twin of deleteVerse in lib/store/index.ts: drop the link; a verse in no collection
 -- is soft-deleted when mastered and hard-deleted otherwise.
@@ -193,6 +199,7 @@ declare
   held public.user_verses%rowtype;
   stale record;
   linked integer;
+  my_verses_id uuid;
 begin
   changed := false;
   if p_version is null or p_version !~ '^[A-Z0-9][A-Z0-9-]{1,15}$' then
@@ -254,6 +261,8 @@ begin
     changed := changed or linked > 0;
   end loop;
 
+  -- A verse that isn't a group reference (an old client added it to the copy) moves to
+  -- My Verses with its progress. Removed references already left every copy (trigger below).
   for stale in
     select vc.verse_id from public.verse_collections vc
     join public.user_verses v on v.id = vc.verse_id
@@ -262,7 +271,16 @@ begin
         where r.shared_collection_id = p_shared and r.book = v.book and r.chapter = v.chapter
           and r.verse_start = v.verse_start and r.verse_end = v.verse_end)
   loop
-    perform private.remove_verse_from_collection(p_user, stale.verse_id, local_row.id);
+    if my_verses_id is null then
+      insert into public.user_collections (user_id, client_id, name, is_default, created_at)
+      values (p_user, 'my-verses', 'My Verses', true, 'epoch')
+      on conflict (user_id, client_id) do update set deleted_at = null
+      returning id into my_verses_id;
+    end if;
+    delete from public.verse_collections where verse_id = stale.verse_id and collection_id = local_row.id;
+    insert into public.verse_collections (verse_id, collection_id)
+    values (stale.verse_id, my_verses_id)
+    on conflict (verse_id, collection_id) do nothing;
     changed := true;
   end loop;
 
@@ -338,15 +356,17 @@ $$;
 
 -- ---------- Client API
 
-create function public.mint_invite(p_shared uuid)
+-- Definer: clients only read invites. The group lock makes rotations take turns, so
+-- exactly one code is live after any number of concurrent calls.
+create function private.mint_invite(p_shared uuid)
 returns table (code text, expires_at timestamptz)
-language plpgsql security invoker set search_path = ''
+language plpgsql security definer set search_path = ''
 as $$
 begin
-  if auth.uid() is null then
-    raise exception 'Authentication required' using errcode = '42501';
-  end if;
-  if not exists (select 1 from public.shared_collections s where s.id = p_shared and s.owner_id = auth.uid()) then
+  perform 1 from public.shared_collections s
+  where s.id = p_shared and s.owner_id = auth.uid()
+  for update;
+  if auth.uid() is null or not found then
     raise exception 'Only the owner can invite' using errcode = '42501';
   end if;
   update public.shared_invites as i set revoked_at = now()
@@ -407,7 +427,7 @@ begin
   where vc.collection_id = source.id and v.deleted_at is null;
   update public.user_collections set shared_collection_id = new_id where id = source.id;
 
-  return query select new_id, i.code from public.mint_invite(new_id) i;
+  return query select new_id, i.code from private.mint_invite(new_id) i;
 end;
 $$;
 
@@ -470,8 +490,9 @@ begin
 end;
 $$;
 
-create function public.sync_shared_collection(p_shared uuid, p_version text)
-returns table (client_id text, changed boolean) language plpgsql security invoker set search_path = ''
+-- Definer: it links the copy through shared_collection_id, which clients can't write.
+create function private.sync_shared_collection(p_shared uuid, p_version text)
+returns table (client_id text, changed boolean) language plpgsql security definer set search_path = ''
 as $$
 begin
   if auth.uid() is null or not private.is_member(p_shared) then
@@ -482,8 +503,10 @@ begin
 end;
 $$;
 
-create function public.leave_shared_collection(p_shared uuid)
-returns void language plpgsql security invoker set search_path = ''
+-- Definer: members can't delete their membership row directly, so leaving always takes
+-- the copy with it.
+create function private.leave_shared_collection(p_shared uuid)
+returns void language plpgsql security definer set search_path = ''
 as $$
 begin
   if auth.uid() is null or not private.is_member(p_shared) then
@@ -565,11 +588,100 @@ begin
 end;
 $$;
 
+-- ---------- Triggers
+
+-- Dissolve: before the group goes, every member's copy catches up in their translation, so
+-- the personal copy the foreign key leaves behind has every reference. The owner is skipped:
+-- their copy is theirs already, and on account deletion their rows are going.
+create function private.sync_members_before_dissolve() returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  member record;
+begin
+  for member in
+    select m.user_id, coalesce(p.translation, 'ESV') as translation
+    from public.shared_collection_members m
+    left join public.profiles p on p.user_id = m.user_id
+    where m.shared_collection_id = old.id and m.role <> 'owner'
+  loop
+    perform private.sync_member_copies(member.user_id, old.id, member.translation);
+  end loop;
+  return old;
+end;
+$$;
+create trigger sync_members_before_dissolve
+  before delete on public.shared_collections
+  for each row execute function private.sync_members_before_dissolve();
+
+-- Editors' removals reach every member's copy at once with today's delete rule, so sync can
+-- treat anything else in a copy as the member's own verse. Skipped while the group itself is
+-- being deleted (the cascade), which dissolves instead.
+create function private.remove_reference_from_copies() returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  copy record;
+begin
+  if not exists (select 1 from public.shared_collections s where s.id = old.shared_collection_id) then
+    return null;
+  end if;
+  for copy in
+    select c.user_id, c.id as collection_id, vc.verse_id
+    from public.user_collections c
+    join public.shared_collection_members m on m.shared_collection_id = c.shared_collection_id and m.user_id = c.user_id
+    join public.verse_collections vc on vc.collection_id = c.id
+    join public.user_verses v on v.id = vc.verse_id
+    where c.shared_collection_id = old.shared_collection_id
+      and v.book = old.book and v.chapter = old.chapter
+      and v.verse_start = old.verse_start and v.verse_end = old.verse_end
+  loop
+    perform private.remove_verse_from_collection(copy.user_id, copy.verse_id, copy.collection_id);
+  end loop;
+  return null;
+end;
+$$;
+create trigger remove_reference_from_copies
+  after delete on public.shared_collection_verses
+  for each row execute function private.remove_reference_from_copies();
+
+-- References per group. The group lock makes concurrent adds take turns.
+create function private.check_reference_cap() returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  cap integer := (private.shared_limits()).verses;
+begin
+  perform 1 from public.shared_collections s where s.id = new.shared_collection_id for update;
+  if (select count(*) from public.shared_collection_verses r where r.shared_collection_id = new.shared_collection_id) >= cap then
+    raise exception 'A shared collection holds up to % verses', cap using errcode = '22023';
+  end if;
+  return new;
+end;
+$$;
+create trigger check_reference_cap
+  before insert on public.shared_collection_verses
+  for each row execute function private.check_reference_cap();
+
 -- Invoker wrappers: the only shared-collection functions PostgREST exposes.
 create function public.share_collection(p_collection_client_id text)
 returns table (shared_id uuid, code text)
 language sql security invoker set search_path = ''
 as $$ select * from private.share_collection(p_collection_client_id) $$;
+
+create function public.mint_invite(p_shared uuid)
+returns table (code text, expires_at timestamptz)
+language sql security invoker set search_path = ''
+as $$ select * from private.mint_invite(p_shared) $$;
+
+create function public.sync_shared_collection(p_shared uuid, p_version text)
+returns table (client_id text, changed boolean)
+language sql security invoker set search_path = ''
+as $$ select * from private.sync_shared_collection(p_shared, p_version) $$;
+
+create function public.leave_shared_collection(p_shared uuid)
+returns void language sql security invoker set search_path = ''
+as $$ select private.leave_shared_collection(p_shared) $$;
 
 create function public.preview_invite(p_code text)
 returns table (shared_id uuid, name text, inviter_name text, verse_count integer, member_count integer, already_member boolean)
@@ -606,20 +718,21 @@ revoke all on function
   private.shared_limits(), private.new_invite_code(), private.is_member(uuid), private.can_edit(uuid),
   private.remove_verse_from_collection(uuid, uuid, uuid), private.sync_member_copies(uuid, uuid, text),
   private.drop_member_collection(uuid, uuid), private.member_squares(uuid), private.find_invite(text),
-  private.share_collection(text), private.preview_invite(text), private.join_shared_collection(text, text),
-  private.remove_shared_member(uuid, uuid), private.read_shared_members(uuid),
-  private.read_shared_progress(uuid), private.read_shared_status()
+  private.mint_invite(uuid), private.share_collection(text), private.preview_invite(text),
+  private.join_shared_collection(text, text), private.sync_shared_collection(uuid, text),
+  private.leave_shared_collection(uuid), private.remove_shared_member(uuid, uuid),
+  private.read_shared_members(uuid), private.read_shared_progress(uuid), private.read_shared_status(),
+  private.sync_members_before_dissolve(), private.remove_reference_from_copies(), private.check_reference_cap()
   from public, anon, authenticated;
 
--- Reachable only through the public wrappers and policies (PostgREST doesn't expose private).
--- member_squares and find_invite run only inside definer functions, so clients never need them.
+-- The policy helpers, and the definer bodies the public wrappers call (PostgREST doesn't
+-- expose private). Everything that writes for a given user stays out of clients' reach.
 grant execute on function
-  private.shared_limits(), private.new_invite_code(), private.is_member(uuid), private.can_edit(uuid),
-  private.remove_verse_from_collection(uuid, uuid, uuid), private.sync_member_copies(uuid, uuid, text),
-  private.drop_member_collection(uuid, uuid),
-  private.share_collection(text), private.preview_invite(text), private.join_shared_collection(text, text),
-  private.remove_shared_member(uuid, uuid), private.read_shared_members(uuid),
-  private.read_shared_progress(uuid), private.read_shared_status()
+  private.is_member(uuid), private.can_edit(uuid),
+  private.mint_invite(uuid), private.share_collection(text), private.preview_invite(text),
+  private.join_shared_collection(text, text), private.sync_shared_collection(uuid, text),
+  private.leave_shared_collection(uuid), private.remove_shared_member(uuid, uuid),
+  private.read_shared_members(uuid), private.read_shared_progress(uuid), private.read_shared_status()
   to authenticated;
 
 revoke all on function

@@ -7,7 +7,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 
 | Table | Owner | Purpose |
 |---|---|---|
-| `profiles` | per-user | `translation`: the account translation (`bible-versions.md`); `display_name` ([shared collections](../features/shared-collections.md)) |
+| `profiles` | per-user | account `translation` (`bible-versions.md`), `display_name` ([shared](../features/shared-collections.md)) |
 | `usage_daily` | per-user | Free/Supporter rate-limit counters (transcribe seconds, evaluate count, Bible fetch count) |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
@@ -17,7 +17,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `curated_collection_savers` | global | [All-time contribution ledger and access rules](../features/home.md#community-saves) |
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
 | `verse_collections` | per-user (via verse) | Many-to-many junction: `(verse_id, collection_id)` |
-| `shared_collections`, `shared_collection_members`, `shared_collection_verses`, `shared_invites` | per-group | [Shared collections](../features/shared-collections.md#data-model): references only, members-only reads |
+| `shared_collections`, `shared_collection_members`, `shared_collection_verses`, `shared_invites` | per-group | [Shared collections](../features/shared-collections.md#data-model), references only |
 | `verse_of_month` | global | Public monthly challenge verse, optional `image_url` |
 | `user_intro_presentations` | per-user | [Intro claims](../features/home.md#encouragement-video) |
 | `session_attempts` | per-user, append-only | One row per practice session (or partial early exit). Denormalized — no FK to `user_verses`. |
@@ -45,10 +45,10 @@ Migrations: `002_user_data.sql`, `016_sort_and_last_practiced.sql`,
 | `client_id` | TEXT | client-generated; unique per `(user_id, client_id)` |
 | `name` | TEXT | |
 | `is_default` | BOOLEAN | `true` for the auto-created "My Verses" collection |
-| `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = client default |
+| `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = default |
 | `icon_key` | TEXT | nullable |
 | `position` | INTEGER | custom order, nullable |
-| `shared_collection_id` | UUID FK → `shared_collections` | nullable; ON DELETE SET NULL ([dissolve](../features/shared-collections.md#dissolve)) |
+| `shared_collection_id` | UUID FK → `shared_collections` | nullable, SET NULL on delete, no client writes ([why](../features/shared-collections.md#access-rules)) |
 | `deleted_at` | TIMESTAMPTZ | soft delete; NULL = active |
 | `updated_at` | TIMESTAMPTZ | trigger maintained |
 
@@ -56,7 +56,8 @@ Indexes:
 - `idx_user_collections_user (user_id) WHERE deleted_at IS NULL` — active-collection lookups
 - `idx_user_collections_client (user_id, client_id)` — lookups by client_id
 
-RLS: owner SELECT/INSERT/UPDATE/DELETE, service all.
+RLS: owner SELECT/INSERT/UPDATE/DELETE, service all. Insert and update are
+column grants: grant each new column.
 
 ### `user_verses`
 
@@ -242,7 +243,7 @@ incrementally — the cron is the only writer.
 | `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment. See `docs/features/notifications.md` |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
 | `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction INSERT RLS checks only the verse owner) |
-| shared collection functions | invoker wrappers over `private` | [function table](../features/shared-collections.md#functions) |
+| shared collection functions | invoker wrappers | [table](../features/shared-collections.md#functions) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
 | `verse_cache_stats` | view | per-version cache stats |

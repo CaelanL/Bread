@@ -162,7 +162,7 @@ fails) restores the local list and rethrows. Step 3 only logs.
 
 The same rule has a SQL twin, `private.remove_verse_from_collection`, used when a member
 leaves or is removed from a [shared collection](shared-collections.md#leave-and-remove) and
-when sync drops a reference. Change both together.
+when an editor removes a reference. Change both together.
 
 `SwipeableVerseCard` picks its confirmation text from the same facts, using
 `collectionCount` from `[id].tsx`:
