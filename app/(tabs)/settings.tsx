@@ -17,7 +17,7 @@ import { DisplayNameModal } from '@/components/settings/DisplayNameModal';
 import { ReviewIntervalModal } from '@/components/settings/ReviewIntervalModal';
 import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion, type ColorMode } from '@/lib/settings';
 import { useAuth } from '@/lib/auth';
@@ -798,6 +798,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   passwordInput: {
+    ...InputText,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
@@ -821,6 +822,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   deleteInput: {
+    ...InputText,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,

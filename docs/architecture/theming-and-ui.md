@@ -274,6 +274,10 @@ Invariant 8 is above. Also:
    automatically with valid SF Symbol names.
 4. **New haptics are gated to iOS.** Use the
    `EXPO_OS === 'ios'` guard.
+5. **Every `TextInput` style spreads `InputText` first** (`constants/theme.ts`: `letterSpacing: 0`,
+   `fontWeight: '400'`), then its own values. iOS on the New Architecture recycles input views and
+   keeps the last input's kern and weight when the next one sets none (react-native#42589); the
+   join-code field's spacing showed up in other fields on a phone. Flow: `input-spacing`.
 
 ## Sharp edges
 

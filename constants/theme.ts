@@ -20,6 +20,12 @@ export const Motion = {
   spinnerMs: 900,
   easing: [0.2, 0, 0, 1],
 } as const;
+/**
+ * Spread first into every TextInput style. iOS on the New Architecture recycles TextInput views,
+ * and a recycled view keeps the last input's letter spacing and weight when the next one sets
+ * none (react-native#42589), so each input states both.
+ */
+export const InputText = { letterSpacing: 0, fontWeight: '400' } as const;
 export const Shadows = {
   floating: '0px 4px 10px rgba(0,0,0,0.14)',
   border: '0px 0px 0px 1px rgba(0,0,0,0.06), 0px 1px 2px -1px rgba(0,0,0,0.06), 0px 2px 4px 0px rgba(0,0,0,0.04)',

@@ -1,0 +1,31 @@
+# Start from npm run db:reset. A field typed after the join-code field (letterSpacing 4, weight 600)
+# keeps normal spacing: iOS recycles TextInput views (react-native#42589). docs/architecture/theming-and-ui.md
+appId: com.caelanliu.biblemem
+name: input-spacing
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Romans 8, Shared.*"
+    timeout: 20000
+- tapOn:
+    id: library-add
+- tapOn: "Join with code"
+- extendedWaitUntil:
+    visible:
+      id: join-code-input
+    timeout: 8000
+- inputText: "ABCD2345"
+- tapOn:
+    id: modal-close
+- extendedWaitUntil:
+    notVisible:
+      id: join-code-input
+    timeout: 5000
+- tapOn: ".*Romans 8, Shared.*"
+- extendedWaitUntil:
+    visible: "Search verses..."
+    timeout: 15000
+- tapOn: "Search verses..."
+- inputText: "romans"
+- takeScreenshot: input-spacing-search

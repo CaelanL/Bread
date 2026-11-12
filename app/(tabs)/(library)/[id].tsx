@@ -5,7 +5,7 @@ import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
-import { Colors, Radius } from '@/constants/theme';
+import { Colors, Radius, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useAuth } from '@/lib/auth';
@@ -497,6 +497,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchInput: {
+    ...InputText,
     flex: 1,
     fontSize: 15,
     padding: 0,

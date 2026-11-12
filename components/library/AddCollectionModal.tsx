@@ -18,7 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface AddCollectionModalProps {
@@ -238,6 +238,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
+    ...InputText,
     height: 48,
     borderRadius: 12,
     paddingHorizontal: 16,

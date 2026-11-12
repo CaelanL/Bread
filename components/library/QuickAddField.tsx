@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { VerseExpandModal } from '@/components/ui/VerseExpandModal';
-import { Colors, Radius } from '@/constants/theme';
+import { Colors, Radius, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchVerse } from '@/lib/api';
 import { completeBook, hintFor, parseQuickAdd } from '@/lib/bible/quick-add';
@@ -282,6 +282,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   input: {
+    ...InputText,
     flex: 1,
     fontSize: 16,
     paddingVertical: 10,

@@ -1,5 +1,5 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Fonts, Radius, Shadows } from '@/constants/theme';
+import { Colors, Fonts, InputText, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BlurView } from 'expo-blur';
 import type { ReactNode } from 'react';
@@ -53,13 +53,12 @@ export const modalStyles = StyleSheet.create({
   copy: { fontSize: 15, lineHeight: 21 },
   meta: { fontSize: 13, lineHeight: 18 },
   input: {
+    ...InputText,
     height: 52,
     paddingHorizontal: 16,
     borderRadius: Radius.lg,
     borderWidth: 1,
     fontSize: 17,
-    fontWeight: '400',
-    letterSpacing: 0,
   },
   button: {
     height: 52,

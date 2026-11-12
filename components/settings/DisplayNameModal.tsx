@@ -1,4 +1,4 @@
-import { Colors, Radius } from '@/constants/theme';
+import { Colors, Radius, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { MAX_DISPLAY_NAME_LENGTH } from '@/lib/shared/display-name';
 import { useEffect, useState } from 'react';
@@ -104,6 +104,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   input: {
+    ...InputText,
     padding: 14,
     borderRadius: Radius.md,
     borderWidth: 1,
