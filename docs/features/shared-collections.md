@@ -79,12 +79,8 @@ input; `22023` messages are written to be shown as is.
 Codes are normalized on input (upper case, spaces and dashes dropped). They're 8
 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (no 0, O, 1 or I).
 
-Squares (`private.member_squares`, shared by the last two): a member's rows for a
-reference, in any translation and soft-deleted ones included, are folded with `bool_or`.
-`practiced` = any difficulty has a `bestAccuracy`; `mastered` = `hard.completed`;
-`engraved` = `engraved.completed`. A reference a member holds no row for is missing from
-`get_shared_progress`, and the client reads it as Open. `mastered_squares` counts a square
-that is mastered or engraved.
+The last two read squares through `private.member_squares`; what a square is and how it
+counts is in [group-progress.md](group-progress.md#squares).
 
 Every wrapper calls a `SECURITY DEFINER` body in `private` that checks the caller and
 passes `auth.uid()` on. The `private` helpers that write take the user they act for, so

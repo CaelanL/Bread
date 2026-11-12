@@ -364,6 +364,7 @@ export default function CollectionScreen() {
               group={sharedId ? {
                 you: cellState(progressFlags(item.progress)),
                 states: groupRows.get(referenceKey(item))?.states ?? null,
+                unavailable: sharedProgress?.failed ?? false,
               } : undefined}
             />
           )}

@@ -33,7 +33,7 @@ import {
   setInProgressSort as persistInProgressSort,
   setMasteredSort as persistMasteredSort,
 } from './library-sort';
-import { computeNextSrState } from './review';
+import { computeNextSrState, hasPracticed } from './review';
 import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from './review-config';
 import { compareRecords, isVisible, mayBeMissing, onePerReference, planCollapse, planMoves, referenceKey, seedTranslation, type VerseRecord } from './translation';
 
@@ -1303,12 +1303,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Opening a shared collection: bring the copy up to date, then read the grid. A failed sync
-  // throws after the grid is read; a failed grid read shows on the entry.
+  // Opening a shared collection: bring the copy up to date, then read the grid and the group row
+  // (a role the owner changed since the last refresh). A failed sync throws after both reads; a
+  // failed grid read shows on the entry.
   openSharedCollection: async (sharedId) => {
-    const synced = await get().syncSharedCollection(sharedId).then(() => null, (e: unknown) => e);
-    await get().fetchSharedProgress(sharedId);
-    if (synced) throw synced;
+    let changed = false;
+    let failure: unknown = null;
+    try {
+      changed = await get().syncSharedCollection(sharedId);
+    } catch (e) {
+      failure = e;
+    }
+    // A sync that changed something has already refetched the group rows.
+    await Promise.all([get().fetchSharedProgress(sharedId), changed || get().fetchSharedCollections()]);
+    if (failure) throw failure;
   },
 
   leaveSharedCollection: async (sharedId) => {
@@ -1950,13 +1958,7 @@ export function useMasteredVerseCount() {
  * doesn't show, or vice versa.
  */
 function isInProgressVerse(v: SavedVerse): boolean {
-  if (v.progress.hard?.completed) return false;
-  const p = v.progress;
-  return (
-    p.easy?.bestAccuracy !== null ||
-    p.medium?.bestAccuracy !== null ||
-    p.hard?.bestAccuracy !== null
-  );
+  return !v.progress.hard?.completed && hasPracticed(v.progress);
 }
 
 /**

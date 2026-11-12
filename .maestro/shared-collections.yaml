@@ -59,7 +59,7 @@ name: shared-collections
     timeout: 20000
 - assertNotVisible:
     id: swipe-delete
-- assertVisible: "Shared, 2 members.*"
+- assertVisible: "Shared · 2 members.*"
 - takeScreenshot: shared-4-joined-collection
 - tapOn:
     id: shared-row

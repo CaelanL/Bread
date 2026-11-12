@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  barSegments,
   buildGrid,
   cellState,
   everyoneEngraved,
@@ -34,14 +35,16 @@ test('a square is Engraved over Mastered over Learning over Open', () => {
 });
 
 test('Due and Locked verses count as Mastered: only hard.completed decides', () => {
-  const due = { easy: { bestAccuracy: 95 }, medium: { bestAccuracy: null }, hard: { bestAccuracy: 92, completed: true },
-    engraved: { completed: false, nextDueAt: null } };
-  const locked = { ...due, engraved: { completed: false, nextDueAt: '2999-01-01T00:00:00.000Z' } };
+  const score = (bestAccuracy: number | null, completed = false) => ({ bestAccuracy, completed });
+  const engraved = (nextDueAt: string | null) =>
+    ({ completed: false, passCount: 1, nextDueAt, lifetimeReviews: 1, lastReviewedAt: null, months: [] });
+  const due = { easy: score(95, true), medium: score(null), hard: score(92, true), engraved: engraved(null) };
+  const locked = { ...due, engraved: engraved('2999-01-01T00:00:00.000Z') };
   assert.equal(cellState(progressFlags(due)), 'mastered');
   assert.equal(cellState(progressFlags(locked)), 'mastered');
-  const fresh = { easy: { bestAccuracy: null }, medium: { bestAccuracy: null }, hard: { bestAccuracy: null, completed: false } };
+  const fresh = { easy: score(null), medium: score(null), hard: score(null) };
   assert.equal(cellState(progressFlags(fresh)), 'open');
-  assert.equal(cellState(progressFlags({ ...fresh, medium: { bestAccuracy: 40 } })), 'learning');
+  assert.equal(cellState(progressFlags({ ...fresh, medium: score(40) })), 'learning');
 });
 
 // The seed: Cara and Dana engraved 8:1, Cara mastered 8:28 and Dana is learning it, no one started 8:38-39.
@@ -119,4 +122,10 @@ test("a member's own squares can be swapped for their local verses", () => {
   const swapped = replaceMemberCells(server, 'C', [cell('C', r828, none)]);
   const grid = buildGrid(['C', 'D'], [r81, r828], swapped);
   assert.deepEqual(grid.rows.map((row) => row.states), [['learning', 'open'], ['open', 'mastered']]);
+});
+
+test('the Group bar orders members by state and stops at eight members', () => {
+  assert.deepEqual(barSegments(['open', 'engraved', 'learning', 'mastered']), ['engraved', 'mastered', 'learning', 'open']);
+  assert.equal(barSegments(Array<'open'>(8).fill('open'))?.length, 8);
+  assert.equal(barSegments(Array<'open'>(9).fill('open')), null);
 });

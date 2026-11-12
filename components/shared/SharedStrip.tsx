@@ -22,6 +22,7 @@ export function SharedStrip({ memberNames, memberCount, verseCount, progress, fa
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const percent = progress ? Math.round(progress.ratio * 100) : 0;
+  const heading = `Shared · ${plural(memberCount, 'member')} · ${plural(verseCount, 'verse')}`;
   const summary = progress ? `${progress.masteredByEveryone} of ${plural(verseCount, 'verse')} mastered by everyone` : '';
 
   return (
@@ -29,13 +30,13 @@ export function SharedStrip({ memberNames, memberCount, verseCount, progress, fa
       <Pressable
         testID="shared-row"
         accessibilityRole="button"
-        accessibilityLabel={`Shared, ${plural(memberCount, 'member')}, ${plural(verseCount, 'verse')}. Show members`}
+        accessibilityLabel={`${heading}. Show members`}
         onPress={onOpen}
         style={styles.header}
       >
         {memberNames && <MemberDots names={memberNames} count={memberCount} />}
         <Text style={[styles.members, { color: colors.icon }]} numberOfLines={1}>
-          {plural(memberCount, 'member')} · {plural(verseCount, 'verse')}
+          {heading}
         </Text>
         <IconSymbol name="chevron.right" size={14} color={colors.icon} />
       </Pressable>

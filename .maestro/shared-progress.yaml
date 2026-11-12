@@ -10,7 +10,7 @@ name: shared-progress
 - extendedWaitUntil:
     visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
     timeout: 20000
-- assertVisible: "Shared, 2 members, 3 verses. Show members"
+- assertVisible: "Shared · 2 members · 3 verses. Show members"
 - assertVisible: "You: Engraved.*Romans 8:1 •.*Group: everyone engraved"
 - assertVisible: "You: Learning.*Romans 8:28 •.*Group: 1 of 2 mastered"
 - assertVisible: "You: Open.*Romans 8:38-39 •.*Group: 0 of 2 mastered"
@@ -75,7 +75,7 @@ name: shared-progress
 - extendedWaitUntil:
     visible: "You: Open.*Romans 8:31 •.*Group: 0 of 2 mastered"
     timeout: 20000
-- assertVisible: "Shared, 2 members, 4 verses. Show members"
+- assertVisible: "Shared · 2 members · 4 verses. Show members"
 - assertVisible: "Group progress 38%. 1 of 4 verses mastered by everyone"
 - assertVisible: "Practice your 3 open verses"
 - takeScreenshot: shared-progress-4-editor-added

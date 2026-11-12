@@ -29,8 +29,8 @@ interface SwipeableVerseCardProps {
   collectionCount?: number;
   /** Set in a shared collection: removing the verse removes it for every member. */
   sharedMemberCount?: number;
-  /** Set in a shared collection: your state on the left, every member's (null while loading) on the right. */
-  group?: { you: MemberState; states: MemberState[] | null };
+  /** Set in a shared collection: your state on the left, every member's on the right (null until read). */
+  group?: { you: MemberState; states: MemberState[] | null; unavailable: boolean };
 }
 
 export function SwipeableVerseCard({
@@ -258,7 +258,7 @@ export function SwipeableVerseCard({
                 )}
                 <ReviewStateBadge verse={verse} />
               </View>
-              {group && <GroupCount states={group.states} />}
+              {group && <GroupCount states={group.states} unavailable={group.unavailable} />}
             </View>
           </Pressable>
         </Animated.View>

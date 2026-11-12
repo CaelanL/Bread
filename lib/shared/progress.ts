@@ -1,4 +1,6 @@
 // lib-ok: Pure reading of a shared collection's members × references grid from the server's per-square booleans.
+import { hasPracticed } from '@/lib/store/review';
+import type { VerseProgress } from '@/lib/storage';
 
 /** A member's state on one reference. Due and Locked (spaced review) are Mastered. */
 export type MemberState = 'open' | 'learning' | 'mastered' | 'engraved';
@@ -50,17 +52,10 @@ export function isMasteredState(state: MemberState): boolean {
   return state === 'mastered' || state === 'engraved';
 }
 
-type ProgressShape = {
-  easy: { bestAccuracy: number | null };
-  medium: { bestAccuracy: number | null };
-  hard: { bestAccuracy: number | null; completed: boolean };
-  engraved?: { completed: boolean };
-};
-
 /** The same booleans the server folds per square (`private.member_squares`), from one local verse. */
-export function progressFlags(progress: ProgressShape): ProgressFlags {
+export function progressFlags(progress: VerseProgress): ProgressFlags {
   return {
-    practiced: [progress.easy, progress.medium, progress.hard].some((d) => d.bestAccuracy !== null),
+    practiced: hasPracticed(progress),
     mastered: progress.hard.completed,
     engraved: progress.engraved?.completed === true,
   };
@@ -120,6 +115,16 @@ export function everyoneMastered(grid: Grid): boolean {
 /** Every square engraved. False on an empty grid. */
 export function everyoneEngraved(grid: Grid): boolean {
   return grid.rows.length > 0 && grid.rows.every(everyone(grid, (s) => s === 'engraved'));
+}
+
+/** Above this many members a per-member bar is too thin to read, so only the count shows. */
+export const MAX_BAR_MEMBERS = 8;
+
+/** A verse's per-member bar: engraved, mastered, learning, then open; null above MAX_BAR_MEMBERS. */
+export function barSegments(states: MemberState[]): MemberState[] | null {
+  if (states.length > MAX_BAR_MEMBERS) return null;
+  const order: MemberState[] = ['engraved', 'mastered', 'learning', 'open'];
+  return [...states].sort((a, b) => order.indexOf(a) - order.indexOf(b));
 }
 
 /** The references a member hasn't mastered yet (Open or Learning), in grid order. */

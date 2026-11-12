@@ -31,7 +31,7 @@ name: shared-join-code
 - tapOn:
     id: display-name-continue
 - extendedWaitUntil:
-    visible: "Shared, 3 members.*"
+    visible: "Shared · 3 members.*"
     timeout: 20000
 - assertVisible: ".*Romans 8:28 • ESV.*"
 - takeScreenshot: join-code-2-joined
@@ -107,7 +107,7 @@ name: shared-join-code
     visible: "Maybe later"
     timeout: 20000
 - tapOn: "Maybe later"
-- assertVisible: "Shared, 4 members.*"
+- assertVisible: "Shared · 4 members.*"
 - takeScreenshot: join-code-5-joined-after-sign-in
 - tapOn: Back
 - assertVisible: "New collection"

@@ -1,6 +1,6 @@
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { isMasteredState, type MemberState } from '@/lib/shared/progress';
+import { barSegments, isMasteredState, type MemberState } from '@/lib/shared/progress';
 import { StyleSheet, Text, View } from 'react-native';
 
 type Palette = (typeof Colors)['light'];
@@ -40,21 +40,25 @@ export function MemberStateDot({ state }: { state: MemberState }) {
 
 // The labels sit on leaf views: a card reads its children's labels, but not a label on a view with children.
 
-/** The group's count on a verse: "1/2" over a bar of every member's state, or "All" when everyone mastered it. */
-export function GroupCount({ states }: { states: MemberState[] | null }) {
+/**
+ * The group's count on a verse: "1/2" over a bar of every member's state (up to MAX_BAR_MEMBERS),
+ * or "All" when everyone mastered it. `unavailable` when the grid couldn't be read.
+ */
+export function GroupCount({ states, unavailable }: { states: MemberState[] | null; unavailable: boolean }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   if (!states || states.length === 0) {
     return (
       <View style={styles.group}>
-        <Text accessibilityLabel="Group: loading" style={[styles.count, { color: colors.icon }]}>–</Text>
+        <Text accessibilityLabel={unavailable ? 'Group: unavailable' : 'Group: loading'} style={[styles.count, { color: colors.icon }]}>
+          –
+        </Text>
       </View>
     );
   }
   const mastered = states.filter(isMasteredState).length;
   const all = mastered === states.length;
   const allEngraved = states.every((s) => s === 'engraved');
-  const order: MemberState[] = ['engraved', 'mastered', 'learning', 'open'];
-  const sorted = [...states].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  const segments = barSegments(states);
   return (
     <View style={styles.group}>
       <Text
@@ -62,11 +66,13 @@ export function GroupCount({ states }: { states: MemberState[] | null }) {
         style={[styles.count, { color: all ? (allEngraved ? colors.tint : colors.success) : colors.text }]}>
         {all ? '✓ All' : `${mastered}/${states.length}`}
       </Text>
-      <View style={[styles.bar, { backgroundColor: colors.borderLight }]}>
-        {sorted.map((state, index) => (
-          <View key={index} style={[styles.segment, { backgroundColor: memberStateFill(state, colors) }]} />
-        ))}
-      </View>
+      {segments && (
+        <View style={[styles.bar, { backgroundColor: colors.borderLight }]}>
+          {segments.map((state, index) => (
+            <View key={index} style={[styles.segment, { backgroundColor: memberStateFill(state, colors) }]} />
+          ))}
+        </View>
+      )}
     </View>
   );
 }

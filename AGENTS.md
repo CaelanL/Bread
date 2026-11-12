@@ -20,8 +20,8 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Streak, time studied, popular ranges | `docs/features/insights.md` |
 | Home tab, Verse of the Month | `docs/features/home.md` |
 | Push, cron, prefs UI, device tokens | `docs/features/notifications.md` |
-| Shared collections, invites, emblems, display name | `docs/features/shared-collections.md` |
-| Shared collection screen, group progress, Who's where | `docs/features/group-progress.md` |
+| Shared collections, invites, display name | `docs/features/shared-collections.md` |
+| Shared collection screen, group progress, Who's where, emblems | `docs/features/group-progress.md` |
 | Verse fetching, caches, KJV bundle | `docs/architecture/bible-api-and-caching.md` |
 | Adding or switching a Bible version | `docs/architecture/bible-versions.md` |
 | Schema, migrations, RLS | `docs/architecture/data-model.md` |

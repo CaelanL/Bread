@@ -37,6 +37,7 @@ test('joining and leaving a shared collection', async (t) => {
       hard: { bestAccuracy: null, completed: false } }, deleted_at: null };
   let joined = false;
   let progressFails = false;
+  let role = 'member';
   let copyRow = null;
   const rpcs = [];
   const reads = [];
@@ -75,7 +76,7 @@ test('joining and leaving a shared collection', async (t) => {
     }
     if (url.pathname === '/rest/v1/shared_collections') return json(joined ? [{ id: group, owner_id: 'C', name: 'Romans 8' }] : []);
     if (url.pathname === '/rest/v1/shared_collection_members') {
-      return json(joined ? [{ shared_collection_id: group, role: 'member' }] : []);
+      return json(joined ? [{ shared_collection_id: group, role }] : []);
     }
     if (url.pathname === '/rest/v1/verse_collections' && url.searchParams.get('select')?.includes('user_collections')) {
       return json(copyRow ? [{ added_at: '2026-11-11T00:00:00Z', user_collections: { client_id: copy.client_id }, user_verses: verse }] : []);
@@ -110,19 +111,28 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 1);
   });
 
-  await t.test('opening syncs once, then reads members, progress and the reference list', async () => {
+  await t.test('opening syncs once, then reads members, progress, the reference list and the group row', async () => {
     rpcs.length = 0;
     reads.length = 0;
     await state().openSharedCollection(group);
     assert.equal(rpcs[0][0], 'sync_shared_collection');
     assert.deepEqual(rpcs[0][1], { p_shared: group, p_version: 'NIV' });
-    assert.deepEqual(rpcs.map(([name]) => name).sort(), ['get_shared_members', 'get_shared_progress', 'sync_shared_collection']);
+    assert.deepEqual(rpcs.map(([name]) => name).sort(),
+      ['get_shared_members', 'get_shared_progress', 'get_shared_status', 'sync_shared_collection']);
     assert.ok(reads.includes('/rest/v1/shared_collection_verses'));
     const progress = state().sharedProgress[group];
     assert.equal(progress.failed, false);
     assert.deepEqual(progress.members.map((m) => m.displayName), ['Cara', 'Dana']);
     assert.deepEqual(progress.references, [{ book: 'Romans', chapter: 8, verseStart: 28, verseEnd: 28 }]);
     assert.equal(progress.cells[0].mastered, true);
+  });
+
+  await t.test('a promotion to editor shows on the next open, with no refresh in between', async () => {
+    assert.equal(state().sharedCollections[group]?.role, 'member');
+    role = 'editor';
+    await state().openSharedCollection(group);
+    assert.equal(state().sharedCollections[group]?.role, 'editor');
+    role = 'member';
   });
 
   await t.test('a failed grid read keeps the last grid and marks it failed; a retry clears it', async () => {
