@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-// The real store against a stubbed HTTP boundary (Supabase REST and auth): join, then leave.
+// The real store against a stubbed HTTP boundary (Supabase REST and auth): join, leave, and the
+// one notice when a group is gone by the next refresh.
 test('joining and leaving a shared collection', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-shared-test-'));
   const platform = join(fixture, 'platform.cjs');
@@ -35,6 +36,7 @@ test('joining and leaving a shared collection', async (t) => {
     progress: { easy: { bestAccuracy: null, completed: false }, medium: { bestAccuracy: null, completed: false },
       hard: { bestAccuracy: null, completed: false } }, deleted_at: null };
   let joined = false;
+  let copyRow = null;
   const rpcs = [];
   const reads = [];
   const json = (body, status = 200) => Response.json(body, { status });
@@ -48,8 +50,8 @@ test('joining and leaving a shared collection', async (t) => {
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
       const name = url.pathname.slice('/rest/v1/rpc/'.length);
       rpcs.push([name, init.body ? JSON.parse(init.body) : null]);
-      if (name === 'join_shared_collection') { joined = true; return json(copy.client_id); }
-      if (name === 'leave_shared_collection') { joined = false; return new Response(null, { status: 204 }); }
+      if (name === 'join_shared_collection') { joined = true; copyRow = copy; return json(copy.client_id); }
+      if (name === 'leave_shared_collection') { joined = false; copyRow = null; return new Response(null, { status: 204 }); }
       if (name === 'get_shared_status') {
         return json(joined ? [{ shared_id: group, member_count: 2, verse_count: 1, mastered_squares: 0, engraved_squares: 0 }] : []);
       }
@@ -58,13 +60,13 @@ test('joining and leaving a shared collection', async (t) => {
     if (method !== 'GET') return new Response(null, { status: 204 });
     reads.push(url.pathname);
     if (url.pathname === '/rest/v1/profiles') return json({ translation: 'NIV', display_name: 'Dana' });
-    if (url.pathname === '/rest/v1/user_collections') return json(joined ? [copy] : []);
+    if (url.pathname === '/rest/v1/user_collections') return json(copyRow ? [copyRow] : []);
     if (url.pathname === '/rest/v1/shared_collections') return json(joined ? [{ id: group, owner_id: 'C', name: 'Romans 8' }] : []);
     if (url.pathname === '/rest/v1/shared_collection_members') {
       return json(joined ? [{ shared_collection_id: group, role: 'member' }] : []);
     }
     if (url.pathname === '/rest/v1/verse_collections' && url.searchParams.get('select')?.includes('user_collections')) {
-      return json(joined ? [{ added_at: '2026-11-11T00:00:00Z', user_collections: { client_id: copy.client_id }, user_verses: verse }] : []);
+      return json(copyRow ? [{ added_at: '2026-11-11T00:00:00Z', user_collections: { client_id: copy.client_id }, user_verses: verse }] : []);
     }
     return json([]);
   });
@@ -72,6 +74,9 @@ test('joining and leaving a shared collection', async (t) => {
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'test-key';
   const { useAppStore } = await import('../lib/store/index.ts');
   const { supabase } = await import('../lib/api/client.ts');
+  const { subscribeToToast } = await import('../lib/toast.ts');
+  const toasts = [];
+  t.after(subscribeToToast((message) => toasts.push(message)));
   const state = useAppStore.getState;
   t.after(() => supabase.auth.stopAutoRefresh());
   assert.ifError((await supabase.auth.signInWithPassword({ email: 'D@example.test', password: 'test' })).error);
@@ -101,5 +106,32 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(state().collections.some((c) => c.id === copy.client_id), false);
     assert.equal(state().verses.some((v) => v.collectionId === copy.client_id), false);
     assert.equal(state().sharedCollections[group], undefined);
+  });
+
+  await t.test('leaving yourself brings no notice on the next refresh', async () => {
+    toasts.length = 0;
+    await state().refresh();
+    assert.deepEqual(toasts, []);
+  });
+
+  await t.test('a group gone with the copy deleted reads as removed, once', async () => {
+    await state().joinSharedCollection('BREAD828');
+    toasts.length = 0;
+    joined = false;
+    copyRow = null;
+    await state().refresh();
+    assert.deepEqual(toasts, ['You were removed from Romans 8.']);
+    await state().refresh();
+    assert.equal(toasts.length, 1);
+  });
+
+  await t.test("a group gone with the copy kept reads as the member's own copy", async () => {
+    await state().joinSharedCollection('BREAD828');
+    toasts.length = 0;
+    joined = false;
+    copyRow = { ...copy, shared_collection_id: null };
+    await state().refresh();
+    assert.deepEqual(toasts, ['Romans 8 is now your own copy.']);
+    assert.equal(state().collections.find((c) => c.id === copy.client_id)?.sharedId, undefined);
   });
 });

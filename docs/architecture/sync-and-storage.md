@@ -19,6 +19,8 @@ AsyncStorage holds device settings and small local caches.
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
 | Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
 | Display name (`displayName`) | ✓ (`profiles.display_name`) | ✓ | — |
+| [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ last seen ids and names (`shared_known_groups:<user>`) |
+| Invite from a signed-out link | — | — | ✓ (`shared_pending_join`) |
 | Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
 | Virtual collection sorts | — | ✓ | ✓ (`library_sort_mastered`, `library_sort_in_progress`) |
@@ -81,9 +83,15 @@ interface AppState {
   reorderCollections: (ids) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
   setCollectionSort: (collectionId, sort) => Promise<void>;
-  fetchSharedCollections, shareCollection, mintInvite, joinSharedCollection,
-  syncSharedCollection, leaveSharedCollection, removeSharedMember,
-  setSharedMemberRole   // docs/features/shared-collections.md#in-the-app
+  // Shared collections: docs/features/shared-collections.md#in-the-app
+  fetchSharedCollections: () => Promise<boolean>;
+  shareCollection: (collectionId) => Promise<{ sharedId: string; code: string }>;
+  mintInvite: (sharedId) => Promise<{ code: string; expiresAt: string }>;
+  joinSharedCollection: (code) => Promise<string>;   // the copy's client_id
+  syncSharedCollection: (sharedId) => Promise<boolean>; // true when something changed
+  leaveSharedCollection: (sharedId) => Promise<void>;
+  removeSharedMember: (sharedId, userId) => Promise<void>;
+  setSharedMemberRole: (sharedId, userId, role) => Promise<void>;
   addVerse: (verse, collectionId) => Promise<SavedVerse>;
   copyVerseToCollection: (verseId, collectionId) => Promise<void>;
   deleteVerse: (id, collectionId) => Promise<{ wasMastered: boolean }>;

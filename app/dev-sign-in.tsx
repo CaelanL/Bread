@@ -22,7 +22,13 @@ export default function DevSignIn() {
         const { error } = await signIn(`${as ?? 'reader-a'}@example.test`, DEV_SIGN_IN_PASSWORD);
         if (error) console.error('[dev-sign-in]', error);
         else {
-          router.replace((next ?? '/') as Href);
+          // An invite opens over the Library, the way a signed-out link tap does after sign-in.
+          if (next?.startsWith('/join')) {
+            router.replace('/(tabs)/(library)');
+            router.push(next as Href);
+          } else {
+            router.replace((next ?? '/') as Href);
+          }
           return;
         }
       }

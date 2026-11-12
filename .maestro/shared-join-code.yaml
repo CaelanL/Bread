@@ -1,6 +1,7 @@
 # Start from npm run db:reset. reader-a types the seeded code BREAD828 from the Library and joins
 # Romans 8 (their own Romans 8:28 is reused); reader-c makes a new link, so BREAD828 stops
-# working for reader-b; a link opened signed out shows the join modal after sign-in.
+# working for reader-b; a link opened signed out shows the join modal over the Library after
+# sign-in, and joins from there.
 appId: com.caelanliu.biblemem
 name: shared-join-code
 ---
@@ -77,26 +78,37 @@ name: shared-join-code
 - tapOn:
     id: join-not-now
 
-# Signed out: the link waits through sign-in, then the modal opens.
-- runFlow: subflows/open-app.yaml
-- openLink: com.biblemem://join/${output.code}
-- extendedWaitUntil:
-    visible: "Sign In"
-    timeout: 15000
-# Not subflows/sign-in.yaml: it waits for the tab bar, which the modal covers.
-- tapOn: "Email"
-- inputText: reader-b@example.test
-- tapOn: "Password"
-- inputText: password123 # local seed users only, see supabase/seed.sql
-- hideKeyboard
-- tapOn: "Sign In"
-- extendedWaitUntil:
-    visible: "CARA INVITED YOU"
-    timeout: 30000
-- tapOn:
-    text: "Maybe later"
-    optional: true
+# Signed out: the link waits through sign-in, then the modal opens over the Library. Twice:
+# Not now lands on the Library (the modal hides it from accessibility), then Join from there.
+- runFlow:
+    file: subflows/invite-signed-out.yaml
+    env:
+      CODE: ${output.code}
 - assertVisible: "3 verses · 3 members"
 - takeScreenshot: join-code-4-after-sign-in
 - tapOn:
     id: join-not-now
+# The reminders card follows the modal, over the Library.
+- extendedWaitUntil:
+    visible: "Maybe later"
+    timeout: 10000
+- tapOn: "Maybe later"
+- assertVisible: "New collection"
+- assertNotVisible: "Sign In"
+- runFlow:
+    file: subflows/invite-signed-out.yaml
+    env:
+      CODE: ${output.code}
+- tapOn:
+    id: join-button
+- tapOn:
+    id: display-name-continue
+- extendedWaitUntil:
+    visible: "Maybe later"
+    timeout: 20000
+- tapOn: "Maybe later"
+- assertVisible: "Shared, 4 members.*"
+- takeScreenshot: join-code-5-joined-after-sign-in
+- tapOn: Back
+- assertVisible: "New collection"
+- assertVisible: ".*Romans 8.*"

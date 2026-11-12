@@ -3,6 +3,7 @@ import { MemberDots } from '@/components/shared/MemberDots';
 import { SheetLayout } from '@/components/ui/BottomSheet';
 import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useUxFlagsStore } from '@/lib/notifications';
 import { normalizeInviteCode, sharedErrorMessage } from '@/lib/shared/invite-code';
 import { previewInvite, type InvitePreview } from '@/lib/shared/invites';
 import { useAppStore, useHydrated } from '@/lib/store';
@@ -23,6 +24,11 @@ export function JoinInvite({ code: raw }: { code: string }) {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'invite' | 'name'>('invite');
   const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    useUxFlagsStore.getState().setInviteOpen(true);
+    return () => useUxFlagsStore.getState().setInviteOpen(false);
+  }, []);
 
   useEffect(() => {
     let current = true;

@@ -31,8 +31,8 @@ user_collections.shared_collection_id → shared_collections (nullable, ON DELET
 - `profiles.display_name` (1 to 40 characters) is the name members see. See
   [auth.md](../architecture/auth.md#display-name).
 
-Old clients ignore the new tables and column, and see a member's copy as an ordinary
-collection. What they can do to it is repaired by the next sync (below).
+Old clients see a member's copy as an ordinary collection; the next sync (below) repairs
+what they do to it.
 
 ## Access rules
 
@@ -87,11 +87,8 @@ reference, in any translation and soft-deleted ones included, are folded with `b
 that is mastered or engraved.
 
 Every wrapper calls a `SECURITY DEFINER` body in `private` that checks the caller and
-passes `auth.uid()` on. Helpers in `private`: `shared_limits()`, `new_invite_code()`,
-`is_member`, `can_edit`, `remove_verse_from_collection`, `sync_member_copies`,
-`drop_member_collection`, `member_squares`, `find_invite`. The helpers that write take the
-user they act for, so clients can't execute them; only the definer bodies and the
-triggers below call them.
+passes `auth.uid()` on. The `private` helpers that write take the user they act for, so
+clients can't execute them; only the definer bodies and the triggers below call them.
 
 Triggers: `sync_members_before_dissolve` (see Dissolve), `remove_reference_from_copies`
 (see Sync) and `check_reference_cap` (see Caps).
@@ -102,8 +99,8 @@ Triggers: `sync_members_before_dissolve` (see Dissolve), `remove_reference_from_
 person (owned or joined), a 14-day invite lifetime and 200 references per group.
 `lib/shared/constants.ts` mirrors them as `MAX_SHARED_MEMBERS`, `MAX_SHARED_COLLECTIONS`,
 `INVITE_TTL_DAYS` and `MAX_SHARED_VERSES`; change both together. The reference cap is a
-`BEFORE INSERT` trigger that locks the group, so it holds for editors' direct inserts and
-for `share_collection`.
+`BEFORE INSERT` trigger that locks the group, so editors' inserts and `share_collection` both
+hit it.
 
 ## Sync
 
@@ -119,8 +116,8 @@ match the group, under the same per-account lock as `import_curated_collection`:
    copy by hand) to My Verses, creating My Verses if needed. It is never deleted and keeps
    progress.
 
-It runs inside join, whenever a member calls `sync_shared_collection`, and for every
-member just before the group is deleted. It reports `changed` when any step wrote a row.
+It runs in join, in `sync_shared_collection`, and for every member before the group is
+deleted. It reports `changed` when any step wrote a row.
 
 Removing a reference doesn't wait for sync: the `remove_reference_from_copies` trigger
 applies the delete rule below to every member's copy of it at once. That is why step 3
@@ -149,8 +146,7 @@ the cascade.
 
 Squares fold every row a member holds for a reference, including progress from before
 the group existed (Q5 reuse plus Q11). An owner or editor who adds a reference can see
-whether each member already practiced or mastered it. The join modal's privacy line says
-so: members see how far along you are on these verses, including progress you already have.
+whether each member already practiced or mastered it. The join modal's privacy line says so.
 
 ## In the app
 
@@ -164,15 +160,15 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 - **Members sheet** (`SharedCollectionSheet`, from the Shared row under the header): members and
   roles. The owner also gets the code, `com.biblemem://join/<code>`, days left, Copy link, Share,
   New link (confirmed; the old code dies), and per member Make editor / Make member and Remove.
-  Copy (React Native's clipboard module, no native build) and Share send
-  `Join "<name>" on Bread: <link> — or enter code <code> in Bread`: chat apps rarely make
-  custom-scheme links tappable. Members get Leave collection.
+  Copy and Share send `Join "<name>" on Bread: <link> — or enter code <code> in Bread`:
+  chat apps rarely make custom-scheme links tappable. Members get Leave collection.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, from "Have an invite
   code?" in New Collection) show `JoinInvite`: inviter, name, counts, inviter's initial and "+N",
   the privacy line with the account translation, Join and Not now. Join asks for a name if
   needed, calls `joinSharedCollection` (account translation, then `refresh`) and opens the copy.
-  A member sees Open (same idempotent call); a bad code shows its message. A signed-out link
-  waits in `lib/shared/pending-join.ts`.
+  A member sees Open (same idempotent call); a bad code shows its message. A signed-out link's
+  code waits in AsyncStorage (`lib/shared/pending-join.ts`) through sign-in, email confirmation
+  or an app kill, then opens over the Library; the reminders card waits for the modal.
 - **Inside**: opening a shared collection syncs once per visit, and pull to refresh again. Only
   the owner and editors see + and swipe-delete; only the owner renames or changes the icon.
   `addVerse` inserts the reference and syncs; `deleteVerse` deletes it ("Remove for everyone?").
@@ -182,6 +178,9 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   (`useVersesLostWith`: not mastered, in no other collection). The owner's Delete reads
   "Delete for everyone? Members keep their own copy." with the count, then dissolves. Cards
   show "· Shared" until then.
+- **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
+  toasts once, "You were removed from <name>." or, if the owner deleted it, "<name> is now your
+  own copy." Not for groups you left or own.
 
 ## Seed users
 
@@ -191,8 +190,7 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 
 ## Sharp edges
 
-- A removed member gets no notice; the copy is gone on their next refresh.
-
+- Leaving on another device reads as "You were removed" on this one.
 - A shared reference a member's translation leaves out still gets a copy in their
   translation with no text, the same as `addVerse`.
 - A member who removed a mastered copy through an old client still shows Mastered,
@@ -205,7 +203,8 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 
 After `npm run db:reset` each: `npm run sim -- flow shared-collections` (share, copy, join by
 link, both in the list, leave, rejoin, delete for everyone, personal copy) and
-`npm run sim -- flow shared-join-code` (typed code, revoked code, link across sign-in).
+`npm run sim -- flow shared-join-code` (typed code, revoked code, link across sign-in to the
+modal over the Library, Not now, Join).
 
 ## Decisions
 

@@ -18,7 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
-import { stashPendingJoin, takePendingJoin } from '@/lib/shared/pending-join';
+import { clearPendingJoin, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import {
   installDevTools as installNotifDevTools,
   registerDeepLinkHandler,
@@ -70,7 +70,7 @@ function RootLayoutNav() {
     if (!isAuthenticated && !inAuthGroup && !isResetPassword && !isDevSignIn) {
       // An invite link opened signed out joins after sign-in (effect below).
       const invite = pathname.match(/^\/join\/([^/]+)/)?.[1];
-      if (invite) stashPendingJoin(invite);
+      if (invite) stashPendingJoin(invite).catch((e) => console.error('[join] Failed to keep the invite:', e));
       // Not authenticated and not on auth screen - redirect to sign in
       router.replace('/(auth)/sign-in');
     } else if (isAuthenticated && inAuthGroup) {
@@ -79,11 +79,20 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated, isLoading, segments, pathname, navigationState?.key]);
 
-  // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in.
+  // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in,
+  // over the Library, so Not now and Join both land there.
   useEffect(() => {
     if (!isAuthenticated || !navigationState?.key) return;
-    const invite = takePendingJoin();
-    if (invite) router.push(`/join/${invite}`);
+    let current = true;
+    readPendingJoin()
+      .then((invite) => {
+        if (!current || !invite) return;
+        router.replace('/(tabs)/(library)');
+        router.push(`/join/${invite}`);
+        return clearPendingJoin();
+      })
+      .catch((e) => console.error('[join] Failed to open the kept invite:', e));
+    return () => { current = false; };
   }, [isAuthenticated, navigationState?.key]);
 
   // Hydrate store and run migration when authenticated. Sequenced as

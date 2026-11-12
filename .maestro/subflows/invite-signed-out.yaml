@@ -1,0 +1,20 @@
+# A fresh app opens com.biblemem://join/${CODE} signed out, signs in as reader-b and waits for
+# Cara's invite. Not subflows/sign-in.yaml: it waits for the tab bar, which the modal covers.
+appId: com.caelanliu.biblemem
+---
+- runFlow: open-app.yaml
+- openLink: com.biblemem://join/${CODE}
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 15000
+- tapOn: "Email"
+- inputText: reader-b@example.test
+- tapOn: "Password"
+- inputText: password123 # local seed users only, see supabase/seed.sql
+- hideKeyboard
+- tapOn: "Sign In"
+- extendedWaitUntil:
+    visible: "CARA INVITED YOU"
+    timeout: 30000
+# The reminders card waits until the invite modal closes.
+- assertNotVisible: "Maybe later"

@@ -410,6 +410,40 @@ function sharedRole(sharedId: string): SharedRole {
   return role;
 }
 
+// The groups this account was in at the last fetch, per account on this device, so a group that
+// is gone by the next fetch gets one notice. Owned groups only go by the owner's own delete.
+type KnownGroup = { id: string; name: string; owned: boolean };
+const knownGroupsKey = (userId: string) => `shared_known_groups:${userId}`;
+let knownGroupsQueue: Promise<unknown> = Promise.resolve();
+
+function withKnownGroups(userId: string, work: (known: KnownGroup[] | null) => Promise<KnownGroup[]>) {
+  const next = knownGroupsQueue.then(async () => {
+    const raw = await AsyncStorage.getItem(knownGroupsKey(userId));
+    const groups = await work(raw ? JSON.parse(raw) : null);
+    await AsyncStorage.setItem(knownGroupsKey(userId), JSON.stringify(groups));
+  });
+  knownGroupsQueue = next.catch(() => {});
+  return next;
+}
+
+// A member's copy stays active when the owner deleted the group, and is soft-deleted when they were removed.
+async function noticeDepartedGroups(userId: string, current: KnownGroup[], generation: number) {
+  await withKnownGroups(userId, async (known) => {
+    const gone = (known ?? []).filter((g) => !g.owned && !current.some((c) => c.id === g.id));
+    if (gone.length === 0) return current;
+    const { data, error } = await db.from('user_collections').select('client_id')
+      .in('client_id', gone.map((g) => `shared-${g.id}`)).is('deleted_at', null);
+    if (error) throw error;
+    const kept = new Set(data.map((row) => row.client_id));
+    if (generation === accountGeneration) {
+      showErrorToast(gone.map((g) => kept.has(`shared-${g.id}`)
+        ? `${g.name} is now your own copy.`
+        : `You were removed from ${g.name}.`).join('\n'));
+    }
+    return current;
+  });
+}
+
 function sameReference(a: Pick<SavedVerse, 'book' | 'chapter' | 'verseStart' | 'verseEnd'>, b: typeof a) {
   return a.book === b.book && a.chapter === b.chapter && a.verseStart === b.verseStart && a.verseEnd === b.verseEnd;
 }
@@ -651,6 +685,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       }
       set({ sharedCollections });
+      const current = Object.values(sharedCollections).map((g) => ({ id: g.id, name: g.name, owned: g.role === 'owner' }));
+      await noticeDepartedGroups(userId, current, generation)
+        .catch((e) => console.error('[STORE] Failed to check for removed shared collections:', e));
       return true;
     } catch (e) {
       if (generation !== accountGeneration) return false;
@@ -1205,6 +1242,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   leaveSharedCollection: async (sharedId) => {
     const { error } = await supabase.rpc('leave_shared_collection', { p_shared: sharedId });
     if (error) throw error;
+    const userId = await getCurrentUserId();
+    await withKnownGroups(userId, async (known) => (known ?? []).filter((g) => g.id !== sharedId))
+      .catch((e) => console.error('[STORE] Failed to forget a left shared collection:', e));
     const gone = new Set(get().collections.filter((c) => c.sharedId === sharedId).map((c) => c.id));
     set((state) => ({
       collections: state.collections.filter((c) => !gone.has(c.id)),

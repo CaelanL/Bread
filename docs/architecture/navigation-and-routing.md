@@ -122,9 +122,13 @@ Three states:
 - Not auth'd, anywhere else: redirect to sign-in.
 - Auth'd, in `(auth)`: redirect to `/(tabs)`.
 
-A signed-out visit to `join/<code>` stashes the code (`lib/shared/pending-join.ts`) before the
-redirect; once authenticated with a navigator key, an effect after the gate pushes
-`/join/<code>`, so an invite tapped while signed out opens after sign-in.
+A signed-out visit to `join/<code>` stashes the code in AsyncStorage (`lib/shared/pending-join.ts`)
+before the redirect, so it survives sign-up with email confirmation and an app kill. Once
+authenticated with a navigator key, an effect after the gate replaces to the Library, pushes
+`/join/<code>` and clears the stash, so Not now and Join both land on the Library.
+`dev-sign-in?next=/join/<code>` does the same. `Q1ExplainerCard` waits until `Motion.exitMs`
+after `JoinInvite` unmounts (`useUxFlagsStore.inviteOpen`): an RN `Modal` presented over the
+modal route, or as it closes, never shows and leaves an invisible layer that takes every tap.
 
 `reset-password` is whitelisted because the user reaches it from an
 email link before they have a session. `dev-sign-in` is whitelisted
