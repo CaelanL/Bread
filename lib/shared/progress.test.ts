@@ -5,8 +5,6 @@ import test from 'node:test';
 import {
   buildGrid,
   cellState,
-  everyoneEngraved,
-  everyoneMastered,
   GRID_PITCH,
   gridScrolls,
   groupProgress,
@@ -70,8 +68,6 @@ test('the group count per verse counts mastered and engraved members', () => {
 test('group progress is mastered squares over all squares', () => {
   assert.equal(groupProgress(seed), 3 / 6);
   assert.equal(masteredByEveryoneCount(seed), 1);
-  assert.equal(everyoneMastered(seed), false);
-  assert.equal(everyoneEngraved(seed), false);
 });
 
 test('a member with no copy yet has an Open square on every verse', () => {
@@ -80,26 +76,16 @@ test('a member with no copy yet has an Open square on every verse', () => {
   assert.equal(groupProgress(grid), 1 / 9);
 });
 
-test('everyone mastered, and everyone engraved', () => {
+test('every square mastered, engraved included, is 100%', () => {
   const allMastered = buildGrid(['C', 'D'], [r81, r828], [
     cell('C', r81, engraved), cell('C', r828, mastered), cell('D', r81, mastered), cell('D', r828, engraved),
   ]);
-  assert.equal(everyoneMastered(allMastered), true);
-  assert.equal(everyoneEngraved(allMastered), false);
   assert.equal(groupProgress(allMastered), 1);
-
-  const allEngraved = buildGrid(['C', 'D'], [r81, r828], [
-    cell('C', r81, engraved), cell('C', r828, engraved), cell('D', r81, engraved), cell('D', r828, engraved),
-  ]);
-  assert.equal(everyoneMastered(allEngraved), true);
-  assert.equal(everyoneEngraved(allEngraved), true);
 });
 
-test('an empty grid is 0% and never everyone-done', () => {
+test('an empty grid is 0%', () => {
   for (const grid of [buildGrid([], [r81], []), buildGrid(['C'], [], [])]) {
     assert.equal(groupProgress(grid), 0);
-    assert.equal(everyoneMastered(grid), false);
-    assert.equal(everyoneEngraved(grid), false);
   }
 });
 

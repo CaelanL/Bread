@@ -182,7 +182,7 @@ Supabase:
 const { data: { user } } = await supabase.auth.getUser();
 ```
 
-`lib/store/index.ts`, `lib/storage/index.ts` and `lib/sync/` call
+`lib/store/index.ts` and `lib/storage/index.ts` call
 `ensureAuth()` first (`getCurrentUserId` in each). `lib/api/analytics.ts`
 and `lib/notifications/api.ts` don't. RLS on every user-owned table
 enforces `auth.uid() = user_id`, so even if a mistake bypasses the

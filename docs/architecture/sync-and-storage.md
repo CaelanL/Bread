@@ -29,7 +29,6 @@ AsyncStorage holds device settings and small local caches.
 | Notification prefs | ✓ | ✓ (`usePrefsStore`) | ✓ cache (`notifications_prefs_cache`) |
 | Notification flags, push token | — | ✓ (`useUxFlagsStore`, flags) | ✓ (`notifications_q1_dismissed`, `notifications_settings_visited`, `notifications_cached_expo_token`) |
 | Auth session | — | (via Supabase) | ✓ (Supabase-managed) |
-| Migration flag | — | — | `data_synced_to_server`, only set by unused code in `lib/sync/migration.ts` |
 
 **Verses, collections and progress are never persisted to
 AsyncStorage.** The app does not work offline for writes — see the
@@ -116,12 +115,12 @@ The convention is `useX(...)` selectors, not direct
 | `useCollections()`, `useCollection(id)` | `Collection[]`, one collection |
 | `useCollectionSort(id)` | the collection's `SortOption` |
 | `useVerses()` | `SavedVerse[]` |
-| `useHydrated()`, `useStoreError()` | `boolean`, `string \| null` |
+| `useHydrated()` | `boolean` |
 | `useVerse(id)` | one verse from `verses` or `masteredVerses` |
 | `useVersesByCollection(id)` | filtered verse list |
 | `useMasteredVerses()`, `useMasteredVerseCount()` | `masteredVerses`, its count |
 | `useInProgressVerses()`, `useInProgressVerseCount()` | the virtual In Progress list, its count |
-| `useReviewMaxIntervalDays()`, `useReviewState(id)`, `useDueCounts()` | review state, see `docs/features/review.md` |
+| `useDueCounts()` | review state, see `docs/features/review.md` |
 | `useMostMemorizedBooks()` | top 5 books by mastered count |
 | `useSharedCollection(id)` | the group a collection is a copy of: role, member and verse counts, mastered and engraved squares |
 | `useSharedOwnerName(id)` | that group's owner's display name (yours when you own it), or null |
@@ -194,7 +193,7 @@ arrays.
 or screens.** Components and screens never call the supabase client
 directly. They call Zustand actions, or a function from `lib/api/` or
 `lib/notifications/`. The writes are in `lib/store/index.ts` (verse and
-collection mutations), `lib/storage/`, `lib/api/`, `lib/sync/` and
+collection mutations), `lib/storage/`, `lib/api/` and
 `lib/notifications/api.ts`. Exception: auth calls in
 `lib/auth/context.tsx`. This is what keeps optimistic updates, RLS, and
 rollback consistent.
@@ -266,21 +265,9 @@ Holds the shared types (`SavedVerse`, `Collection`, `VerseProgress`),
 `parseVerseRowExtras`, `parseSortPreference`, `parseCollectionRow`), the virtual collection
 IDs, and `formatVerseReference`.
 
-The store calls two of its writes: `updateCollectionSort` and
-`updateVerseStudyPrefs`. It also has a full set of CRUD functions
-(`saveVerse`, `deleteVerse`, `deleteCollection`, `updateVerseProgress`
-and others) with the upsert / soft-delete semantics described in
-`docs/architecture/data-model.md`. The store doesn't use those; its
-actions run their own queries, so a change to the semantics belongs in
-the store.
-
-## Sync layer — `lib/sync/`
-
-A one-time migration helper from the local-only era
-(`migrateLocalDataToServer`) plus `sync*` wrappers over `lib/storage/`.
-Nothing outside `lib/sync/` imports it. The flag
-`data_synced_to_server` in AsyncStorage would mark that the migration
-ran.
+Its two writes, `updateCollectionSort` and `updateVerseStudyPrefs`, are
+called by the store, and `getSavedVerses` is read by the study session.
+Every other verse and collection write is a store action.
 
 ## Verse text caching
 

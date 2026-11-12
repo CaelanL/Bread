@@ -234,10 +234,6 @@ way a verse leaves Mastered.
 
 ## Sharp edges
 
-- **`lib/storage` and `lib/sync` hold older copies.** `deleteCollection`, `deleteVerse` and
-  `saveVerse` in `lib/storage/index.ts` are only called from `lib/sync`, and the app imports
-  nothing from `lib/sync`. The older `deleteCollection` moves verses to My Verses, which is
-  the opposite of what the store does. Use the store actions.
 - **Reset on a soft-deleted mastered verse doesn't update the Mastered list.**
   `resetVerseProgress` works out `wasMastered` from `verses` alone, and such a verse is only
   in `masteredVerses`. It stays listed with old progress until the next fetch. After that the

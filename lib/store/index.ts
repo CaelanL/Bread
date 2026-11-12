@@ -33,7 +33,7 @@ import {
   setInProgressSort as persistInProgressSort,
   setMasteredSort as persistMasteredSort,
 } from './library-sort';
-import { computeNextSrState, hasPracticed } from './review';
+import { computeNextSrState, hasPracticed, isDueForReview } from './review';
 import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from './review-config';
 import { compareRecords, isVisible, mayBeMissing, onePerReference, planCollapse, planMoves, referenceKey, seedTranslation, type VerseRecord } from './translation';
 
@@ -690,7 +690,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const userId = await getCurrentUserId();
       const [groups, mine, status] = await Promise.all([
-        db.from('shared_collections').select('id, owner_id, name'),
+        db.from('shared_collections').select('id, name'),
         db.from('shared_collection_members').select('shared_collection_id, role').eq('user_id', userId),
         db.rpc('get_shared_status'),
       ]);
@@ -715,7 +715,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (!isSharedRole(role) || !count) continue;
         sharedCollections[group.id] = {
           id: group.id,
-          ownerId: group.owner_id,
           ownerName: ownerNames.get(group.id) ?? null,
           name: group.name,
           role,
@@ -1850,9 +1849,7 @@ import { useShallow } from 'zustand/shallow';
 export const useCollections = () => useAppStore((state) => state.collections);
 export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
-export const useStoreError = () => useAppStore((state) => state.error);
 export const useCuratedSaverCount = (catalogId: string) => useAppStore((state) => state.curatedSaverCounts[catalogId]);
-export const useReviewMaxIntervalDays = () => useAppStore((state) => state.reviewMaxIntervalDays);
 
 /**
  * Sort preference for a given collection. Routes by ID literal because
@@ -1985,29 +1982,6 @@ export function useInProgressVerseCount() {
 }
 
 /**
- * Per-verse review state. 'pre-mastery' for unmastered verses; 'due',
- * 'locked', or 'engraved' for mastered ones.
- *
- * Precedence: engraved > due > locked > pre-mastery. Engraved verses that
- * are also due render as Engraved (the lifetime count carries the visual
- * weight); their due-ness is communicated via sort order, not the badge.
- */
-export type ReviewState = 'pre-mastery' | 'locked' | 'due' | 'engraved';
-
-export function useReviewState(verseId: string, now?: Date): ReviewState {
-  const verse = useVerse(verseId);
-  const nowMs = now ? now.getTime() : Date.now();
-  return useMemo<ReviewState>(() => {
-    if (!verse) return 'pre-mastery';
-    const e = verse.progress.engraved;
-    if (!verse.progress.hard?.completed) return 'pre-mastery';
-    if (e?.completed) return 'engraved';
-    if (!e || e.nextDueAt === null) return 'due';
-    return nowMs >= new Date(e.nextDueAt).getTime() ? 'due' : 'locked';
-  }, [verse, nowMs]);
-}
-
-/**
  * Counts of due verses by virtual collection. Only Mastered has an SR
  * schedule; In Progress verses are pre-mastery and cannot be "due".
  *
@@ -2020,16 +1994,11 @@ export function useDueCounts(now?: Date) {
   return useMemo(() => {
     let mastered = 0;
     const seen = new Set<string>();
+    const at = new Date(nowMs);
     for (const v of masteredVerses) {
       if (seen.has(v.id)) continue;
       seen.add(v.id);
-      const e = v.progress.engraved;
-      if (!v.progress.hard?.completed) continue;
-      if (!e || e.nextDueAt === null) {
-        mastered += 1;
-        continue;
-      }
-      if (nowMs >= new Date(e.nextDueAt).getTime()) mastered += 1;
+      if (isDueForReview(v, at)) mastered += 1;
     }
     return { mastered };
   }, [masteredVerses, nowMs]);
