@@ -20,13 +20,20 @@ export function memberStateFill(state: MemberState, colors: Palette): string {
   return 'transparent';
 }
 
+const DOT_BORDER: Record<MemberState, (colors: Palette) => string> = {
+  open: (colors) => colors.border,
+  learning: (colors) => colors.warning,
+  mastered: () => 'transparent',
+  engraved: () => 'transparent',
+};
+
 /** Your state on a verse, as a dot. */
 export function MemberStateDot({ state }: { state: MemberState }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   return (
     <View
       accessibilityLabel={`You: ${MEMBER_STATE_LABEL[state]}`}
-      style={[styles.dot, { backgroundColor: memberStateFill(state, colors), borderColor: state === 'open' ? colors.border : 'transparent' }]}
+      style={[styles.dot, { backgroundColor: memberStateFill(state, colors), borderColor: DOT_BORDER[state](colors) }]}
     />
   );
 }
