@@ -147,7 +147,7 @@ The add screen, quick add, the chapter range gesture and `addVerse`'s identity r
 ## Copying a saved verse
 
 Long-press a verse for Copy to collection. On iOS, one light haptic confirms
-the picker opens. Choose My Verses or a custom collection.
+the picker opens. Choose My Verses or a custom collection ([shared ones](shared-collections.md#in-the-app)).
 Already added destinations are disabled. A failed copy keeps the picker open.
 
 `copyVerseToCollection` adds one membership for the existing verse, so it stays

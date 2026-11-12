@@ -1,3 +1,4 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { isMasteredState, type MemberState } from '@/lib/shared/progress';
@@ -46,7 +47,8 @@ export function MemberStateSquare({ state, label }: { state: MemberState; label?
 
 /**
  * The group's count on a verse, the same on every row: members who mastered it (engraved counts)
- * over all members. `unavailable` when the grid couldn't be read.
+ * over all members, with a check in `success` once everyone has it (`tint` once everyone engraved
+ * it). `unavailable` when the grid couldn't be read.
  */
 export function GroupCount({ states, unavailable }: { states: MemberState[] | null; unavailable: boolean }) {
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -58,15 +60,24 @@ export function GroupCount({ states, unavailable }: { states: MemberState[] | nu
     );
   }
   const mastered = states.filter(isMasteredState).length;
+  const all = mastered === states.length;
+  const allEngraved = states.every((s) => s === 'engraved');
+  const color = !all ? colors.text : allEngraved ? colors.tint : colors.success;
   return (
-    <Text accessibilityLabel={`Group: ${mastered} of ${states.length} mastered`} style={[styles.count, { color: colors.text }]}>
-      {mastered}/{states.length}
-    </Text>
+    <View style={styles.countRow}>
+      {all && <IconSymbol name="checkmark" size={12} color={color} />}
+      <Text
+        accessibilityLabel={all ? `Group: everyone ${allEngraved ? 'engraved' : 'mastered'}` : `Group: ${mastered} of ${states.length} mastered`}
+        style={[styles.count, { color }]}>
+        {mastered}/{states.length}
+      </Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   tile: { width: 20, height: 20, borderRadius: Radius.xs },
   swatch: { width: 12, height: 12, borderRadius: Radius.xs },
+  countRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   count: { fontSize: 15, lineHeight: 20, fontWeight: '600', fontVariant: ['tabular-nums'] },
 });

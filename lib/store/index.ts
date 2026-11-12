@@ -1394,6 +1394,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ VERSE ACTIONS ============
 
   copyVerseToCollection: async (verseId, collectionId) => {
+    // A shared collection holds the group's references: the copy adds one, and sync links the verse.
+    const sharedId = sharedIdOf(collectionId);
+    if (sharedId) {
+      const verse = get().verses.find((v) => v.id === verseId);
+      if (!verse) throw new Error('Failed to copy verse');
+      await addSharedVerse(sharedId, collectionId, verse);
+      return;
+    }
     const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
     if (!session || generation !== accountGeneration) return;

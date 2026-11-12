@@ -131,7 +131,7 @@ export default function WhoIsWhereScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Who's where" leftButton={{ icon: 'chevron.left', label: 'Back', onPress: back }} />
+      <AppHeader title="Details" leftButton={{ icon: 'chevron.left', label: 'Back', onPress: back }} />
       <ScrollView
         testID="whos-where"
         contentContainerStyle={styles.content}
@@ -143,9 +143,9 @@ export default function WhoIsWhereScreen() {
           </Text>
         ) : !view ? (
           failed ? (
-            <Pressable testID="grid-retry" accessibilityRole="button" accessibilityLabel="Couldn't load Who's where. Retry"
+            <Pressable testID="grid-retry" accessibilityRole="button" accessibilityLabel="Couldn't load details. Retry"
               onPress={retry} style={styles.retry}>
-              <Text style={[styles.message, { color: colors.text }]}>Couldn&apos;t load Who&apos;s where.</Text>
+              <Text style={[styles.message, { color: colors.text }]}>Couldn&apos;t load details.</Text>
               <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
             </Pressable>
           ) : (
@@ -154,7 +154,7 @@ export default function WhoIsWhereScreen() {
         ) : (
           <>
             {failed && (
-              <Pressable testID="grid-retry" accessibilityRole="button" accessibilityLabel="Couldn't refresh Who's where. Retry"
+              <Pressable testID="grid-retry" accessibilityRole="button" accessibilityLabel="Couldn't refresh details. Retry"
                 onPress={retry} style={styles.staleRetry}>
                 <Text style={[styles.secondary, { color: colors.icon }]}>Couldn&apos;t refresh.</Text>
                 <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
@@ -197,7 +197,9 @@ export default function WhoIsWhereScreen() {
                   horizontal
                   scrollEnabled={scrolls}
                   showsHorizontalScrollIndicator={false}
-                  onLayout={(event) => setColumnsWidth(event.nativeEvent.layout.width)}
+                  style={styles.columns}
+                  contentContainerStyle={styles.columnsContent}
+                  onLayout={(event) => setColumnsWidth(event.nativeEvent.layout.width - CARD_PADDING)}
                 >
                   {view.columns.map(renderColumn)}
                 </ScrollView>
@@ -230,6 +232,8 @@ export default function WhoIsWhereScreen() {
   );
 }
 
+const CARD_PADDING = 14;
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 48, gap: 16 },
@@ -239,7 +243,7 @@ const styles = StyleSheet.create({
   retryText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
   staleRetry: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   // The strip's card.
-  card: { borderRadius: Radius.xxl, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, gap: 16 },
+  card: { borderRadius: Radius.xxl, borderWidth: 1, paddingHorizontal: CARD_PADDING, paddingVertical: 12, gap: 16 },
   progress: { gap: 8 },
   progressTop: { flexDirection: 'row', justifyContent: 'space-between' },
   data: { fontSize: 15, lineHeight: 20 },
@@ -251,6 +255,9 @@ const styles = StyleSheet.create({
   fill: { height: '100%', borderRadius: Radius.full },
   grid: { flexDirection: 'row' },
   references: { width: 124, marginRight: 12 },
+  // The columns scroll to the card's edge, so a column cut by scrolling is cut at the border.
+  columns: { marginRight: -CARD_PADDING },
+  columnsContent: { paddingRight: CARD_PADDING },
   column: { width: GRID_PITCH, alignItems: 'center' },
   header: { height: GRID_PITCH, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
   cell: { height: GRID_PITCH, justifyContent: 'center' },

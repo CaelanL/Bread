@@ -37,13 +37,14 @@ shared collection looks like a personal one, and a personal collection looks as 
   moment a session saves. A failed read keeps the last grid and shows Retry on the group card; until a
   grid arrives the Group column reads "–" (loading, or unavailable after a failure).
 - **Group card** (`SharedStrip`, under the header): member initials (yours first and solid) and
-  "<owner's name> · N members · V verses", which open the member list (`app/share/[id]?view=members`:
+  "<owner's name> · N members · V verses" (no name until the grid loads), which open the member list (`app/share/[id]?view=members`:
   names and roles, the owner's member actions); a gear, which opens the share panel
   (`app/share/[id].tsx`: invite, Stop sharing or Leave); and the group percentage with its bar and
-  "Details". Every other point of the card opens [Who's where](#whos-where).
+  "Details". Every other point of the card opens [Who's where](#whos-where), titled "Details".
 - **Cards**: the same rows as a personal collection (book icon, difficulty dot or check, review
   badge), plus the group's count on the right (`GroupCount`): members who mastered the verse,
-  engraved included, over all members, "8/10", the same on every row.
+  engraved included, over all members, "8/10", the same on every row. When everyone has it, a
+  `checkmark` and the count in `success`, or in `tint` when everyone engraved it.
 
 ## Who's where
 
@@ -61,14 +62,15 @@ your verses), nothing new.
   four states closes the card.
 - **Wide groups**: columns sit at a fixed 26 pt pitch (`GRID_PITCH`) and never stretch. When they
   are wider than the space measured beside the references (`gridScrolls`), they scroll sideways
-  and the reference column stays put; 7 fit on a 393 pt phone.
+  and the reference column stays put; 7 fit on a 393 pt phone. The scrolling part reaches the
+  card's edge, so a cut column is cut at the border and reads as more to scroll.
 - **Members**: `MemberRow`, the same rows as the share panel: name ("You" after yours) and
   role. The owner taps another member for Make editor / Make member and Remove (`manageMember`
   in `components/shared/member-actions.ts`, the store's `setSharedMemberRole` and
   `removeSharedMember`), here and on the panel. Invite and Leave stay on the panel.
 - **Reads**: each visit reads the grid once (`fetchSharedProgress`); pull to refresh runs the
   collection screen's refresh, sync and grid read. A failed read keeps the last grid with
-  "Couldn't refresh. Retry"; with none yet it shows "Couldn't load Who's where." and Retry.
+  "Couldn't refresh. Retry"; with none yet it shows "Couldn't load details." and Retry.
 
 ## Library cards
 
@@ -116,6 +118,8 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 
 - 2026-11-11 · Your own squares on the collection screen come from your local verses, the rest from the grid · Your row, review badge and the Group count then agree, and a session's result shows without a refetch.
 - 2026-11-12 · Verse rows in a shared collection look like personal rows, with only the "mastered/members" count on the right; no You dot, no per-member bar, no Open filter and no Practice button · Caelan's phone pass: the dots confused, and a bar on some rows and a number on others read inconsistently.
+- 2026-11-12 · The Group count marks a verse everyone has with a check, in `success` (or `tint` when everyone engraved it), and keeps "10/10" · Caelan liked seeing when the whole group has it memorized; only the bar and the mixed formats were the problem.
+- 2026-11-12 · Who's where is titled "Details", like the group card's link · Caelan: the name was too many words.
 - 2026-11-11 · Who's where puts your column first and lists references in Bible order · You look for yourself first; the collection screen keeps your own sort, the grid is a fixed table.
 - 2026-11-12 · Who's where reads the collection screen's grid and opens from anywhere on the group card but the members line (member list) and the gear (share panel) · One read path; Caelan's phone pass wanted the card itself to lead to the details.
 - 2026-11-11 · Column headers carry only the initial, mastered counts sit in a row under the tiles, and roles show in the member list · A role badge and a count don't fit a 26 pt column.

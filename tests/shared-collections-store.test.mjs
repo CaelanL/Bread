@@ -45,6 +45,7 @@ test('joining and leaving a shared collection', async (t) => {
   let syncFails = false;
   const rpcs = [];
   const reads = [];
+  const writes = [];
   const json = (body, status = 200) => Response.json(body, { status });
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(input);
@@ -84,7 +85,10 @@ test('joining and leaving a shared collection', async (t) => {
       copyRow = { ...copy, shared_collection_id: null };
       return json([{ id: group }]);
     }
-    if (method !== 'GET') return new Response(null, { status: 204 });
+    if (method !== 'GET') {
+      writes.push(`${method} ${url.pathname}`);
+      return new Response(null, { status: 204 });
+    }
     reads.push(url.pathname);
     if (url.pathname === '/rest/v1/profiles') return json({ translation: 'NIV', display_name: 'Dana' });
     if (url.pathname === '/rest/v1/user_collections') return json(copyRow ? [copyRow] : []);
@@ -150,6 +154,19 @@ test('joining and leaving a shared collection', async (t) => {
     await state().openSharedCollection(group);
     assert.equal(state().sharedCollections[group]?.role, 'editor');
     role = 'member';
+  });
+
+  await t.test('copying a verse into a shared collection you own adds it to the group, then syncs', async () => {
+    role = 'owner';
+    await state().openSharedCollection(group);
+    rpcs.length = 0;
+    writes.length = 0;
+    await state().copyVerseToCollection('verse-1', copy.client_id);
+    assert.deepEqual(writes, ['POST /rest/v1/shared_collection_verses']);
+    assert.equal(rpcs[0][0], 'sync_shared_collection');
+    assert.ok(!rpcs.some(([name]) => name === 'copy_verse_to_collection'));
+    role = 'member';
+    await state().openSharedCollection(group);
   });
 
   await t.test('a failed grid read keeps the last grid and marks it failed; a retry clears it', async () => {

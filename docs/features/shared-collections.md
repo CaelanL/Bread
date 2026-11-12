@@ -150,15 +150,14 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 
 - **Share**: Share… on a collection you own, or New shared collection on the Library's + menu
   ([library.md](library.md#sharing-from-the-library)), opens `app/share/[id].tsx`: a name
-  (`DisplayNameForm`) once, then `shareCollection` and the panel. 20 groups toasts. The group and
-  code exist from that tap, but until someone else joins it looks and acts personal
+  (`DisplayNameForm`) once, then `shareCollection` and the panel. At 20 groups a new share toasts
+  (`shareHitsCap`). From that tap there's a code, but until someone joins it acts personal
   ([group progress](group-progress.md#collection-screen)); the panel says "Not shared yet".
 - **Share panel** (`SharePanel`, also from the group card's gear): members, roles;
-  `?view=members` shows only the members. The owner also gets the code with a copy icon, days
-  left, Share, New code (confirmed; the old code dies), the
-  [member actions](group-progress.md#whos-where) and Stop sharing. Share sends `Join "<name>" on
-  Bread: <link> — or enter code <code> in Bread`: chat apps rarely make the link tappable.
-  Members get Leave.
+  `?view=members` shows only the members. It opens at full size (stand-ins until loaded).
+  The owner also gets the code, copy icon, days left, Share, New code (confirmed, old code
+  dies), the [member actions](group-progress.md#whos-where) and Stop sharing. Share sends
+  `inviteMessage`, link and code: chat apps rarely make links tappable. Members get Leave.
 - **Stop sharing** (owner, confirmed): `stopSharing` deletes the group ([dissolve](#dissolve));
   codes die, everyone's copy, the owner's included, is personal again.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed) show `JoinInvite`:
@@ -170,8 +169,8 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 - **Inside**: [group-progress.md](group-progress.md). Only the owner and editors see + and
   swipe-delete; only the owner renames or changes the icon. `addVerse` inserts the reference and
   syncs; `deleteVerse` deletes it ("Remove for everyone?" once others joined).
-  Copy-to-collection skips shared collections and Add-to-collection lists only ones you edit
-  (sync moves hand-linked verses to My Verses).
+  Copy-to-collection lists your own that no one joined (`addSharedVerse`); Add-to-collection,
+  ones you edit (sync moves hand-linked verses to My Verses).
 - **Leave and delete**: a member's swipe and menu read Leave; the confirm counts verses lost
   (`useVersesLostWith`). Once others joined, the owner's Delete asks "Delete for everyone?
   Members keep their own copy."; it stops sharing, then deletes the owner's copy.
@@ -181,9 +180,9 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 
 ## Seed users
 
-The header of `supabase/seed.sql`: `reader-c` (Cara) owns "Romans 8" with `reader-d` (Dana),
+`supabase/seed.sql`'s header: `reader-c` (Cara) owns "Romans 8" with `reader-d` (Dana),
 code `BREAD828`, and the groups in [group-progress.md](group-progress.md#browser-checks).
-`reader-a` and `reader-b` belong to no group.
+`reader-a` and `reader-b` are in no group.
 
 ## Sharp edges
 

@@ -29,7 +29,7 @@ app/
 │   │   ├── add.tsx                    ← Add a verse: quick-add field, version, book and chapter
 │   │   ├── add/[book]/[chapter].tsx   ← Verse picker for a chapter
 │   │   ├── setup/[id].tsx             ← Difficulty + chunk-size picker before starting a session
-│   │   └── shared/[id].tsx            ← Who's where, pushed from a shared collection's group progress
+│   │   └── shared/[id].tsx            ← Who's where (titled Details), pushed from a shared collection's group progress
 │   └── settings.tsx                   ← Tab: Settings
 ├── collections/[slug].tsx     ← Curated collection introduction and import
 ├── join/[code].tsx            ← Shared-collection invite (transparent modal)

@@ -6,7 +6,7 @@ import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
-import { MAX_SHARED_COLLECTIONS } from '@/lib/shared/constants';
+import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
 import { hasOtherMembers, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
 import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useVersesByCollection, useVersesLostWith } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
@@ -172,7 +172,7 @@ export default function LibraryScreen() {
 
   // The share modal is a route, never an RN Modal held here: see ModalCard. `new` names one first.
   const handleShare = (collectionId: string) => {
-    if (sharedCount >= MAX_SHARED_COLLECTIONS) {
+    if (shareHitsCap(allCollections.find((c) => c.id === collectionId)?.sharedId, sharedCount)) {
       showErrorToast(`${MAX_SHARED_COLLECTIONS} shared collections is the limit.`);
       return;
     }

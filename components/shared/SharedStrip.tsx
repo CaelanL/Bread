@@ -37,7 +37,8 @@ export function SharedStrip({ ownerName, members, memberCount, verseCount, progr
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const percent = progress ? Math.round(progress.ratio * 100) : 0;
-  const heading = `${ownerName ?? 'Shared'} · ${plural(memberCount, 'member')} · ${verseCount === 0 ? 'No verses yet' : plural(verseCount, 'verse')}`;
+  const heading = [ownerName, plural(memberCount, 'member'), verseCount === 0 ? 'No verses yet' : plural(verseCount, 'verse')]
+    .filter(Boolean).join(' · ');
 
   return (
     <View style={[styles.strip, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -77,7 +78,7 @@ export function SharedStrip({ ownerName, members, memberCount, verseCount, progr
           testID="shared-progress"
           accessibilityRole="button"
           accessibilityLabel={groupProgressLabel(progress, verseCount)}
-          accessibilityHint="Shows who's where"
+          accessibilityHint="Shows details"
           onPress={onShowGrid}
           style={[styles.body, styles.progress]}
         >
