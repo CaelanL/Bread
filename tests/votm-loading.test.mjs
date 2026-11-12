@@ -92,6 +92,19 @@ test('monthly loads publish reference metadata promptly and keep text with its c
     await next; assert.equal(updates.at(-1).text, 'New month');
     assert.deepEqual(monthCalls, ['2026-11', '2026-12']);
   });
+  await t.test('reloading the month on screen keeps it there, text included, until the new read lands', async () => {
+    reset(); const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));
+    await loader.load('ESV', november);
+    const before = updates.length;
+    clearSessionCache(); const pending = hold('ESV'); const again = loader.load('ESV', november);
+    await pending.sent.promise;
+    assert.ok(updates.length > before);
+    for (const state of updates.slice(before)) {
+      assert.equal(state.loading, false); assert.equal(state.votm.yearMonth, '2026-11'); assert.equal(state.text, 'Synthetic ESV');
+    }
+    pending.reply.resolve(Response.json({ reference: 'Psalms 23:1', version: 'ESV', text: 'Fresh', verses: { 1: 'Fresh' } }));
+    await again; assert.equal(updates.at(-1).text, 'Fresh');
+  });
   await t.test('leaving or changing accounts prevents late publication', async () => {
     reset(); const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));
     const pending = hold('ESV'); const loading = loader.load('ESV', november); await pending.sent.promise;

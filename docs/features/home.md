@@ -80,17 +80,17 @@ survive; they may differ from the generated three-year rotation. Schedule tests
 check canonical bounds, continuous coverage and SQL/source parity.
 
 `useVotm` loads on Home focus, translation change, app return and pull to refresh.
-While focused, a short local clock check detects a month change without a long
-JavaScript timer or server polling. `getCurrentVOTM` uses the device's local month.
+While focused, a once-a-minute clock check catches a month change (no long timer or
+polling). `getCurrentVOTM` uses the device's local month.
 Aliases such as Psalm keep their display reference and normalize through the
 shared Bible helper.
 
-The reference appears as soon as metadata arrives. Text and mastery reads run in
-parallel through the existing Bible/API paths. `createMonthlyLoader` clears old
-text immediately and ignores responses from an older month, version, account or
-blurred screen. A missing schedule row shows the empty card; a failed metadata
-read offers Try again. A text failure keeps the reference and offers a text retry.
-Only the current month's text is fetched.
+The reference shows when metadata arrives; text and mastery load in parallel.
+A reload of the month and translation on screen keeps the card until new reads land
+(no skeleton, no art remount). Otherwise `createMonthlyLoader`
+clears old text at once; it ignores responses from an older month, version, account or
+blurred screen. No schedule row: the empty card; failed metadata: Try again; failed
+text: reference and retry. Only the current month's text is fetched.
 
 ## `verse_of_month`
 
