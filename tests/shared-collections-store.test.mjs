@@ -78,6 +78,12 @@ test('joining and leaving a shared collection', async (t) => {
       }
       return json([]);
     }
+    if (method === 'DELETE' && url.pathname === '/rest/v1/shared_collections') {
+      // Dissolve: the FK sets the copy's shared_collection_id to NULL.
+      joined = false;
+      copyRow = { ...copy, shared_collection_id: null };
+      return json([{ id: group }]);
+    }
     if (method !== 'GET') return new Response(null, { status: 204 });
     reads.push(url.pathname);
     if (url.pathname === '/rest/v1/profiles') return json({ translation: 'NIV', display_name: 'Dana' });
@@ -239,6 +245,23 @@ test('joining and leaving a shared collection', async (t) => {
     await state().resetVerseProgress('verse-1');
     assert.equal(state().sharedCollections[group]?.masteredSquares, 1);
     masteredSquares = 0;
+  });
+
+  await t.test("the owner's Stop sharing deletes the group and keeps the collection as a plain one, with no notice", async () => {
+    role = 'owner';
+    await state().refresh();
+    toasts.length = 0;
+    await state().stopSharing(group);
+    const collection = state().collections.find((c) => c.id === copy.client_id);
+    assert.ok(collection, 'the collection stays');
+    assert.equal(collection.sharedId, undefined);
+    assert.equal(state().sharedCollections[group], undefined);
+    assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 1);
+    await state().refresh();
+    assert.deepEqual(toasts, []);
+    role = 'member';
+    copyRow = copy;
+    await state().joinSharedCollection('BREAD828');
   });
 
   await t.test('a leave that completes after the account changed touches nothing of the new session', async () => {

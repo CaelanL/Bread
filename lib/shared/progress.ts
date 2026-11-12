@@ -118,6 +118,14 @@ export function everyoneEngraved(grid: Grid): boolean {
   return grid.rows.length > 0 && grid.rows.every(everyone(grid, (s) => s === 'engraved'));
 }
 
+/**
+ * Whether anyone besides the owner is in the group. Until someone joins, a shared collection looks
+ * and acts like a personal one: no group card, no group counts, personal emblems and delete text.
+ */
+export function hasOtherMembers(status: Pick<SharedCollectionInfo, 'memberCount'> | undefined): boolean {
+  return (status?.memberCount ?? 0) > 1;
+}
+
 /** A Library card's emblem: the whole collection mastered (engraved counts) or engraved. */
 export type Emblem = 'mastered' | 'engraved';
 
@@ -138,23 +146,6 @@ export function sharedEmblem(
   const squares = status.memberCount * status.verseCount;
   if (squares === 0 || status.masteredSquares !== squares) return null;
   return status.engravedSquares === squares ? 'engraved' : 'mastered';
-}
-
-/** Above this many members a per-member bar is too thin to read, so only the count shows. */
-export const MAX_BAR_MEMBERS = 8;
-
-/** A verse's per-member bar: engraved, mastered, learning, then open; null above MAX_BAR_MEMBERS. */
-export function barSegments(states: MemberState[]): MemberState[] | null {
-  if (states.length > MAX_BAR_MEMBERS) return null;
-  const order: MemberState[] = ['engraved', 'mastered', 'learning', 'open'];
-  return [...states].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-}
-
-/** The references a member hasn't mastered yet (Open or Learning), in grid order. */
-export function openVersesFor(userId: string, grid: Grid): SharedReference[] {
-  const column = grid.memberIds.indexOf(userId);
-  if (column < 0) return [];
-  return grid.rows.filter((row) => !isMasteredState(row.states[column])).map((row) => row.reference);
 }
 
 /** One Who's where column (and row): a 20 pt tile and a 6 pt gap. Columns never stretch. */

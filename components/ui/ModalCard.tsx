@@ -68,6 +68,10 @@ export const modalStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonText: { fontSize: 16, fontWeight: '600' },
+  // A ScrollView under the card's header: it reaches the card's edges, so its scroll indicator
+  // sits at the edge instead of over the content, and the content keeps the card's padding.
+  edgeScroll: { flexGrow: 0, flexShrink: 1, marginHorizontal: -PADDING },
+  edgeScrollContent: { paddingHorizontal: PADDING },
 });
 
 const styles = StyleSheet.create({

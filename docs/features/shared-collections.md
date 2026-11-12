@@ -128,8 +128,8 @@ Nothing of another member's changes. The owner can't leave or be removed.
 
 ## Dissolve
 
-Deleting the group row (owner `DELETE` under RLS, or the owner's account deletion
-cascading from `auth.users`) first runs `sync_members_before_dissolve`: every member but
+Deleting the group row (owner `DELETE` under RLS from Stop sharing or Delete, or the owner's
+account deletion cascading from `auth.users`) first runs `sync_members_before_dissolve`: every member but
 the owner is synced in their `profiles.translation` (ESV when unset), so a reference they
 never opened still reaches their copy. Then the foreign key sets every member's
 `shared_collection_id` to NULL in the same statement. Each copy becomes a personal
@@ -149,13 +149,23 @@ State and actions live in the store ([sync-and-storage.md](../architecture/sync-
 group) is read on hydrate and refresh. Failures throw for a toast, nothing queued;
 `sharedErrorMessage` (`lib/shared/invite-code.ts`) shows `22023` text as is.
 
-- **Share**: Share… on a personal collection, or New shared collection on the Library's + menu
+- **Share**: Share… on a collection you own, or New shared collection on the Library's + menu
   ([library.md](library.md#sharing-from-the-library)), opens `app/share/[id].tsx`: a name
-  (`DisplayNameForm`) once, then `shareCollection` and the panel. 20 groups toasts.
-- **Share panel** (`SharePanel`, also from the strip): members, roles. The owner also gets the
-  code with a copy icon, days left, Share, New code (confirmed; the old code dies) and the
-  [member actions](group-progress.md#whos-where). Share sends `Join "<name>" on Bread: <link> — or
+  (`DisplayNameForm`) once, then `shareCollection` and the panel. 20 groups toasts. The group and
+  its code exist from that tap, but until someone else joins the collection looks and acts
+  personal (`hasOtherMembers`, `member_count > 1`): no group card or counts, personal emblems,
+  the personal delete and remove confirms. The panel says "Not shared yet", and Share… on the
+  long-press menu opens it again.
+- **Share panel** (`SharePanel`, also from the group card's gear): members, roles. The name stays
+  above the scrolling part, which reaches the card's edges, so nothing scrolls under the X and
+  the scroll bar stays off the rows. `?view=members` (the group card's members line) shows only
+  the members. The owner also gets the code with a copy icon, days left, Share, New code
+  (confirmed; the old code dies), the [member actions](group-progress.md#whos-where) and Stop
+  sharing. Share sends `Join "<name>" on Bread: <link> — or
   enter code <code> in Bread`: chat apps rarely make the link tappable. Members get Leave.
+- **Stop sharing** (owner, confirmed): `stopSharing` deletes the group, the same
+  [dissolve](#dissolve) as Delete without deleting the owner's copy. Every code dies, members keep
+  a personal copy, and the owner's collection is a plain one again.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed, Join with code on the +
   menu) show `JoinInvite`: inviter, name, counts, inviter's initial and "+N", the privacy line
   with the account translation, and Join. Join asks for a name if needed, calls
@@ -168,8 +178,9 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   Copy-to-collection skips shared collections and Add-to-collection lists only ones you edit
   (sync moves hand-linked verses to My Verses).
 - **Leave and delete**: a member's swipe and menu read Leave; the confirm counts verses lost
-  (`useVersesLostWith`: not mastered, in no other collection). The owner's Delete reads
-  "Delete for everyone? Members keep their own copy." with the count, then dissolves. Cards
+  (`useVersesLostWith`: not mastered, in no other collection). Once someone joined, the owner's
+  Delete reads "Delete for everyone? Members keep their own copy." with the count; either way it
+  stops sharing, then deletes the owner's copy with today's rule. Cards
   read [Shared](group-progress.md#library-cards) until then.
 - **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
   toasts once, "You were removed from <name>." or, if the owner deleted it, "<name> is now your
@@ -212,4 +223,6 @@ modal over the Library, close, Join).
 - 2026-11-11 · A dissolve syncs every member first (one-time fan-out) · Without it a member who never reopened the collection keeps a copy missing the latest references.
 - 2026-11-11 · An editor's removal reaches every copy at once; sync moves anything else in a copy to My Verses · Sync can't tell a removed reference from an old client's own verse, and a member's own verse is never deleted by sync.
 - 2026-11-11 · Mint, leave and sync are definer-backed; clients can't write invites, delete memberships or set `shared_collection_id` · Each direct path skipped a rule: extra or revived codes, a membership dropped without its copy, a collection linked to a group without joining.
+- 2026-11-12 · A collection reads as shared only once someone besides the owner is in it, derived from `member_count`, no new column · Caelan didn't want one accidental Share tap to turn a collection shared; the real line is whether anyone else is in it.
+- 2026-11-12 · Stop sharing deletes the group, with or without members · The dissolve already keeps every member's copy and kills the codes in one statement; no new RPC or migration. Replaces "no Stop sharing" from 2026-11-11.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.

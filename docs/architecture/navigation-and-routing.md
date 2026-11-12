@@ -116,7 +116,7 @@ Home also presents the [intro player](../features/home.md#encouragement-video) t
 |---|---|
 | `collections/[slug].tsx` | `slug` — bundled curated collection ID |
 | `join/[code].tsx` | `code` — invite code, normalized (upper case, spaces and dashes dropped) |
-| `share/[id].tsx` | `id` — collection `client_id` to share or manage, or `new` to name and share a new one |
+| `share/[id].tsx` | `id` — collection `client_id` to share or manage, or `new` to name and share a new one; `view=members` shows only the members |
 | `(tabs)/(library)/[id].tsx` | `id` — collection `client_id`, or the virtual `mastered` / `in-progress` |
 | `(tabs)/(library)/add/[book]/[chapter].tsx` | `book`, `chapter` — Bible reference; query `collectionId`, `version` |
 | `(tabs)/(library)/setup/[id].tsx` | `id` — verse `client_id` |

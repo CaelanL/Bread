@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
-import { GroupCount, MemberStateDot } from '@/components/shared/MemberState';
+import { GroupCount } from '@/components/shared/MemberState';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -29,8 +29,8 @@ interface SwipeableVerseCardProps {
   collectionCount?: number;
   /** Set in a shared collection: removing the verse removes it for every member. */
   sharedMemberCount?: number;
-  /** Set in a shared collection: your state on the left, every member's on the right (null until read). */
-  group?: { you: MemberState; states: MemberState[] | null; unavailable: boolean };
+  /** Set in a shared collection with other members: every member's state, for the count on the right (null until read). */
+  group?: { states: MemberState[] | null; unavailable: boolean };
 }
 
 export function SwipeableVerseCard({
@@ -207,20 +207,14 @@ export function SwipeableVerseCard({
               <View style={styles.engravedGlow} />
             )}
             <View style={styles.cardContent}>
-              {group ? (
-                <View style={styles.youColumn}>
-                  <MemberStateDot state={group.you} />
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.iconContainer,
-                    { backgroundColor: colors.primaryLight },
-                  ]}
-                >
-                  <IconSymbol name="book.fill" size={20} color={colors.icon} />
-                </View>
-              )}
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: colors.primaryLight },
+                ]}
+              >
+                <IconSymbol name="book.fill" size={20} color={colors.icon} />
+              </View>
               <View style={styles.cardText}>
                 <View style={styles.referenceRow}>
                   <Text style={[styles.verseReference, { color: verse.progress.engraved?.completed ? primaryColor : colors.text }]}>
@@ -238,7 +232,7 @@ export function SwipeableVerseCard({
                       card styling (glow + reference text color) is
                       the indicator. ReviewStateBadge below carries
                       the SR review-status detail in all cases. */}
-                  {group ? null : !verse.progress.hard.completed && highestDifficulty === 'easy' ? (
+                  {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
                     <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
                   ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
                     <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
@@ -292,11 +286,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-  },
-  youColumn: {
-    width: 24,
-    alignItems: 'center',
-    paddingTop: 4,
   },
   iconContainer: {
     width: 40,

@@ -15,11 +15,12 @@ type Step = 'name' | 'collection' | 'sharing' | 'panel';
 /**
  * The share modal, for `com.biblemem://share/<collection id>` or `/share/new`: the one-time
  * display name if needed, then (for new) the collection's name, then shares it and shows the code
- * and members. Opening it for a collection that's already shared goes straight to the members.
+ * and members. Opening it for a collection that's already shared goes straight to the panel;
+ * `?view=members` shows only the members.
  * A route, not an RN Modal, so an invite opened over it unwinds with it (see ModalCard).
  */
 export default function ShareScreen() {
-  const { id = '' } = useLocalSearchParams<{ id: string }>();
+  const { id = '', view } = useLocalSearchParams<{ id: string; view?: string }>();
   const colors = Colors[useColorScheme() ?? 'light'];
   const isNew = id === 'new';
   const alreadyShared = useAppStore((s) => !isNew && s.collections.some((c) => c.id === id && c.sharedId));
@@ -58,7 +59,8 @@ export default function ShareScreen() {
   if (step === 'name') body = <DisplayNameForm onDone={() => setStep(isNew ? 'collection' : 'sharing')} />;
   else if (step === 'collection') body = <CollectionNameForm onSubmit={create} />;
   else if (step === 'sharing' || !target) body = <ActivityIndicator style={styles.loading} color={colors.icon} />;
-  else body = <SharePanel collectionId={target} onLeft={() => router.dismissTo('/(tabs)/(library)')} />;
+  else body = <SharePanel collectionId={target} view={view === 'members' ? 'members' : 'all'}
+    onLeft={() => router.dismissTo('/(tabs)/(library)')} onStopped={close} />;
 
   return (
     <ModalCard onClose={close} closeDisabled={step === 'sharing'}>

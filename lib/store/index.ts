@@ -135,6 +135,7 @@ interface AppState {
 
   // Actions - Shared collections. Every failure throws for the caller's toast; nothing is queued.
   shareCollection: (collectionId: string) => Promise<{ sharedId: string; code: string }>;
+  stopSharing: (sharedId: string) => Promise<void>;
   mintInvite: (sharedId: string) => Promise<{ code: string; expiresAt: string }>;
   joinSharedCollection: (code: string) => Promise<string>;
   syncSharedCollection: (sharedId: string) => Promise<boolean>;
@@ -1085,7 +1086,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteCollection: async (id: string) => {
     if (id === DEFAULT_COLLECTION_ID) return;
 
-    // A member's delete is leave. The owner's dissolves the group: every member keeps their
+    // A member's delete is leave. The owner's stops sharing first: every member keeps their
     // copy (docs/features/shared-collections.md#dissolve), then the owner's goes as below.
     const sharedId = sharedIdOf(id);
     if (sharedId) {
@@ -1093,13 +1094,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         await get().leaveSharedCollection(sharedId);
         return;
       }
-      const { data: group, error: groupError } = await db.from('shared_collections').delete().eq('id', sharedId).select('id');
-      if (groupError) throw groupError;
-      if (group.length !== 1) throw new Error('Could not delete the shared collection.');
-      set((state) => ({
-        collections: state.collections.map((c) => c.id === id ? { ...c, sharedId: undefined } : c),
-        sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
-      }));
+      await get().stopSharing(sharedId);
     }
 
     // Get server UUID for this collection
@@ -1237,6 +1232,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     await get().fetchSharedCollections();
     return { sharedId: row.shared_id, code: row.code };
+  },
+
+  // Deletes the group: its codes die, members keep a personal copy, and the owner's copy is a
+  // plain collection again.
+  stopSharing: async (sharedId) => {
+    if (sharedRole(sharedId) !== 'owner') throw new Error('Only the owner can stop sharing.');
+    const { data: group, error } = await db.from('shared_collections').delete().eq('id', sharedId).select('id');
+    if (error) throw error;
+    if (group.length !== 1) throw new Error('Could not stop sharing this collection.');
+    set((state) => ({
+      collections: state.collections.map((c) => c.sharedId === sharedId ? { ...c, sharedId: undefined } : c),
+      sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
+      sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
+    }));
   },
 
   mintInvite: async (sharedId) => {

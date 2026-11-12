@@ -52,6 +52,7 @@ const MAPPING = {
   'square.on.square': 'filter-none',
   'square.and.arrow.up': 'ios-share',
   'ellipsis': 'more-horiz',
+  'gearshape': 'settings',
   'arrow.triangle.2.circlepath': 'autorenew',
   'rectangle.portrait.and.arrow.right': 'logout',
 } as IconMapping;

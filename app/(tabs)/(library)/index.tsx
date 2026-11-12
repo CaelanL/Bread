@@ -7,7 +7,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { MAX_SHARED_COLLECTIONS } from '@/lib/shared/constants';
-import { sharedEmblem, soloEmblem } from '@/lib/shared/progress';
+import { hasOtherMembers, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
 import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useVersesByCollection, useVersesLostWith } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
@@ -62,11 +62,13 @@ function CollectionCard({
       ? inProgressVerseCount
       : collectionVerses.length;
   const dueCount = isMastered ? dueCounts.mastered : 0;
+  // Shared only once someone else joined; until then it's a personal card (docs/features/shared-collections.md).
+  const group = shared && hasOtherMembers(shared) ? shared : undefined;
   const emblem = useMemo(() => {
     if (collection.isVirtual) return null;
-    if (collection.sharedId) return shared ? sharedEmblem(shared) : null;
+    if (group) return sharedEmblem(group);
     return soloEmblem(collectionVerses.map((v) => v.progress));
-  }, [collection.isVirtual, collection.sharedId, shared, collectionVerses]);
+  }, [collection.isVirtual, group, collectionVerses]);
 
   return (
     <SwipeableCollectionCard
@@ -83,7 +85,7 @@ function CollectionCard({
       lostCount={lostCount}
       onShare={onShare}
       emblem={emblem}
-      memberCount={shared?.memberCount}
+      memberCount={group?.memberCount}
     />
   );
 }

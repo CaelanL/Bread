@@ -21,8 +21,9 @@ means every square is.
 
 ## Collection screen
 
-`app/(tabs)/(library)/[id].tsx`, only when `Collection.sharedId` is set; a personal collection
-looks as it always did.
+`app/(tabs)/(library)/[id].tsx`. The group parts below show only once someone besides the owner
+is in the group (`hasOtherMembers` in `lib/shared/progress.ts`, `member_count > 1`); before that a
+shared collection looks like a personal one, and a personal collection looks as it always did.
 
 - **What syncs when**: each visit runs `openSharedCollection` once (sync, then the grid, the group
   row and your own copies, which a removed reference, a removal or a dissolve changes without
@@ -33,23 +34,20 @@ looks as it always did.
 - **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
   group's `shared_collection_verses`, turned into squares by `lib/shared/progress.ts` (pure,
   `progress.test.ts`). Your own squares come from your verses in this collection, so they move the
-  moment a session saves. A failed read keeps the last grid and shows Retry on the strip; until a
+  moment a session saves. A failed read keeps the last grid and shows Retry on the group card; until a
   grid arrives the Group column reads "–" (loading, or unavailable after a failure).
-- **Strip** (`SharedStrip`, under the header): member initials (yours first and solid),
-  "Shared · N members · V verses", the group percentage with its bar, and "K of V verses mastered
-  by everyone". The members line opens the
-  share panel (`app/share/[id].tsx`: invite, Leave); the progress opens [Who's where](#whos-where).
-- **Cards**: a You dot on the left (`MemberStateDot`, the tile fills below as a dot) and a Group
-  column on the right (`GroupCount`: "mastered/members" over a bar of every member's state, or a
-  checkmark and "All" when everyone has mastered it). The bar shows up to 8
-  members (`MAX_BAR_MEMBERS`); above that only the count. The review badge stays.
-- **Open verses**: the ones you haven't mastered. "Open · N" filters the list to them, and
-  "Practice your N open verses" opens setup on the first of them in the list's order, the same
-  screen a tap opens. Both hide at zero.
+- **Group card** (`SharedStrip`, under the header): member initials (yours first and solid) and
+  "<owner's name> · N members · V verses", which open the member list (`app/share/[id]?view=members`:
+  names and roles, the owner's member actions); a gear, which opens the share panel
+  (`app/share/[id].tsx`: invite, Stop sharing or Leave); and the group percentage with its bar and
+  "Details". Every other point of the card opens [Who's where](#whos-where).
+- **Cards**: the same rows as a personal collection (book icon, difficulty dot or check, review
+  badge), plus the group's count on the right (`GroupCount`): members who mastered the verse,
+  engraved included, over all members, "8/10", the same on every row.
 
 ## Who's where
 
-`app/(tabs)/(library)/shared/[id].tsx`, pushed from the strip's progress; `id` is the local
+`app/(tabs)/(library)/shared/[id].tsx`, pushed from the group card; `id` is the local
 collection, as on the collection screen. It reads the same grid (`useSharedGrid`, your squares from
 your verses), nothing new.
 
@@ -87,6 +85,8 @@ frame. The rules are `soloEmblem` and `sharedEmblem` in `lib/shared/progress.ts`
 | Shared, engraved by everyone | Engraved squares = members × verses | The engraved square in a ring | "Engraved by everyone · Shared" |
 | Shared, not yet | Anything else, or no status row yet | The collection's own icon | "Shared · M members" |
 
+A shared collection only its owner is in follows the personal rows.
+
 The ring is 1.5 pt in the emblem colour at `Radius.xl`, 3 pt outside the 48 pt square, so 1.5 pt
 of `card` shows between them and the card's layout doesn't move. Virtual collections never get an
 emblem. A shared card reads the status from the last hydrate, refresh or collection visit, and a session
@@ -103,12 +103,13 @@ references in every state, so Who's where scrolls sideways
 (`"/(tabs)/(library)/shared/seed-sermon-mount" --as reader-c`).
 
 After `npm run db:reset`: `npm run sim -- flow shared-progress` (the seeded Romans 8 as Cara and
-Dana: strip, You and Group values, open filter, Practice, Cara makes Dana an editor, Dana adds
-Romans 8:31, Cara sees it); `npm run sim -- flow shared-grid` (Dana opens Who's where from the
-strip: four states, your column first, member list; Cara opens it by link and makes Dana an editor
-there); `npm run sim -- flow shared-emblems` (the seeded group reads "Shared · 2 members", its
-script masters and then engraves every square for the ring, Cara deletes for everyone and Dana's
-copy reads "Engraved · 3 verses", reader-a's Psalms reads "Mastered · 1 verse"). Shots:
+Dana: the group card, Group counts, the members line opens the member list, the gear the share
+panel, Details Who's where, Cara makes Dana an editor, Dana adds Romans 8:31, Cara sees it);
+`npm run sim -- flow shared-grid` (Dana opens Who's where from the group card: four states, your
+column first, member list; Cara opens it by link and makes Dana an editor there);
+`npm run sim -- flow shared-emblems` (the seeded group reads "Shared · 2 members", its script
+masters and then engraves every square, "Engraved by everyone", Cara deletes for everyone and
+Dana's copy reads "Engraved · 3 verses", reader-a's Psalms reads "Mastered · 1 verse"). Shots:
 `npm run sim -- shot "/(tabs)/(library)" --as reader-c` (the card without an emblem),
 `"/(tabs)/(library)/seed-romans-8" --as reader-c` and `"/(tabs)/(library)/shared-cccccccc-0000-4000-8000-000000000031" --as reader-d`;
 Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
@@ -116,13 +117,14 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 
 ## Decisions
 
-- 2026-11-11 · Your own squares on the collection screen come from your local verses, the rest from the grid · Your You dot, review badge and open count then agree, and a session's result shows without a refetch.
+- 2026-11-11 · Your own squares on the collection screen come from your local verses, the rest from the grid · Your row, review badge and the Group count then agree, and a session's result shows without a refetch.
+- 2026-11-12 · Verse rows in a shared collection look like personal rows, with only the "mastered/members" count on the right; no You dot, no per-member bar, no Open filter and no Practice button · Caelan's phone pass: the dots confused, and a bar on some rows and a number on others read inconsistently.
 - 2026-11-11 · Who's where puts your column first and lists references in Bible order · You look for yourself first; the collection screen keeps your own sort, the grid is a fixed table.
-- 2026-11-11 · Who's where reads the collection screen's grid and opens from the strip's progress; the members line still opens the sheet · One read path, and invite and Leave stay where slice 2 put them.
+- 2026-11-12 · Who's where reads the collection screen's grid and opens from anywhere on the group card but the members line (member list) and the gear (share panel) · One read path; Caelan's phone pass wanted the card itself to lead to the details.
 - 2026-11-11 · Column headers carry only the initial, mastered counts sit in a row under the tiles, and roles show in the member list · A role badge and a count don't fit a 26 pt column.
 - 2026-11-11 · Learning is solid `warning`, not 30% alpha · The alpha tint turned brown on dark and read as a darker Engraved.
-- 2026-11-11 · Your column is marked by a solid `primary` circle, not a caption · One marker, no extra row, the same mark on the strip and the member rows.
+- 2026-11-11 · Your column is marked by a solid `primary` circle, not a caption · One marker, no extra row, the same mark on the group card and the member rows.
 - 2026-11-11 · Columns keep a fixed 26 pt pitch and scroll from the measured width · Stretched columns spread a two-member grid across the card, and a member-count cutoff overlapped columns beside long references.
 - 2026-11-11 · The emblem replaces the icon in the card's square and the subtitle carries the words; no tinted frame or gradient · A frame on a card that already has a 1 pt border is border-on-border, and the ring alone must never carry the meaning.
-- 2026-11-11 · A shared card without the emblem reads "Shared · M members" instead of the verse count · Shared and personal collections read differently at a glance; the verse count is on the strip.
 - 2026-11-11 · The ring sits outside the existing 48 pt square (the design note said 40 and 46) · The square keeps its size and the card's text doesn't shift.
+- 2026-11-11 · A shared card without the emblem reads "Shared · M members" instead of the verse count · Shared and personal collections read differently at a glance; the verse count is on the group card. A collection only its owner is in reads as personal.

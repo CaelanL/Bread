@@ -43,8 +43,7 @@ same as a real collection. Notification taps use that path
 `fetchCollections` pins My Verses, Mastered and In Progress. Custom collections
 follow saved positions, then creation time and client ID. New collections append.
 
-Long-press a custom collection for Rename, Reorder and Delete, plus Share… on a personal
-one. Shared collections change the menu, swipe, add and delete; see
+Long-press a custom collection for Rename, Reorder and Delete, plus Share… on one you own. Shared collections change the menu, swipe, add and delete; see
 [shared collections](shared-collections.md#in-the-app). On iOS, one light
 haptic confirms the action opens. The menu opens under the press and `PopoverMenu` keeps it
 inside the safe area, so a card near the bottom gets it moved up rather than cut off. Rename prefills
@@ -52,9 +51,9 @@ inside the safe area, so a card near the bottom gets it moved up rather than cut
 actions to move up or down. Each drop saves the order, with rollback on failure.
 Tap Done to return to opening collections by tapping their rows.
 
-Each card: the icon square, name, a subtitle (verse count; "Shared · M members" for a shared
-one), the due pill on Mastered, and a chevron. A collection whose every verse is mastered or
-engraved shows an emblem in the square instead; see
+Each card: the icon square, name, a subtitle (verse count; "Shared · M members" once someone else
+is in a shared one), the due pill on Mastered, and a chevron. A collection whose every verse is
+mastered or engraved shows an emblem in the square instead; see
 [group progress](group-progress.md#library-cards).
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.

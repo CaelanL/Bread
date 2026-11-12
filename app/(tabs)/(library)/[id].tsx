@@ -10,14 +10,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useAuth } from '@/lib/auth';
 import { useSharedGrid } from '@/hooks/use-shared-grid';
-import {
-  cellState,
-  groupProgress,
-  masteredByEveryoneCount,
-  openVersesFor,
-  progressFlags,
-  referenceKey,
-} from '@/lib/shared/progress';
+import { groupProgress, hasOtherMembers, masteredByEveryoneCount, referenceKey } from '@/lib/shared/progress';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
@@ -63,18 +56,16 @@ export default function CollectionScreen() {
   const sharedId = collection?.sharedId;
   // Plain members of a shared collection read it; the owner and editors add and remove.
   const canEdit = !sharedId || shared?.role === 'owner' || shared?.role === 'editor';
+  // The group card and counts show once someone besides the owner joined; until then it reads as personal.
+  const withOthers = Boolean(sharedId) && hasOtherMembers(shared);
   const { user } = useAuth();
-  const [openOnly, setOpenOnly] = useState(false);
   const { sharedProgress, grid } = useSharedGrid(sharedId, collectionVerses);
   const stripMembers = useMemo(() => {
     const members = (sharedProgress?.members ?? []).map((m) => ({ name: m.displayName, you: m.userId === user?.id }));
     return [...members.filter((m) => m.you), ...members.filter((m) => !m.you)];
   }, [sharedProgress, user]);
+  const ownerName = sharedProgress?.members.find((m) => m.role === 'owner')?.displayName ?? null;
   const groupRows = useMemo(() => new Map(grid?.rows.map((row) => [row.key, row])), [grid]);
-  const openKeys = useMemo(
-    () => new Set(grid && user ? openVersesFor(user.id, grid).map(referenceKey) : []),
-    [grid, user],
-  );
 
   // Count how many collections each verse is in (by matching book/chapter/verse/version)
   const getVerseCollectionCount = (verse: SavedVerse): number => {
@@ -167,11 +158,7 @@ export default function CollectionScreen() {
   const primaryColor = colors.primary;
 
   // Filter verses by search query (progressive filtering)
-  const showOpenOnly = openOnly && openKeys.size > 0;
-  const filteredVerses = filterVerses(
-    showOpenOnly ? verses.filter((v) => openKeys.has(referenceKey(v))) : verses,
-    searchQuery,
-  );
+  const filteredVerses = filterVerses(verses, searchQuery);
 
   // Sort verses based on sortBy
   const now = useReviewNow();
@@ -189,12 +176,6 @@ export default function CollectionScreen() {
   };
 
   const sortLabel = getSortLabel(sortBy);
-
-  // Today's session on your first open verse, in this list's order: the same setup screen a tap opens.
-  const practiceOpen = useDebouncedPress(() => {
-    const first = sortVerses(verses.filter((v) => openKeys.has(referenceKey(v))), sortBy, now)[0];
-    if (first) router.push(`/(tabs)/(library)/setup/${first.id}`);
-  });
 
   const renderEmptyState = () => {
     // No search results
@@ -288,14 +269,16 @@ export default function CollectionScreen() {
         }
       />
 
-      {sharedId && (
+      {withOthers && sharedId && (
         <SharedStrip
+          ownerName={sharedProgress?.fetchedAt ? ownerName : null}
           members={sharedProgress?.fetchedAt ? stripMembers : null}
           memberCount={sharedProgress?.fetchedAt ? sharedProgress.members.length : shared?.memberCount ?? 1}
           verseCount={sharedProgress?.fetchedAt ? sharedProgress.references.length : shared?.verseCount ?? verses.length}
           progress={grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null}
           failed={sharedProgress?.failed ?? false}
-          onOpen={() => router.push(`/share/${id}`)}
+          onMembers={() => router.push(`/share/${id}?view=members`)}
+          onSettings={() => router.push(`/share/${id}`)}
           onShowGrid={showGrid}
           onRetry={() => void useAppStore.getState().fetchSharedProgress(sharedId)}
         />
@@ -317,18 +300,6 @@ export default function CollectionScreen() {
               clearButtonMode="while-editing"
             />
           </View>
-          {openKeys.size > 0 && (
-            <Pressable
-              testID="open-verses-filter"
-              accessibilityRole="button"
-              accessibilityState={{ selected: showOpenOnly }}
-              accessibilityLabel={`Only your open verses, ${openKeys.size}`}
-              style={[styles.sortButton, { backgroundColor: showOpenOnly ? colors.primary : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
-              onPress={() => setOpenOnly(!showOpenOnly)}
-            >
-              <Text style={[styles.sortLabel, { color: showOpenOnly ? colors.white : colors.icon }]}>Open · {openKeys.size}</Text>
-            </Pressable>
-          )}
           <Pressable
             style={[styles.sortButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
             onPress={cycleSortBy}
@@ -357,21 +328,17 @@ export default function CollectionScreen() {
               }}
               disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
               collectionCount={getVerseCollectionCount(item)}
-              sharedMemberCount={sharedId ? shared?.memberCount ?? 1 : undefined}
-              group={sharedId ? {
-                you: cellState(progressFlags(item.progress)),
+              sharedMemberCount={withOthers ? shared?.memberCount : undefined}
+              group={withOthers ? {
                 states: groupRows.get(referenceKey(item))?.states ?? null,
                 unavailable: sharedProgress?.failed ?? false,
               } : undefined}
             />
           )}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={sortedVerses.length === 0
-            ? styles.emptyContainer
-            : [styles.versesContainer, openKeys.size > 0 && styles.versesAbovePractice]}
-          ListHeaderComponent={sharedId && sortedVerses.length > 0 ? (
+          contentContainerStyle={sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
+          ListHeaderComponent={withOthers && sortedVerses.length > 0 ? (
             <View style={styles.columns}>
-              <Text style={[styles.columnLabel, { color: colors.icon }]}>You · Verse</Text>
               <Text style={[styles.columnLabel, { color: colors.icon }]}>Group</Text>
             </View>
           ) : undefined}
@@ -380,20 +347,6 @@ export default function CollectionScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
           }
         />
-      )}
-      {sharedId && openKeys.size > 0 && (
-        <View style={styles.practiceWrap} pointerEvents="box-none">
-          <Pressable
-            testID="practice-open"
-            accessibilityRole="button"
-            onPress={practiceOpen}
-            style={({ pressed }) => [styles.practice, { backgroundColor: colors.text, opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Text style={[styles.practiceText, { color: colors.background }]}>
-              Practice your {openKeys.size} open verse{openKeys.size === 1 ? '' : 's'}
-            </Text>
-          </Pressable>
-        </View>
       )}
       {iconPickerOpen && canChangeIcon && (
         <CollectionIconPicker
@@ -445,7 +398,7 @@ const styles = StyleSheet.create({
   },
   columns: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: 4,
   },
   columnLabel: {
@@ -454,32 +407,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-  },
-  versesAbovePractice: {
-    paddingBottom: 96,
-  },
-  practiceWrap: {
-    position: 'absolute',
-    bottom: 16,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-  },
-  practice: {
-    height: 48,
-    paddingHorizontal: 28,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  practiceText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
   searchContainer: {
     flexDirection: 'row',

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  barSegments,
   buildGrid,
   cellState,
   everyoneEngraved,
@@ -11,8 +10,8 @@ import {
   GRID_PITCH,
   gridScrolls,
   groupProgress,
+  hasOtherMembers,
   masteredByEveryoneCount,
-  openVersesFor,
   progressFlags,
   replaceMemberCells,
   sharedEmblem,
@@ -79,7 +78,6 @@ test('a member with no copy yet has an Open square on every verse', () => {
   const grid = buildGrid(['C', 'D', 'E'], [r81, r828, r838], [cell('C', r81, mastered)]);
   assert.deepEqual(grid.rows.map((row) => row.states[2]), ['open', 'open', 'open']);
   assert.equal(groupProgress(grid), 1 / 9);
-  assert.deepEqual(openVersesFor('E', grid), [r81, r828, r838]);
 });
 
 test('everyone mastered, and everyone engraved', () => {
@@ -105,12 +103,6 @@ test('an empty grid is 0% and never everyone-done', () => {
   }
 });
 
-test('open verses are the ones a member has not mastered, in grid order', () => {
-  assert.deepEqual(openVersesFor('C', seed), [r838]);
-  assert.deepEqual(openVersesFor('D', seed), [r828, r838]);
-  assert.deepEqual(openVersesFor('stranger', seed), []);
-});
-
 test('ranges match exactly, and cells for other verses or non-members are ignored', () => {
   const r82830 = { ...r828, verseEnd: 30 };
   const grid = buildGrid(['C'], [r828], [cell('C', r82830, mastered), cell('X', r828, mastered)]);
@@ -129,10 +121,10 @@ test("a member's own squares can be swapped for their local verses", () => {
   assert.deepEqual(grid.rows.map((row) => row.states), [['learning', 'open'], ['open', 'mastered']]);
 });
 
-test('the Group bar orders members by state and stops at eight members', () => {
-  assert.deepEqual(barSegments(['open', 'engraved', 'learning', 'mastered']), ['engraved', 'mastered', 'learning', 'open']);
-  assert.equal(barSegments(Array<'open'>(8).fill('open'))?.length, 8);
-  assert.equal(barSegments(Array<'open'>(9).fill('open')), null);
+test('a collection reads as shared only once someone besides the owner is in it', () => {
+  assert.equal(hasOtherMembers(undefined), false);
+  assert.equal(hasOtherMembers({ memberCount: 1 }), false);
+  assert.equal(hasOtherMembers({ memberCount: 2 }), true);
 });
 
 const cara = { userId: 'C', displayName: 'Cara', role: 'owner' as const };

@@ -56,7 +56,7 @@ interface SwipeableCollectionCardProps {
   onShare?: () => void;
   /** Every verse mastered or engraved; on a shared collection, by every member. */
   emblem?: Emblem | null;
-  /** A shared collection's member count, from `get_shared_status`. */
+  /** Set once someone besides the owner is in the shared collection, from `get_shared_status`. */
   memberCount?: number;
 }
 
@@ -96,9 +96,9 @@ export function SwipeableCollectionCard({
   const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
   const emblemLabel = emblem === 'engraved' ? 'Engraved' : 'Mastered';
   const subtitle = emblem
-    ? collection.sharedId ? `${emblemLabel} by everyone · Shared` : `${emblemLabel} · ${verseCount}`
-    : collection.sharedId
-      ? memberCount === undefined ? 'Shared' : `Shared · ${memberCount} member${memberCount !== 1 ? 's' : ''}`
+    ? memberCount !== undefined ? `${emblemLabel} by everyone · Shared` : `${emblemLabel} · ${verseCount}`
+    : memberCount !== undefined
+      ? `Shared · ${memberCount} member${memberCount !== 1 ? 's' : ''}`
       : verseCount;
 
   useEffect(() => {
@@ -194,8 +194,8 @@ export function SwipeableCollectionCard({
         closeSwipe();
       }
     };
-    if (collection.sharedId && sharedRole === 'owner') return confirmDeleteForEveryone(lostCount, confirm, closeSwipe);
-    if (collection.sharedId) return confirmLeave(collection.name, lostCount, confirm, closeSwipe);
+    if (isLeave) return confirmLeave(collection.name, lostCount, confirm, closeSwipe);
+    if (memberCount !== undefined) return confirmDeleteForEveryone(lostCount, confirm, closeSwipe);
     const title = `Delete "${collection.name}"?`;
     const message = collection.verseCount > 0
       ? 'Verses not mastered or in another collection will be deleted and lose progress.'
@@ -251,7 +251,7 @@ export function SwipeableCollectionCard({
             }}
           >
             <View style={styles.cardLeft}>
-              {emblem ? <CollectionEmblem emblem={emblem} ring={Boolean(collection.sharedId)} /> : <View style={[
+              {emblem ? <CollectionEmblem emblem={emblem} ring={memberCount !== undefined} /> : <View style={[
                 styles.iconContainer,
                 {
                   backgroundColor: collection.iconColor
@@ -314,7 +314,8 @@ export function SwipeableCollectionCard({
           items={[
             // A member's copy takes its name from the group, so only the owner renames it.
             ...(isLeave ? [] : [{ label: 'Rename', icon: 'pencil', onPress: onRename }]),
-            ...(onShare && !collection.sharedId ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
+            // The owner's Share… opens the code again (or Stop sharing) on a collection already shared.
+            ...(onShare && !isLeave ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
             { label: 'Reorder', icon: 'line.3.horizontal', onPress: onReorder },
             isLeave
               ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: handleDelete, destructive: true }
