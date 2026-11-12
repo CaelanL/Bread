@@ -185,6 +185,10 @@ async function getCurrentUserId(): Promise<string> {
 }
 
 let accountGeneration = 0;
+
+function inSharedCollection(state: Pick<AppState, 'verses' | 'collections'>, verseId: string): boolean {
+  return state.verses.some((v) => v.id === verseId && state.collections.some((c) => c.id === v.collectionId && c.sharedId));
+}
 let saverReadGeneration = 0;
 
 async function getCollectionWriteSession(generation: number) {
@@ -1309,9 +1313,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Opening a shared collection: bring the copy up to date, then read the grid and the group row
-  // (a role the owner changed since the last refresh). A failed sync throws after both reads; a
-  // failed grid read shows on the entry.
+  // Opening a shared collection: bring the copy up to date, then read the grid, the group row (a
+  // role the owner changed since the last refresh) and the user's own copies. A failed sync throws
+  // after the reads; a failed grid read shows on the entry.
   openSharedCollection: async (sharedId) => {
     let changed = false;
     let failure: unknown = null;
@@ -1320,17 +1324,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) {
       failure = e;
     }
-    // A sync that changed something has already refetched the group rows.
-    await Promise.all([get().fetchSharedProgress(sharedId), changed || get().fetchSharedCollections()]);
+    // A sync that changed something has already refetched. One that didn't still reloads: the
+    // server applies a removed reference, a removal or a dissolve to this copy without the sync.
+    await Promise.all([
+      get().fetchSharedProgress(sharedId),
+      changed || Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]),
+    ]);
+    if (!get().collections.some((c) => c.sharedId === sharedId)) {
+      set((state) => ({
+        sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
+      }));
+    }
     if (failure) throw failure;
   },
 
   leaveSharedCollection: async (sharedId) => {
-    const { error } = await supabase.rpc('leave_shared_collection', { p_shared: sharedId });
-    if (error) throw error;
+    const generation = accountGeneration;
     const userId = await getCurrentUserId();
+    const { error } = await supabase.rpc('leave_shared_collection', { p_shared: sharedId });
+    if (generation !== accountGeneration) return;
+    if (error) throw error;
     await withKnownGroups(userId, async (known) => (known ?? []).filter((g) => g.id !== sharedId))
       .catch((e) => console.error('[STORE] Failed to forget a left shared collection:', e));
+    if (generation !== accountGeneration) return;
     const gone = new Set(get().collections.filter((c) => c.sharedId === sharedId).map((c) => c.id));
     set((state) => ({
       collections: state.collections.filter((c) => !gone.has(c.id)),
@@ -1754,8 +1770,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // A shared card's emblem reads `get_shared_status`, so a square that just turned mastered or
     // engraved refetches it.
     const engravedNow = newProgress.engraved?.completed === true && verse.progress.engraved?.completed !== true;
-    const inShared = get().verses.some((v) => v.id === id && get().collections.some((c) => c.id === v.collectionId && c.sharedId));
-    if ((justBecameMastered || engravedNow) && inShared) await get().fetchSharedCollections();
+    if ((justBecameMastered || engravedNow) && inSharedCollection(get(), id)) await get().fetchSharedCollections();
   },
 
   resetVerseProgress: async (id: string) => {
@@ -1795,6 +1810,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ verses: previousVerses, masteredVerses: previousMastered });
       throw error;
     }
+    // A mastered square went back to Open: the shared card's emblem may no longer hold.
+    if (wasMastered && inSharedCollection(get(), id)) await get().fetchSharedCollections();
   },
 
   setVerseStudyPrefs: (id, chunkSize, difficulty) => {

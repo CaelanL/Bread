@@ -388,6 +388,21 @@ select ok((select deleted_at is not null from public.user_collections where id =
 select results_eq($$select verse_start, deleted_at is not null from public.user_verses where book = 'Romans' order by 1$$,
   $$values (1, true)$$, 'their unmastered copies are gone and the engraved one is soft-deleted');
 
+-- A sync that passed the membership check before the removal committed resumes under its locks,
+-- sees the membership gone and writes nothing. (The two-session race itself can't run inside one
+-- pgTAP transaction; this calls the helper the way the resumed sync does.)
+reset role;
+select results_eq(format('select local_client_id, changed from private.sync_member_copies(%L, %L, ''NIV'')',
+    current_setting('test.d'), current_setting('test.s')),
+  format('values (%L::text, false)', 'shared-' || current_setting('test.s')),
+  'a sync for someone no longer a member reports no change');
+select ok((select deleted_at is not null from public.user_collections where id = 'dddddddd-0000-4000-8000-000000000012'),
+  'that sync leaves the removed copy deleted');
+select results_eq(format($$select verse_start, deleted_at is not null from public.user_verses
+    where user_id = %L and book = 'Romans' order by 1$$, current_setting('test.d')),
+  $$values (1, true)$$, 'and brings back no verse copies');
+set local role authenticated;
+
 -- Rejoin with a fresh link: the old row and the kept verse come back.
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
 select set_config('test.code', (select code from public.mint_invite(current_setting('test.s')::uuid)), true);

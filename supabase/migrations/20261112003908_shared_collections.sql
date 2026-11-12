@@ -205,7 +205,8 @@ begin
   if p_version is null or p_version !~ '^[A-Z0-9][A-Z0-9-]{1,15}$' then
     raise exception 'Invalid translation' using errcode = '22023';
   end if;
-  select * into grp from public.shared_collections where id = p_shared;
+  -- Leave and remove hold the group row for update, so a sync waits for them to commit.
+  select * into grp from public.shared_collections where id = p_shared for share;
   if not found then
     raise exception 'Shared collection not found' using errcode = '22023';
   end if;
@@ -219,7 +220,14 @@ begin
   limit 1
   for update;
 
-  if not found then
+  -- The caller checked membership before these locks; a leave or removal may have committed since.
+  if not exists (select 1 from public.shared_collection_members m
+    where m.shared_collection_id = p_shared and m.user_id = p_user) then
+    local_client_id := local_row.client_id;
+    return;
+  end if;
+
+  if local_row.id is null then
     insert into public.user_collections (user_id, client_id, name, icon_key, shared_collection_id)
     values (p_user, 'shared-' || p_shared, grp.name, grp.icon_key, p_shared)
     returning * into local_row;
@@ -513,6 +521,8 @@ begin
   if auth.uid() is null or not private.is_member(p_shared) then
     raise exception 'Not a member' using errcode = '42501';
   end if;
+  -- Before anything else, so a sync of this member's copy waits (sync_member_copies).
+  perform 1 from public.shared_collections s where s.id = p_shared for update;
   if exists (select 1 from public.shared_collections s where s.id = p_shared and s.owner_id = auth.uid()) then
     raise exception 'The owner can''t leave' using errcode = '22023';
   end if;
@@ -528,6 +538,8 @@ begin
     or not exists (select 1 from public.shared_collections s where s.id = p_shared and s.owner_id = auth.uid()) then
     raise exception 'Only the owner can remove members' using errcode = '42501';
   end if;
+  -- Before anything else, so a sync of this member's copy waits (sync_member_copies).
+  perform 1 from public.shared_collections s where s.id = p_shared for update;
   if p_user = auth.uid() then
     raise exception 'The owner can''t be removed' using errcode = '22023';
   end if;

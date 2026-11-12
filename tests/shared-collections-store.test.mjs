@@ -39,6 +39,9 @@ test('joining and leaving a shared collection', async (t) => {
   let progressFails = false;
   let role = 'member';
   let copyRow = null;
+  let referenceRemoved = false;
+  let masteredSquares = 0;
+  let leaveGate = null;
   const rpcs = [];
   const reads = [];
   const json = (body, status = 200) => Response.json(body, { status });
@@ -53,7 +56,12 @@ test('joining and leaving a shared collection', async (t) => {
       const name = url.pathname.slice('/rest/v1/rpc/'.length);
       rpcs.push([name, init.body ? JSON.parse(init.body) : null]);
       if (name === 'join_shared_collection') { joined = true; copyRow = copy; return json(copy.client_id); }
-      if (name === 'leave_shared_collection') { joined = false; copyRow = null; return new Response(null, { status: 204 }); }
+      if (name === 'leave_shared_collection') {
+        await leaveGate;
+        joined = false;
+        copyRow = null;
+        return new Response(null, { status: 204 });
+      }
       if (name === 'get_shared_members') {
         return json([{ user_id: 'C', display_name: 'Cara', role: 'owner', joined_at: '2026-11-01T00:00:00Z' },
           { user_id: 'D', display_name: 'Dana', role: 'member', joined_at: '2026-11-05T00:00:00Z' }]);
@@ -63,7 +71,7 @@ test('joining and leaving a shared collection', async (t) => {
         return json([{ user_id: 'C', book: 'Romans', chapter: 8, verse_start: 28, verse_end: 28, practiced: true, mastered: true, engraved: false }]);
       }
       if (name === 'get_shared_status') {
-        return json(joined ? [{ shared_id: group, member_count: 2, verse_count: 1, mastered_squares: 0, engraved_squares: 0 }] : []);
+        return json(joined ? [{ shared_id: group, member_count: 2, verse_count: 1, mastered_squares: masteredSquares, engraved_squares: 0 }] : []);
       }
       return json([]);
     }
@@ -79,7 +87,7 @@ test('joining and leaving a shared collection', async (t) => {
       return json(joined ? [{ shared_collection_id: group, role }] : []);
     }
     if (url.pathname === '/rest/v1/verse_collections' && url.searchParams.get('select')?.includes('user_collections')) {
-      return json(copyRow ? [{ added_at: '2026-11-11T00:00:00Z', user_collections: { client_id: copy.client_id }, user_verses: verse }] : []);
+      return json(copyRow && !referenceRemoved ? [{ added_at: '2026-11-11T00:00:00Z', user_collections: { client_id: copy.client_id }, user_verses: verse }] : []);
     }
     return json([]);
   });
@@ -189,5 +197,52 @@ test('joining and leaving a shared collection', async (t) => {
     await state().refresh();
     assert.deepEqual(toasts, ['Romans 8 is now your own copy.']);
     assert.equal(state().collections.find((c) => c.id === copy.client_id)?.sharedId, undefined);
+  });
+
+  await t.test('opening reloads the copy even when sync changed nothing: a reference removed between visits goes', async () => {
+    await state().joinSharedCollection('BREAD828');
+    assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 1);
+    referenceRemoved = true;
+    await state().openSharedCollection(group);
+    assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 0);
+    referenceRemoved = false;
+  });
+
+  await t.test('opening after a removal between visits drops the copy and its shared state', async () => {
+    await state().openSharedCollection(group);
+    assert.ok(state().sharedProgress[group]);
+    joined = false;
+    copyRow = null;
+    await state().openSharedCollection(group);
+    assert.equal(state().collections.some((c) => c.id === copy.client_id), false);
+    assert.equal(state().sharedCollections[group], undefined);
+    assert.equal(state().sharedProgress[group], undefined);
+  });
+
+  await t.test("resetting a mastered shared verse refetches the group's status, so the emblem goes", async () => {
+    await state().joinSharedCollection('BREAD828');
+    masteredSquares = 2;
+    await state().updateVerseProgress('verse-1', 'hard', 95, true);
+    assert.equal(state().sharedCollections[group]?.masteredSquares, 2);
+    masteredSquares = 1;
+    await state().resetVerseProgress('verse-1');
+    assert.equal(state().sharedCollections[group]?.masteredSquares, 1);
+    masteredSquares = 0;
+  });
+
+  await t.test('a leave that completes after the account changed touches nothing of the new session', async () => {
+    let release;
+    leaveGate = new Promise((resolve) => { release = resolve; });
+    rpcs.length = 0;
+    const leaving = state().leaveSharedCollection(group);
+    while (!rpcs.some(([name]) => name === 'leave_shared_collection')) await new Promise((r) => setTimeout(r, 1));
+    state().clear();
+    await state().refresh();
+    assert.ok(state().collections.some((c) => c.id === copy.client_id));
+    release();
+    await leaving;
+    leaveGate = null;
+    assert.ok(state().collections.some((c) => c.id === copy.client_id), 'the new session keeps its collection');
+    assert.ok(state().sharedCollections[group], 'and its group');
   });
 });

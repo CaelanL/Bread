@@ -24,8 +24,9 @@ means every square is.
 `app/(tabs)/(library)/[id].tsx`, only when `Collection.sharedId` is set; a personal collection
 looks as it always did.
 
-- **What syncs when**: each visit runs `openSharedCollection` once (sync, then the grid), and pull
-  to refresh runs it again. An add or remove by you, and the owner's role or member changes,
+- **What syncs when**: each visit runs `openSharedCollection` once (sync, then the grid, the group
+  row and your own copies, which a removed reference, a removal or a dissolve changes without
+  sync; a copy no longer shared drops its grid), and pull to refresh runs it again. An add or remove by you, and the owner's role or member changes,
   refetch the grid if it's loaded. Nothing beyond `get_shared_status` is read on the Library list.
 - **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
   group's `shared_collection_verses`, turned into squares by `lib/shared/progress.ts` (pure,
@@ -88,7 +89,8 @@ The ring is 1.5 pt in the emblem colour at `Radius.xl`, 3 pt outside the 48 pt s
 of `card` shows between them and the card's layout doesn't move. Virtual collections never get an
 emblem. A shared card reads the status from the last hydrate, refresh or collection visit, and a session
 that turns one of your squares mastered or engraved refetches it (`updateVerseProgress`), so
-finishing the last square shows the ring on the way back. Once the owner deletes the
+finishing the last square shows the ring on the way back; Reset Progress on a mastered one
+refetches it too (`resetVerseProgress`). Once the owner deletes the
 group, a member's copy is personal and follows the personal rules.
 
 ## Browser checks

@@ -69,7 +69,7 @@ input; `22023` messages are written to be shown as is.
 | `mint_invite(group)` | owner | Locks the group, revokes open invites, returns a new `(code, expires_at)` |
 | `preview_invite(code)` | signed in | `(shared_id, name, inviter_name, verse_count, member_count, already_member)`. `Invite expired` / `Invite not found` (revoked reads as not found) |
 | `join_shared_collection(code, version)` | signed in, has a display name | Joins as `member` and syncs; a member's repeat join only syncs. Returns the local `client_id` |
-| `sync_shared_collection(group, version)` | member | Syncs the caller's copy. Returns `(client_id, changed)`: `changed` is true when it created, restored, renamed, linked or removed anything, so the client refetches only then |
+| `sync_shared_collection(group, version)` | member | Syncs the caller's copy. Returns `(client_id, changed)`: `changed` is true when it created, restored, renamed, linked or removed anything, the client still reloads the copy on open |
 | `leave_shared_collection(group)` | non-owner member | Drops the caller's membership and copy |
 | `remove_shared_member(group, user)` | owner | Drops another member's membership and copy |
 | `get_shared_members(group)` | member | `(user_id, display_name, role, joined_at)`, owner first |
@@ -101,7 +101,10 @@ hit it.
 ## Sync
 
 `private.sync_member_copies(user, group, version)` makes the member's local collection
-match the group, under the same per-account lock as `import_curated_collection`:
+match the group. It holds the group row (share), the per-account lock of
+`import_curated_collection` and the member's row, then rechecks membership: a leave or
+removal holds the group row for update first, so a sync that started before it commits
+writes nothing and returns `changed = false`.
 
 1. Finds the member's row by `shared_collection_id`, else inserts one. Restores it if
    soft-deleted (an old client "deleted" it, or the member is rejoining) and copies the
@@ -210,7 +213,7 @@ modal over the Library, Not now, Join).
 - 2026-11-11 · Leave, remove and sync use a SQL twin of the delete rule · Remove is a cross-user write, so it has to run server-side; one function keeps one rule for all three.
 - 2026-11-11 · `share_collection` is definer-backed and clients can't insert groups or memberships · Otherwise a client could create groups directly and skip the caps and the display-name rule.
 - 2026-11-11 · Shared references allow any range up to verse 176, not the curated import's two-verse limit · Users' own collections hold ranges like Psalm 23:1-3, and those must be shareable.
-- 2026-11-11 · `sync_shared_collection` returns `changed` with the local `client_id` · Opening a shared collection syncs every time; the flag lets the client skip refetching verses and collections when nothing moved.
+- 2026-11-11 · `sync_shared_collection` returns `changed` with the local `client_id` · Opening a shared collection syncs every time; a removed reference, a removal or a dissolve reaches the copy without sync, so open reloads the copy either way.
 - 2026-11-11 · A dissolve syncs every member first (one-time fan-out) · Without it a member who never reopened the collection keeps a copy missing the latest references.
 - 2026-11-11 · An editor's removal reaches every copy at once; sync moves anything else in a copy to My Verses · Sync can't tell a removed reference from an old client's own verse, and a member's own verse is never deleted by sync.
 - 2026-11-11 · Mint, leave and sync are definer-backed; clients can't write invites, delete memberships or set `shared_collection_id` · Each direct path skipped a rule: extra or revived codes, a membership dropped without its copy, a collection linked to a group without joining.
