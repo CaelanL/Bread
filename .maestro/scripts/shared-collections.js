@@ -2,6 +2,7 @@
 // MODE=invite: output.code is READER's newest live invite.
 // MODE=no-copy: READER holds no row for Psalm 23:1-3 (left with an unmastered verse).
 // MODE=personal-copy: READER's "Psalms" is a personal collection again, still holding Psalm 23:1-3.
+// MODE=remove-members: READER, an owner, removes every plain member of their groups.
 // MODE=mastered|engraved: READER's verses matching FILTER (PostgREST query) get the seed's progress for that state.
 const host = (API_URL.match(/^https?:\/\/([^:/]+)/) || [])[1];
 if (host !== '127.0.0.1' && host !== 'localhost') throw new Error('shared-collections requires local Supabase');
@@ -42,6 +43,16 @@ if (MODE === 'invite') {
   });
   const rows = json(response.body);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('No ' + READER + ' verses matched ' + FILTER + ': ' + response.body);
+} else if (MODE === 'remove-members') {
+  const members = get('shared_collection_members?select=shared_collection_id,user_id&role=eq.member');
+  if (members.length === 0) throw new Error('No members to remove for ' + READER);
+  members.forEach((m) => {
+    const response = http.post(API_URL + '/rest/v1/rpc/remove_shared_member', {
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+      body: JSON.stringify({ p_shared: m.shared_collection_id, p_user: m.user_id }),
+    });
+    if (response.status >= 300) throw new Error('Remove failed: ' + response.body);
+  });
 } else {
   throw new Error('Unknown MODE ' + MODE);
 }

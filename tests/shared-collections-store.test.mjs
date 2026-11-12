@@ -42,6 +42,7 @@ test('joining and leaving a shared collection', async (t) => {
   let referenceRemoved = false;
   let masteredSquares = 0;
   let leaveGate = null;
+  let syncFails = false;
   const rpcs = [];
   const reads = [];
   const json = (body, status = 200) => Response.json(body, { status });
@@ -55,6 +56,8 @@ test('joining and leaving a shared collection', async (t) => {
     if (url.pathname.startsWith('/rest/v1/rpc/')) {
       const name = url.pathname.slice('/rest/v1/rpc/'.length);
       rpcs.push([name, init.body ? JSON.parse(init.body) : null]);
+      if (name === 'sync_shared_collection' && !joined) return json({ code: '42501', message: 'Not a member' }, 403);
+      if (name === 'sync_shared_collection' && syncFails) return json({ code: '57014', message: 'canceling statement due to statement timeout' }, 500);
       if (name === 'join_shared_collection') { joined = true; copyRow = copy; return json(copy.client_id); }
       if (name === 'leave_shared_collection') {
         await leaveGate;
@@ -208,12 +211,20 @@ test('joining and leaving a shared collection', async (t) => {
     referenceRemoved = false;
   });
 
-  await t.test('opening after a removal between visits drops the copy and its shared state', async () => {
-    await state().openSharedCollection(group);
+  await t.test('a failed sync while still a member stays visible', async () => {
+    syncFails = true;
+    await assert.rejects(state().openSharedCollection(group));
+    syncFails = false;
+  });
+
+  await t.test('opening after a removal between visits drops the copy and its shared state, with only the removal notice', async () => {
+    assert.equal(await state().openSharedCollection(group), true);
     assert.ok(state().sharedProgress[group]);
     joined = false;
     copyRow = null;
-    await state().openSharedCollection(group);
+    toasts.length = 0;
+    assert.equal(await state().openSharedCollection(group), false);
+    assert.deepEqual(toasts, ['You were removed from Romans 8.']);
     assert.equal(state().collections.some((c) => c.id === copy.client_id), false);
     assert.equal(state().sharedCollections[group], undefined);
     assert.equal(state().sharedProgress[group], undefined);

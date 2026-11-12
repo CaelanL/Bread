@@ -139,7 +139,7 @@ interface AppState {
   joinSharedCollection: (code: string) => Promise<string>;
   syncSharedCollection: (sharedId: string) => Promise<boolean>;
   fetchSharedProgress: (sharedId: string) => Promise<boolean>;
-  openSharedCollection: (sharedId: string) => Promise<void>;
+  openSharedCollection: (sharedId: string) => Promise<boolean>;
   leaveSharedCollection: (sharedId: string) => Promise<void>;
   removeSharedMember: (sharedId: string, userId: string) => Promise<void>;
   setSharedMemberRole: (sharedId: string, userId: string, role: Exclude<SharedRole, 'owner'>) => Promise<void>;
@@ -1315,7 +1315,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Opening a shared collection: bring the copy up to date, then read the grid, the group row (a
   // role the owner changed since the last refresh) and the user's own copies. A failed sync throws
-  // after the reads; a failed grid read shows on the entry.
+  // after the reads, unless they show the membership gone: then the departed-group notice is the
+  // message and it returns false. A failed grid read shows on the entry.
   openSharedCollection: async (sharedId) => {
     let changed = false;
     let failure: unknown = null;
@@ -1326,16 +1327,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     // A sync that changed something has already refetched. One that didn't still reloads: the
     // server applies a removed reference, a removal or a dissolve to this copy without the sync.
+    // After a failed sync the membership may be gone, so the grid waits for the reload to say.
     await Promise.all([
-      get().fetchSharedProgress(sharedId),
+      failure ? null : get().fetchSharedProgress(sharedId),
       changed || Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]),
     ]);
     if (!get().collections.some((c) => c.sharedId === sharedId)) {
       set((state) => ({
         sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
       }));
+      return false;
     }
-    if (failure) throw failure;
+    if (failure) {
+      await get().fetchSharedProgress(sharedId);
+      throw failure;
+    }
+    return true;
   },
 
   leaveSharedCollection: async (sharedId) => {

@@ -28,7 +28,7 @@ import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   FlatList,
@@ -118,29 +118,30 @@ export default function CollectionScreen() {
   // Opening a shared collection brings this copy up to date with the group, then reads the grid,
   // once per visit.
   const syncedId = useRef<string | null>(null);
-  const syncShared = async (target: string) => {
+  const backToLibrary = useCallback(() => {
+    if ((navigation.getState()?.index ?? 0) > 0) router.back();
+    else router.replace('/(tabs)/(library)');
+  }, [navigation]);
+  const syncShared = useCallback(async (target: string) => {
     try {
-      await useAppStore.getState().openSharedCollection(target);
+      const shared = await useAppStore.getState().openSharedCollection(target);
+      // Removed or left elsewhere: the copy is gone (a dissolved copy stays, now personal).
+      if (!shared && !useAppStore.getState().collections.some((c) => c.id === id)) backToLibrary();
     } catch {
       showErrorToast("Couldn't update this shared collection. Pull to refresh to try again.");
     }
-  };
+  }, [id, backToLibrary]);
   useEffect(() => {
     if (!sharedId || syncedId.current === sharedId) return;
     syncedId.current = sharedId;
     void syncShared(sharedId);
-  }, [sharedId]);
+  }, [sharedId, syncShared]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refresh();
     if (sharedId) await syncShared(sharedId);
     setRefreshing(false);
-  };
-
-  const backToLibrary = () => {
-    if ((navigation.getState()?.index ?? 0) > 0) router.back();
-    else router.replace('/(tabs)/(library)');
   };
 
   const handleAddVerse = useDebouncedPress(() => {

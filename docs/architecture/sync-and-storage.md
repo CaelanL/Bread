@@ -92,7 +92,7 @@ interface AppState {
   joinSharedCollection: (code) => Promise<string>;   // the copy's client_id
   syncSharedCollection: (sharedId) => Promise<boolean>; // true when something changed
   fetchSharedProgress: (sharedId) => Promise<boolean>;  // never throws; a failure sets `failed` on the entry
-  openSharedCollection: (sharedId) => Promise<void>;    // sync, then fetchSharedProgress
+  openSharedCollection: (sharedId) => Promise<boolean>; // sync, then reloads; false once no longer shared
   leaveSharedCollection: (sharedId) => Promise<void>;
   removeSharedMember: (sharedId, userId) => Promise<void>;
   setSharedMemberRole: (sharedId, userId, role) => Promise<void>;

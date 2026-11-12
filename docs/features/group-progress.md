@@ -26,7 +26,9 @@ looks as it always did.
 
 - **What syncs when**: each visit runs `openSharedCollection` once (sync, then the grid, the group
   row and your own copies, which a removed reference, a removal or a dissolve changes without
-  sync; a copy no longer shared drops its grid), and pull to refresh runs it again. An add or remove by you, and the owner's role or member changes,
+  sync; a copy no longer shared drops its grid), and pull to refresh runs it again. When the reload
+  shows you were removed, the sync's error is dropped: the "You were removed" notice is the one
+  message, and the screen goes back to the Library (a dissolved copy stays open, now personal). An add or remove by you, and the owner's role or member changes,
   refetch the grid if it's loaded. Nothing beyond `get_shared_status` is read on the Library list.
 - **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
   group's `shared_collection_verses`, turned into squares by `lib/shared/progress.ts` (pure,
