@@ -175,11 +175,13 @@ export interface SharedProgress {
 
 // ============ HELPERS ============
 
+// The session ensureAuth just read, so no network round trip; its own error is kept.
 async function getCurrentUserId(): Promise<string> {
   await ensureAuth();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  return user.id;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  if (!data.session) throw new Error('Not authenticated');
+  return data.session.user.id;
 }
 
 let accountGeneration = 0;
@@ -250,9 +252,13 @@ function queueTranslationWork<T>(work: () => Promise<T>): Promise<T> {
 let requestedTranslation: BibleVersion | null = null;
 
 // No offline queue (invariant 10): say so, and the next hydrate or pull to refresh retries.
-function reportSyncFailure(e: unknown) {
-  console.error('[STORE] Failed to sync translation:', e);
-  showErrorToast("Couldn't line your verses up with your translation. Pull to refresh to try again.");
+// A sync for an account that has since signed out says nothing.
+function reportSyncFailure(generation: number) {
+  return (e: unknown) => {
+    if (generation !== accountGeneration) return;
+    console.error('[STORE] Failed to sync translation:', e);
+    showErrorToast("Couldn't line your verses up with your translation. Pull to refresh to try again.");
+  };
 }
 
 // The winner takes the losers' collections, then the losers are deleted for good, so a
@@ -758,7 +764,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (generation !== accountGeneration) return;
     // The cached translation stands in when the profile can't be read (offline).
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure);
+    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure(generation));
     if (generation !== accountGeneration) return;
     let [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
       get().fetchCollections(),
@@ -802,7 +808,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   refresh: async () => {
     set({ error: null });
     const generation = accountGeneration;
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure);
+    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure(generation));
     await Promise.all([
       get().fetchCollections(),
       get().fetchVerses(),

@@ -39,6 +39,8 @@ test('account translation sync and switch', async (t) => {
   let heldProfile;
   let failLinks = false;
   let deleteBlocked = false;
+  let failUser = false;
+  let failProfile = false;
   const writes = [];
   const json = (body, status = 200) => Response.json(body, { status });
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
@@ -48,7 +50,7 @@ test('account translation sync and switch', async (t) => {
     if (url.pathname === '/auth/v1/token') {
       return json({ access_token: token, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, user: { id: 'A' } });
     }
-    if (url.pathname === '/auth/v1/user') return json({ id: 'A' });
+    if (url.pathname === '/auth/v1/user') return failUser ? json({ message: 'unavailable' }, 503) : json({ id: 'A' });
     if (url.pathname === '/auth/v1/logout') return new Response(null, { status: 204 });
     if (url.pathname === '/rest/v1/profiles') {
       if (method !== 'GET') {
@@ -57,6 +59,7 @@ test('account translation sync and switch', async (t) => {
         return new Response(null, { status: 201 });
       }
       if (heldProfile) await heldProfile.promise;
+      if (failProfile) return json({ message: 'unavailable' }, 503);
       const row = { translation: profile };
       return json(object ? row : [row]);
     }
@@ -125,5 +128,29 @@ test('account translation sync and switch', async (t) => {
     assert.equal(state().bibleVersion, 'KJV');
     assert.deepEqual(writes.filter(([kind]) => kind === 'profile'), [['profile', 'KJV']]);
     assert.equal(profile, 'KJV');
+  });
+
+  await t.test('the sync reads the signed-in id from the session, so a failed user request changes nothing', async () => {
+    failUser = true;
+    toasts.length = 0;
+    profile = 'ESV';
+    await state().refresh();
+    failUser = false;
+    assert.deepEqual(toasts, []);
+    assert.equal(state().bibleVersion, 'ESV');
+  });
+
+  await t.test('a sync that fails after its account signed out shows nothing', async () => {
+    toasts.length = 0;
+    failProfile = true;
+    heldProfile = Promise.withResolvers();
+    const syncing = state().refresh();
+    await new Promise((resolve) => setImmediate(resolve));
+    state().clear();
+    heldProfile.resolve();
+    heldProfile = undefined;
+    await syncing;
+    failProfile = false;
+    assert.deepEqual(toasts, []);
   });
 });
