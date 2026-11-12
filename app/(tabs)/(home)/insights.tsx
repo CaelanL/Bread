@@ -283,7 +283,7 @@ export default function InsightsScreen() {
         {/* Most Memorized Books */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.icon }]}>YOUR MOST MEMORIZED BOOKS</Text>
-          <View style={[styles.booksList, { backgroundColor: cardBg }]}>
+          <View>
             {topBooks.length > 0 ? (
               topBooks.map((book, index) => (
                 <View
@@ -291,7 +291,7 @@ export default function InsightsScreen() {
                   style={[
                     styles.bookItem,
                     index < topBooks.length - 1 && styles.bookItemBorder,
-                    { borderBottomColor: colors.border },
+                    { borderBottomColor: colors.borderLight },
                   ]}
                 >
                   <View style={styles.bookInfo}>
@@ -321,14 +321,14 @@ export default function InsightsScreen() {
               <IconSymbol name="person.2" size={14} color={colors.icon} />
               <Text style={[styles.sectionTitle, { color: colors.icon }]}>POPULAR VERSES</Text>
             </View>
-            <View style={[styles.booksList, { backgroundColor: cardBg }]}>
+            <View>
               {popularRanges.map((range, index) => (
                 <Pressable
                   key={`${range.book}-${range.chapter}-${range.verseStart}-${range.verseEnd}`}
                   style={({ pressed }) => [
                     styles.bookItem,
                     index < popularRanges.length - 1 && styles.bookItemBorder,
-                    { borderBottomColor: colors.border },
+                    { borderBottomColor: colors.borderLight },
                     pressed && { opacity: 0.7 },
                   ]}
                   onPress={() => handleRangePress(range)}
@@ -448,7 +448,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
     gap: 16,
   },
   statsRow: {
@@ -509,7 +510,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   section: {
-    gap: 8,
+    marginTop: 12,
+    gap: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -521,18 +523,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  booksList: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
   bookItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
+    paddingVertical: 12,
   },
   bookItemBorder: {
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   bookInfo: {
     flexDirection: 'row',
