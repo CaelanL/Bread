@@ -168,9 +168,8 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   needed, calls `joinSharedCollection` (account translation, then `refresh`) and opens the copy.
   A member sees Open (same idempotent call); a bad code shows its message. A signed-out link's
   code waits in AsyncStorage (`lib/shared/pending-join.ts`) through sign-in, email confirmation
-  or an app kill, then opens over the Library. The reminders card is held from before the stashed
-  code is read until the modal is gone, so it never presents under it.
-- **Inside**: see [Collection screen](#collection-screen). Only the owner and editors see + and
+  or an app kill, then opens over the Library; the reminders card is held from before that read.
+- **Inside**: see [group-progress.md](group-progress.md). Only the owner and editors see + and
   swipe-delete; only the owner renames or changes the icon.
   `addVerse` inserts the reference and syncs; `deleteVerse` deletes it ("Remove for everyone?").
   Copy-to-collection skips shared collections and Add-to-collection lists only ones you edit
@@ -182,32 +181,6 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 - **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
   toasts once, "You were removed from <name>." or, if the owner deleted it, "<name> is now your
   own copy." Not for groups you left or own.
-
-## Collection screen
-
-`app/(tabs)/(library)/[id].tsx`, only when `Collection.sharedId` is set; a personal collection
-looks as it always did.
-
-- **What syncs when**: each visit runs `openSharedCollection` once (sync, then the grid), and pull
-  to refresh runs it again. An add or remove by you, and the owner's role or member changes,
-  refetch the grid if it's loaded. Nothing beyond `get_shared_status` is read on the Library list.
-- **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
-  group's `shared_collection_verses`. `lib/shared/progress.ts` (pure, `progress.test.ts`) turns it
-  into one state per member per reference: Engraved, else Mastered (`hard.completed`, so Due and
-  Locked are Mastered), else Learning (any `bestAccuracy`), else Open; a missing square is Open.
-  Your own squares come from your verses in this collection, so they move the moment a session
-  saves. A failed read keeps the last grid and shows Retry on the strip.
-- **Group progress** = mastered squares (engraved included) over members × references. This is
-  the one definition; `mastered_squares` in `get_shared_status` counts the same squares.
-- **Strip** (`SharedStrip`, under the header): member initials, "N members · V verses", the group
-  percentage with its bar, and "K of V verses mastered by everyone". Tapping opens the members
-  sheet.
-- **Cards**: a You dot on the left (`MemberStateDot`: open ring, amber learning ring, green
-  mastered, gold engraved) and a Group column on the right (`GroupCount`: "mastered/members" over
-  a bar of every member's state, or "✓ All" when everyone has mastered it). The review badge stays.
-- **Open verses**: the ones you haven't mastered. "Open · N" filters the list to them, and
-  "Practice your N open verses" opens setup on the first of them in the list's order, the same
-  screen a tap opens. Both hide at zero.
 
 ## Seed users
 
@@ -231,8 +204,7 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 After `npm run db:reset` each: `npm run sim -- flow shared-collections` (share, copy, join by
 link, both in the list, leave, rejoin, delete for everyone, personal copy) and
 `npm run sim -- flow shared-join-code` (typed code, revoked code, link across sign-in to the
-modal over the Library, Not now, Join), and `npm run sim -- flow shared-progress` (the seeded
-Romans 8 as Cara and Dana: strip, You and Group values, open filter, Practice, an editor's add).
+modal over the Library, Not now, Join).
 
 ## Decisions
 
@@ -246,5 +218,4 @@ Romans 8 as Cara and Dana: strip, You and Group values, open filter, Practice, a
 - 2026-11-11 · A dissolve syncs every member first (one-time fan-out) · Without it a member who never reopened the collection keeps a copy missing the latest references.
 - 2026-11-11 · An editor's removal reaches every copy at once; sync moves anything else in a copy to My Verses · Sync can't tell a removed reference from an old client's own verse, and a member's own verse is never deleted by sync.
 - 2026-11-11 · Mint, leave and sync are definer-backed; clients can't write invites, delete memberships or set `shared_collection_id` · Each direct path skipped a rule: extra or revived codes, a membership dropped without its copy, a collection linked to a group without joining.
-- 2026-11-11 · Your own squares on the collection screen come from your local verses, the rest from the grid · Your You dot, review badge and open count then agree, and a session's result shows without a refetch.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.

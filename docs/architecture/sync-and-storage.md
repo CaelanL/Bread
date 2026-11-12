@@ -20,7 +20,7 @@ AsyncStorage holds device settings and small local caches.
 | Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
 | Display name (`displayName`) | ✓ (`profiles.display_name`) | ✓ | — |
 | [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ last seen ids and names (`shared_known_groups:<user>`) |
-| [Group progress](../features/shared-collections.md#collection-screen) | ✓ (read) | ✓ (`sharedProgress`) | — |
+| [Group progress](../features/group-progress.md#collection-screen) | ✓ (read) | ✓ (`sharedProgress`) | — |
 | Invite from a signed-out link | — | — | ✓ (`shared_pending_join`) |
 | Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
