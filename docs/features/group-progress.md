@@ -43,8 +43,7 @@ shared collection looks like a personal one, and a personal collection looks as 
   "Details". Every other point of the card opens [Who's where](#whos-where), titled "Details".
 - **Cards**: the same rows as a personal collection (book icon, difficulty dot or check, review
   badge), plus the group's count on the right (`GroupCount`): members who mastered the verse,
-  engraved included, over all members, "8/10", the same on every row. When everyone has it, a
-  `checkmark` and the count in `success`, or in `tint` when everyone engraved it.
+  engraved included, over all members, "8/10", the same on every row.
 
 ## Who's where
 
@@ -118,7 +117,7 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 
 - 2026-11-11 · Your own squares on the collection screen come from your local verses, the rest from the grid · Your row, review badge and the Group count then agree, and a session's result shows without a refetch.
 - 2026-11-12 · Verse rows in a shared collection look like personal rows, with only the "mastered/members" count on the right; no You dot, no per-member bar, no Open filter and no Practice button · Caelan's phone pass: the dots confused, and a bar on some rows and a number on others read inconsistently.
-- 2026-11-12 · The Group count marks a verse everyone has with a check, in `success` (or `tint` when everyone engraved it), and keeps "10/10" · Caelan liked seeing when the whole group has it memorized; only the bar and the mixed formats were the problem.
+- 2026-11-12 · The Group count is plain "10/10" even when everyone has it: no check, no colour · Caelan's pass 2 undid a check-and-colour state ("What it had before was fine").
 - 2026-11-12 · Who's where is titled "Details", like the group card's link · Caelan: the name was too many words.
 - 2026-11-11 · Who's where puts your column first and lists references in Bible order · You look for yourself first; the collection screen keeps your own sort, the grid is a fixed table.
 - 2026-11-12 · Who's where reads the collection screen's grid and opens from anywhere on the group card but the members line (member list) and the gear (share panel) · One read path; Caelan's phone pass wanted the card itself to lead to the details.

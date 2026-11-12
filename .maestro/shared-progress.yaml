@@ -12,7 +12,7 @@ name: shared-progress
     visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
     timeout: 20000
 - assertVisible: "Cara · 2 members · 3 verses. Show members"
-- assertVisible: ".*Romans 8:1 •.*Group: everyone engraved"
+- assertVisible: ".*Romans 8:1 •.*Group: 2 of 2 mastered"
 - assertVisible: ".*Romans 8:28 •.*Group: 1 of 2 mastered"
 - assertVisible: ".*Romans 8:38-39 •.*Group: 0 of 2 mastered"
 - assertNotVisible: "Practice your.*"
