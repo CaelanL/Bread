@@ -8,6 +8,7 @@ export default function LibraryLayout() {
       <Stack.Screen name="add" />
       <Stack.Screen name="add/[book]/[chapter]" />
       <Stack.Screen name="setup/[id]" />
+      <Stack.Screen name="shared/[id]" />
     </Stack>
   );
 }

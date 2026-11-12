@@ -12,7 +12,7 @@ export const MEMBER_STATE_LABEL: Record<MemberState, string> = {
   engraved: 'Engraved',
 };
 
-/** One colour per state, for dots, bars and (slice 4) grid squares. Open is a border only. */
+/** One colour per state, for dots, bars and Who's where squares. Open is a border only. */
 export function memberStateFill(state: MemberState, colors: Palette): string {
   if (state === 'engraved') return colors.tint;
   if (state === 'mastered') return colors.success;
@@ -34,6 +34,22 @@ export function MemberStateDot({ state }: { state: MemberState }) {
     <View
       accessibilityLabel={`You: ${MEMBER_STATE_LABEL[state]}`}
       style={[styles.dot, { backgroundColor: memberStateFill(state, colors), borderColor: DOT_BORDER[state](colors) }]}
+    />
+  );
+}
+
+/**
+ * One member on one verse in Who's where, a tile labelled for VoiceOver ("Dana, Romans 8:28,
+ * Mastered"). Open is a faint empty tile. Without a label it's the legend's swatch, hidden from VoiceOver.
+ */
+export function MemberStateSquare({ state, label }: { state: MemberState; label?: string }) {
+  const colors = Colors[useColorScheme() ?? 'light'];
+  return (
+    <View
+      accessible={Boolean(label)}
+      accessibilityLabel={label ? `${label}, ${MEMBER_STATE_LABEL[state]}` : undefined}
+      style={[label ? styles.tile : styles.swatch,
+        { backgroundColor: state === 'open' ? colors.cardAlt : memberStateFill(state, colors) }]}
     />
   );
 }
@@ -79,6 +95,8 @@ export function GroupCount({ states, unavailable }: { states: MemberState[] | nu
 
 const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: Radius.full, borderWidth: 1.5 },
+  tile: { width: 24, height: 24, borderRadius: Radius.sm },
+  swatch: { width: 12, height: 12, borderRadius: Radius.xs },
   group: { width: 44, alignItems: 'flex-end', gap: 5 },
   count: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   bar: { flexDirection: 'row', width: 36, height: 4, borderRadius: Radius.xs, overflow: 'hidden' },

@@ -6,18 +6,28 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+export type GroupProgressValue = { ratio: number; masteredByEveryone: number };
+
+/** "Group progress 50%. 1 of 3 verses mastered by everyone", or the loading label. */
+export function groupProgressLabel(progress: GroupProgressValue | null, verseCount: number): string {
+  if (!progress) return 'Group progress loading';
+  return `Group progress ${Math.round(progress.ratio * 100)}%. ${progress.masteredByEveryone} of ${plural(verseCount, 'verse')} mastered by everyone`;
+}
+
 /**
  * Under a shared collection's header: members, then the group's progress (mastered squares over
- * all squares). Tapping opens `onOpen`; a failed grid read shows Retry instead of the numbers.
+ * all squares). The members line opens `onOpen` (the members sheet), the progress `onShowGrid`
+ * (Who's where); a failed grid read shows Retry instead of the numbers.
  */
-export function SharedStrip({ memberNames, memberCount, verseCount, progress, failed, onOpen, onRetry }: {
+export function SharedStrip({ memberNames, memberCount, verseCount, progress, failed, onOpen, onShowGrid, onRetry }: {
   memberNames: string[] | null;
   memberCount: number;
   verseCount: number;
   /** Null while the grid loads. */
-  progress: { ratio: number; masteredByEveryone: number } | null;
+  progress: GroupProgressValue | null;
   failed: boolean;
   onOpen: () => void;
+  onShowGrid: () => void;
   onRetry: () => void;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -51,8 +61,9 @@ export function SharedStrip({ memberNames, memberCount, verseCount, progress, fa
         <Pressable
           testID="shared-progress"
           accessibilityRole="button"
-          accessibilityLabel={progress ? `Group progress ${percent}%. ${summary}` : 'Group progress loading'}
-          onPress={onOpen}
+          accessibilityLabel={groupProgressLabel(progress, verseCount)}
+          accessibilityHint="Shows who's where"
+          onPress={onShowGrid}
           style={styles.progress}
         >
           <View style={styles.progressTop}>
@@ -66,7 +77,11 @@ export function SharedStrip({ memberNames, memberCount, verseCount, progress, fa
           <View style={[styles.track, { backgroundColor: colors.borderLight }]}>
             <View style={[styles.fill, { width: `${percent}%`, backgroundColor: colors.success }]} />
           </View>
-          <Text style={[styles.summary, { color: colors.icon }]}>{summary || ' '}</Text>
+          <View style={styles.summaryRow}>
+            <Text style={[styles.summary, styles.summaryText, { color: colors.icon }]} numberOfLines={1}>{summary || ' '}</Text>
+            <Text style={[styles.summary, { color: colors.icon }]}>Who&apos;s where</Text>
+            <IconSymbol name="chevron.right" size={14} color={colors.icon} />
+          </View>
         </Pressable>
       )}
       {failed && progress && (
@@ -99,6 +114,8 @@ const styles = StyleSheet.create({
   track: { height: 6, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
   summary: { fontSize: 13 },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  summaryText: { flex: 1 },
   retry: { gap: 4, paddingVertical: 4 },
   retryText: { fontSize: 14, fontWeight: '600' },
   staleRetry: { flexDirection: 'row', gap: 8, alignItems: 'center' },

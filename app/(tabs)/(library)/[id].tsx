@@ -10,15 +10,14 @@ import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useAuth } from '@/lib/auth';
+import { useSharedGrid } from '@/hooks/use-shared-grid';
 import {
-  buildGrid,
   cellState,
   groupProgress,
   masteredByEveryoneCount,
   openVersesFor,
   progressFlags,
   referenceKey,
-  replaceMemberCells,
 } from '@/lib/shared/progress';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
@@ -67,18 +66,8 @@ export default function CollectionScreen() {
   const canEdit = !sharedId || shared?.role === 'owner' || shared?.role === 'editor';
   const [sharedSheetOpen, setSharedSheetOpen] = useState(false);
   const { user } = useAuth();
-  const sharedProgress = useAppStore((s) => (sharedId ? s.sharedProgress[sharedId] : undefined));
   const [openOnly, setOpenOnly] = useState(false);
-
-  // Members × references, with your own squares from your verses here so they match your cards
-  // the moment a session saves.
-  const grid = useMemo(() => {
-    if (!sharedId || !user || !sharedProgress?.fetchedAt) return null;
-    const own = collectionVerses.map((v) => ({ userId: user.id, book: v.book, chapter: v.chapter,
-      verseStart: v.verseStart, verseEnd: v.verseEnd, ...progressFlags(v.progress) }));
-    return buildGrid(sharedProgress.members.map((m) => m.userId), sharedProgress.references,
-      replaceMemberCells(sharedProgress.cells, user.id, own));
-  }, [sharedId, user, sharedProgress, collectionVerses]);
+  const { sharedProgress, grid } = useSharedGrid(sharedId, collectionVerses);
   const groupRows = useMemo(() => new Map(grid?.rows.map((row) => [row.key, row])), [grid]);
   const openKeys = useMemo(
     () => new Set(grid && user ? openVersesFor(user.id, grid).map(referenceKey) : []),
@@ -152,6 +141,10 @@ export default function CollectionScreen() {
 
   const handleAddVerse = useDebouncedPress(() => {
     router.push(`/(tabs)/(library)/add?collectionId=${id}`);
+  });
+
+  const showGrid = useDebouncedPress(() => {
+    router.push(`/(tabs)/(library)/shared/${id}`);
   });
 
   const handleVersePress = (verse: SavedVerse) => {
@@ -300,6 +293,7 @@ export default function CollectionScreen() {
           progress={grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null}
           failed={sharedProgress?.failed ?? false}
           onOpen={() => setSharedSheetOpen(true)}
+          onShowGrid={showGrid}
           onRetry={() => void useAppStore.getState().fetchSharedProgress(sharedId)}
         />
       )}

@@ -1,4 +1,6 @@
 import { confirmLeave } from '@/components/shared/confirm-removal';
+import { manageMember } from '@/components/shared/member-actions';
+import { MemberRow } from '@/components/shared/MemberRow';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Fonts, Radius } from '@/constants/theme';
@@ -6,14 +8,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
 import { daysLeft, inviteLink, inviteMessage, sharedErrorMessage } from '@/lib/shared/invite-code';
 import { copyText, getLiveInvite, getSharedMembers, type LiveInvite, type SharedMember } from '@/lib/shared/invites';
-import type { SharedRole } from '@/lib/storage';
 import { useAppStore, useCollection, useSharedCollection, useVersesLostWith } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
-
-const ROLE_LABEL: Record<SharedRole, string> = { owner: 'Owner', editor: 'Editor', member: 'Member' };
 
 /**
  * Members and invite for a shared collection. The owner sees the link and code, Copy, Share,
@@ -98,38 +97,11 @@ export function SharedCollectionSheet({ collectionId, onClose, onLeft }: {
     ]);
   };
 
-  const remove = (member: SharedMember) => {
-    if (!sharedId) return;
-    Alert.alert(`Remove ${member.displayName}?`,
-      "This collection leaves their Library, with their verses here that aren't mastered or in another collection.", [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => run(async () => {
-            await useAppStore.getState().removeSharedMember(sharedId, member.userId);
-            setMembers((list) => list?.filter((m) => m.userId !== member.userId) ?? null);
-          }, `Couldn't remove ${member.displayName}. Try again.`),
-        },
-      ]);
-  };
-
   const memberActions = (member: SharedMember) => {
     if (!sharedId) return;
-    const role = member.role === 'editor' ? 'member' : 'editor';
-    Alert.alert(member.displayName, member.role === 'editor'
-      ? 'Editors add and remove verses for everyone.'
-      : 'Make them an editor to let them add and remove verses for everyone.', [
-      {
-        text: role === 'editor' ? 'Make editor' : 'Make member',
-        onPress: () => run(async () => {
-          await useAppStore.getState().setSharedMemberRole(sharedId, member.userId, role);
-          setMembers((list) => list?.map((m) => m.userId === member.userId ? { ...m, role } : m) ?? null);
-        }, "Couldn't change their role. Try again."),
-      },
-      { text: 'Remove', style: 'destructive', onPress: () => remove(member) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    manageMember(sharedId, member, run, (role) => setMembers((list) => (role
+      ? list?.map((m) => m.userId === member.userId ? { ...m, role } : m)
+      : list?.filter((m) => m.userId !== member.userId)) ?? null));
   };
 
   const leave = () => {
@@ -193,26 +165,9 @@ export function SharedCollectionSheet({ collectionId, onClose, onLeft }: {
           <ActivityIndicator style={styles.retry} color={colors.icon} />
         ) : members.map((member) => {
           const you = member.userId === user?.id;
-          const manageable = isOwner && !you;
           return (
-            <Pressable
-              key={member.userId}
-              testID={`member-${member.displayName}`}
-              accessibilityRole={manageable ? 'button' : undefined}
-              accessibilityLabel={`${member.displayName}${you ? ', you' : ''}, ${ROLE_LABEL[member.role]}`}
-              disabled={!manageable || busy}
-              onPress={() => memberActions(member)}
-              style={[styles.member, { borderColor: colors.borderLight }]}
-            >
-              <View style={[styles.dot, { backgroundColor: colors.primaryLight }]}>
-                <Text style={[styles.initial, { color: colors.text }]}>{member.displayName.charAt(0).toUpperCase()}</Text>
-              </View>
-              <Text style={[styles.memberName, { color: colors.text }]} numberOfLines={1}>
-                {member.displayName}{you ? ' (you)' : ''}
-              </Text>
-              <Text style={[styles.role, { color: colors.icon }]}>{ROLE_LABEL[member.role]}</Text>
-              {manageable && <IconSymbol name="ellipsis" size={16} color={colors.icon} />}
-            </Pressable>
+            <MemberRow key={member.userId} member={member} you={you} manageable={isOwner && !you}
+              disabled={busy} onPress={() => memberActions(member)} />
           );
         })}
 
@@ -250,17 +205,6 @@ const styles = StyleSheet.create({
   newLinkText: { fontSize: 14, fontWeight: '600' },
   membersLabel: { marginBottom: 4 },
   retry: { paddingVertical: 16, gap: 6 },
-  member: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  dot: { width: 32, height: 32, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
-  initial: { fontSize: 13, fontWeight: '600' },
-  memberName: { flex: 1, fontSize: 16 },
-  role: { fontSize: 14 },
   leave: {
     marginTop: 20,
     height: 48,
