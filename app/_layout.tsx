@@ -199,7 +199,7 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack screenOptions={{ headerShown: false, fullScreenGestureEnabled: true }}>
         <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="reset-password" />

@@ -18,6 +18,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 interface SwipeableVerseCardProps {
   verse: SavedVerse;
@@ -71,14 +72,15 @@ export function SwipeableVerseCard({
 
   const translateX = useSharedValue(0);
   const swipeStart = useSharedValue(0);
+  const [open, setOpen] = useState(false);
   const debouncedPress = useDebouncedPress(onPress);
   const closeSwipe = () => {
     translateX.value = withTiming(0, { duration: Motion.pressMs });
+    setOpen(false);
   };
 
   const panGesture = Gesture.Pan()
     .enabled(!disableSwipe)
-    .activeOffsetX([-10, 10])
     .failOffsetY([-5, 5])
     .onStart(() => {
       swipeStart.value = translateX.value;
@@ -87,11 +89,14 @@ export function SwipeableVerseCard({
       translateX.value = Math.min(0, Math.max(swipeStart.value + e.translationX, -SWIPE_DELETE_DISTANCE));
     })
     .onEnd(() => {
-      translateX.value = withTiming(
-        translateX.value < -SWIPE_DELETE_DISTANCE / 2 ? -SWIPE_DELETE_DISTANCE : 0,
-        { duration: Motion.pressMs },
-      );
+      const opened = translateX.value < -SWIPE_DELETE_DISTANCE / 2;
+      translateX.value = withTiming(opened ? -SWIPE_DELETE_DISTANCE : 0, { duration: Motion.pressMs });
+      scheduleOnRN(setOpen, opened);
     });
+  // A closed row lets a rightward drag go, so the screen's swipe back gets it first time; an open
+  // row takes it, to close.
+  if (open) panGesture.activeOffsetX([-10, 10]);
+  else panGesture.activeOffsetX(-10).failOffsetX(10);
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],

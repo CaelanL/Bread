@@ -63,6 +63,11 @@ Home under it. A tab keeps its stack when you switch away and back.
 curated card opens one introduction. Maestro cannot start the iOS edge
 swipe, so check the swipe on a device.
 
+Back is a swipe from anywhere on the page, not only the edge (`fullScreenGestureEnabled` on the
+root, Home and Library stacks), except on Details, whose grid scrolls sideways. A row that swipes
+to delete (`SwipeableVerseCard`) claims only a leftward drag while closed and fails on a rightward
+one, so the swipe back gets it; an open row takes a rightward drag to close.
+
 ## Modals
 
 Two modal styles, both handled at the root Stack:
@@ -239,4 +244,5 @@ gating logic above. A notification tap routes through
 
 ## Decisions
 
+- 2026-11-12 · Swipe back from anywhere on pushed screens, and swipe-to-delete rows claim only leftward drags while closed · Swiping back from a collection often took two tries (Caelan's pass 4, C23): a verse row's pan activated at 10 pt in either direction, so a back swipe starting on a row raced the edge recognizer, and react-native-screens only makes scroll views wait for the edge, not gesture-handler pans. Swiping from anywhere is how Slack, Spotify and iOS 26's own apps go back; react-native-screens turns off iOS 26's content swipe and offers this instead.
 - 2026-11-12 · The shared-collection modals (share, join, typed code, display name) are native modal routes rendering `ModalCard`, not RN `Modal`s in screen state · An invite opened over the RN-modal share sheet left the Library unable to present its next modal; native modal routes unwind together.
