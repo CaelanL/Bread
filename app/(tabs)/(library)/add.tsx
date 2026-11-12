@@ -1,14 +1,16 @@
 import { AppHeader } from '@/components/app-header';
+import { QuickAddField } from '@/components/library/QuickAddField';
 import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
 import { type BibleVersion } from '@/lib/storage';
 import { useAppStore } from '@/lib/store';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -27,17 +29,23 @@ export default function AddVerseScreen() {
 
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
 
+  // Ignores only a quick re-tap of the same book; a tap on another book goes through.
+  const lastBookPress = useRef({ book: '', at: 0 });
   const handleBookPress = (book: string) => {
-    setExpandedBook(expandedBook === book ? null : book);
+    const now = Date.now();
+    if (lastBookPress.current.book === book && now - lastBookPress.current.at <= 500) return;
+    lastBookPress.current = { book, at: now };
+    setExpandedBook((current) => (current === book ? null : book));
   };
 
-  const handleChapterPress = (book: string, chapter: number) => {
+  const handleChapterPress = useDebouncedPress((book: string, chapter: number) => {
     const params = new URLSearchParams();
     if (collectionId) params.set('collectionId', collectionId);
     const queryString = params.toString();
     router.push(`/(tabs)/(library)/add/${encodeURIComponent(book)}/${chapter}?${queryString}`);
-  };
+  });
 
   const renderChapterGrid = (book: string) => {
     const chapterCount = getChapterCount(book);
@@ -118,7 +126,11 @@ export default function AddVerseScreen() {
         accountNote
       />
 
-      <ScrollView style={styles.scrollView}>
+      <QuickAddField collectionId={collectionId} onTypingChange={setIsTyping} />
+
+      <ScrollView style={[styles.scrollView, { opacity: isTyping ? 0.55 : 1 }]} keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
         <View style={styles.bottomPadding} />
       </ScrollView>

@@ -33,6 +33,7 @@ const MAPPING = {
   'pause.fill': 'pause',
   'arrow.up.right': 'north-east',
   'xmark': 'close',
+  'magnifyingglass': 'search',
   'checkmark': 'check',
   'arrow.counterclockwise': 'refresh',
   'arrow.right': 'arrow-forward',

@@ -1,0 +1,84 @@
+# reader-b types two references and one out-of-range one into the add screen's quick-add
+# field, peeks a chip, adds both good ones with one tap, then deletes them again.
+appId: com.caelanliu.biblemem
+name: quick-add
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)%2Fmy-verses
+- waitForAnimationToEnd
+# A failed earlier run can leave the verses behind.
+- runFlow:
+    when:
+      visible: ".*Ruth 2:1-2 • (ESV|KJV).*"
+    commands:
+      - swipe:
+          from: ".*Ruth 2:1-2 • (ESV|KJV).*"
+          direction: LEFT
+      - tapOn:
+          id: swipe-delete
+      - tapOn:
+          text: Delete
+          below: "Delete verse?"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: ".*Ruth 1:1 • (ESV|KJV).*"
+    file: subflows/delete-ruth.yaml
+- extendedWaitUntil:
+    visible: "No verses yet"
+    timeout: 20000
+- tapOn: ".*Add Verse"
+# Bundled KJV, so the peek reads without the network.
+- tapOn:
+    id: add-translation-picker
+- scrollUntilVisible:
+    element:
+      id: bible-translation-KJV
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: bible-translation-KJV
+- assertNotVisible: "Translation"
+- tapOn:
+    id: quick-add-field
+- inputText: "Ru"
+- assertVisible:
+    id: quick-add-suggestion-Ruth
+- tapOn:
+    id: quick-add-suggestion-Ruth
+- inputText: "1 1"
+- pressKey: Enter
+- assertVisible:
+    id: quick-add-chip-Ruth-1-1-1
+- inputText: "Ruth 2:1-2"
+- pressKey: Enter
+- inputText: "John 22 1"
+- pressKey: Enter
+- assertVisible: "John has 21 chapters"
+- assertVisible: "Add 2"
+- takeScreenshot: quick-add-1-chips
+- longPressOn:
+    id: quick-add-chip-Ruth-1-1-1
+- extendedWaitUntil:
+    visible: ".*judges ruled.*"
+    timeout: 20000
+- takeScreenshot: quick-add-2-peek
+- tapOn:
+    id: verse-expand-close
+- tapOn:
+    id: quick-add-submit
+- extendedWaitUntil:
+    visible: ".*Ruth 1:1 • KJV.*"
+    timeout: 20000
+- assertVisible: ".*Ruth 2:1-2 • KJV.*"
+- takeScreenshot: quick-add-3-added
+- swipe:
+    from: ".*Ruth 2:1-2 • KJV.*"
+    direction: LEFT
+- tapOn:
+    id: swipe-delete
+- assertVisible: "Delete verse?"
+- tapOn:
+    text: Delete
+    below: "Delete verse?"
+- runFlow: subflows/delete-ruth.yaml

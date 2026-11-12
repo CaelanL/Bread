@@ -1,0 +1,44 @@
+# reader-b double-taps a book row and a chapter button on the add screen: the book stays
+# open and the chapter screen opens once, so one Back returns to the add screen. A quick
+# tap on a different book still goes through.
+appId: com.caelanliu.biblemem
+name: add-double-tap
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2F(library)%2Fadd%3FcollectionId%3Dmy-verses
+- extendedWaitUntil:
+    visible: "Genesis, Forward"
+    timeout: 20000
+# A quick tap on a different book still goes through. With Genesis open, one point sits on
+# Exodus; tapping it opens Exodus and closes Genesis, which slides Numbers under the same
+# point, so the second tap of a double tap lands on Numbers inside the 500 ms window.
+- tapOn: "Genesis, Forward"
+- assertVisible: "50"
+- assertVisible: "Exodus, Forward"
+- tapOn:
+    point: "50%,82%"
+    repeat: 2
+    delay: 100
+- assertVisible: "Exodus, Forward"
+- assertNotVisible: "Numbers, Forward"
+- assertNotVisible: "50"
+- tapOn: "Numbers.*"
+- extendedWaitUntil:
+    visible: "Numbers, Forward"
+    timeout: 5000
+- tapOn:
+    text: "Ruth, Forward"
+    repeat: 2
+    delay: 100
+- assertVisible: "1"
+- tapOn:
+    text: "1"
+    repeat: 2
+    delay: 100
+- extendedWaitUntil:
+    visible: "Ruth 1"
+    timeout: 20000
+- tapOn: Back
+- assertVisible: "Add Verse"
+- assertNotVisible: "Ruth 1"
+- takeScreenshot: add-double-tap
