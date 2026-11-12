@@ -1,7 +1,8 @@
 # Start from npm run db:reset. The seeded "Romans 8" group (reader-c Cara owns, reader-d Dana is a
-# member): the strip's group progress and each card's You and Group values from the seed, the
-# open-verses filter and Practice button, then Cara makes Dana an editor, Dana adds Romans 8:31 and
-# Cara sees it with the group numbers updated. docs/features/shared-collections.md
+# member): the group card's progress and each row's Group count from the seed; the members line
+# opens the member list, the gear the share panel, Details Who's where; then Cara makes Dana an
+# editor, Dana adds Romans 8:31 and Cara sees it with the group numbers updated.
+# docs/features/group-progress.md
 appId: com.caelanliu.biblemem
 name: shared-progress
 ---
@@ -10,31 +11,45 @@ name: shared-progress
 - extendedWaitUntil:
     visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
     timeout: 20000
-- assertVisible: "Shared · 2 members · 3 verses. Show members"
-- assertVisible: "You: Engraved.*Romans 8:1 •.*Group: everyone engraved"
-- assertVisible: "You: Learning.*Romans 8:28 •.*Group: 1 of 2 mastered"
-- assertVisible: "You: Open.*Romans 8:38-39 •.*Group: 0 of 2 mastered"
-- assertVisible: "Practice your 2 open verses"
+- assertVisible: "Cara · 2 members · 3 verses. Show members"
+- assertVisible: ".*Romans 8:1 •.*Group: 2 of 2 mastered"
+- assertVisible: ".*Romans 8:28 •.*Group: 1 of 2 mastered"
+- assertVisible: ".*Romans 8:38-39 •.*Group: 0 of 2 mastered"
+- assertNotVisible: "Practice your.*"
+- assertNotVisible:
+    id: open-verses-filter
 # The header's + reads "add".
 - assertNotVisible: "add"
 - takeScreenshot: shared-progress-1-member
-# The filter keeps Dana's open verses only.
+# The members line: the member list alone.
 - tapOn:
-    id: open-verses-filter
-- assertNotVisible: ".*Romans 8:1 •.*"
-- assertVisible: ".*Romans 8:28 •.*"
-- assertVisible: ".*Romans 8:38-39 •.*"
-- tapOn:
-    id: open-verses-filter
-- assertVisible: ".*Romans 8:1 •.*"
-# Practice opens setup on the first open verse in the list's order (Recent: 8:28 was practiced).
-- tapOn:
-    id: practice-open
+    id: shared-row
 - extendedWaitUntil:
-    visible: "Start session.*"
+    visible: "Dana, you, Member"
+    timeout: 10000
+- assertVisible: "Cara, Owner"
+- assertNotVisible:
+    id: shared-leave
+- takeScreenshot: shared-progress-2-members
+- tapOn:
+    id: modal-close
+# The gear: the share panel, with Leave for a member.
+- tapOn:
+    id: shared-settings
+- extendedWaitUntil:
+    visible:
+      id: shared-leave
+    timeout: 10000
+- takeScreenshot: shared-progress-2b-settings
+- tapOn:
+    id: modal-close
+# The rest of the card: Who's where.
+- tapOn:
+    id: shared-progress
+- extendedWaitUntil:
+    visible: "Cara, Romans 8:28, Mastered"
     timeout: 15000
-- assertVisible: ".*Romans 8:28.*"
-- takeScreenshot: shared-progress-2-practice-setup
+- tapOn: "Back"
 
 # Cara, the owner: her own states, then she makes Dana an editor.
 - runFlow: subflows/open-app.yaml
@@ -42,8 +57,7 @@ name: shared-progress
 - extendedWaitUntil:
     visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
     timeout: 20000
-- assertVisible: "You: Mastered.*Romans 8:28 •.*Group: 1 of 2 mastered"
-- assertVisible: "Practice your 1 open verse"
+- assertVisible: ".*Romans 8:28 •.*Group: 1 of 2 mastered"
 - takeScreenshot: shared-progress-3-owner
 - tapOn:
     id: shared-row
@@ -75,19 +89,17 @@ name: shared-progress
     timeout: 20000
 - tapOn: Back
 - extendedWaitUntil:
-    visible: "You: Open.*Romans 8:31 •.*Group: 0 of 2 mastered"
+    visible: ".*Romans 8:31 •.*Group: 0 of 2 mastered"
     timeout: 20000
-- assertVisible: "Shared · 2 members · 4 verses. Show members"
+- assertVisible: "Cara · 2 members · 4 verses. Show members"
 - assertVisible: "Group progress 38%. 1 of 4 verses mastered by everyone"
-- assertVisible: "Practice your 3 open verses"
 - takeScreenshot: shared-progress-4-editor-added
 
 # Cara's copy catches up when she opens it.
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fseed-romans-8
 - extendedWaitUntil:
-    visible: "You: Open.*Romans 8:31 •.*Group: 0 of 2 mastered"
+    visible: ".*Romans 8:31 •.*Group: 0 of 2 mastered"
     timeout: 20000
 - assertVisible: "Group progress 38%. 1 of 4 verses mastered by everyone"
-- assertVisible: "Practice your 2 open verses"
 - takeScreenshot: shared-progress-5-owner-sees-add

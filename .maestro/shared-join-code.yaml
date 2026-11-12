@@ -32,7 +32,7 @@ name: shared-join-code
 - tapOn:
     id: display-name-continue
 - extendedWaitUntil:
-    visible: "Shared · 3 members.*"
+    visible: "Cara · 3 members.*"
     timeout: 20000
 - assertVisible: ".*Romans 8:28 • ESV.*"
 - takeScreenshot: join-code-2-joined
@@ -42,10 +42,10 @@ name: shared-join-code
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fseed-romans-8
 - extendedWaitUntil:
     visible:
-      id: shared-row
+      id: shared-settings
     timeout: 20000
 - tapOn:
-    id: shared-row
+    id: shared-settings
 - extendedWaitUntil:
     visible: "BREAD828"
     timeout: 10000
@@ -109,7 +109,9 @@ name: shared-join-code
     visible: "Maybe later"
     timeout: 20000
 - tapOn: "Maybe later"
-- assertVisible: "Shared · 4 members.*"
+- extendedWaitUntil:
+    visible: "Cara · 4 members.*"
+    timeout: 15000
 - takeScreenshot: join-code-5-joined-after-sign-in
 - tapOn: Back
 - assertVisible:
