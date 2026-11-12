@@ -166,7 +166,7 @@ function Sweep({ color }: { color: string }) {
         x.value = withRepeat(
           withSequence(
             withTiming(e.nativeEvent.layout.width, { duration: Motion.sweepMs, easing }),
-            withDelay(Motion.sweepRestMs, withTiming(-SWEEP_WIDTH, { duration: 0 })),
+            withDelay(Motion.sweepRestMs, withTiming(-SWEEP_WIDTH, { duration: Motion.jumpMs })),
           ),
           -1,
         );

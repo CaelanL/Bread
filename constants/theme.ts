@@ -20,6 +20,7 @@ export const Motion = {
   spinnerMs: 900,
   sweepMs: 900,
   sweepRestMs: 2400,
+  jumpMs: 0, // An instant reset inside an animation sequence
   easing: [0.2, 0, 0, 1],
 } as const;
 /**
