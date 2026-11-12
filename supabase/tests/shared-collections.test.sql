@@ -112,18 +112,23 @@ select is((select role from public.shared_collection_members where user_id = cur
 update public.shared_collection_members set role = 'editor' where user_id = current_setting('test.d')::uuid;
 
 select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
+select results_eq(format('select client_id, changed from public.sync_shared_collection(%L, ''NIV'')', current_setting('test.s')),
+  format('values (%L, false)', 'shared-' || current_setting('test.s')), 'a member already in step syncs with changed = false');
 select lives_ok(format('insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end) values (%L, ''Romans'', 8, 31, 31)',
   current_setting('test.s')), 'an editor adds a verse');
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
-select is(public.sync_shared_collection(current_setting('test.s')::uuid, 'ESV'), 'seed-romans-8',
-  'the owner''s sync returns their own collection id');
+select results_eq(format('select client_id, changed from public.sync_shared_collection(%L, ''ESV'')', current_setting('test.s')),
+  $$values ('seed-romans-8'::text, true)$$, 'the owner''s sync returns their own collection id and changed = true after an add');
+select results_eq(format('select changed from public.sync_shared_collection(%L, ''ESV'')', current_setting('test.s')),
+  $$values (false)$$, 'a second sync changes nothing');
 select is((select count(*)::int from public.verse_collections vc join public.user_verses v on v.id = vc.verse_id
   where vc.collection_id = 'cccccccc-0000-4000-8000-000000000012' and v.verse_start = 31 and v.version = 'ESV'), 1,
   'sync adds the new verse to the owner''s copy in their translation');
 select set_config('request.jwt.claim.sub', current_setting('test.d'), true);
 delete from public.shared_collection_verses where verse_start = 31;
 select set_config('request.jwt.claim.sub', current_setting('test.c'), true);
-select public.sync_shared_collection(current_setting('test.s')::uuid, 'ESV');
+select results_eq(format('select changed from public.sync_shared_collection(%L, ''ESV'')', current_setting('test.s')),
+  $$values (true)$$, 'a sync that removes a copy reports changed = true');
 select is((select count(*)::int from public.user_verses where verse_start = 31), 0,
   'sync removes a verse that left the group with today''s rule (unmastered: gone)');
 update public.shared_collection_members set role = 'member' where user_id = current_setting('test.d')::uuid;

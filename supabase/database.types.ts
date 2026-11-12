@@ -478,7 +478,9 @@ isOneToOne: false
             }[]
                            },
 "sync_shared_collection":
-{ Args: { "p_shared": string,"p_version": string }; Returns: string
+{ Args: { "p_shared": string,"p_version": string }; Returns: {
+              "changed": boolean,"client_id": string
+            }[]
                            },
 "update_popular_ranges":
 { Args: Record<PropertyKey, never>; Returns: undefined

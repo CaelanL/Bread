@@ -180,9 +180,11 @@ $$;
 
 -- Makes the user's local collection match the group: restores and renames the local row,
 -- adds a copy of each reference (reusing a held row, else a new one in p_version) and
--- removes copies whose reference left the group. Returns the local client_id.
-create function private.sync_member_copies(p_user uuid, p_shared uuid, p_version text)
-returns text language plpgsql security invoker set search_path = ''
+-- removes copies whose reference left the group. Returns the local client_id, and whether
+-- it wrote anything (so the client refetches only then).
+create function private.sync_member_copies(p_user uuid, p_shared uuid, p_version text,
+  out local_client_id text, out changed boolean)
+language plpgsql security invoker set search_path = ''
 as $$
 declare
   grp public.shared_collections%rowtype;
@@ -190,7 +192,9 @@ declare
   ref record;
   held public.user_verses%rowtype;
   stale record;
+  linked integer;
 begin
+  changed := false;
   if p_version is null or p_version !~ '^[A-Z0-9][A-Z0-9-]{1,15}$' then
     raise exception 'Invalid translation' using errcode = '22023';
   end if;
@@ -212,12 +216,14 @@ begin
     insert into public.user_collections (user_id, client_id, name, icon_key, shared_collection_id)
     values (p_user, 'shared-' || p_shared, grp.name, grp.icon_key, p_shared)
     returning * into local_row;
+    changed := true;
   elsif local_row.deleted_at is not null
     or local_row.name is distinct from grp.name
     or local_row.icon_key is distinct from grp.icon_key then
     update public.user_collections
     set deleted_at = null, name = grp.name, icon_key = grp.icon_key
     where id = local_row.id;
+    changed := true;
   end if;
 
   for ref in
@@ -235,13 +241,17 @@ begin
       insert into public.user_verses (user_id, client_id, book, chapter, verse_start, verse_end, version)
       values (p_user, 'verse-' || gen_random_uuid(), ref.book, ref.chapter, ref.verse_start, ref.verse_end, p_version)
       returning * into held;
+      changed := true;
     elsif held.deleted_at is not null then
       update public.user_verses set deleted_at = null where id = held.id;
+      changed := true;
     end if;
 
     insert into public.verse_collections (verse_id, collection_id)
     values (held.id, local_row.id)
     on conflict (verse_id, collection_id) do nothing;
+    get diagnostics linked = row_count;
+    changed := changed or linked > 0;
   end loop;
 
   for stale in
@@ -253,9 +263,10 @@ begin
           and r.verse_start = v.verse_start and r.verse_end = v.verse_end)
   loop
     perform private.remove_verse_from_collection(p_user, stale.verse_id, local_row.id);
+    changed := true;
   end loop;
 
-  return local_row.client_id;
+  local_client_id := local_row.client_id;
 end;
 $$;
 
@@ -455,18 +466,19 @@ begin
     values (invite.shared_collection_id, me, 'member');
   end if;
 
-  return private.sync_member_copies(me, invite.shared_collection_id, p_version);
+  return (private.sync_member_copies(me, invite.shared_collection_id, p_version)).local_client_id;
 end;
 $$;
 
 create function public.sync_shared_collection(p_shared uuid, p_version text)
-returns text language plpgsql security invoker set search_path = ''
+returns table (client_id text, changed boolean) language plpgsql security invoker set search_path = ''
 as $$
 begin
   if auth.uid() is null or not private.is_member(p_shared) then
     raise exception 'Not a member' using errcode = '42501';
   end if;
-  return private.sync_member_copies(auth.uid(), p_shared, p_version);
+  return query select s.local_client_id, s.changed
+    from private.sync_member_copies(auth.uid(), p_shared, p_version) s;
 end;
 $$;
 

@@ -67,7 +67,7 @@ input; `22023` messages are written to be shown as is.
 | `mint_invite(group)` | owner | Revokes open invites, returns a new `(code, expires_at)` |
 | `preview_invite(code)` | signed in | `(shared_id, name, inviter_name, verse_count, member_count, already_member)`. `Invite expired` / `Invite not found` (revoked reads as not found) |
 | `join_shared_collection(code, version)` | signed in, has a display name | Joins as `member` and syncs; a member's repeat join only syncs. Returns the local `client_id` |
-| `sync_shared_collection(group, version)` | member | Syncs the caller's copy. Returns the local `client_id` |
+| `sync_shared_collection(group, version)` | member | Syncs the caller's copy. Returns `(client_id, changed)`: `changed` is true when it created, restored, renamed, linked or removed anything, so the client refetches only then |
 | `leave_shared_collection(group)` | non-owner member | Drops the caller's membership and copy |
 | `remove_shared_member(group, user)` | owner | Drops another member's membership and copy |
 | `get_shared_members(group)` | member | `(user_id, display_name, role, joined_at)`, owner first |
@@ -111,7 +111,8 @@ match the group, under the same per-account lock as `import_curated_collection`:
 3. Removes each linked verse whose reference left the group, with the delete rule below.
    This also removes a verse an old client added to a member's copy by hand.
 
-It runs inside join and whenever a member calls `sync_shared_collection`.
+It runs inside join and whenever a member calls `sync_shared_collection`, and reports
+`changed` when any step wrote a row.
 
 ## Leave and remove
 
@@ -155,4 +156,5 @@ a member. Romans 8:1 is engraved by both, 8:28 mastered by Cara and learning for
 - 2026-11-11 · Leave, remove and sync use a SQL twin of the delete rule · Remove is a cross-user write, so it has to run server-side; one function keeps one rule for all three.
 - 2026-11-11 · `share_collection` is definer-backed and clients can't insert groups or memberships · Otherwise a client could create groups directly and skip the caps and the display-name rule.
 - 2026-11-11 · Shared references allow any range up to verse 176, not the curated import's two-verse limit · Users' own collections hold ranges like Psalm 23:1-3, and those must be shareable.
+- 2026-11-11 · `sync_shared_collection` returns `changed` with the local `client_id` · Opening a shared collection syncs every time; the flag lets the client skip refetching verses and collections when nothing moved.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.
