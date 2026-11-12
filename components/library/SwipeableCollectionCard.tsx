@@ -4,6 +4,7 @@ import { DueCountPill } from '@/components/library/DueCountPill';
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Rays } from '@/components/ui/Rays';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -237,6 +238,8 @@ export function SwipeableCollectionCard({
           >
             <View style={styles.cardLeft}>
               {/* Engraved fills the square like the engraved pill on a verse; the icon stays the collection's own. */}
+              <View>
+              {emblem && <Rays size={84} color={engraved ? colors.tint : colors.success} />}
               <View style={[
                 styles.iconContainer,
                 {
@@ -267,6 +270,7 @@ export function SwipeableCollectionCard({
                       : <IconSymbol name="checkmark" size={11} color={colors.card} weight="bold" />}
                   </View>
                 )}
+              </View>
               </View>
               <View style={styles.cardText}>
                 <Text style={[styles.collectionName, { color: colors.text }]} numberOfLines={1}>
