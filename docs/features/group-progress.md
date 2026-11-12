@@ -35,25 +35,28 @@ shared collection looks like a personal one, and a personal collection looks as 
 - **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
   group's `shared_collection_verses`, turned into squares by `lib/shared/progress.ts` (pure,
   `progress.test.ts`). Your own squares come from your verses in this collection, so they move the
-  moment a session saves. A failed read keeps the last grid and shows Retry on the group card; until a
-  grid arrives the Group column reads "–" (loading, or unavailable after a failure).
-- **Group card** (`SharedStrip`, under the header): member initials (yours first and solid) and
-  "<owner's name> · N members · V verses" (the Library's name until the grid loads), which open the member list (`app/share/[id]?view=members`:
-  names and roles, the owner's member actions); a gear, which opens the share panel
-  (`app/share/[id].tsx`: invite, Stop sharing or Leave); and the group percentage with its bar and
-  "Details". Every other point of the card opens [Who's where](#whos-where), titled "Details".
-- **Invite card** (`InviteStrip`): in the group card's place for the owner while no one else is in
-  it: "Invite code · No one has joined yet", the gear (share panel), and the code with copy
-  (`square.on.square`) and share (`square.and.arrow.up`), the panel's actions
+  moment a session saves. A failed read keeps the last grid and shows Retry on the progress line; until a
+  grid arrives the count reads "–" (loading, or unavailable after a failure).
+- **Header** (`CollectionHeader`, the same for every collection, [library.md](library.md#collection-screen)):
+  once others are in, the people line, member initials (in `get_shared_members` order, yours
+  solid) and "Cara and Dana · 3 verses" (`listNames`; "<owner's name> · N members" until the grid
+  loads), opens the member list (`app/share/[id]?view=members`); under it a thin progress line,
+  "50% together" (mastered squares over all), which opens [Who's where](#whos-where), or "Couldn't
+  load · Retry" after a failed read.
+- **Invite line** (`InviteLine`): for the owner while no one else is in it, "Invite code", the
+  code, copy (`square.on.square`) and share (`square.and.arrow.up`), the share card's actions
   (`components/shared/invite-actions.ts`). It reads `getLiveInvite` on each focus, so a new code
-  made on the panel shows on return; an expired code offers New code (the panel).
-- **Cards**: the same rows as a personal collection (book icon, difficulty dot or check, review
-  badge), plus the group's count on the right (`GroupCount`): members who mastered the verse,
-  engraved included, over all members, "8/10", the same on every row.
+  made on the card shows on return; an expired code offers New code (the card).
+- **Bar**: person-plus (the owner, and any collection you could share) opens the share card
+  (`app/share/[id].tsx`: invite, members and roles, Stop sharing); the dots open Details, Change
+  icon, Rename, Stop sharing and Delete, or Details and Leave for a member.
+- **Rows**: the same flat rows as a personal collection (difficulty dot or check, review badge),
+  plus the group's count on the right (`GroupCount`): members who mastered the verse, engraved
+  included, over all members, "8/10", the same on every row.
 
 ## Who's where
 
-`app/(tabs)/(library)/shared/[id].tsx`, pushed from the group card; `id` is the local
+`app/(tabs)/(library)/shared/[id].tsx`, pushed from the progress line or Details; `id` is the local
 collection, as on the collection screen. It reads the same grid (`useSharedGrid`, your squares from
 your verses), nothing new.
 
@@ -107,9 +110,9 @@ references in every state, so Who's where scrolls sideways
 (`"/(tabs)/(library)/shared/seed-sermon-mount" --as reader-c`).
 
 After `npm run db:reset`: `npm run sim -- flow shared-progress` (the seeded Romans 8 as Cara and
-Dana: the group card, Group counts, the members line opens the member list, the gear the share
-panel, Details Who's where, Cara makes Dana an editor, Dana adds Romans 8:31, Cara sees it);
-`npm run sim -- flow shared-grid` (Dana opens Who's where from the group card: four states, your
+Dana: the header, Group counts, the people line opens the member list, the menu's Details and the
+progress line Who's where, Cara makes Dana an editor, Dana adds Romans 8:31, Cara sees it);
+`npm run sim -- flow shared-grid` (Dana opens Who's where from the progress line: four states, your
 column first, member list; Cara opens it by link and makes Dana an editor there);
 `npm run sim -- flow shared-emblems` (the seeded group reads "Cara · 2 members", its script
 masters and then engraves every square, "Engraved by everyone", Cara deletes for everyone and
@@ -126,12 +129,13 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 - 2026-11-12 · The Group count is plain "10/10" even when everyone has it: no check, no colour · Caelan's pass 2 undid a check-and-colour state ("What it had before was fine").
 - 2026-11-12 · Who's where is titled "Details", like the group card's link · Caelan: the name was too many words.
 - 2026-11-11 · Who's where puts your column first and lists references in Bible order · You look for yourself first; the collection screen keeps your own sort, the grid is a fixed table.
-- 2026-11-12 · Who's where reads the collection screen's grid and opens from anywhere on the group card but the members line (member list) and the gear (share panel) · One read path; Caelan's phone pass wanted the card itself to lead to the details.
+- 2026-11-12 · Who's where reads the collection screen's grid and opens from the header's progress line and the menu's Details · One read path; the group card it used to open from folded into the header (pass 3).
+- 2026-11-12 · The group card and invite card fold into the collection header; the gear goes, person-plus and the dots take its actions · Caelan approved the pass 3 mock-up: one header for solo and shared, actions as icons.
 - 2026-11-11 · Column headers carry only the initial, mastered counts sit in a row under the tiles, and roles show in the member list · A role badge and a count don't fit a 26 pt column.
 - 2026-11-11 · Learning is solid `warning`, not 30% alpha · The alpha tint turned brown on dark and read as a darker Engraved.
 - 2026-11-11 · Your column is marked by a solid `primary` circle, not a caption · One marker, no extra row, the same mark on the group card and the member rows.
 - 2026-11-11 · Columns keep a fixed 26 pt pitch and scroll from the measured width · Stretched columns spread a two-member grid across the card, and a member-count cutoff overlapped columns beside long references.
 - 2026-11-12 · Done collections keep their own icon; mastered adds a check to the subtitle, engraved fills the square like the engraved verse pill; no ring, the same on personal and shared cards · Caelan's phone pass: the swapped check or cross lost the collection's identity, and the green square and ring read as a highlight. Replaces the emblem square and ring of 2026-11-11.
 - 2026-11-12 · A shared card without the emblem reads "<owner's name> · M members" instead of the verse count, like the group card · Shared and personal collections read differently at a glance, and Caelan's pass 2 wanted the owner's name in place of "Shared"; the verse count is on the group card. A collection only its owner is in reads as personal (its verse count), even with a code out.
-- 2026-11-12 · Before anyone joins, the owner's collection screen shows the code in the group card's place · Caelan's pass 2: the code must be findable inside the collection, not only from Share again.
+- 2026-11-12 · Before anyone joins, the owner's collection header shows the code where the people line goes · Caelan's pass 2: the code must be findable inside the collection, not only from Share again.
 - 2026-11-12 · A joined group's owner name comes from `get_shared_members`, one read per joined group on each Library load (20 at most) · No schema change while the branch's migration is on testers' databases. If it ever costs, add the owner's name to `get_shared_status`.

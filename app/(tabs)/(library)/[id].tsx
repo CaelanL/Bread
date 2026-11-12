@@ -1,9 +1,12 @@
-import { AppHeader } from '@/components/app-header';
+import { AddCollectionModal } from '@/components/library/AddCollectionModal';
+import { CollectionHeader, groupProgressLabel, HeaderPill } from '@/components/library/CollectionHeader';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
-import { InviteStrip } from '@/components/shared/InviteStrip';
-import { SharedStrip } from '@/components/shared/SharedStrip';
+import { confirmDeleteCollection, confirmDeleteForEveryone, confirmLeave, confirmStopSharing } from '@/components/shared/confirm-removal';
+import { InviteLine } from '@/components/shared/InviteLine';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { PopoverMenu } from '@/components/ui/PopoverMenu';
+import { TopBar, TopBarButton, useScrollY, useTopBarHeight } from '@/components/ui/TopBar';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors, Radius, InputText } from '@/constants/theme';
@@ -11,20 +14,23 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useAuth } from '@/lib/auth';
 import { useSharedGrid } from '@/hooks/use-shared-grid';
-import { groupProgress, hasOtherMembers, masteredByEveryoneCount, referenceKey } from '@/lib/shared/progress';
+import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
+import { listNames } from '@/lib/shared/display-name';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
+import { groupProgress, hasOtherMembers, masteredByEveryoneCount, referenceKey, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
+import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection, useVersesLostWith } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import type { SymbolViewProps } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  FlatList,
   Pressable,
   StyleSheet,
   Text,
@@ -32,6 +38,9 @@ import {
   View,
   RefreshControl,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export default function CollectionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -61,12 +70,24 @@ export default function CollectionScreen() {
   const withOthers = Boolean(sharedId) && hasOtherMembers(shared);
   const { user } = useAuth();
   const { sharedProgress, grid } = useSharedGrid(sharedId, collectionVerses);
-  const stripMembers = useMemo(() => {
-    const members = (sharedProgress?.members ?? []).map((m) => ({ name: m.displayName, you: m.userId === user?.id }));
-    return [...members.filter((m) => m.you), ...members.filter((m) => !m.you)];
-  }, [sharedProgress, user]);
   const storedOwnerName = useSharedOwnerName(id || '');
-  const ownerName = (sharedProgress?.fetchedAt ? sharedProgress.members.find((m) => m.role === 'owner')?.displayName : null) ?? storedOwnerName;
+  const isOwner = !sharedId || shared?.role === 'owner';
+  const isCustom = Boolean(collection && !collection.isDefault && !collection.isVirtual);
+  // A member's delete is Leave; only the owner shares, renames and stops sharing.
+  const isLeave = Boolean(sharedId) && !isOwner;
+  const lostCount = useVersesLostWith(id || '');
+  const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
+  const barHeight = useTopBarHeight();
+  const { scrollY, onScroll } = useScrollY();
+  const [titleBottom, setTitleBottom] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [searching, setSearching] = useState(false);
+  // A modal route (the share card) can present over this screen; its RN Modals must not stay up under it.
+  useFocusEffect(useCallback(() => () => {
+    setMenuOpen(false);
+    setRenaming(false);
+  }, []));
   const groupRows = useMemo(() => new Map(grid?.rows.map((row) => [row.key, row])), [grid]);
 
   // Count how many collections each verse is in (by matching book/chapter/verse/version)
@@ -142,6 +163,46 @@ export default function CollectionScreen() {
   const showGrid = useDebouncedPress(() => {
     router.push(`/(tabs)/(library)/shared/${id}`);
   });
+
+  // The share card is a route, never an RN Modal held here: see ModalCard. Sharing a personal
+  // collection makes its code; it stays personal until someone joins.
+  const share = useDebouncedPress(() => {
+    if (shareHitsCap(sharedId, sharedCount)) {
+      showErrorToast(`${MAX_SHARED_COLLECTIONS} shared collections is the limit.`);
+      return;
+    }
+    router.push(`/share/${id}`);
+  });
+
+  const showMembers = useDebouncedPress(() => {
+    router.push(`/share/${id}?view=members`);
+  });
+
+  const removeCollection = () => {
+    if (!collection) return;
+    const confirm = async () => {
+      backToLibrary();
+      try {
+        await useAppStore.getState().deleteCollection(collection.id);
+      } catch (e) {
+        showErrorToast(sharedErrorMessage(e, isLeave ? "Couldn't leave this collection. Try again." : 'Failed to delete collection.'));
+      }
+    };
+    if (isLeave) confirmLeave(collection.name, lostCount, confirm);
+    else if (withOthers) confirmDeleteForEveryone(lostCount, confirm);
+    else confirmDeleteCollection(collection.name, verses.length, confirm);
+  };
+
+  const stopSharing = () => {
+    if (!collection || !sharedId) return;
+    confirmStopSharing(collection.name, withOthers, async () => {
+      try {
+        await useAppStore.getState().stopSharing(sharedId);
+      } catch (e) {
+        showErrorToast(sharedErrorMessage(e, "Couldn't stop sharing. Try again."));
+      }
+    });
+  };
 
   const handleVersePress = (verse: SavedVerse) => {
     router.push(`/(tabs)/(library)/setup/${verse.id}`);
@@ -245,113 +306,147 @@ export default function CollectionScreen() {
     );
   };
 
-  return (
-    <ReviewNowProvider value={now}>
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader
-        title={collection?.name || 'Collection'}
-        leftButton={{
-          icon: 'chevron.left',
-          label: 'Back',
-          onPress: backToLibrary,
-        }}
-        titleIcon={canChangeIcon ? {
-          name: collectionIcon.symbol,
-          label: `Change collection icon, ${collectionIcon.label}`,
-          onPress: () => setIconPickerOpen(true),
-        } : undefined}
-        rightButton={
-          collection?.isVirtual || !canEdit
-            ? undefined
-            : {
-                icon: 'plus',
-                onPress: handleAddVerse,
-                variant: 'icon',
-              }
-        }
-      />
+  const emblem = useMemo(() => {
+    if (!collection || collection.isVirtual) return null;
+    if (withOthers && shared) return sharedEmblem(shared);
+    return soloEmblem(collectionVerses.map((v) => v.progress));
+  }, [collection, withOthers, shared, collectionVerses]);
+  const verseCount = sharedProgress?.fetchedAt && withOthers ? sharedProgress.references.length : verses.length;
+  const verseLine = verseCount === 0 ? 'No verses yet' : plural(verseCount, 'verse');
+  const members = withOthers && sharedProgress?.fetchedAt
+    ? sharedProgress.members.map((m) => ({ name: m.displayName, you: m.userId === user?.id }))
+    : null;
+  const memberCount = members?.length ?? shared?.memberCount ?? 1;
+  const people = withOthers ? {
+    members,
+    count: memberCount,
+    line: `${members ? listNames(members.map((m) => m.name)) : [storedOwnerName, plural(memberCount, 'member')].filter(Boolean).join(' · ')} · ${verseLine}`,
+    onPress: showMembers,
+  } : undefined;
+  const progress = grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null;
+  const symbol = (collection?.icon as SymbolViewProps['name']) || (collection?.isDefault ? 'heart.fill' : collectionIcon.symbol);
+  const name = collection?.name ?? (hydrated ? 'Collection' : '');
 
-      {withOthers && sharedId && (
-        <SharedStrip
-          ownerName={ownerName}
-          members={sharedProgress?.fetchedAt ? stripMembers : null}
-          memberCount={sharedProgress?.fetchedAt ? sharedProgress.members.length : shared?.memberCount ?? 1}
-          verseCount={sharedProgress?.fetchedAt ? sharedProgress.references.length : shared?.verseCount ?? verses.length}
-          progress={grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null}
-          failed={sharedProgress?.failed ?? false}
-          onMembers={() => router.push(`/share/${id}?view=members`)}
-          onSettings={() => router.push(`/share/${id}`)}
-          onShowGrid={showGrid}
-          onRetry={() => void useAppStore.getState().fetchSharedProgress(sharedId)}
-        />
-      )}
+  const menuItems = [
+    ...(withOthers ? [{ label: 'Details', icon: 'info.circle', onPress: showGrid }] : []),
+    ...(canChangeIcon ? [{ label: 'Change icon', icon: 'square.grid.2x2', onPress: () => setIconPickerOpen(true) }] : []),
+    ...(isCustom && !isLeave ? [{ label: 'Rename', icon: 'pencil', onPress: () => setRenaming(true) }] : []),
+    ...(sharedId && isOwner ? [{ label: 'Stop sharing', icon: 'person.2.slash', onPress: stopSharing }] : []),
+    ...(isCustom ? [isLeave
+      ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: removeCollection, destructive: true }
+      : { label: 'Delete', icon: 'trash', onPress: removeCollection, destructive: true }] : []),
+  ];
 
-      {sharedId && !withOthers && shared?.role === 'owner' && (
-        <InviteStrip sharedId={sharedId} name={collection?.name ?? shared.name} onSettings={() => router.push(`/share/${id}`)} />
-      )}
-
-      {/* Search and Sort Bar */}
-      {hydrated && verses.length > 0 && (
-        <View style={styles.searchContainer}>
-          <View style={[styles.searchBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
+  const header = (
+    <CollectionHeader
+      symbol={symbol}
+      accent={collection?.iconColor ?? colors.primary}
+      emblem={emblem}
+      iconLabel={`Change collection icon, ${collectionIcon.label}`}
+      onIconPress={canChangeIcon ? () => setIconPickerOpen(true) : undefined}
+      name={name}
+      onTitleBottom={setTitleBottom}
+      people={people}
+      subtitle={hydrated ? (emblem ? `${emblem === 'engraved' ? 'Engraved' : 'Mastered'} · ${verseLine}` : verseLine) : undefined}
+      invite={sharedId && !withOthers && isOwner
+        ? <InviteLine sharedId={sharedId} name={name} onManage={share} />
+        : undefined}
+      progress={withOthers && sharedId ? {
+        ratio: progress?.ratio ?? null,
+        label: groupProgressLabel(progress, verseCount),
+        failed: sharedProgress?.failed ?? false,
+        onPress: showGrid,
+        onRetry: () => void useAppStore.getState().fetchSharedProgress(sharedId),
+      } : undefined}
+    >
+      {hydrated && verses.length > 0 && (searching ? (
+        <View style={styles.searchRow}>
+          <View style={[styles.searchBar, { backgroundColor: colors.fill }]}>
             <IconSymbol name="magnifyingglass" size={16} color={colors.icon} />
             <TextInput
+              testID="collection-search"
               style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search verses..."
+              placeholder="Search verses"
               placeholderTextColor={colors.icon}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              autoFocus
               autoCapitalize="none"
               autoCorrect={false}
               clearButtonMode="while-editing"
             />
           </View>
-          <Pressable
-            style={[styles.sortButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
-            onPress={cycleSortBy}
-          >
-            <IconSymbol name="arrow.up.arrow.down" size={14} color={colors.icon} />
-            <Text style={[styles.sortLabel, { color: colors.icon }]}>{sortLabel}</Text>
+          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => { setSearchQuery(''); setSearching(false); }}>
+            <Text style={[styles.cancel, { color: colors.tint }]}>Cancel</Text>
           </Pressable>
         </View>
-      )}
-
-      {!hydrated ? (
-        <View style={styles.skeletonContainer}>
-          <VerseCardSkeleton count={3} />
-        </View>
       ) : (
-        <FlatList
-          data={sortedVerses}
-          renderItem={({ item }) => (
-            <SwipeableVerseCard
-              verse={item}
-              onPress={() => handleVersePress(item)}
-              onDelete={() => handleDeleteVerse(item.id)}
-              onCopy={() => {
-                setCopyNotice(null);
-                setCopyingVerse(item);
-              }}
-              disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
-              collectionCount={getVerseCollectionCount(item)}
-              sharedMemberCount={withOthers ? shared?.memberCount : undefined}
-              group={withOthers ? {
-                states: groupRows.get(referenceKey(item))?.states ?? null,
-                unavailable: sharedProgress?.failed ?? false,
-              } : undefined}
-            />
-          )}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={sortedVerses.length === 0 ? styles.emptyContainer : styles.versesContainer}
-          ListHeaderComponent={withOthers && sortedVerses.length > 0 ? (
-            <View style={styles.columns}>
-              <Text style={[styles.columnLabel, { color: colors.icon }]}>Group</Text>
-            </View>
-          ) : undefined}
-          ListEmptyComponent={renderEmptyState}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
-          }
+        <>
+          <HeaderPill testID="collection-search-open" icon="magnifyingglass" label="Search" onPress={() => setSearching(true)} />
+          <HeaderPill testID="collection-sort" icon="arrow.up.arrow.down" label={sortLabel} accessibilityLabel={`Sort, ${sortLabel}`} onPress={cycleSortBy} />
+          <View style={styles.spacer} />
+          {!collection?.isVirtual && canEdit && <HeaderPill testID="collection-add" icon="plus" label="Add" accessibilityLabel="Add verses" onPress={handleAddVerse} primary />}
+        </>
+      ))}
+    </CollectionHeader>
+  );
+
+  return (
+    <ReviewNowProvider value={now}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Animated.FlatList
+        data={hydrated ? sortedVerses : []}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        ListHeaderComponent={header}
+        renderItem={({ item }) => (
+          <SwipeableVerseCard
+            verse={item}
+            onPress={() => handleVersePress(item)}
+            onDelete={() => handleDeleteVerse(item.id)}
+            onCopy={() => {
+              setCopyNotice(null);
+              setCopyingVerse(item);
+            }}
+            disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
+            collectionCount={getVerseCollectionCount(item)}
+            sharedMemberCount={withOthers ? shared?.memberCount : undefined}
+            group={withOthers ? {
+              states: groupRows.get(referenceKey(item))?.states ?? null,
+              unavailable: sharedProgress?.failed ?? false,
+            } : undefined}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
+        ListEmptyComponent={hydrated ? renderEmptyState : <VerseCardSkeleton count={3} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
+        }
+      />
+      <TopBar scrollY={scrollY} title={name} titleAt={titleBottom} onBack={backToLibrary}>
+        {isCustom && isOwner && (
+          <TopBarButton testID="collection-share" icon="person.badge.plus" label={sharedId ? 'Invite and members' : 'Share'} onPress={share} />
+        )}
+        {menuItems.length > 0 && (
+          <TopBarButton testID="collection-menu" icon="ellipsis" label="More" onPress={() => setMenuOpen(true)} />
+        )}
+      </TopBar>
+      <PopoverMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        anchorPosition={{ top: barHeight, right: 12 }}
+        items={menuItems}
+      />
+      {renaming && collection && (
+        <AddCollectionModal
+          visible
+          initialName={collection.name}
+          onClose={() => setRenaming(false)}
+          onAdd={(next) => useAppStore.getState().renameCollection(collection.id, next)}
         />
       )}
       {iconPickerOpen && canChangeIcon && (
@@ -402,31 +497,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  columns: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 4,
+  content: {
+    paddingBottom: 32,
   },
-  columnLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 20,
   },
-  searchContainer: {
+  searchRow: {
+    flex: 1,
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
+    alignItems: 'center',
+    gap: 12,
+  },
+  cancel: {
+    fontSize: 17,
+  },
+  spacer: {
+    flex: 1,
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    height: 36,
+    borderRadius: Radius.lg,
     gap: 8,
   },
   searchInput: {
@@ -435,34 +531,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     padding: 0,
   },
-  sortButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    gap: 6,
-  },
-  sortLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 100,
-  },
-  skeletonContainer: {
-    padding: 16,
-  },
-  versesContainer: {
-    padding: 16,
-    gap: 12,
-  },
   emptyState: {
     alignItems: 'center',
     gap: 12,
+    paddingTop: 48,
   },
   emptyIcon: {
     width: 80,

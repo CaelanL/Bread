@@ -83,7 +83,7 @@ name: library-plus
 - takeScreenshot: plus-3-join-over-share
 - tapOn:
     id: join-button
-# Only the owner is in it, so the collection screen has no group card.
+# Only the owner is in it, so the collection screen has no people line.
 - extendedWaitUntil:
     visible: "Add your first verse to start memorizing"
     timeout: 15000

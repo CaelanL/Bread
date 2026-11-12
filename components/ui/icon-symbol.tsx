@@ -55,6 +55,11 @@ const MAPPING = {
   'gearshape': 'settings',
   'arrow.triangle.2.circlepath': 'autorenew',
   'rectangle.portrait.and.arrow.right': 'logout',
+  'person.badge.plus': 'person-add-alt',
+  'info.circle': 'info-outline',
+  'square.grid.2x2': 'grid-view',
+  'person.2.slash': 'group-off',
+  'arrow.up.arrow.down': 'swap-vert',
 } as IconMapping;
 
 /**

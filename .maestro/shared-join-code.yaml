@@ -34,7 +34,7 @@ name: shared-join-code
 - extendedWaitUntil:
     visible: "Cara · 3 members.*"
     timeout: 20000
-- assertVisible: ".*Romans 8:28 • ESV.*"
+- assertVisible: ".*Romans 8:28 · ESV.*"
 - takeScreenshot: join-code-2-joined
 
 # The owner replaces the link; the old code stops working.
@@ -42,10 +42,10 @@ name: shared-join-code
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fseed-romans-8
 - extendedWaitUntil:
     visible:
-      id: shared-settings
+      id: collection-share
     timeout: 20000
 - tapOn:
-    id: shared-settings
+    id: collection-share
 - extendedWaitUntil:
     visible: "BREAD828"
     timeout: 10000

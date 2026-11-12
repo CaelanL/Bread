@@ -32,6 +32,15 @@ export const Shadows = {
   borderHover: '0px 0px 0px 1px rgba(0,0,0,0.08), 0px 1px 2px -1px rgba(0,0,0,0.08), 0px 2px 4px 0px rgba(0,0,0,0.06)',
 } as const;
 
+/** How much of a collection's accent shows behind its icon and across the top of its screen. */
+export const AccentAlpha = { fill: 0.14, wash: 0.18 } as const;
+
+/** `#rrggbb` at `alpha`, for an accent that isn't a token itself (a collection's icon colour). */
+export function withAlpha(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1, 7), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
 export const Colors = {
   light: {
     // Core
@@ -52,6 +61,7 @@ export const Colors = {
     // Surfaces
     card: '#ffffff',              // Pure white cards for contrast
     cardAlt: '#f5f3f0',           // Warm light gray
+    fill: 'rgba(0,0,0,0.05)',     // Quiet fill on the page: pills, pressed rows
     input: '#f5f3f0',             // Warm input background
     overlay: 'rgba(0,0,0,0.5)',
 
@@ -88,6 +98,7 @@ export const Colors = {
     // Surfaces
     card: '#242424',              // Dark charcoal card
     cardAlt: '#2e2e2e',           // Slightly lighter
+    fill: 'rgba(255,255,255,0.08)',
     input: '#2e2e2e',             // Input background
     overlay: 'rgba(0,0,0,0.6)',
 

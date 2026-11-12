@@ -24,6 +24,7 @@ surfaces.
 | `recordingAction` | `rgba(0,0,0,0.10)` | submit action fill on bronze, same in both modes |
 | `card` | `#ffffff` | card surfaces |
 | `cardAlt` | `#f5f3f0` | secondary card surfaces |
+| `fill` | `rgba(0,0,0,0.05)` | quiet fill on the page: header pills, a pressed row |
 | `input` | `#f5f3f0` | input backgrounds |
 | `border` | `#e0dcd6` | dividers / borders |
 | `borderLight` | `#ebe7e1` | subtle dividers |
@@ -49,6 +50,7 @@ surfaces.
 | `recordingControl` | `#a8824c` | bronze mic and waveform surface with white icons |
 | `card` | `#242424` | |
 | `cardAlt` | `#2e2e2e` | |
+| `fill` | `rgba(255,255,255,0.08)` | |
 | `input` | `#2e2e2e` | |
 | `border` | `#3a3a3a` | |
 | `borderLight` | `#444444` | |
@@ -66,6 +68,9 @@ shift with theme.
 
 Auth screens always use `Colors.dark`, with `authAccent` and
 `authButton` from the same file.
+
+A collection's accent (its `iconColor`, or `primary`) isn't a token: `withAlpha(hex, alpha)` with
+`AccentAlpha.fill` (its icon square) or `AccentAlpha.wash` (the header wash) derives from it.
 
 ## Radius, motion and shadows
 
@@ -196,6 +201,7 @@ have hex literals; don't copy them.
 | `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
 | `ModalCard.tsx` | `ModalCard` (a centered card on a blurred, dimmed backdrop, with an X) and `modalStyles` (its type, input and button), for modal routes |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
+| `TopBar.tsx` | `TopBar`, `TopBarButton`, `useScrollY`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
 
 If you're building a new reusable primitive, add it here with a
 `.tsx` (and `.ios.tsx` if it needs platform divergence). Pull
@@ -224,6 +230,20 @@ use Material Community Icons through `IconSymbol` on every platform.
 
 Forgetting step 3 means the icon renders correctly on iOS and not
 on Android / web.
+
+## Screen tops
+
+A screen's title lives in its content, never centered in a bar. `TopBar` floats over the scroll
+view (absolute, under the status bar): back on the left, icon actions (`TopBarButton`) on the
+right, and no surface until content scrolls under it, then the page colour and a hairline. Its
+small title fades in, left-aligned, once the large title has scrolled under it (`titleAt`, from
+the title's `onLayout`). The scroll view is a Reanimated one with `onScroll` from `useScrollY`,
+`paddingTop: useTopBarHeight()` and the same value as its `RefreshControl`'s `progressViewOffset`,
+so the spinner shows below the bar, not behind the Dynamic Island.
+
+The collection screen's top is `CollectionHeader` (`components/library/`): the accent washing down
+from the top edge (an `expo-linear-gradient`, solid above the bar for a pull), a 56 pt icon square,
+the name at 28/600, a secondary line, and `HeaderPill`s (one `primary`, the rest on `fill`).
 
 ## Haptics
 

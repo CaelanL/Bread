@@ -1,4 +1,4 @@
-import { confirmLeave } from '@/components/shared/confirm-removal';
+import { confirmLeave, confirmStopSharing } from '@/components/shared/confirm-removal';
 import { shareInvite, useCopyCode } from '@/components/shared/invite-actions';
 import { manageMember } from '@/components/shared/member-actions';
 import { MemberRow, MemberRowPlaceholder } from '@/components/shared/MemberRow';
@@ -120,19 +120,10 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
 
   const stopSharing = () => {
     if (!sharedId) return;
-    Alert.alert(`Stop sharing "${name}"?`, othersJoined
-      ? 'The code stops working, and each member keeps their own copy. The collection stays in your Library.'
-      : 'The code stops working. The collection stays in your Library.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Stop sharing',
-        style: 'destructive',
-        onPress: () => run(async () => {
-          await useAppStore.getState().stopSharing(sharedId);
-          onStopped();
-        }, "Couldn't stop sharing. Try again."),
-      },
-    ]);
+    confirmStopSharing(name, othersJoined, () => run(async () => {
+      await useAppStore.getState().stopSharing(sharedId);
+      onStopped();
+    }, "Couldn't stop sharing. Try again."));
   };
 
   const plural = `${memberCount} member${memberCount === 1 ? '' : 's'}`;

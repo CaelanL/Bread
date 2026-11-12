@@ -3,7 +3,7 @@ import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { GroupCount } from '@/components/shared/MemberState';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Motion } from '@/constants/theme';
+import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { getVerseText } from '@/lib/api/bible';
@@ -45,11 +45,6 @@ export function SwipeableVerseCard({
 }: SwipeableVerseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
-
-  const cardBg = colors.card;
-  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Keep for subtle accent border
-  const primaryColor = colors.tint;
 
   // Text loading state (for verses without cached text)
   const [text, setText] = useState<string>(verse.text || '');
@@ -172,25 +167,17 @@ export function SwipeableVerseCard({
     onCopy();
   };
 
+  const engraved = verse.progress.engraved?.completed === true;
+
   return (
-    <Animated.View
-      style={styles.container}
-    >
+    <Animated.View style={styles.container}>
       {!disableSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} />}
 
-      {/* Swipeable card */}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={cardStyle}>
           <Pressable
-            style={[
-              styles.card,
-              {
-                backgroundColor: verse.progress.engraved?.completed
-                  ? colors.cardAlt
-                  : cardBg,
-                borderColor,
-              },
-            ]}
+            style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.fill }]}
+            unstable_pressDelay={PRESS_DELAY_MS}
             onPress={handlePress}
             onLongPress={handleCopy}
             accessibilityActions={[
@@ -202,58 +189,36 @@ export function SwipeableVerseCard({
               if (!disableSwipe && event.nativeEvent.actionName === 'delete') handleDelete();
             }}
           >
-            {/* Gold glow overlay when engraved */}
-            {verse.progress.engraved?.completed && (
-              <View style={styles.engravedGlow} />
-            )}
-            <View style={styles.cardContent}>
-              <View
-                style={[
-                  styles.iconContainer,
-                  { backgroundColor: colors.primaryLight },
-                ]}
-              >
-                <IconSymbol name="book.fill" size={20} color={colors.icon} />
+            <View style={styles.rowText}>
+              <View style={styles.referenceRow}>
+                <Text style={[styles.reference, { color: engraved ? colors.tint : colors.text }]} numberOfLines={1}>
+                  {formatVerseReference(verse)}
+                  <Text style={[styles.version, { color: colors.icon }]}> · {verse.version}</Text>
+                </Text>
+                {/* Where the verse stands short of engraved: a dot for Easy (grey) or Medium (blue), a
+                    check once mastered. Engraved shows in its colour and the badge below. */}
+                {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
+                  <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff' }]} />
+                ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
+                  <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
+                ) : verse.progress.hard.completed && !engraved ? (
+                  <IconSymbol name="checkmark" size={13} color={colors.success} />
+                ) : null}
               </View>
-              <View style={styles.cardText}>
-                <View style={styles.referenceRow}>
-                  <Text style={[styles.verseReference, { color: verse.progress.engraved?.completed ? primaryColor : colors.text }]}>
-                    {formatVerseReference(verse)}
-                    <Text style={[styles.versionBadge, { color: verse.progress.engraved?.completed ? colors.tint : colors.icon }]}>
-                      {' '}• {verse.version}
-                    </Text>
-                  </Text>
-                  {/* Top-line indicator. Unmastered verses show a
-                      progression dot (gray=easy, blue=medium).
-                      Mastered-but-not-engraved verses get a green
-                      checkmark — visual parity with the unmastered
-                      dots so users can scan a list at a glance.
-                      Engraved verses skip this slot; their gold
-                      card styling (glow + reference text color) is
-                      the indicator. ReviewStateBadge below carries
-                      the SR review-status detail in all cases. */}
-                  {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
-                  ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
-                  ) : verse.progress.hard.completed && !verse.progress.engraved?.completed ? (
-                    <IconSymbol name="checkmark" size={14} color={colors.success} />
-                  ) : null}
+              {loading ? (
+                <Skeleton width="70%" height={14} borderRadius={4} style={styles.previewSkeleton} />
+              ) : (
+                <Text style={[styles.preview, { color: colors.icon }]} numberOfLines={1}>
+                  {text}
+                </Text>
+              )}
+              {verse.progress.hard.completed && (
+                <View style={styles.badge}>
+                  <ReviewStateBadge verse={verse} />
                 </View>
-                {loading ? (
-                  <View style={styles.skeletonContainer}>
-                    <Skeleton width="100%" height={15} borderRadius={4} />
-                    <Skeleton width="65%" height={15} borderRadius={4} />
-                  </View>
-                ) : (
-                  <Text style={[styles.versePreview, { color: colors.text }]} numberOfLines={2}>
-                    {text}
-                  </Text>
-                )}
-                <ReviewStateBadge verse={verse} />
-              </View>
-              {group && <GroupCount states={group.states} unavailable={group.unavailable} />}
+              )}
             </View>
+            {group && <GroupCount states={group.states} unavailable={group.unavailable} />}
           </Pressable>
         </Animated.View>
       </GestureDetector>
@@ -261,66 +226,53 @@ export function SwipeableVerseCard({
   );
 }
 
+// A row highlights only once a touch stays, so a scroll doesn't flash every row it starts on.
+const PRESS_DELAY_MS = 80;
+
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 16,
   },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    overflow: 'hidden',
-  },
-  engravedGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
-  },
-  cardContent: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  cardText: {
+  rowText: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   referenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  verseReference: {
-    fontSize: 15,
-    fontWeight: '600',
+  reference: {
+    flexShrink: 1,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  version: {
+    fontSize: 13,
+    fontWeight: '400',
   },
   difficultyDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: Radius.xs,
   },
-  versionBadge: {
-    fontWeight: '400',
-  },
-  versePreview: {
+  preview: {
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 20,
   },
-  skeletonContainer: {
-    gap: 6,
-    height: 42, // Match 2 lines of text (lineHeight 21 * 2)
+  previewSkeleton: {
+    marginVertical: 3,
+  },
+  badge: {
+    marginTop: 4,
   },
 });

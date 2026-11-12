@@ -18,10 +18,10 @@ name: quick-add
 # A failed earlier run can leave the verses behind.
 - runFlow:
     when:
-      visible: ".*Romans 8:1-4 • .*"
+      visible: ".*Romans 8:1-4 · .*"
     commands:
       - swipe:
-          from: ".*Romans 8:1-4 • .*"
+          from: ".*Romans 8:1-4 · .*"
           direction: LEFT
       - tapOn:
           id: swipe-delete
@@ -31,10 +31,10 @@ name: quick-add
       - waitForAnimationToEnd
 - runFlow:
     when:
-      visible: ".*Romans 8:1 • .*"
+      visible: ".*Romans 8:1 · .*"
     commands:
       - swipe:
-          from: ".*Romans 8:1 • .*"
+          from: ".*Romans 8:1 · .*"
           direction: LEFT
       - tapOn:
           id: swipe-delete
@@ -93,12 +93,12 @@ name: quick-add
     id: quick-add-cancel
 - tapOn: Back
 - extendedWaitUntil:
-    visible: ".*Romans 8:1 • .*"
+    visible: ".*Romans 8:1 · .*"
     timeout: 20000
-- assertNotVisible: ".*Romans 8:1-4 • .*"
+- assertNotVisible: ".*Romans 8:1-4 · .*"
 - waitForAnimationToEnd
 - swipe:
-    from: ".*Romans 8:1 • .*"
+    from: ".*Romans 8:1 · .*"
     direction: LEFT
 - tapOn:
     id: swipe-delete

@@ -36,13 +36,13 @@ name: shared-stop
     visible: ".*Psalm 23, .*Mastered · .* verses.*"
     timeout: 10000
 - assertNotVisible: ".*Psalm 23, .*members.*"
-# Inside, the code sits where the group card would.
+# Inside, the code sits in the header.
 - tapOn: ".*Psalm 23, .*Mastered.*"
 - extendedWaitUntil:
     visible:
       id: strip-invite-code
     timeout: 10000
-- assertVisible: "Invite code · No one has joined yet"
+- assertVisible: "Invite code"
 - takeScreenshot: stop-2b-invite-in-collection
 - tapOn: "Back"
 - longPressOn: ".*Psalm 23, .*Mastered.*"

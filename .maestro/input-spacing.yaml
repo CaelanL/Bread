@@ -24,8 +24,10 @@ name: input-spacing
     timeout: 5000
 - tapOn: ".*Romans 8, Shared.*"
 - extendedWaitUntil:
-    visible: "Search verses..."
+    visible:
+      id: collection-search-open
     timeout: 15000
-- tapOn: "Search verses..."
+- tapOn:
+    id: collection-search-open
 - inputText: "romans"
 - takeScreenshot: input-spacing-search

@@ -1,5 +1,5 @@
 import { AppHeader } from '@/components/app-header';
-import { groupProgressLabel } from '@/components/shared/SharedStrip';
+import { groupProgressLabel } from '@/components/library/CollectionHeader';
 import { manageMember } from '@/components/shared/member-actions';
 import { InitialDot } from '@/components/shared/MemberDots';
 import { MemberRow, ROLE_LABEL } from '@/components/shared/MemberRow';

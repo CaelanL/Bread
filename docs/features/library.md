@@ -29,7 +29,7 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 | Route (`app/(tabs)/(library)/`) | Purpose |
 |---|---|
 | `index.tsx` | Collection list, pull to refresh, Edit, and the + menu |
-| `[id].tsx` | One collection: icon picker, search, sort pill, verse list, + to add, and long press to copy |
+| `[id].tsx` | One collection: `CollectionHeader` (icon, name, Search, sort and Add pills), flat verse rows, long press to copy, a menu |
 | `add.tsx` | Quick-add field, then pick a book and chapter. Its picker sets the account translation. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
 | `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
@@ -106,8 +106,7 @@ is in [shared collections](shared-collections.md#in-the-app).
 
 ## Sorting verses
 
-The pill on `[id].tsx` cycles through the options in `cycleSort`, in
-`lib/store/library-sort.ts`. Only Mastered has Due first.
+The sort pill cycles through `cycleSort` (`lib/store/library-sort.ts`). Only Mastered has Due first.
 
 | Sort | Order (`sortVerses`) |
 |---|---|
@@ -168,7 +167,7 @@ reading is offline: saving verses and recording progress still need the network
 
 ## Curated collections
 
-Tap a custom collection's header icon to change it. See [Explore collections](home.md#explore-collections) for imports and [save totals](home.md#community-saves).
+Tap a custom collection's header icon, or Change icon in its menu, to change it. See [Explore collections](home.md#explore-collections) for imports and [save totals](home.md#community-saves).
 
 ## Deleting a verse
 

@@ -153,7 +153,7 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   (`DisplayNameForm`) once, then `shareCollection` and the panel. At 20 groups a new share toasts
   (`shareHitsCap`). From that tap there's a code, but until someone joins it acts personal
   ([group progress](group-progress.md#collection-screen)); the panel says "Not shared yet".
-- **Share panel** (`SharePanel`, also from the group card's gear): members, roles;
+- **Share panel** (`SharePanel`, also the bar's person-plus): members, roles;
   `?view=members` shows only the members. It opens at full size (stand-ins until loaded).
   The owner also gets the code, copy icon, days left, Share, New code (confirmed, old code
   dies), the [member actions](group-progress.md#whos-where) and Stop sharing. Share sends

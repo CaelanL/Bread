@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { confirmDeleteForEveryone, confirmLeave } from '@/components/shared/confirm-removal';
+import { confirmDeleteCollection, confirmDeleteForEveryone, confirmLeave } from '@/components/shared/confirm-removal';
 import { DueCountPill } from '@/components/library/DueCountPill';
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
@@ -14,7 +14,7 @@ import type { Collection, SharedRole } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   FadeInDown,
@@ -200,25 +200,7 @@ export function SwipeableCollectionCard({
     };
     if (isLeave) return confirmLeave(collection.name, lostCount, confirm, closeSwipe);
     if (memberCount !== undefined) return confirmDeleteForEveryone(lostCount, confirm, closeSwipe);
-    const title = `Delete "${collection.name}"?`;
-    const message = collection.verseCount > 0
-      ? 'Verses not mastered or in another collection will be deleted and lose progress.'
-      : 'This collection will be permanently deleted.';
-
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel', onPress: closeSwipe },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await onDelete();
-          } catch {
-            closeSwipe();
-          }
-        },
-      },
-    ]);
+    confirmDeleteCollection(collection.name, collection.verseCount, confirm, closeSwipe);
   };
 
   const openActions = (pageY: number) => {

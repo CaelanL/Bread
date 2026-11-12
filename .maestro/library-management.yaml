@@ -96,7 +96,7 @@ name: library-management
 - tapOn: Cancel
 
 - tapOn: ".*Mastered, 1 verse.*"
-- longPressOn: ".*John 3:16 • ESV.*"
+- longPressOn: ".*John 3:16 · ESV.*"
 - assertVisible: "Copy to collection"
 - assertVisible:
     text: "My Verses, Already added"
@@ -110,17 +110,17 @@ name: library-management
     file: scripts/library-membership.js
     env:
       EXPECT_COPY: "yes"
-- longPressOn: ".*John 3:16 • ESV.*"
+- longPressOn: ".*John 3:16 · ESV.*"
 - assertVisible:
     text: "Verses for patience and encouragement, Already added"
     enabled: false
 - tapOn: Close
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
 - tapOn: ".*Verses for patience and encouragement, 1 verse.*"
-- assertVisible: ".*John 3:16 • ESV.*Review now.*"
+- assertVisible: ".*John 3:16 · ESV.*Review now.*"
 - takeScreenshot: library-7-copied-verse
 - swipe:
-    from: ".*John 3:16 • ESV.*"
+    from: ".*John 3:16 · ESV.*"
     direction: LEFT
 - takeScreenshot: library-8-verse-swipe-light
 - tapOn:
@@ -140,7 +140,7 @@ name: library-management
 - takeScreenshot: library-9-collection-swipe-dark
 - tapOn: ".*Verses for patience and encouragement, 1 verse.*"
 - swipe:
-    from: ".*John 3:16 • ESV.*"
+    from: ".*John 3:16 · ESV.*"
     direction: LEFT
 - takeScreenshot: library-10-verse-swipe-dark
 - tapOn:
@@ -154,7 +154,7 @@ name: library-management
       EXPECT_COPY: "no"
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
 - tapOn: ".*My Verses, 2 verses.*"
-- assertVisible: ".*John 3:16 • ESV.*Review now.*"
+- assertVisible: ".*John 3:16 · ESV.*Review now.*"
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fsettings
 - extendedWaitUntil:
     visible: System

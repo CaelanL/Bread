@@ -189,8 +189,9 @@ gating logic above. A notification tap routes through
   feedback on iOS only. The Settings tab shows a badge from
   `useSettingsBadge`.
 - Active tint: `Colors[scheme].tint` (bronze gold).
-- Navigator headers are off (`headerShown: false`). Screens render
-  the shared `AppHeader` (`components/app-header.tsx`).
+- Navigator headers are off (`headerShown: false`). The collection screen renders `TopBar`
+  ([theming](theming-and-ui.md#screen-tops)); the rest still render `AppHeader`
+  (`components/app-header.tsx`).
 
 ## Conventions
 
