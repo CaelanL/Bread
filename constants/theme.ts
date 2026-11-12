@@ -47,6 +47,7 @@ export const Colors = {
     recordingControl: '#987142',
     recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(176,141,87,0.12)',
+    engravedFill: 'rgba(245,158,11,0.12)', // Engraved pill and engraved collection icon
 
     // Surfaces
     card: '#ffffff',              // Pure white cards for contrast
@@ -82,6 +83,7 @@ export const Colors = {
     recordingControl: '#a8824c',
     recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(201,169,98,0.15)',
+    engravedFill: 'rgba(245,158,11,0.15)',
 
     // Surfaces
     card: '#242424',              // Dark charcoal card

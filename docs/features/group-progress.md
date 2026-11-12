@@ -72,28 +72,25 @@ your verses), nothing new.
 
 ## Library cards
 
-The Library card of a collection whose every square is mastered or engraved carries an emblem in
-its icon square (`CollectionEmblem`), and the subtitle says it in words. Nothing goes on the card
-frame. The rules are `soloEmblem` and `sharedEmblem` in `lib/shared/progress.ts`, on
-`cellState`, so the mastered and engraved tests are the grid's (`progress.test.ts`).
+A collection whose every square is mastered or engraved says so on its Library card. The card
+keeps the collection's own icon. The rules are `soloEmblem` and `sharedEmblem` in
+`lib/shared/progress.ts`, on `cellState`, so the mastered and engraved tests are the grid's
+(`progress.test.ts`). A shared collection uses the shared rule only once someone else joined;
+before that it follows the personal one.
 
-| Card | Rule | Square | Subtitle |
+| Card | Rule | Icon square | Subtitle |
 |---|---|---|---|
-| Personal, mastered | A real collection, My Verses included, with at least one verse, every verse Mastered or Engraved | `MonthlyCardColors.masteredPlain`, `checkmark` in `success` | "Mastered · N verses" |
-| Personal, engraved | The same, every verse Engraved | `primaryLight`, `EngravedIcon` in `tint` | "Engraved · N verses" |
-| Shared, mastered by everyone | `get_shared_status`: mastered squares = members × verses, above 0 | The mastered square in a ring | "Mastered by everyone · Shared" |
-| Shared, engraved by everyone | Engraved squares = members × verses | The engraved square in a ring | "Engraved by everyone · Shared" |
-| Shared, not yet | Anything else, or no status row yet | The collection's own icon | "Shared · M members" |
+| Personal, mastered | A real collection, My Verses included, with at least one verse, every verse Mastered or Engraved | Unchanged | `checkmark` in `success`, "Mastered · N verses" |
+| Personal, engraved | The same, every verse Engraved | `engravedFill` behind the icon in `tint`, the engraved verse pill's colours | `EngravedIcon` in `tint`, "Engraved · N verses" |
+| Shared, mastered by everyone | `get_shared_status`: mastered squares = members × verses, above 0 | Unchanged | `checkmark`, "Mastered by everyone" |
+| Shared, engraved by everyone | Engraved squares = members × verses | As personal engraved | `EngravedIcon`, "Engraved by everyone" |
+| Shared, not yet | Anything else, or no status row yet | Unchanged | "Shared · M members" |
 
-A shared collection only its owner is in follows the personal rows.
-
-The ring is 1.5 pt in the emblem colour at `Radius.xl`, 3 pt outside the 48 pt square, so 1.5 pt
-of `card` shows between them and the card's layout doesn't move. Virtual collections never get an
-emblem. A shared card reads the status from the last hydrate, refresh or collection visit, and a session
-that turns one of your squares mastered or engraved refetches it (`updateVerseProgress`), so
-finishing the last square shows the ring on the way back; Reset Progress on a mastered one
-refetches it too (`resetVerseProgress`). Once the owner deletes the
-group, a member's copy is personal and follows the personal rules.
+Virtual collections never get one. A shared card reads the status from the last hydrate, refresh
+or collection visit, and a session that turns one of your squares mastered or engraved refetches it
+(`updateVerseProgress`), so finishing the last square shows on the way back; Reset Progress on a
+mastered one refetches it too (`resetVerseProgress`). Once the group is gone (Stop sharing, or the
+owner deletes it), a member's copy is personal and follows the personal rules.
 
 ## Browser checks
 
@@ -125,6 +122,5 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 - 2026-11-11 · Learning is solid `warning`, not 30% alpha · The alpha tint turned brown on dark and read as a darker Engraved.
 - 2026-11-11 · Your column is marked by a solid `primary` circle, not a caption · One marker, no extra row, the same mark on the group card and the member rows.
 - 2026-11-11 · Columns keep a fixed 26 pt pitch and scroll from the measured width · Stretched columns spread a two-member grid across the card, and a member-count cutoff overlapped columns beside long references.
-- 2026-11-11 · The emblem replaces the icon in the card's square and the subtitle carries the words; no tinted frame or gradient · A frame on a card that already has a 1 pt border is border-on-border, and the ring alone must never carry the meaning.
-- 2026-11-11 · The ring sits outside the existing 48 pt square (the design note said 40 and 46) · The square keeps its size and the card's text doesn't shift.
+- 2026-11-12 · Done collections keep their own icon; mastered adds a check to the subtitle, engraved fills the square like the engraved verse pill; no ring, the same on personal and shared cards · Caelan's phone pass: the swapped check or cross lost the collection's identity, and the green square and ring read as a highlight. Replaces the emblem square and ring of 2026-11-11.
 - 2026-11-11 · A shared card without the emblem reads "Shared · M members" instead of the verse count · Shared and personal collections read differently at a glance; the verse count is on the group card. A collection only its owner is in reads as personal.

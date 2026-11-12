@@ -38,7 +38,7 @@ export function ReviewStateBadge({ verse }: Props) {
   // Engraved wins.
   if (e?.completed) {
     return (
-      <View style={[styles.badge, styles.engravedBadge, { backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.12)' }]}>
+      <View style={[styles.badge, styles.engravedBadge, { backgroundColor: colors.engravedFill }]}>
         <EngravedIcon size={11} color={colors.tint} />
         <Text style={[styles.label, { color: colors.tint }]}>
           {e.lifetimeReviews} {e.lifetimeReviews === 1 ? 'review' : 'reviews'}

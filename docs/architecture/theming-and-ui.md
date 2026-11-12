@@ -35,6 +35,7 @@ surfaces.
 | `tabIconSelected` | `#b08d57` | active tab icons |
 | `icon` | `#6b6b6b` | default icon color |
 | `primaryLight` | `rgba(176,141,87,0.12)` | tinted accent background |
+| `engravedFill` | `rgba(245,158,11,0.12)` | engraved verse pill and engraved collection icon |
 | `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
 | `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 
@@ -56,6 +57,7 @@ surfaces.
 | `tabIconSelected` | `#c9a962` | |
 | `icon` | `#9a9a9a` | |
 | `primaryLight` | `rgba(201,169,98,0.15)` | |
+| `engravedFill` | `rgba(245,158,11,0.15)` | |
 | `overlay` | `rgba(0,0,0,0.6)` | |
 
 Status colors (`success`, `warning`, `error`) are intentionally the

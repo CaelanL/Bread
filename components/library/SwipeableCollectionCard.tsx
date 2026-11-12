@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { confirmDeleteForEveryone, confirmLeave } from '@/components/shared/confirm-removal';
-import { CollectionEmblem } from '@/components/library/CollectionEmblem';
 import { DueCountPill } from '@/components/library/DueCountPill';
+import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
@@ -54,7 +54,7 @@ interface SwipeableCollectionCardProps {
   lostCount?: number;
   /** Shown for a personal collection; opens sharing. */
   onShare?: () => void;
-  /** Every verse mastered or engraved; on a shared collection, by every member. */
+  /** Every verse mastered or engraved; on a shared collection with others in it, by every member. */
   emblem?: Emblem | null;
   /** Set once someone besides the owner is in the shared collection, from `get_shared_status`. */
   memberCount?: number;
@@ -94,9 +94,10 @@ export function SwipeableCollectionCard({
   const canSwipe = isCustom && !editing && !actionsDisabled;
   const isLeave = Boolean(collection.sharedId) && sharedRole !== 'owner';
   const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
-  const emblemLabel = emblem === 'engraved' ? 'Engraved' : 'Mastered';
+  const engraved = emblem === 'engraved';
+  const emblemLabel = engraved ? 'Engraved' : 'Mastered';
   const subtitle = emblem
-    ? memberCount !== undefined ? `${emblemLabel} by everyone · Shared` : `${emblemLabel} · ${verseCount}`
+    ? memberCount !== undefined ? `${emblemLabel} by everyone` : `${emblemLabel} · ${verseCount}`
     : memberCount !== undefined
       ? `Shared · ${memberCount} member${memberCount !== 1 ? 's' : ''}`
       : verseCount;
@@ -251,27 +252,34 @@ export function SwipeableCollectionCard({
             }}
           >
             <View style={styles.cardLeft}>
-              {emblem ? <CollectionEmblem emblem={emblem} ring={memberCount !== undefined} /> : <View style={[
+              {/* Engraved fills the square like the engraved pill on a verse; the icon stays the collection's own. */}
+              <View style={[
                 styles.iconContainer,
                 {
-                  backgroundColor: collection.iconColor
-                    ? `${collection.iconColor}20`
-                    : collection.isDefault
-                      ? colors.primaryLight
-                      : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                  backgroundColor: engraved
+                    ? colors.engravedFill
+                    : collection.iconColor
+                      ? `${collection.iconColor}20`
+                      : collection.isDefault
+                        ? colors.primaryLight
+                        : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                 },
               ]}>
                 <IconSymbol
                   name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
                   size={24}
-                  color={collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
+                  color={engraved ? colors.tint : collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
                 />
-              </View>}
+              </View>
               <View style={styles.cardText}>
                 <Text style={[styles.collectionName, { color: colors.text }]} numberOfLines={1}>
                   {collection.name}
                 </Text>
-                <Text style={[styles.verseCount, { color: colors.icon }]}>{subtitle}</Text>
+                <View style={styles.subtitleRow}>
+                  {emblem === 'mastered' && <IconSymbol name="checkmark" size={13} color={colors.success} />}
+                  {engraved && <EngravedIcon size={13} color={colors.tint} />}
+                  <Text style={[styles.verseCount, { color: colors.icon }]} numberOfLines={1}>{subtitle}</Text>
+                </View>
               </View>
             </View>
             {!editing && (
@@ -375,7 +383,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   verseCount: {
+    flexShrink: 1,
     fontSize: 14,
   },
   dragHandle: {
