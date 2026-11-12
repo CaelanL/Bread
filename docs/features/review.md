@@ -78,7 +78,7 @@ Engraved is `passCount >= ENGRAVED_THRESHOLD`, with the threshold set to 10 in `
 | `completed` | Engraved, as above |
 | `passCount` | Qualifying reviews that advanced the schedule. Not reset by lateness |
 | `nextDueAt` | ISO UTC of a local midnight. Null means no schedule yet, and a mastered verse with null is due |
-| `lifetimeReviews` | Every qualifying session, early ones included. Shown on the engraved badge |
+| `lifetimeReviews` | Every qualifying session, early ones included. Not shown in the app |
 | `lastReviewedAt` | ISO UTC of the last qualifying session. Written, not read by any screen |
 | `months` | Legacy, see below |
 
@@ -110,9 +110,9 @@ No migration removes it. Don't build on it.
 | Pre-mastery | `hard.completed` false | No badge | "Engraved Progress", `passCount / 10` |
 | Due | Mastered, not engraved, `nextDueAt` null or passed | "Review now" | "Ready to Review", "Review now to advance" |
 | Locked | Mastered, not engraved, `nextDueAt` in the future | "Next review tmr", "Next review in 3d" | Lock icon, "Unlocks tomorrow", "Unlocks in 3d" |
-| Engraved | `completed` true | Icon and "N reviews" | "Engraved" and a tagline |
+| Engraved | `completed` true | No badge; the engraved glyph sits beside the version, where a mastered verse's check goes | "Engraved" and a tagline |
 
-Engraved wins over due. Engraved verses keep coming due, and they count in the due pill, the due-first sort and the push digest. Only the badge hides it.
+Engraved wins over due. Engraved verses keep coming due, and they count in the due pill, the due-first sort and the push digest. Only the verse row hides it.
 
 `formatTimeUntilDue` in `lib/store/review.ts` is the one label formatter: under 24 hours is `tmr`, 1 to 3 days include hours (`1d 5h`), 4 days and up are `Xd`.
 
@@ -187,3 +187,4 @@ Seed user reader-a has John 3:16 mastered with `passCount` 1 and no schedule.
 - 2026-04-28 · A mastered verse with no schedule shows as due · The next qualifying review starts its schedule, which beats showing no badge.
 - 2026-04-29 · `nextDueAt` snaps to local midnight · A digest at any chosen time must catch every verse on its due day.
 - 2026-06-04 · Lower the cap floor from 30 to 10 · 10 still leaves every interval before engraved unclamped.
+- 2026-11-12 · An engraved verse's row shows the engraved glyph beside the version, where a mastered verse's check sits, and no "N reviews" pill · Caelan's pass 4 (C24): the pill under the row was noise once engraved; the reference keeps its tint.

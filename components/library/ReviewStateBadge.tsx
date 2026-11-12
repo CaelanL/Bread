@@ -5,14 +5,13 @@
  *   pre-mastery  →  null         (verse hasn't entered SR yet)
  *   locked       →  "Next review tmr" / "Next review in 1d 5h" / "Next review in 30d"
  *   due          →  "Review now"
- *   engraved     →  EngravedIcon + "47 reviews" lifetime count
+ *   engraved     →  null         (the row shows the engraved glyph instead)
  *
- * Engraved is sticky: an engraved verse that is also due renders the
- * Engraved variant. Due-ness on engraved verses is communicated via sort
- * position (Mastered's "due-first" sort), not a second badge.
+ * Engraved is sticky: an engraved verse that is also due shows no badge.
+ * Due-ness on engraved verses is communicated via sort position
+ * (Mastered's "due-first" sort), not a badge.
  */
 
-import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useReviewNowValue } from '@/hooks/use-review-now';
@@ -33,19 +32,8 @@ export function ReviewStateBadge({ verse }: Props) {
   const e = verse.progress.engraved;
   const masteredOnHard = verse.progress.hard?.completed === true;
 
-  if (!masteredOnHard) return null;
-
   // Engraved wins.
-  if (e?.completed) {
-    return (
-      <View style={[styles.badge, styles.engravedBadge, { backgroundColor: colors.engravedFill }]}>
-        <EngravedIcon size={11} color={colors.tint} />
-        <Text style={[styles.label, { color: colors.tint }]}>
-          {e.lifetimeReviews} {e.lifetimeReviews === 1 ? 'review' : 'reviews'}
-        </Text>
-      </View>
-    );
-  }
+  if (!masteredOnHard || e?.completed) return null;
 
   const isDue =
     !e ||
@@ -83,9 +71,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 999,
     gap: 4,
-  },
-  engravedBadge: {
-    // engraved variant uses a softer warm fill; tint comes from text color
   },
   label: {
     fontSize: 11,

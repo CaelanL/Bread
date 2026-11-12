@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
 import { GroupCount } from '@/components/shared/MemberState';
+import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -200,13 +201,15 @@ export function SwipeableVerseCard({
                   {formatVerseReference(verse)}
                   <Text style={[styles.version, { color: colors.icon }]}> · {verse.version}</Text>
                 </Text>
-                {/* Where the verse stands short of engraved: a dot for Easy (grey) or Medium (blue), a
-                    check once mastered. Engraved shows in its colour and the badge below. */}
+                {/* Where the verse stands: a dot for Easy (grey) or Medium (blue), a check once
+                    mastered, the engraved glyph once engraved. */}
                 {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
                   <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff' }]} />
                 ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
                   <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
-                ) : verse.progress.hard.completed && !engraved ? (
+                ) : engraved ? (
+                  <EngravedIcon size={13} color={colors.tint} />
+                ) : verse.progress.hard.completed ? (
                   <IconSymbol name="checkmark" size={13} color={colors.success} />
                 ) : null}
               </View>
@@ -217,7 +220,7 @@ export function SwipeableVerseCard({
                   {text}
                 </Text>
               )}
-              {verse.progress.hard.completed && (
+              {verse.progress.hard.completed && !engraved && (
                 <View style={styles.badge}>
                   <ReviewStateBadge verse={verse} />
                 </View>

@@ -36,7 +36,7 @@ surfaces.
 | `tabIconSelected` | `#b08d57` | active tab icons |
 | `icon` | `#6b6b6b` | default icon color |
 | `primaryLight` | `rgba(176,141,87,0.12)` | tinted accent background |
-| `engravedFill` | `rgba(245,158,11,0.12)` | engraved verse pill and engraved collection icon |
+| `engravedFill` | `rgba(245,158,11,0.12)` | engraved collection icon |
 | `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
 | `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 
