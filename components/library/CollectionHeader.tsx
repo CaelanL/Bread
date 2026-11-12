@@ -150,7 +150,7 @@ export function CollectionHeader({
   );
 }
 
-/** One soft highlight across the finished line when it first shows, then it rests off the end. */
+/** A quick highlight across the finished line when it first shows, then a steady slower pulse. */
 function Sweep({ color }: { color: string }) {
   const reduced = useReducedMotion();
   const x = useSharedValue(-SWEEP_WIDTH);
@@ -161,14 +161,21 @@ function Sweep({ color }: { color: string }) {
       pointerEvents="none"
       style={StyleSheet.absoluteFill}
       onLayout={(e) => {
+        const end = e.nativeEvent.layout.width;
+        const back = withTiming(-SWEEP_WIDTH, { duration: Motion.jumpMs });
         x.value = -SWEEP_WIDTH;
-        // Sweeps, rests, sweeps again: a slow pulse for as long as the collection stays finished.
-        x.value = withRepeat(
-          withSequence(
-            withTiming(e.nativeEvent.layout.width, { duration: Motion.sweepMs, easing }),
-            withDelay(Motion.sweepRestMs, withTiming(-SWEEP_WIDTH, { duration: Motion.jumpMs })),
+        // One quick sweep, then a steady heartbeat of slightly slower ones for as long as the
+        // collection stays finished.
+        x.value = withSequence(
+          withTiming(end, { duration: Motion.sweepMs, easing }),
+          back,
+          withRepeat(
+            withSequence(
+              withDelay(Motion.pulseRestMs, withTiming(end, { duration: Motion.pulseMs, easing })),
+              withTiming(-SWEEP_WIDTH, { duration: Motion.jumpMs }),
+            ),
+            -1,
           ),
-          -1,
         );
       }}
     >

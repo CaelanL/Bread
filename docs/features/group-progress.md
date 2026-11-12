@@ -44,7 +44,7 @@ shared collection looks like a personal one, and a personal collection looks as 
   "50%" and a chevron (mastered squares over all), which opens [Who's where](#whos-where), or "Couldn't
   load · Retry" after a failed read. At 100% the line fills with a soft gradient (light to deep green when
   everyone mastered every verse, champagne to bronze when everyone engraved them), a single
-  highlight crosses it, rests 2.4 s and crosses again, a slow pulse (skipped under Reduce Motion), and "100%" reads
+  highlight crosses it quickly once, then keeps crossing a little slower every 2.3 s like a heartbeat (skipped under Reduce Motion), and "100%" reads
   "Mastered by everyone" or "Engraved by everyone" in green or gold, for VoiceOver too.
 - **Invite line** (`InviteLine`): for the owner while no one else is in it, "Invite code", the
   code, copy (`square.on.square`) and share (`square.and.arrow.up`), the share card's actions
