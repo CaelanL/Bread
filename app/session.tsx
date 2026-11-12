@@ -22,13 +22,18 @@ import {
   startLiveTranscription,
   base64ToUint8Array,
 } from '@/lib/transcription/live-session';
-import { createRecordingControls, type RecordingState } from '@/lib/transcription/recording-controls';
+import {
+  createRecordingControls,
+  removeAbandonedRecordings,
+  type RecordingState,
+} from '@/lib/transcription/recording-controls';
 import {
   useAudioRecorder,
   AudioStudioModule,
   type AudioDataEvent,
 } from '@siteed/audio-studio';
 import { LegacyEventEmitter } from 'expo-modules-core';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -92,6 +97,10 @@ export default function StudySessionScreen() {
   }, []);
 
   useEffect(() => () => { void recorder.cancel(); }, [recorder]);
+
+  useEffect(() => {
+    void removeAbandonedRecordings(FileSystem);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!recorder.isRecording()) return;
@@ -229,6 +238,7 @@ export default function StudySessionScreen() {
           });
         },
         stop: stopRecording,
+        remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
       });
       if (result === 'denied') {
         Alert.alert('Permission required', 'Please allow microphone access to record.');

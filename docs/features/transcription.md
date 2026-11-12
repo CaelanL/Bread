@@ -81,6 +81,19 @@ closes the live session and holds ownership until native cleanup finishes. A lat
 transcript from that attempt is ignored. Discarded recordings do not affect the
 score, duration, or session attempt.
 
+### Deleting recordings
+
+The recorder writes `<UUID>.m4a` into Documents. `recording-controls.ts` deletes
+each attempt's file (`fileUri` and `compressedFileUri`, deduplicated) through
+`Capture.remove`: after a submit's processing settles (live, batch or failure,
+and a cancel mid-processing waits for it), or after native stop for a discard.
+Delete failures are ignored; cleanup never turns a score into an error.
+
+`removeAbandonedRecordings` runs when the session screen mounts. It deletes
+leftovers from crashes and old builds: Documents children named exactly
+`<UUID>.m4a` and `Caches/AV` children named `recording-<UUID>.m4a` (old expo-av),
+20 at a time. It stops while an attempt is unsettled; failures retry later.
+
 ## The `processRecording` seam
 
 In `useStudySession`, `processRecording` uses `scoreRecording` in order:
@@ -212,6 +225,7 @@ Recording needs a person and a real device. Local runs take the batch path unles
 - With the secret unset: same taps. The analysis indicator stays visible longer, the log says `falling back to batch: token endpoint 403`, the score still appears, and no error shows.
 - Hold a recording past 5:00: the toast "5 minute limit reached — scoring what you recited." appears and a score follows, with no second submit.
 - Mic, then the X beside the mic or on the pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
+- In Xcode's app container, `Documents` has no `<UUID>.m4a` after a live or batch score, a discard, or exit mid-analysis. Old ones go once a session opens.
 - Enable Reduce Motion in iOS Accessibility and relaunch Bread. The startup ring stays still and the control fades in place as native capture starts.
 
 ## Decisions
@@ -227,3 +241,4 @@ Recording needs a person and a real device. Local runs take the batch path unles
 - 2026-08-24 · No incremental scoring · Alignment is local and fast, so the transcript is the only wait. A second scoring path over provisional tokens would gain nothing.
 - 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off. Revisit if quota returns.
 - 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
+- 2026-11-12 · Delete each file once its attempt settles, sweep exact-name leftovers, no owned folder · Every take was kept forever. A folder adds a step before native start; the sweep covers it.

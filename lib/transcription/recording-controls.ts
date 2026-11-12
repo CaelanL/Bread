@@ -18,6 +18,7 @@ interface Capture {
   start(): Promise<unknown>;
   stop(): Promise<RecordingFile>;
   openLive(): LiveTranscriptionSession;
+  remove(uri: string): Promise<unknown>;
 }
 
 export interface RecordingSubmission {
@@ -39,6 +40,44 @@ interface Attempt {
 
 // Native capture is shared even if a new screen mounts while the old one stops.
 let nativeOwner: Attempt | undefined;
+// Attempts whose file may still be recorded or read; the sweep waits for none.
+const unsettled = new Set<Attempt>();
+
+async function removeRecording(attempt: Attempt, recording: RecordingFile | undefined) {
+  unsettled.delete(attempt);
+  const uris = new Set([recording?.fileUri, recording?.compression?.compressedFileUri]);
+  await Promise.all([...uris].map((uri) => uri && attempt.capture.remove(uri).catch(() => {})));
+}
+
+interface RecordingFolders {
+  documentDirectory: string | null;
+  cacheDirectory: string | null;
+  readDirectoryAsync(uri: string): Promise<string[]>;
+  deleteAsync(uri: string, options: { idempotent: boolean }): Promise<void>;
+}
+
+const UUID = '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}';
+const SWEEP_BATCH = 20;
+
+// Leftovers from crashes and from builds that never deleted recordings:
+// audio-studio's Documents/<UUID>.m4a and expo-av's Caches/AV/recording-<UUID>.m4a.
+export async function removeAbandonedRecordings(fs: RecordingFolders) {
+  const places = [
+    { dir: fs.documentDirectory, name: new RegExp(`^${UUID}\\.m4a$`, 'i') },
+    { dir: fs.cacheDirectory && `${fs.cacheDirectory}AV/`, name: new RegExp(`^recording-${UUID}\\.m4a$`, 'i') },
+  ];
+  for (const { dir, name } of places) {
+    if (!dir) continue;
+    const names = await fs.readDirectoryAsync(dir).catch((): string[] => []);
+    const leftovers = names.filter((entry) => name.test(entry));
+    for (let i = 0; i < leftovers.length; i += SWEEP_BATCH) {
+      if (unsettled.size) return;
+      await Promise.all(leftovers.slice(i, i + SWEEP_BATCH).map((entry) => (
+        fs.deleteAsync(dir + entry, { idempotent: true }).catch(() => {})
+      )));
+    }
+  }
+}
 
 export function createRecordingControls(onChange: (state: RecordingState) => void) {
   let current: Attempt | undefined;
@@ -63,7 +102,9 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
       if (current || nativeOwner) return;
       const attempt: Attempt = { index, isRetry, capture, phase: 'starting', cancelled: false };
       current = nativeOwner = attempt;
+      unsettled.add(attempt);
       transition(attempt, 'starting');
+      let recording: RecordingFile | undefined;
 
       try {
         const granted = await capture.requestPermission();
@@ -73,7 +114,7 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
         attempt.liveSession = capture.openLive();
         await capture.start();
         if (attempt.cancelled) {
-          await capture.stop().catch(() => {});
+          recording = await capture.stop().catch(() => undefined);
           return;
         }
         transition(attempt, 'recording');
@@ -84,6 +125,7 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
           attempt.liveSession?.abort();
           releaseNative(attempt);
           reset(attempt);
+          await removeRecording(attempt, recording);
         }
       }
     },
@@ -94,9 +136,10 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
       if (attempt?.phase !== 'recording' || !liveSession) return;
       const isCurrent = () => current === attempt && !attempt.cancelled;
       transition(attempt, 'submitting');
+      let recording: RecordingFile | undefined;
 
       try {
-        const recording = await attempt.capture.stop();
+        recording = await attempt.capture.stop();
         releaseNative(attempt);
         if (!isCurrent()) return;
         await process({ index: attempt.index, isRetry: attempt.isRetry, recording, liveSession, isCurrent });
@@ -106,6 +149,7 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
         liveSession.abort();
         releaseNative(attempt);
         reset(attempt);
+        await removeRecording(attempt, recording);
       }
     },
 
@@ -121,9 +165,10 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
       }
       transition(attempt, 'stopping');
       if (wasRecording) {
-        await attempt.capture.stop().catch(() => {});
+        const recording = await attempt.capture.stop().catch(() => undefined);
         releaseNative(attempt);
         reset(attempt);
+        await removeRecording(attempt, recording);
       }
     },
 
