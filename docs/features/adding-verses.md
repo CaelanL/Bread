@@ -37,7 +37,9 @@ and range in any version, including soft-deleted ones:
 | None | Insert the verse with `DEFAULT_PROGRESS`, then the junction row |
 
 A verse is one row per reference (`bible-versions.md`). The restore
-path means a soft-deleted row never blocks a re-add.
+path means a soft-deleted row never blocks a re-add. The local card carries the row's last
+practiced time and study choices, and adding a verse the collection already holds keeps the
+one card it has.
 
 ## Quick add
 
@@ -110,10 +112,6 @@ only a re-tap of the same book inside 500 ms; a quick tap on another book goes t
 
 ## Sharp edges
 
-- **Adding a verse already in the collection duplicates it locally.** `addVerse` always
-  prepends to `verses`, even when the junction upsert did nothing. The verse shows twice,
-  with a duplicate list key, until the next fetch. Restored verses also lose
-  `lastPracticedAt` in that local entry until then.
 - **The chapter screen needs a connection even for KJV.** `[chapter].tsx` checks `NetInfo`
   before `fetchChapter` and shows "No Internet Connection", although KJV could load from the
   bundle.

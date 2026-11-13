@@ -1,6 +1,7 @@
 // lib-ok: Pure reading of a shared collection's members × references grid from the server's per-square booleans.
 import { BIBLE_BOOKS } from '@/lib/bible/books';
 import { hasPracticed } from '@/lib/store/review';
+import { referenceKey } from '@/lib/store/translation';
 import type { SharedCollectionInfo, SharedRole, VerseProgress } from '@/lib/storage';
 
 /** A member's state on one reference. Due and Locked (spaced review) are Mastered. */
@@ -36,10 +37,6 @@ export interface GridRow {
 export interface Grid {
   memberIds: string[];
   rows: GridRow[];
-}
-
-export function referenceKey(r: SharedReference): string {
-  return `${r.book} ${r.chapter}:${r.verseStart}-${r.verseEnd}`;
 }
 
 export function cellState(flags: ProgressFlags): MemberState {
@@ -106,16 +103,6 @@ function everyone(grid: Grid, test: (state: MemberState) => boolean): (row: Grid
 /** References every member has mastered. */
 export function masteredByEveryoneCount(grid: Grid): number {
   return grid.rows.filter(everyone(grid, isMasteredState)).length;
-}
-
-/** Every square mastered. False on an empty grid. */
-export function everyoneMastered(grid: Grid): boolean {
-  return grid.rows.length > 0 && grid.rows.every(everyone(grid, isMasteredState));
-}
-
-/** Every square engraved. False on an empty grid. */
-export function everyoneEngraved(grid: Grid): boolean {
-  return grid.rows.length > 0 && grid.rows.every(everyone(grid, (s) => s === 'engraved'));
 }
 
 /**

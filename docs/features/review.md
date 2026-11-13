@@ -10,7 +10,6 @@ Read this before touching `lib/store/review.ts`, `lib/store/review-config.ts`, o
 
 - `computeNextSrState` in `lib/store/review.ts` holds the schedule rules as a pure function. `updateVerseProgress` is its only production caller.
 - Other code reads the result: badges, sorts, the due pill, the push digest. None of it writes `progress.engraved`.
-- `lib/storage/index.ts` has a function with the same name. It only updates best scores, and it is reached only through `syncUpdateProgress`, which nothing calls. Don't use it.
 - The practice streak on Insights is a separate activity count in SQL. It decides nothing about mastery. See `docs/features/insights.md`.
 
 ## What a session writes
@@ -120,10 +119,8 @@ Engraved wins over due. Engraved verses keep coming due, and they count in the d
 
 | Where | Used for |
 |---|---|
-| `ReviewStateBadge` | Verse card badge |
+| `isDueForReview`, `daysUntilDue` in `lib/store/review.ts` | Verse card badge (`ReviewStateBadge`), "N due" pill on the Mastered row (`useDueCounts` in `lib/store/index.ts`, through `DueCountPill`), due-first sort (`sortVerses` in `lib/store/library-sort.ts`) |
 | `ProgressCard` | Setup screen |
-| `useDueCounts` in `lib/store/index.ts` | "N due" pill on the Mastered row, through `DueCountPill` |
-| `isDueForReview`, `daysUntilDue` in `lib/store/review.ts` | Due-first sort, through `sortVerses` in `lib/store/library-sort.ts` |
 | `loadDueVerses` in `supabase/functions/send-notifications/sources/reviews-digest.ts` | Push digest |
 
 Only Mastered has the pill and the due-first sort, which is its default. The In Progress collection has no schedule. See `docs/features/library.md` and `docs/features/notifications.md`.
@@ -163,7 +160,7 @@ Review state lives in the `progress` column, so it follows the row. Delete rules
 - **Two devices can drift by one.** Writes are last-write-wins and each device checks its own copy of `nextDueAt`. Two reviews can both count, or one can overwrite the other.
 - **The pill and the push can disagree.** `useDueCounts` includes soft-deleted mastered verses. `loadDueVerses` filters `deleted_at` out. The pill can show verses that the digest never mentions.
 - **Reset on a soft-deleted mastered verse leaves stale state.** See `docs/features/library.md`.
-- **Unused code.** `useReviewState`, `dueVersesFor`, `lockedVersesFor` and `useReviewMaxIntervalDays` have no callers in the app. `dueCount` in `app/(tabs)/(library)/[id].tsx` is computed and never rendered. Don't assume a change to them reaches a screen.
+- **Unused code.** `dueVersesFor` and `lockedVersesFor` have no callers in the app. `dueCount` in `app/(tabs)/(library)/[id].tsx` is computed and never rendered. Don't assume a change to them reaches a screen.
 
 ## Browser checks
 

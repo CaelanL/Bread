@@ -4,7 +4,7 @@ import test from 'node:test';
 import { calculateFinalScore } from '@/lib/study-chunks';
 import { getChunkReview, saveChunkResult, scoredAlignments, type ChunkResults } from './chunk-results';
 import type { LiveTranscriptionSession } from './live-session';
-import { createRecordingControls, type RecordingState } from './recording-controls';
+import { createRecordingControls, removeAbandonedRecordings, type RecordingState } from './recording-controls';
 import { scoreRecording } from './score-recording';
 
 function deferred<T>() {
@@ -16,7 +16,7 @@ function deferred<T>() {
 const file = { fileUri: 'file:///recitation.m4a', durationMs: 1200 };
 
 function audio() {
-  const counts = { permission: 0, starts: 0, stops: 0, fed: 0, aborts: 0 };
+  const counts = { permission: 0, starts: 0, stops: 0, fed: 0, aborts: 0, removed: [] as string[] };
   const live: LiveTranscriptionSession = {
     state: 'connecting',
     feedAudio: () => { counts.fed++; },
@@ -30,6 +30,7 @@ function audio() {
       start: async () => { counts.starts++; },
       stop: async () => { counts.stops++; return file; },
       openLive: () => live,
+      remove: async (uri: string) => { counts.removed.push(uri); },
     },
   };
 }
@@ -263,4 +264,173 @@ test('an interrupted retry restores the prior result and controls without changi
   await submitting;
   assertRestored();
   assert.equal(getChunkReview(results, 0, 0, 1, recording).canRetry, false);
+});
+
+test('a submitted recording is removed once, only after processing settles', async () => {
+  const { recorder } = controls();
+  const { capture, counts } = audio();
+  const same = { fileUri: 'file:///take.m4a', compression: { compressedFileUri: 'file:///take.m4a' } };
+  await recorder.start(0, false, { ...capture, stop: async () => same });
+  const processing = deferred<void>();
+  const entered = deferred<void>();
+  const submit = recorder.submit(async () => {
+    entered.resolve();
+    await processing.promise;
+  });
+  await entered.promise;
+  assert.deepEqual(counts.removed, []);
+  processing.resolve();
+  await submit;
+  assert.deepEqual(counts.removed, ['file:///take.m4a']);
+});
+
+test('a failed upload still removes both files, and a failed removal keeps the score', async () => {
+  const { recorder } = controls();
+  const { capture, counts } = audio();
+  const both = { fileUri: 'file:///take.wav', compression: { compressedFileUri: 'file:///take.m4a' } };
+  await recorder.start(0, false, { ...capture, stop: async () => both });
+  await assert.rejects(recorder.submit(async () => { throw new Error('upload failed'); }), /upload failed/);
+  assert.deepEqual(counts.removed.sort(), ['file:///take.m4a', 'file:///take.wav']);
+
+  let scored = false;
+  await recorder.start(0, false, { ...capture, remove: async () => { throw new Error('disk busy'); } });
+  await recorder.submit(async () => { scored = true; });
+  assert.equal(scored, true);
+});
+
+test('a discarded take is removed only after native capture stops', async () => {
+  const { recorder } = controls();
+  const { capture, counts } = audio();
+  const nativeStop = deferred<typeof file>();
+  await recorder.start(0, false, { ...capture, stop: () => nativeStop.promise });
+  const cancel = recorder.cancel();
+  await Promise.resolve();
+  assert.deepEqual(counts.removed, []);
+  nativeStop.resolve(file);
+  await cancel;
+  assert.deepEqual(counts.removed, [file.fileUri]);
+});
+
+test('a take discarded during native start is removed after its late stop', async () => {
+  const { recorder } = controls();
+  const { capture, counts } = audio();
+  const nativeStart = deferred<void>();
+  const startEntered = deferred<void>();
+  const start = recorder.start(0, false, {
+    ...capture,
+    start() {
+      startEntered.resolve();
+      return nativeStart.promise;
+    },
+  });
+  await startEntered.promise;
+  await recorder.cancel();
+  assert.deepEqual(counts.removed, []);
+  nativeStart.resolve();
+  await start;
+  assert.deepEqual(counts.removed, [file.fileUri]);
+});
+
+test('cancelling during processing keeps the file until processing settles', async () => {
+  const { recorder } = controls();
+  const { capture, counts } = audio();
+  const upload = deferred<void>();
+  const entered = deferred<void>();
+  await recorder.start(0, false, capture);
+  const submit = recorder.submit(async () => {
+    entered.resolve();
+    await upload.promise;
+  });
+  await entered.promise;
+  await recorder.cancel();
+  assert.deepEqual(counts.removed, []);
+  upload.resolve();
+  await submit;
+  assert.deepEqual(counts.removed, [file.fileUri]);
+});
+
+function folders(listing: Record<string, string[]>) {
+  const deleted: string[] = [];
+  return {
+    deleted,
+    fs: {
+      documentDirectory: 'file:///Documents/',
+      cacheDirectory: 'file:///Caches/',
+      async readDirectoryAsync(dir: string) {
+        if (!listing[dir]) throw new Error('no such directory');
+        return listing[dir];
+      },
+      async deleteAsync(uri: string) { deleted.push(uri); },
+    },
+  };
+}
+
+const id = (n: number) => `${String(n).padStart(8, '0')}-AAAA-4BBB-8CCC-DDDDDDDDDDDD`;
+
+test('abandoned recordings are removed only from the known names and places', async () => {
+  const { fs, deleted } = folders({
+    'file:///Documents/': [
+      `${id(1)}.m4a`, `${id(2)}.M4A`, `${id(3)}.wav`, `${id(4)}.json`, `x${id(5)}.m4a`,
+      `recording-${id(6)}.m4a`, 'notes.m4a', 'bread-recordings', `${id(7)}`,
+    ],
+    'file:///Caches/AV/': [`recording-${id(8)}.m4a`, `${id(9)}.m4a`, 'recording-1.m4a'],
+  });
+  await removeAbandonedRecordings(fs);
+  assert.deepEqual(deleted, [
+    `file:///Documents/${id(1)}.m4a`,
+    `file:///Documents/${id(2)}.M4A`,
+    `file:///Caches/AV/recording-${id(8)}.m4a`,
+  ]);
+});
+
+test('abandoned-recording cleanup survives missing folders and failed deletes', async () => {
+  const { fs } = folders({ 'file:///Caches/AV/': [`recording-${id(1)}.m4a`, `recording-${id(2)}.m4a`] });
+  const tried: string[] = [];
+  await removeAbandonedRecordings({
+    ...fs,
+    async deleteAsync(uri) {
+      tried.push(uri);
+      throw new Error('permission denied');
+    },
+  });
+  assert.equal(tried.length, 2);
+});
+
+test('abandoned-recording cleanup never runs while an attempt may still need its file', async () => {
+  const names = Array.from({ length: 45 }, (_, n) => `${id(n)}.m4a`);
+  const { recorder } = controls();
+  const { capture } = audio();
+
+  await recorder.start(0, false, capture);
+  const processing = deferred<void>();
+  const entered = deferred<void>();
+  const submit = recorder.submit(async () => {
+    entered.resolve();
+    await processing.promise;
+  });
+  await entered.promise;
+  const busy = folders({ 'file:///Documents/': names });
+  await removeAbandonedRecordings(busy.fs);
+  assert.deepEqual(busy.deleted, []);
+  processing.resolve();
+  await submit;
+
+  const batch = deferred<void>();
+  const batchEntered = deferred<void>();
+  const idle = folders({ 'file:///Documents/': names });
+  const sweep = removeAbandonedRecordings({
+    ...idle.fs,
+    async deleteAsync(uri) {
+      await idle.fs.deleteAsync(uri);
+      batchEntered.resolve();
+      await batch.promise;
+    },
+  });
+  await batchEntered.promise;
+  assert.equal(idle.deleted.length, 20);
+  await recorder.start(0, false, capture);
+  batch.resolve();
+  await sweep;
+  assert.equal(idle.deleted.length, 20);
+  await recorder.cancel();
 });

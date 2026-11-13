@@ -65,6 +65,20 @@ function parseReference(ref: string): {
   };
 }
 
+// Identical reads still in progress share one promise, so callers that start
+// together (store hydrate warms every collection membership at once) make one
+// request. Only an entry's own finalizer removes it, on success or failure, so
+// a failed read never poisons a retry. clearSessionCache leaves these alone.
+const inFlight = new Map<string, Promise<unknown>>();
+
+function shareInFlight<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const pending = inFlight.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+  const request = load().finally(() => inFlight.delete(key));
+  inFlight.set(key, request);
+  return request;
+}
+
 /**
  * Fetch a verse from the Bible API
  *
@@ -72,9 +86,16 @@ function parseReference(ref: string): {
  * @param version - Bible version ("ESV" or "NLT")
  * @returns The verse text and metadata
  */
-export async function fetchVerse(
+export function fetchVerse(
   reference: string,
   version: BibleVersion = "ESV"
+): Promise<BibleVerse> {
+  return shareInFlight(`verse:${version}:${reference}`, () => loadVerse(reference, version));
+}
+
+async function loadVerse(
+  reference: string,
+  version: BibleVersion
 ): Promise<BibleVerse> {
   // Check session cache first. Assemble per-verse so the result carries
   // keyed data — returning combined text without `verses` makes
@@ -206,10 +227,18 @@ export async function fetchVerses(
  * @param version - Bible version ("ESV" or "NLT")
  * @returns Object with verses mapped by verse number
  */
-export async function fetchChapter(
+export function fetchChapter(
   book: string,
   chapter: number,
   version: BibleVersion = "ESV"
+): Promise<ChapterResponse> {
+  return shareInFlight(`chapter:${version}:${book}:${chapter}`, () => loadChapter(book, chapter, version));
+}
+
+async function loadChapter(
+  book: string,
+  chapter: number,
+  version: BibleVersion
 ): Promise<ChapterResponse> {
   // Check session cache first
   const cached = getChapterFromSession(book, chapter, version);

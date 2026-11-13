@@ -15,7 +15,7 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useReviewNowValue } from '@/hooks/use-review-now';
-import { formatTimeUntilDue } from '@/lib/store/review';
+import { formatTimeUntilDue, isDueForReview } from '@/lib/store/review';
 import type { SavedVerse } from '@/lib/storage';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -35,12 +35,7 @@ export function ReviewStateBadge({ verse }: Props) {
   // Engraved wins.
   if (!masteredOnHard || e?.completed) return null;
 
-  const isDue =
-    !e ||
-    e.nextDueAt === null ||
-    now.getTime() >= new Date(e.nextDueAt).getTime();
-
-  if (isDue) {
+  if (!e || isDueForReview(verse, now)) {
     return (
       <View style={[styles.badge, { backgroundColor: colors.tint }]}>
         <Text style={[styles.label, { color: '#ffffff', fontWeight: '600' }]}>Review now</Text>
