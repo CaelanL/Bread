@@ -14,11 +14,15 @@ export function normalizeInviteCode(input: string): string {
 
 export const APP_STORE_URL = 'https://apps.apple.com/app/id6757946016';
 
-// Most people invited don't have Bread yet, and chat apps don't make com.biblemem:// links
-// tappable, so the message carries the App Store link and the code to type once installed.
+export function inviteLink(code: string): string {
+  return `com.biblemem://join/${code}`;
+}
+
+// The app link joins in one tap where Bread is installed; it can't reach anyone without Bread,
+// so the App Store link and the code are there for them.
 export function inviteMessage(collectionName: string, code: string): string {
-  return `Join "${collectionName}" with me on Bread, a Bible memory app.\n\n`
-    + `Get Bread: ${APP_STORE_URL}\nThen tap + → Join with code and enter ${code}`;
+  return `Join "${collectionName}" with me on Bread: ${inviteLink(code)}\n\n`
+    + `New to Bread? Get it at ${APP_STORE_URL}, then tap + → Join with code and enter ${code}`;
 }
 
 export function daysLeft(expiresAt: string, now = Date.now()): number {
