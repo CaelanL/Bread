@@ -34,8 +34,11 @@ const GLOW_ALPHA = 0.3;
 // smoothstep curve, so the end of the hairline never shows as a hard band edge.
 const GLOW_IN = 30;
 const GLOW_OUT = 10;
-// The right reads a touch short against the trailing hairline, so it carries a little further.
-const GLOW_OUT_RIGHT = 14;
+// The right starts its fade later and finishes at the screen edge: the same curve, shifted right.
+const GLOW_IN_RIGHT = 24;
+const GLOW_OUT_RIGHT = 16;
+const OUTER_RIGHT_STEPS = [0, 0.104, 0.352];
+const INNER_RIGHT_STEPS = [0.352, 0.648, 0.896, 1];
 const OUTER_STEPS = [0, 0.043, 0.156];
 const INNER_STEPS = [0.156, 0.5, 0.844, 1];
 
@@ -225,7 +228,7 @@ export function SwipeableCollectionCard({
       {engraved && (
         <>
           <LinearGradient pointerEvents="none" colors={glowAt(OUTER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowOut, styles.outLeft]} />
-          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowOut, styles.outRight]} />
+          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_RIGHT_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowOut, styles.outRight]} />
         </>
       )}
       <View style={styles.clip}>
@@ -236,7 +239,7 @@ export function SwipeableCollectionCard({
             <>
               <LinearGradient pointerEvents="none" colors={glowAt(INNER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowIn, styles.inLeft]} />
               <View pointerEvents="none" style={[styles.glowMiddle, { backgroundColor: glow }]} />
-              <LinearGradient pointerEvents="none" colors={glowAt(INNER_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowIn, styles.inRight]} />
+              <LinearGradient pointerEvents="none" colors={glowAt(INNER_RIGHT_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowIn, styles.inRight]} />
             </>
           )}
           <Pressable
@@ -355,8 +358,8 @@ const styles = StyleSheet.create({
   outRight: { right: -GLOW_OUT_RIGHT, width: GLOW_OUT_RIGHT },
   glowIn: { position: 'absolute', top: 0, bottom: 0, width: GLOW_IN },
   inLeft: { left: 0 },
-  inRight: { right: 0 },
-  glowMiddle: { position: 'absolute', top: 0, bottom: 0, left: GLOW_IN, right: GLOW_IN },
+  inRight: { right: 0, width: GLOW_IN_RIGHT },
+  glowMiddle: { position: 'absolute', top: 0, bottom: 0, left: GLOW_IN, right: GLOW_IN_RIGHT },
   // A flat row on the page, like a verse row in a collection: a hairline between rows, no card.
   card: {
     flexDirection: 'row',
