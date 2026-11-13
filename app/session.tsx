@@ -246,7 +246,8 @@ export default function StudySessionScreen() {
       }
     } catch (error) {
       console.error('Failed to start recording:', error);
-      Alert.alert('Error', 'Failed to start recording');
+      // The usual cause is the mic held by a call or another app; the error doesn't say which.
+      Alert.alert("Couldn't start recording", "If you're on a call or another app is using the microphone, close it and try again.");
     }
   }, [handleAudioStream, recorder, session.chunks, session.currentIndex, startRecording, stopRecording, waveformLevels]);
 

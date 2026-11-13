@@ -228,6 +228,10 @@ Recording needs a person and a real device. Local runs take the batch path unles
 - In Xcode's app container, `Documents` has no `<UUID>.m4a` after a live or batch score, a discard, or exit mid-analysis. Old ones go once a session opens.
 - Enable Reduce Motion in iOS Accessibility and relaunch Bread. The startup ring stays still and the control fades in place as native capture starts.
 
+**Can't start.** A start that throws (most often the mic held by a call or another app; the
+error doesn't say) shows "Couldn't start recording" and asks to close the call or app and try
+again. A denied permission shows "Permission required" instead.
+
 ## Decisions
 
 - 2026-08-16 · Stream from the device to Soniox with temporary keys, not through an edge function · Scoped keys are enough for security. Proxying adds latency, wall-clock risk and bandwidth.
