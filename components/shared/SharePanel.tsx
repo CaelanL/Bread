@@ -10,6 +10,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/lib/auth';
 import { daysLeft, sharedErrorMessage } from '@/lib/shared/invite-code';
 import { getLiveInvite, getSharedMembers, type LiveInvite, type SharedMember } from '@/lib/shared/invites';
+import { collectionRemoval } from '@/lib/shared/progress';
 import { useAppStore, useCollection, useSharedCollection, useVersesLostWith } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { useCallback, useEffect, useState } from 'react';
@@ -198,7 +199,7 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
           );
         })}
 
-        {view === 'all' && shared && !isOwner && (
+        {view === 'all' && collectionRemoval(sharedId, shared?.role) === 'leave' && (
           <Pressable testID="shared-leave" accessibilityRole="button" onPress={leave} disabled={busy}
             style={[styles.leave, { borderColor: colors.border }]}>
             <Text style={[styles.buttonText, { color: colors.error }]}>Leave collection</Text>

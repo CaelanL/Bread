@@ -120,11 +120,9 @@ can treat everything else in a copy as the member's own verse.
 ## Leave and remove
 
 `private.drop_member_collection` deletes the membership, then for each verse in the
-member's copy runs `private.remove_verse_from_collection`, the rule `delete_verse` applies
-for `deleteVerse` ([library.md](library.md#deleting-a-verse)): drop the link; a verse
-in no other collection is soft-deleted when mastered and hard-deleted otherwise. Then it
-soft-deletes the copy, keeping its `shared_collection_id` so a rejoin restores it.
-Nothing of another member's changes. The owner can't leave or be removed.
+member's copy runs `private.remove_verse_from_collection`, the
+[delete rule](library.md#deleting-a-verse). Then it soft-deletes the copy, keeping its
+`shared_collection_id` so a rejoin restores it. Nothing of another member's changes. The owner can't leave or be removed.
 
 ## Dissolve
 
@@ -159,7 +157,7 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   dies), the [member actions](group-progress.md#whos-where) and Stop sharing. Share sends
   `inviteMessage`, link and code (chat apps rarely link). Members get Leave.
 - **Stop sharing** (owner; confirm names who's affected): `stopSharing` deletes the group ([dissolve](#dissolve));
-  codes die, everyone's copy, the owner's included, is personal again.
+  codes die, every copy is personal again.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed) show `JoinInvite`:
   inviter, name, counts, the privacy line with the account translation, and Join (a name if
   needed, `joinSharedCollection`, then the copy with one `dismissTo`). A member sees Open; a bad
@@ -171,7 +169,8 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   syncs; `deleteVerse` deletes it ("Remove for everyone?" once others joined).
   Copy-to-collection lists your own that no one joined (`addSharedVerse`); Add-to-collection,
   ones you edit (sync moves hand-linked verses to My Verses).
-- **Leave and delete**: a member's swipe and menu read Leave; the confirm counts verses lost
+- **Leave and delete**: a member's swipe and menu read Leave (`collectionRemoval`),
+  neither until the role loads; the confirm counts verses lost
   (`useVersesLostWith`). Once others joined, the owner's Delete asks "Delete for everyone?
   Members keep their own copy."; it stops sharing, then deletes the owner's copy.
 - **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
@@ -218,3 +217,4 @@ card personal, Stop sharing alone and with members, the old code dead).
 - 2026-11-12 · Shared only once someone besides the owner is in it, from `member_count`, no new column · Caelan: an accidental Share tap mustn't turn a collection shared.
 - 2026-11-12 · Stop sharing deletes the group, members or not · The dissolve keeps copies and kills codes; no migration.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.
+- 2026-11-12 · No Leave or Delete until the role loads · A guess shows the wrong confirm, and the store refuses an unloaded role.

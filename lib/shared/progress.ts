@@ -113,6 +113,23 @@ export function hasOtherMembers(status: Pick<SharedCollectionInfo, 'memberCount'
   return (status?.memberCount ?? 0) > 1;
 }
 
+/** Owners and editors add and remove a shared collection's verses. A role that hasn't loaded can't. */
+export function canEditShared(role: SharedRole | undefined): boolean {
+  return role === 'owner' || role === 'editor';
+}
+
+/** What removing a collection from the Library does: Delete it, or Leave the group. */
+export type CollectionRemoval = 'delete' | 'leave';
+
+/**
+ * Delete for a personal collection or the owner's shared one, Leave for anyone else's. Null while
+ * a shared collection's role hasn't loaded, so no destructive action is offered on a guess.
+ */
+export function collectionRemoval(sharedId: string | undefined, role: SharedRole | undefined): CollectionRemoval | null {
+  if (!sharedId || role === 'owner') return 'delete';
+  return role ? 'leave' : null;
+}
+
 /** A Library card's emblem: the whole collection mastered (engraved counts) or engraved. */
 export type Emblem = 'mastered' | 'engraved';
 

@@ -18,7 +18,7 @@ import { useSharedGrid } from '@/hooks/use-shared-grid';
 import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
 import { listNames } from '@/lib/shared/display-name';
 import { sharedErrorMessage } from '@/lib/shared/invite-code';
-import { groupProgress, hasOtherMembers, masteredByEveryoneCount, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
+import { canEditShared, collectionRemoval, groupProgress, hasOtherMembers, masteredByEveryoneCount, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
 import { referenceKey } from '@/lib/store/translation';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
@@ -67,16 +67,18 @@ export default function CollectionScreen() {
   const shared = useSharedCollection(id || '');
   const sharedId = collection?.sharedId;
   // Plain members of a shared collection read it; the owner and editors add and remove.
-  const canEdit = !sharedId || shared?.role === 'owner' || shared?.role === 'editor';
+  const canEdit = !sharedId || canEditShared(shared?.role);
   // The group card and counts show once someone besides the owner joined; until then it reads as personal.
   const withOthers = Boolean(sharedId) && hasOtherMembers(shared);
   const { user } = useAuth();
   const { sharedProgress, grid } = useSharedGrid(sharedId, collectionVerses);
   const storedOwnerName = useSharedOwnerName(id || '');
-  const isOwner = !sharedId || shared?.role === 'owner';
+  // A member's delete is Leave; only the owner shares, renames and stops sharing. Neither while
+  // the role loads.
+  const removal = collectionRemoval(sharedId, shared?.role);
+  const isOwner = removal === 'delete';
+  const isLeave = removal === 'leave';
   const isCustom = Boolean(collection && !collection.isDefault && !collection.isVirtual);
-  // A member's delete is Leave; only the owner shares, renames and stops sharing.
-  const isLeave = Boolean(sharedId) && !isOwner;
   const lostCount = useVersesLostWith(id || '');
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const barHeight = useTopBarHeight();
@@ -117,8 +119,7 @@ export default function CollectionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
-  const canChangeIcon = collection && !collection.isDefault && !collection.isVirtual
-    && (!sharedId || shared?.role === 'owner');
+  const canChangeIcon = collection && !collection.isDefault && !collection.isVirtual && isOwner;
   const collectionIcon = resolveCollectionIcon(collection?.iconKey);
   const [copyingVerse, setCopyingVerse] = useState<SavedVerse | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
@@ -340,9 +341,9 @@ export default function CollectionScreen() {
   const menuItems = [
     ...(withOthers ? [{ label: 'Details', icon: 'info.circle', onPress: showGrid }] : []),
     ...(canChangeIcon ? [{ label: 'Change icon', icon: 'square.grid.2x2', onPress: () => setIconPickerOpen(true) }] : []),
-    ...(isCustom && !isLeave ? [{ label: 'Rename', icon: 'pencil', onPress: () => setRenaming(true) }] : []),
+    ...(isCustom && isOwner ? [{ label: 'Rename', icon: 'pencil', onPress: () => setRenaming(true) }] : []),
     ...(sharedId && isOwner ? [{ label: 'Stop sharing', icon: 'person.2.slash', onPress: stopSharing }] : []),
-    ...(isCustom ? [isLeave
+    ...(isCustom && removal ? [isLeave
       ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: removeCollection, destructive: true }
       : { label: 'Delete', icon: 'trash', onPress: removeCollection, destructive: true }] : []),
   ];

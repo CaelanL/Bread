@@ -4,7 +4,9 @@ import test from 'node:test';
 
 import {
   buildGrid,
+  canEditShared,
   cellState,
+  collectionRemoval,
   GRID_PITCH,
   gridScrolls,
   groupProgress,
@@ -111,6 +113,21 @@ test('a collection reads as shared only once someone besides the owner is in it'
   assert.equal(hasOtherMembers(undefined), false);
   assert.equal(hasOtherMembers({ memberCount: 1 }), false);
   assert.equal(hasOtherMembers({ memberCount: 2 }), true);
+});
+
+test('owners and editors edit a shared collection; an unloaded role edits nothing', () => {
+  assert.equal(canEditShared('owner'), true);
+  assert.equal(canEditShared('editor'), true);
+  assert.equal(canEditShared('member'), false);
+  assert.equal(canEditShared(undefined), false);
+});
+
+test('a personal or owned collection is deleted, anyone else leaves, an unloaded role offers neither', () => {
+  assert.equal(collectionRemoval(undefined, undefined), 'delete');
+  assert.equal(collectionRemoval('g', 'owner'), 'delete');
+  assert.equal(collectionRemoval('g', 'editor'), 'leave');
+  assert.equal(collectionRemoval('g', 'member'), 'leave');
+  assert.equal(collectionRemoval('g', undefined), null);
 });
 
 const cara = { userId: 'C', displayName: 'Cara', role: 'owner' as const };

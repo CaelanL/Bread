@@ -9,7 +9,7 @@ import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
-import type { Emblem } from '@/lib/shared/progress';
+import { collectionRemoval, type Emblem } from '@/lib/shared/progress';
 import type { Collection, SharedRole } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useFocusEffect } from 'expo-router';
@@ -94,8 +94,10 @@ export function SwipeableCollectionCard({
   const debouncedPress = useDebouncedPress(onPress);
   const isCustom = !collection.isDefault && !collection.isVirtual;
   const editing = Boolean(reorder);
-  const canSwipe = isCustom && !editing && !actionsDisabled;
-  const isLeave = Boolean(collection.sharedId) && sharedRole !== 'owner';
+  // Null while a shared collection's role loads: no Delete or Leave until it's known.
+  const removal = collectionRemoval(collection.sharedId, sharedRole);
+  const isLeave = removal === 'leave';
+  const canSwipe = isCustom && !editing && !actionsDisabled && removal !== null;
   const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
   const engraved = emblem === 'engraved';
   const subtitle = memberCount !== undefined
@@ -314,13 +316,13 @@ export function SwipeableCollectionCard({
           anchorPosition={menuTop === null ? undefined : { top: menuTop, right: 16 }}
           items={[
             // A member's copy takes its name from the group, so only the owner renames it.
-            ...(isLeave ? [] : [{ label: 'Rename', icon: 'pencil', onPress: onRename }]),
+            ...(removal === 'delete' ? [{ label: 'Rename', icon: 'pencil', onPress: onRename }] : []),
             // The owner's Share… opens the code again (or Stop sharing) on a collection already shared.
-            ...(onShare && !isLeave ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
+            ...(onShare && removal === 'delete' ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
             { label: 'Reorder', icon: 'line.3.horizontal', onPress: onReorder },
-            isLeave
+            ...(removal ? [isLeave
               ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: handleDelete, destructive: true }
-              : { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true },
+              : { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true }] : []),
           ]}
         />
       )}

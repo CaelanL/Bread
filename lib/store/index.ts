@@ -19,7 +19,7 @@ import { BIBLE_VERSIONS, type ColorMode } from '@/lib/settings';
 import { composeDisplayName } from '@/lib/shared/display-name';
 import { isSharedRole, normalizeInviteCode } from '@/lib/shared/invite-code';
 import { getSharedMembers, type SharedMember } from '@/lib/shared/invites';
-import type { ProgressCell, SharedReference } from '@/lib/shared/progress';
+import { canEditShared, collectionRemoval, type ProgressCell, type SharedReference } from '@/lib/shared/progress';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SharedCollectionInfo, SharedRole, SortOption, VerseProgress } from '@/lib/storage';
 import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, formatVerseReference, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
@@ -492,7 +492,7 @@ async function addSharedVerse(
   collectionId: string,
   verse: Pick<SavedVerse, 'book' | 'chapter' | 'verseStart' | 'verseEnd'>,
 ): Promise<SavedVerse> {
-  if (sharedRole(sharedId) === 'member') throw new Error('Only the owner and editors can add verses here.');
+  if (!canEditShared(sharedRole(sharedId))) throw new Error('Only the owner and editors can add verses here.');
   const { error } = await db.from('shared_collection_verses').insert({
     shared_collection_id: sharedId,
     book: verse.book,
@@ -1110,7 +1110,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // copy (docs/features/shared-collections.md#dissolve), then the owner's goes as below.
     const sharedId = sharedIdOf(id);
     if (sharedId) {
-      if (sharedRole(sharedId) !== 'owner') {
+      if (collectionRemoval(sharedId, sharedRole(sharedId)) === 'leave') {
         await get().leaveSharedCollection(sharedId);
         return;
       }
@@ -1875,8 +1875,8 @@ export function useSharedOwnerName(collectionId: string): string | null {
 export function useAddableCollections() {
   const collections = useAppStore(useShallow((state) => state.collections));
   const shared = useAppStore((state) => state.sharedCollections);
-  return useMemo(() => collections.filter((c) => !c.isVirtual && (!c.sharedId
-    || shared[c.sharedId]?.role === 'owner' || shared[c.sharedId]?.role === 'editor')), [collections, shared]);
+  return useMemo(() => collections.filter((c) => !c.isVirtual
+    && (!c.sharedId || canEditShared(shared[c.sharedId]?.role))), [collections, shared]);
 }
 
 /**
