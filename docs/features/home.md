@@ -1,6 +1,6 @@
 # Home and Verse of the Month
 
-Home is the first tab. It shows the Verse of the Month (VOTM), a global monthly challenge, `InsightsCard`, a shortcut to the Insights screen, and an Explore collections preview.
+Home, the first tab, shows the Verse of the Month (VOTM), a global monthly challenge; `InsightsCard`, a shortcut to Insights; and an Explore collections preview.
 
 | File | Purpose |
 |---|---|
@@ -14,24 +14,24 @@ What those numbers mean is in `docs/features/insights.md`.
 
 ## Explore collections
 
-Under the Explore heading, two suggested collections sit as flat rows on the page (art
-thumbnail, title, subtitle, passages, saves), with a hairline between them. The streak row
-above sits between hairlines too, with no card. See all opens the full catalog. These rows use bundled artwork
-and passage counts, so browsing does not fetch Bible text.
+Under the Explore heading, two suggested collections are flat rows (art thumbnail, title,
+subtitle, passages, saves) split by a hairline; the streak row above sits between hairlines
+too. See all opens the full catalog. Rows use bundled artwork and passage counts, so
+browsing fetches no Bible text.
 
 An introduction lists tappable references. It preloads the first two
 passages through `fetchVerse`, then the expanded passage and its next
 neighbor, sequentially. Pending and successful reads are shared in memory
-for the selected translation. Version changes and unmount stop further
-preloads and ignore stale preview results. Failed reads remain retryable.
-Text expands on tap in the app's system font. The introduction shares the top-right
+for the selected translation. A version change or unmount stops further
+preloads and ignores stale previews. Failed reads remain retryable.
+Text expands on tap, in the system font. The introduction shares the top-right
 `BibleTranslationPicker` with verse selection. Its scrollable list reads
 `BIBLE_VERSIONS`. The selection starts from the account translation and
 changes only the preview. When it differs, a line under the action says
 verses are added in the account one. Before writing, the store
 verifies all requested keyed verses in the account translation. An
 incomplete read lets the user retry. The centered Add collection action
-uses an intrinsic width and a minimum 44-point touch target.
+has intrinsic width and a 44-point minimum target.
 
 `importCuratedCollection` saves every passage in the account translation in
 one transaction and reads back the resulting collection. Matching references
@@ -65,7 +65,7 @@ not count.
 `curatedSaverCounts` in the app store shares successful reads across these screens.
 Focus, app return and pull to refresh fetch authoritative totals. A committed import
 starts a non-blocking count refresh before Library readback. Loading/failure omits
-an unknown number and retains a previously successful total on refresh failure.
+an unknown number and keeps the last good total when a refresh fails.
 There is no optimistic increment. Requests are account-scoped, ignore older reads,
 and abort when their screen loses focus. Counts do not block browsing or saving.
 
@@ -107,8 +107,8 @@ Defined in `supabase/migrations/007_verse_of_month.sql`, with `image_url` added 
 ## The card
 
 - **Text.** Three lines at most, in the user's `bibleVersion`, with the version shown beside the reference.
-- **Art.** `expo-image` fills the whole card behind native white copy and the original dark overlay. The compact reference badge, header, three-line body and footer retain the original card structure. A broken image returns to the plain themed card with contrasting text; collection symbols are not monthly artwork.
-- **Count.** "N people have mastered" appears only after a successful `getVOTMMasteryCount` response. A successful zero is shown; an unknown/unavailable count is omitted.
+- **Art.** `expo-image` fills the card behind white copy and the original dark overlay, in the original structure (reference badge, header, three-line body, footer). A broken image falls back to the plain themed card; collection symbols are never monthly artwork.
+- **Count.** "N people have mastered" shows only after a successful `getVOTMMasteryCount`, zero included; an unknown count is omitted.
 - **User status.** One of these, in this order:
 
 | Condition | Shows |
@@ -160,8 +160,8 @@ supplies a labeled original nine-second tone/video for the automatic path;
 `introFixture=unavailable` uses a missing local file. Hosted/production builds ignore
 the parameter; dev sign-in restrictions stay intact. The preloader is keyed by account;
 per-fixture remounts failed their first unload. Ordinary startup has no fixture. Production bundles carry the unselected 79 KB fixture, not custom bundler config. The server marker is shared by every device
-on a local account, so reset the disposable stack before a fresh intro flow instead
-of deleting markers through the client.
+on a local account, so reset the stack before a fresh intro flow rather than
+deleting markers through the client.
 
 ## Rules
 
@@ -172,7 +172,7 @@ of deleting markers through the client.
 
 ## Sharp edges
 
-- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it with `p_book`, `p_chapter`, `p_verse_start` and `p_verse_end`, but nothing in `supabase/` defines it, migrations and generated types included, so `getVOTMMasteryCount` returns null and the card hides the optional count without an error banner. The untyped `SupabaseClient` hides it from typecheck. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
+- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it with `p_book`, `p_chapter`, `p_verse_start` and `p_verse_end`, but nothing in `supabase/` defines it, so it returns null and the card hides the count without an error. The untyped `SupabaseClient` hides it from typecheck. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
 
 ## Browser checks
 
@@ -182,10 +182,10 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- shot /home --as reader-b`: the same current monthly card, an insights card with 0 day streak, 0 mastered, 0 in progress, Explore collections, and no video card.
 - `npm run sim -- flow collection-discovery`: sets reader-b's account translation to KJV, then Home and Explore in both themes, introduction, KJV preview, add and open the saved copy, and an ESV preview that still opens it.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
-- `npm run sim -- flow collection-savers`: save with two seed accounts, check all three surfaces show the line only from 10 saves (local counts stay under 10, so it checks the line is hidden; the counting itself is covered by the DB and integration tests), and verify another translation and edits/delete/re-add do not add a second contribution.
-- Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. Both are local; the migration test rolls back its fixtures.
-- `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same actual artwork and reference; a placeholder cannot verify continuity.
-- Each intro flow needs unclaimed accounts, so run it on a freshly reset disposable stack.
+- `npm run sim -- flow collection-savers`: save with two seed accounts, check all three surfaces show the line only from 10 saves (local counts stay under 10, so it checks the line is hidden; DB and integration tests cover the counting), and verify another translation and edits/delete/re-add do not add a second contribution.
+- On a freshly reset local stack, run `tests/curated-collection.integration.ts` (seed credentials; concurrent imports, lost responses) and `tests/curated-savers-migration.integration.ts` (the migration's backfill; rolls back its fixtures).
+- `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same artwork and reference.
+- Each intro flow needs unclaimed accounts: run it on a freshly reset stack.
 - `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, pause/resume, tap pause, scrub back, close, no second autoplay, and no presentation or claim for unavailable/unset media.
 - `npm run sim -- flow intro-modal-handoff` defers intro while each Home modal is visible and presents after native dismissal, for both accounts.
 - `npm run sim -- flow intro-interruption` autoplays for reader-b and checks native Control Center interruption, preserved pause/position, and background close. Needs a physical iPhone too.
@@ -196,7 +196,6 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 
 - 2025-12-24 · VOTM stores a reference with no version · The challenge is the verse, and users read it in their own translation.
 - 2026-01-20 · The count goes through an RPC · RLS stops a client counting other users' rows. The function it calls never reached a migration.
-
 - 2026-11-10 · Monthly choices use a thirty-six-passage cycle and fill only missing months · Existing editorial selections and artwork remain authoritative.
 - 2026-11-10 · An account-wide atomic claim controls automatic intro presentation · Prefer suppressing an ambiguous attempt over surprising users twice. The replay surface left with the Home card and returns with it.
 - 2026-11-11 · Monthly art is plain public URLs · Signed URLs expire.

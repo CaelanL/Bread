@@ -45,14 +45,14 @@ follow saved positions, then creation time and client ID. New collections append
 
 Long-press a custom collection for Rename, Reorder and Delete, plus Share… on one you own. Shared collections change the menu, swipe, add and delete; see
 [shared collections](shared-collections.md#in-the-app). On iOS, one light
-haptic confirms the action opens. The menu opens under the press and `PopoverMenu` keeps it
-inside the safe area, so a card near the bottom gets it moved up rather than cut off. Rename prefills
+haptic confirms it. The menu opens under the press, and `PopoverMenu` moves it up to stay
+inside the safe area. Rename prefills
 `AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
-actions to move up or down. Each drop saves the order, with rollback on failure.
-Tap Done to return to opening collections by tapping their rows.
+actions to move up or down. Each drop saves the order, rolling back on failure.
+Done ends editing.
 
-Collections are flat rows on the page with a `separator` hairline between them, like the verse
-rows inside a collection; there are no cards. Each row: the icon square, name, a subtitle (verse count; "<owner's first name> · M members" once someone else
+Collections are flat rows split by `separator` hairlines, like verse rows inside a
+collection, with no cards. Each row: the icon square, name, a subtitle (verse count; "<owner's first name> · M members" once someone else
 is in a shared one), then the due pill on Mastered, a check or engraved glyph once every verse is
 mastered or engraved (engraved also fills the square and washes the row gold; see
 [group progress](group-progress.md#library-cards)). No chevron: the whole row opens it.
@@ -76,8 +76,7 @@ the expand button still shows the full text.
 - It holds verses where `progress.hard.completed` is true, including soft-deleted ones.
 - Mastery is the only way in. `isVirtual` removes the + button, and
   `AddToCollectionModal` filters virtual collections out.
-- Swipe is disabled on its rows. The only way out is Reset Progress on the setup
-  screen.
+- Swipe is disabled on its rows; only [Reset Progress](#reset-progress) takes a verse out.
 - The list row shows `DueCountPill` from `useDueCounts`. Due and engraved rules are in
   `docs/features/review.md`.
 
@@ -89,8 +88,8 @@ the expand button still shows the full text.
   (`docs/features/insights.md`).
 - The push nudge mirrors it on the server, and the two must change together
   (`docs/features/notifications.md`).
-- `index.tsx` hides the row when the count is zero. `fetchCollections` always includes
-  it, so check for it before you assume the store's list is what's on screen.
+- `index.tsx` hides the row at zero, though `fetchCollections` always includes it: the
+  store's list isn't always what's on screen.
 - It has no + button and no swipe. Verses live in real collections, and this is a view.
 - It isn't part of review scheduling.
 
@@ -100,7 +99,7 @@ the expand button still shows the full text.
 
 | Row | Opens |
 |---|---|
-| New collection | `AddCollectionModal`, as before |
+| New collection | `AddCollectionModal` |
 | New shared collection | `app/share/new`: your display name if you have none, then the collection's name, then it creates and shares it in one go and shows the code |
 | Join with code | `app/join/index.tsx`, the typed code |
 
@@ -163,9 +162,9 @@ See `docs/architecture/data-model.md` for the database operations.
 Saved verses follow the account translation, and the add screens' picker changes it
 (`docs/architecture/bible-versions.md`).
 
-KJV is public domain and ships in the app, so reading a saved KJV verse needs no network
-and costs no API quota. Other versions need a connection unless already cached. Only
-reading is offline: saving verses and recording progress still need the network
+KJV ships in the app (public domain), so reading a saved KJV verse needs no network or API
+quota; other versions need a connection unless cached. Only reading is offline: saves and
+progress still need the network
 (invariant 10, `docs/architecture/sync-and-storage.md`). The bundle itself is in
 `docs/architecture/bible-api-and-caching.md`.
 
@@ -201,9 +200,8 @@ remove](shared-collections.md#leave-and-remove)) repeat the rule. Change all thr
 
 ## Deleting a collection
 
-Swipe a custom collection or a verse in a real collection left to reveal Delete.
-The same inset action opens the confirmation on both types of card. Collection
-actions also offer Delete on long press.
+Swipe a custom collection, or a verse in a real collection, left for Delete, which opens the
+confirmation; the collection long-press menu offers it too.
 
 `deleteCollection` returns early for My Verses; a member's shared copy is left. Otherwise
 one `public.delete_collection` call (latest in `*_delete_collection_for_everyone.sql`) does it
@@ -211,9 +209,8 @@ in one transaction: an owner's group [dissolves](shared-collections.md#dissolve)
 leaves, a verse no other collection holds is soft-deleted if mastered and hard-deleted
 otherwise, and the collection gets `deleted_at`. All or nothing; a retry after success is a
 no-op. It refuses My Verses and a member's copy. Only after it succeeds does the store drop
-the collection (and its group) locally. The virtual collections never get
-here, because the card disables their swipe; if they did, the function would answer
-`Collection not found`.
+the collection (and its group) locally. Virtual collections never get here (their
+swipe is disabled); the function would answer `Collection not found`.
 
 ## Reset progress
 
@@ -224,7 +221,6 @@ way a verse leaves Mastered.
 ## Invariants
 
 1. Verse identity is user, book, chapter and range. Version follows the account translation.
-
 2. My Verses can't be deleted. Don't add a bypass.
 3. Mastered and In Progress have no row. Code that expects every collection ID to map to
    `user_collections` breaks on them, so check `isVirtual` or the ID constants.
@@ -242,15 +238,15 @@ way a verse leaves Mastered.
   `resetVerseProgress` works out `wasMastered` from `verses` alone, and such a verse is only
   in `masteredVerses`. It stays listed with old progress until the next fetch. After that the
   row stays soft-deleted, in no list, until the user re-adds it.
-- **Re-adding a soft-deleted verse restores it.** That's intended, because it preserves
-  mastery, but a "new" verse can arrive with progress.
+- **Re-adding a soft-deleted verse restores it,** keeping mastery on purpose, so a "new"
+  verse can arrive with progress.
 - **A-Z isn't numeric.** `localeCompare` on the reference puts John 10 before John 3.
 - **The empty hint never shows.** `index.tsx` renders it at `collections.length <= 1`, but My
   Verses and Mastered are always present once hydrated.
 
 ## Browser checks
-- `npm run sim -- flow hide-verses`: turn Hide verses on, check My Verses and Study setup show no verse text, turn it off.
 
+- `npm run sim -- flow hide-verses`: turn Hide verses on, check My Verses and Study setup show no verse text, turn it off.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-a`: My Verses, Mastered with a "1 due" pill, In Progress, and Psalms.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
@@ -258,7 +254,6 @@ way a verse leaves Mastered.
 - After a local reset, `npm run sim -- flow library-plus`: the + menu, Share… with the invite opened by link over it and Open, then the Library tab pops to the Library and + still opens; New shared collection lands on the code; Join with code.
 - After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
 - Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery.
-- Adding verses has its own checks in `docs/features/adding-verses.md`.
 
 ## Decisions
 

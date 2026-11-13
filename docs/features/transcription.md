@@ -13,11 +13,10 @@ both edge functions: `docs/architecture/edge-functions.md`.
 `lib/transcription/live-session.ts` (invariant 12).**
 
 The live path uses a Soniox WebSocket, with short-TTL keys minted by the
-`transcription-token` edge function. It must fail silently into the batch path. It
-never surfaces a live-path error to the reader, and a live failure never loses a
-recording: the m4a file is always written, because the design is dual-path. The
-`LIVE_TRANSCRIPTION_ENABLED` secret is the kill switch. Set it to anything but
-`true`, or unset it, and every client falls back to batch from its next recording.
+`transcription-token` edge function. It fails silently into the batch path: no
+live-path error reaches the reader, and the m4a file is always written, so a live
+failure never loses a recording. The `LIVE_TRANSCRIPTION_ENABLED` secret is the
+[kill switch](#kill-switch).
 
 ## Where things live
 
@@ -27,7 +26,7 @@ recording: the m4a file is always written, because the design is dual-path. The
 | Recording control | `components/study/RecordingBar.tsx` | Mic, startup ring, waveform and analysis indicator |
 | Seam | `hooks/use-study-session.ts` (`processRecording`) | Picks the transcript, then aligns and scores |
 | Live client | `lib/transcription/live-session.ts` | `startLiveTranscription`, `LiveTranscriptionSession` |
-| Batch client | `lib/api/recording.ts` | `processRecording` upload to the edge function, same name as the seam |
+| Batch client | `lib/api/recording.ts` | `processRecording`: the upload to `process-recording` |
 | Key mint | `supabase/functions/transcription-token/` | Temporary Soniox keys, and the kill switch |
 | Batch transcribe | `supabase/functions/process-recording/` | Transcribes the file, never scores |
 
@@ -66,8 +65,8 @@ PCM goes two places:
   the hook nulls that callback when `stopRecording` resolves, and the trailing PCM
   chunk can reach JS after that.
 
-The screen also calls `getAuthToken` on mount, so the first mic press doesn't pay
-for a token refresh in front of the key mint.
+The screen calls `getAuthToken` on mount, so the first mic press skips a token
+refresh before the key mint.
 
 ### Submit and teardown
 
@@ -177,8 +176,8 @@ the reader records again.
 | Heartbeat | 10 s | `process-recording` | Beats the phone's roughly 60 s socket idle timeout |
 | Soniox poll deadline | 90 s | `process-recording` | Bounds the batch wait |
 
-The client sets no timeout or `AbortController` on the upload. The heartbeat removes
-the silent window and the poll deadline bounds the work.
+The upload has no client timeout: the heartbeat removes the silent window and the poll
+deadline bounds the work.
 
 ### The 5-minute cap
 
@@ -195,8 +194,8 @@ the full file.
 ## Kill switch
 
 `transcription-token` checks `LIVE_TRANSCRIPTION_ENABLED` after auth. Anything but
-`true` returns 403 `{ error: "LIVE_DISABLED" }`, which the client treats like any
-other mint failure. A secret change takes effect with no deploy or app update, and
+`true`, or unset, returns 403 `{ error: "LIVE_DISABLED" }`, which the client treats like any
+other mint failure, so every client falls back to batch from its next recording. A secret change takes effect with no deploy or app update, and
 in-flight streams finish normally. The batch path doesn't read the secret. Locally it
 goes in `supabase/functions/.env`, then `db:stop` and `db:start`.
 
@@ -209,8 +208,7 @@ goes in `supabase/functions/.env`, then `db:stop` and `db:start`.
   `process-recording`, so `usage_daily.transcribe_seconds` is batch-only. Minted keys
   carry `client_reference_id: user.id` for attribution in Soniox. Any future quota
   has to account for this.
-- **A failed upload isn't retried.** Live failures are silent, but a batch failure
-  loses that attempt. The reader sees the alert and recites again.
+- **A failed upload isn't retried.** That attempt is lost ([Batch path](#batch-path)).
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
   the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
   any of them can clip the last word, which raises `missing` with no error.
@@ -226,11 +224,11 @@ Recording needs a person and a real device. Local runs take the batch path unles
 - Hold a recording past 5:00: the toast "5 minute limit reached — scoring what you recited." appears and a score follows, with no second submit.
 - Mic, then the X beside the mic or on the pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
 - In Xcode's app container, `Documents` has no `<UUID>.m4a` after a live or batch score, a discard, or exit mid-analysis. Old ones go once a session opens.
-- Enable Reduce Motion in iOS Accessibility and relaunch Bread. The startup ring stays still and the control fades in place as native capture starts.
+- Reduce Motion on, relaunch Bread: the startup ring stays still and the control fades in place as capture starts.
 
-**Can't start.** A start that throws (most often the mic held by a call or another app; the
-error doesn't say) shows "Couldn't start recording" and asks to close the call or app and try
-again. A denied permission shows "Permission required" instead.
+**Can't start.** A start that throws (most often a call or app holding the mic; the error
+doesn't say) shows "Couldn't start recording", asking to close it and retry. A denied
+permission shows "Permission required".
 
 ## Decisions
 
