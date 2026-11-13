@@ -198,7 +198,9 @@ The final score computes only once every chunk has a result. Then the hook:
    Results". That page is `components/study/SessionFinish.tsx`: the first time it
    shows, the score counts up while a line fills toward a 90 mark (`Motion.scoreMs`).
    A pass turns them green, plays a success haptic and runs the finished-line
-   highlight (`Sweep`). Then Done, and Review chunks back to the first chunk.
+   highlight (`Sweep`), titled "<Difficulty> passed" with the next step. A miss keeps a
+   black line and reads "Almost there" (65 or more) or "Keep practicing", then "90% to
+   pass". Then Done, and Review chunks back to the first chunk.
 
 A chunk that scores 90 or more without a reveal plays a success haptic too.
 

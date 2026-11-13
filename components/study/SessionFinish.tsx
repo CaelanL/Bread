@@ -75,7 +75,7 @@ export function SessionFinish({ score, difficulty, reference, active, onDone, on
   const tone = landed ? (passed ? colors.success : colors.text) : colors.text;
   const name = difficulty[0].toUpperCase() + difficulty.slice(1);
   const title = passed ? `${name} passed` : score >= 65 ? 'Almost there' : 'Keep practicing';
-  const line = passed ? NEXT[difficulty] : `${PASS}% passes ${name}.`;
+  const line = passed ? NEXT[difficulty] : `${PASS}% to pass`;
 
   if (!active && !landed) return <View style={styles.page} />;
 
@@ -95,7 +95,7 @@ export function SessionFinish({ score, difficulty, reference, active, onDone, on
 
         <Animated.View entering={FadeInDown.duration(Motion.expandMs).delay(Motion.staggerMs * 2)} style={styles.lineWrap}>
           <View style={[styles.track, { backgroundColor: colors.border }]}>
-            <Animated.View style={[styles.fill, fillStyle, !passed && { backgroundColor: colors.primary }]}>
+            <Animated.View style={[styles.fill, fillStyle, !passed && { backgroundColor: colors.text }]}>
               {passed && (
                 <LinearGradient
                   colors={[colors.masteredBarStart, colors.masteredBarEnd]}

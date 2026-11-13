@@ -217,7 +217,7 @@ export function SwipeableCollectionCard({
             <LinearGradient
               pointerEvents="none"
               colors={[withAlpha(colors.tint, 0), colors.engravedFill, colors.engravedFill, withAlpha(colors.tint, 0)]}
-              locations={[0, 0.12, 0.75, 1]}
+              locations={[0, 0.05, 0.95, 1]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={StyleSheet.absoluteFill}
