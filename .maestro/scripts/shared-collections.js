@@ -1,5 +1,5 @@
 // Shared collection checks over local REST, signed in as a seed user. Runs only against the seed database.
-// MODE=invite: output.code is READER's newest live invite.
+// MODE=invite: output.code is READER's newest live invite, output.name its collection's name.
 // MODE=handoff: records CODE as an install handoff for this Mac's network, as the sendlabs.dev join page does.
 // MODE=no-copy: READER holds no row for Psalm 23:1-3 (left with an unmastered verse).
 // MODE=personal-copy: READER's "Psalms" is a personal collection again, still holding Psalm 23:1-3.
@@ -24,9 +24,10 @@ if (MODE === 'handoff') {
   });
   if (response.status !== 200) throw new Error('Handoff record failed: ' + response.status);
 } else if (MODE === 'invite') {
-  const rows = get('shared_invites?select=code&revoked_at=is.null&order=created_at.desc&limit=1');
+  const rows = get('shared_invites?select=code,shared_collections(name)&revoked_at=is.null&order=created_at.desc&limit=1');
   if (rows.length !== 1) throw new Error('No live invite for ' + READER);
   output.code = rows[0].code;
+  output.name = rows[0].shared_collections.name;
 } else if (MODE === 'no-copy') {
   const rows = get('user_verses?select=id&book=eq.Psalms&chapter=eq.23&verse_start=eq.1&verse_end=eq.3');
   if (rows.length !== 0) throw new Error(READER + ' still holds Psalm 23:1-3 after leaving');

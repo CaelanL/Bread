@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { daysLeft, inviteMessage, joinRouteFromLink, normalizeInviteCode, sharedErrorMessage } from './invite-code';
+import { daysLeft, handoffStep, inviteMessage, joinRouteFromLink, normalizeInviteCode, sharedErrorMessage } from './invite-code';
 
 test('a typed code is normalized the way the server reads it', () => {
   assert.equal(normalizeInviteCode('bread-828'), 'BREAD828');
@@ -35,6 +35,14 @@ test('a sendlabs.dev invite link opens Bread\'s join route; other links pass thr
   assert.equal(joinRouteFromLink('https://www.sendlabs.dev/bread/join/abcd-2345?ref=x'), '/join/ABCD2345');
   assert.equal(joinRouteFromLink('/bread/join/ABCD2345'), '/join/ABCD2345');
   assert.equal(joinRouteFromLink('com.biblemem://join/ABCD2345'), 'com.biblemem://join/ABCD2345');
+  assert.equal(joinRouteFromLink('https://sendlabs.dev/bread/join/%E0%A4%A'), 'https://sendlabs.dev/bread/join/%E0%A4%A');
   assert.equal(joinRouteFromLink('/(tabs)/(library)'), '/(tabs)/(library)');
   assert.equal(joinRouteFromLink('https://sendlabs.dev/work/linc'), 'https://sendlabs.dev/work/linc');
+});
+
+test('an install claims a handoff once, and only after a sign-in this launch', () => {
+  assert.equal(handoffStep(false, false), 'claim', 'a fresh install that just signed in asks');
+  assert.equal(handoffStep(false, true), 'mark', 'an update that restored its session marks itself checked without asking');
+  assert.equal(handoffStep(true, false), 'skip');
+  assert.equal(handoffStep(true, true), 'skip');
 });

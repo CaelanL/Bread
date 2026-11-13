@@ -30,6 +30,8 @@ supabase/functions/
 │   └── index.ts         ← Soniox upload, polling, optional GPT cleaning
 ├── transcription-token/
 │   └── index.ts         ← Mints temp Soniox keys for live streaming
+├── invite-handoff/
+│   └── index.ts         ← Install handoff: record (sendlabs.dev page) and claim (navigation-and-routing.md#invite-handoff)
 └── send-notifications/
     ├── index.ts         ← Cron entry point
     ├── push.ts          ← Expo Push client
@@ -203,6 +205,10 @@ Edge functions need:
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — to read/write
   `verse_cache`, `usage_daily`, `subscriptions` past RLS
 - `SUPABASE_ANON_KEY` — for `getAuthUser`'s user-token client
+- `HANDOFF_SALT` — HMAC key for `invite-handoff`'s network hash; unset falls back to a
+  plain hash (and logs a warning). Not set in prod yet: needs Caelan's yes
+  ([release.md](release.md)). After each deploy, check once that the last
+  `x-forwarded-for` hop is the caller's real IP (record from two networks, claim from one).
 
 These are set via `supabase secrets set ...` and never appear in
 the client bundle. `cron_secret` lives in Vault instead; locally,

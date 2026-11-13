@@ -54,7 +54,7 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, sessionRestored } = useAuth();
   const segments = useSegments();
   const pathname = usePathname();
   const navigationState = useRootNavigationState();
@@ -93,7 +93,7 @@ function RootLayoutNav() {
     const flags = useUxFlagsStore.getState();
     flags.setInviteOpen(true);
     readPendingJoin()
-      .then((kept) => kept ?? claimInstallHandoff())
+      .then((kept) => kept ?? claimInstallHandoff(sessionRestored))
       .catch((e) => {
         console.error('[join] Failed to read the kept invite:', e);
         return null;
@@ -116,7 +116,7 @@ function RootLayoutNav() {
       settled = true;
       flags.setInviteOpen(false);
     };
-  }, [isAuthenticated, navigationState?.key, inTabs]);
+  }, [isAuthenticated, navigationState?.key, inTabs, sessionRestored]);
 
   // Hydrate store and run migration when authenticated. Sequenced as
   // an inline async so a fast sign-out → sign-in cycle can't race the

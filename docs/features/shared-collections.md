@@ -161,9 +161,9 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed) show `JoinInvite`:
   inviter, name, counts, the privacy line with the account translation, and Join (a name if
   needed, `joinSharedCollection`, then the copy with one `dismissTo`). A member sees Open; a bad
-  code shows its message. A signed-out link's code waits in AsyncStorage
-  (`lib/shared/pending-join.ts`) through sign-in, email confirmation or an app kill, then opens
-  over the Library; the reminders card is held until that read.
+  code shows its message. A signed-out link's code is kept through
+  sign-in, email confirmation or an app kill, then opens over the Library; so does an install
+  [handoff](../architecture/navigation-and-routing.md#invite-handoff).
 - **Inside**: [group-progress.md](group-progress.md). Only the owner and editors see + and
   swipe-delete; only the owner renames or changes the icon. `addVerse` inserts the reference and
   syncs; `deleteVerse` deletes it ("Remove for everyone?" once others joined).

@@ -1,4 +1,4 @@
-// lib-ok: Invite code, link and message rules, plus the share and join error text; pure, so unit-tested.
+// lib-ok: Invite code, link, message and install-handoff rules, plus the share and join error text; pure, so unit-tested.
 import type { SharedRole } from '@/lib/storage';
 
 export const INVITE_CODE_LENGTH = 8;
@@ -28,7 +28,13 @@ export function inviteMessage(collectionName: string, code: string): string {
 /** An opened sendlabs.dev invite link as Bread's own join route; any other path unchanged. */
 export function joinRouteFromLink(path: string): string {
   const code = path.match(/^(?:https?:\/\/(?:www\.)?sendlabs\.dev)?\/bread\/join\/([^/?#]+)/i)?.[1];
-  return code ? `/join/${normalizeInviteCode(decodeURIComponent(code))}` : path;
+  if (!code) return path;
+  try {
+    return `/join/${normalizeInviteCode(decodeURIComponent(code))}`;
+  } catch {
+    // Bad percent-encoding: leave the path as it came, so routing shows not-found instead of crashing.
+    return path;
+  }
 }
 
 export function daysLeft(expiresAt: string, now = Date.now()): number {
@@ -46,4 +52,15 @@ export function sharedErrorMessage(error: unknown, fallback: string): string {
   const { code, message } = error as { code?: unknown; message?: unknown };
   if (code !== '22023' || typeof message !== 'string') return fallback;
   return INVITE_MESSAGES[message] ?? message;
+}
+
+/**
+ * What this launch does about a handoff: nothing once the install has checked; mark it checked
+ * without asking when the session was restored at launch (an existing install updating to this
+ * version isn't the phone that just installed from the invite, and asking could eat a friend's
+ * row on the same Wi-Fi); otherwise claim.
+ */
+export function handoffStep(checked: boolean, sessionRestored: boolean): 'skip' | 'mark' | 'claim' {
+  if (checked) return 'skip';
+  return sessionRestored ? 'mark' : 'claim';
 }

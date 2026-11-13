@@ -21,7 +21,8 @@ AsyncStorage holds device settings and small local caches.
 | Name (`displayName`, `firstName`, `lastName`) | ✓ (`profiles`) | ✓ | — |
 | [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ last seen ids and names (`shared_known_groups:<user>`) |
 | [Group progress](../features/group-progress.md#collection-screen) | ✓ (read) | ✓ (`sharedProgress`) | — |
-| Invite from a signed-out link | — | — | ✓ (`shared_pending_join`) |
+| Invite from a signed-out link or a claimed handoff | — | — | ✓ (`shared_pending_join`) |
+| Install handoff asked once | — | — | ✓ (`shared_handoff_checked`) |
 | Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
 | Virtual collection sorts | — | ✓ | ✓ (`library_sort_mastered`, `library_sort_in_progress`) |

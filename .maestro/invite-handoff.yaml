@@ -1,7 +1,7 @@
 # Automatic join after a fresh install: the sendlabs.dev join page recorded Cara's invite for this
-# network, then a fresh install signs in as reader-b and the invite opens by itself (any inviter name:
-# Caelan renames reader-c while testing). Closes it
-# without joining, so it changes no group.
+# network, then a fresh install signs in as reader-b and the invite opens by itself, for that collection
+# (any inviter name: Caelan renames reader-c while testing). Closes it without joining, so it changes
+# no group, and a relaunch doesn't open it again.
 appId: com.caelanliu.biblemem
 name: invite-handoff
 ---
@@ -21,9 +21,18 @@ name: invite-handoff
 - extendedWaitUntil:
     visible: ".* INVITED YOU"
     timeout: 20000
+- assertVisible: ".*${output.name}.*"
 - takeScreenshot: handoff-1-invite-opened
 - tapOn:
     id: modal-close
 - extendedWaitUntil:
     visible: ".*My Verses.*"
     timeout: 10000
+- launchApp
+- extendedWaitUntil:
+    visible: ".*My Verses.*"
+    timeout: 20000
+# The pending-invite effect has had its chance once the Library shows.
+- waitForAnimationToEnd
+- assertNotVisible: ".* INVITED YOU"
+- takeScreenshot: handoff-2-relaunch-no-invite

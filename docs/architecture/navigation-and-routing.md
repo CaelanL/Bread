@@ -191,22 +191,25 @@ sees when the app didn't open: Open in Bread (`com.biblemem://join/<code>`), Get
 through Apple's CDN when Bread installs, so it works only in a store or EAS build, never before
 sendlabs.dev serves the file.
 
-### Invite handoff
-
-Someone without Bread who opens an invite link lands on sendlabs.dev's join page, which posts
-`record` to the `invite-handoff` edge function: the code plus a hash of the caller's IP
-(`public.invite_handoffs`, service role only, rows live an hour). On the first sign-in of an
-install, `claimInstallHandoff` (`lib/shared/pending-join.ts`, called from the pending-invite
-effect in `app/_layout.tsx`) posts `claim` and opens `/join/<code>` for the newest match; a
-claimed row is deleted and the install never asks again. It's a guess by network, so a
-household on one Wi-Fi can match the wrong invite: the join modal still needs Join.
-Flow: `npm run sim -- flow invite-handoff`.
-
 The handler extracts tokens from the URL and calls
 `supabase.auth.setSession(...)`. Auth state change then drives the
 gating logic above. A notification tap routes through
 `lib/notifications/deep-links.ts`, see
 `docs/features/notifications.md`.
+
+### Invite handoff
+
+Someone without Bread who opens an invite link lands on sendlabs.dev's join page, which posts
+`record` to the `invite-handoff` edge function: the code plus a keyed hash of the caller's IP
+(`public.invite_handoffs`, service role only, rows live an hour, at most 5 per network). The
+pending-invite effect in `app/_layout.tsx` waits for the tabs, then, with no kept invite, calls
+`claimInstallHandoff` (`lib/shared/pending-join.ts`) once per install (`shared_handoff_checked`):
+only after a sign-in this launch (`sessionRestored` false), since an updated install restoring its
+session isn't the phone that just installed, and it only marks itself checked. The claim deletes
+the newest match, stashes its code like a link's, then opens `/join/<code>`. A failed call is
+retried next launch, and opening any invite marks the install checked. It's a guess by network,
+so a household on one Wi-Fi can match the wrong invite: the join modal still needs Join.
+Flow: `npm run sim -- flow invite-handoff`.
 
 ## Header / tab bar
 

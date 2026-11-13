@@ -71,6 +71,10 @@ Invite links depend on sendlabs.dev (repo `sendlabs-portfolio`, Vercel): it must
 invite message links there reaches anyone, OTA included. See
 [navigation-and-routing.md](navigation-and-routing.md#deep-links).
 
+The `invite-handoff` function reads the `HANDOFF_SALT` secret (`supabase secrets set`) to key its
+network hash. Setting it in prod needs Caelan's yes; until then it uses a plain hash. See
+[edge-functions.md](edge-functions.md#secrets).
+
 ## Limits
 
 - iOS only. Android isn't shipped, and the Expo example has matching jobs to add when it is.

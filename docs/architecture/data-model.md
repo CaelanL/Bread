@@ -18,6 +18,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
 | `verse_collections` | per-user (via verse) | Many-to-many junction: `(verse_id, collection_id)` |
 | `shared_collections`, `shared_collection_members`, `shared_collection_verses`, `shared_invites` | per-group | [Shared collections](../features/shared-collections.md#data-model), references only |
+| `invite_handoffs` | server | [Handoff](navigation-and-routing.md#invite-handoff) |
 | `verse_of_month` | global | Public monthly challenge verse, optional `image_url` |
 | `user_intro_presentations` | per-user | [Intro claims](../features/home.md#encouragement-video) |
 | `session_attempts` | per-user, append-only | One row per practice session (or partial early exit). Denormalized — no FK to `user_verses`. |
@@ -240,7 +241,7 @@ incrementally — the cron is the only writer.
 | `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment. See `docs/features/notifications.md` |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
 | `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction INSERT RLS checks only the verse owner) |
-| `add_verse`, `delete_verse`, `delete_collection` | invoker, authenticated only | [add](../features/adding-verses.md#verse-identity), [delete](../features/library.md#deleting-a-verse) rules, atomic |
+| `add_verse`, `delete_verse`, `delete_collection` | invoker, signed in | [add](../features/adding-verses.md#verse-identity), [delete](../features/library.md#deleting-a-verse) |
 | shared collection functions | invoker wrappers | [table](../features/shared-collections.md#functions) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
@@ -295,8 +296,7 @@ Soft delete is asymmetric and intentional:
 
 The unique index on `user_verses` is partial (`WHERE deleted_at IS
 NULL`), so the database alone wouldn't stop a second row for a
-soft-deleted verse. `add_verse` looks it up with soft-deleted rows
-and restores one instead of inserting.
+soft-deleted verse; `add_verse` restores it instead.
 
 ## Migration safety (invariant 11)
 

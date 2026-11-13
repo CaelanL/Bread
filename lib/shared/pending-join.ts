@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/api/client';
 
-import { normalizeInviteCode } from './invite-code';
+import { handoffStep, normalizeInviteCode } from './invite-code';
 
 const PENDING_JOIN_KEY = 'shared_pending_join';
 const HANDOFF_CHECKED_KEY = 'shared_handoff_checked';
@@ -22,7 +22,8 @@ export async function clearPendingJoin() {
 /**
  * Once per install, after the first sign-in: an invite the sendlabs.dev join page recorded for this
  * network in the last hour, so someone who installed from an invite lands on it. A failed call
- * asks again next launch; the server keeps a handoff only an hour. See
+ * asks again next launch; the server keeps a handoff only an hour. A claimed code is stashed like
+ * a signed-out link's before it's returned, so an app kill before the push can't lose it. See
  * docs/architecture/navigation-and-routing.md#invite-handoff.
  *
  * The claim deletes the server's row, so a caller cancelled mid-flight (the pending-invite effect
@@ -31,17 +32,24 @@ export async function clearPendingJoin() {
  */
 let handoff: Promise<string | null> | null = null;
 
-export function claimInstallHandoff(): Promise<string | null> {
-  handoff ??= claimOnce();
+export function claimInstallHandoff(sessionRestored: boolean): Promise<string | null> {
+  handoff ??= claimOnce(sessionRestored);
   return handoff;
 }
 
+/** After any invite opens (kept or handed off): the install never asks for a handoff again. */
 export function forgetInstallHandoff() {
   handoff = Promise.resolve(null);
+  AsyncStorage.setItem(HANDOFF_CHECKED_KEY, '1').catch((e) => console.error('[join] Failed to mark the handoff checked:', e));
 }
 
-async function claimOnce(): Promise<string | null> {
-  if (await AsyncStorage.getItem(HANDOFF_CHECKED_KEY)) return null;
+async function claimOnce(sessionRestored: boolean): Promise<string | null> {
+  const step = handoffStep(Boolean(await AsyncStorage.getItem(HANDOFF_CHECKED_KEY)), sessionRestored);
+  if (step === 'skip') return null;
+  if (step === 'mark') {
+    await AsyncStorage.setItem(HANDOFF_CHECKED_KEY, '1');
+    return null;
+  }
   const { data, error } = await supabase.functions.invoke<{ code: string | null }>('invite-handoff', {
     body: { action: 'claim' },
   });
@@ -49,6 +57,8 @@ async function claimOnce(): Promise<string | null> {
     handoff = null;
     return null;
   }
+  const code = typeof data?.code === 'string' ? normalizeInviteCode(data.code) || null : null;
+  if (code) await stashPendingJoin(code);
   await AsyncStorage.setItem(HANDOFF_CHECKED_KEY, '1');
-  return typeof data?.code === 'string' ? normalizeInviteCode(data.code) || null : null;
+  return code;
 }
