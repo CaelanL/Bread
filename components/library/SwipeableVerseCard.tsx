@@ -184,7 +184,7 @@ export function SwipeableVerseCard({
       <GestureDetector gesture={panGesture}>
         <Animated.View style={cardStyle}>
           <Pressable
-            style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.fill }]}
+            style={({ pressed }) => [styles.row, hideText && styles.rowHidden, pressed && { backgroundColor: colors.fill }]}
             unstable_pressDelay={PRESS_DELAY_MS}
             onPress={handlePress}
             onLongPress={handleCopy}
@@ -257,7 +257,10 @@ const styles = StyleSheet.create({
   },
   // With the text line hidden, a little more air between the reference and the pill below it.
   rowTextHidden: {
-    gap: 6,
+    gap: 8,
+  },
+  rowHidden: {
+    paddingVertical: 18,
   },
   referenceRow: {
     flexDirection: 'row',
