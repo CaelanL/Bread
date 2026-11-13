@@ -439,7 +439,7 @@ export default function StudySessionScreen() {
                   accessibilityLabel="Exit"
                   testID="exit-session-button"
                 >
-                  <IconSymbol name="xmark" size={20} color={colors.background} />
+                  <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={colors.background} />
                 </Pressable>
               )}
               {canRetry && (

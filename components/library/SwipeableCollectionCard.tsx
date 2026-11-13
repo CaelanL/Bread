@@ -28,6 +28,9 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 export const COLLECTION_ROW_GAP = 0;
+/** The Library list's side padding, where an engraved row's glow fades out. */
+const PAGE_MARGIN = 16;
+const GLOW_ALPHA = 0.3;
 
 export interface CollectionReorder {
   index: number;
@@ -96,6 +99,8 @@ export function SwipeableCollectionCard({
   const canSwipe = isCustom && !editing && !actionsDisabled && removal !== null;
   const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
   const engraved = emblem === 'engraved';
+  const glow = withAlpha(colors.engravedBarStart, GLOW_ALPHA);
+  const glowClear = withAlpha(colors.engravedBarStart, 0);
   const subtitle = memberCount !== undefined
     ? [ownerName && firstName(ownerName), `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
     : verseCount;
@@ -209,20 +214,18 @@ export function SwipeableCollectionCard({
       onLayout={(event) => { rowHeight.value = event.nativeEvent.layout.height; }}
       style={[styles.container, reorder && dragStyle]}
     >
+      {/* Engraved: gold across the whole row, fading out only in the page margin past the hairline. */}
+      {engraved && (
+        <>
+          <LinearGradient pointerEvents="none" colors={[glowClear, glow]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.edgeGlow, styles.edgeLeft]} />
+          <LinearGradient pointerEvents="none" colors={[glow, glowClear]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.edgeGlow, styles.edgeRight]} />
+        </>
+      )}
+      <View style={styles.clip}>
       {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.card, { backgroundColor: colors.background, borderTopColor: colors.separator }, index > 0 && styles.divided, cardStyle]}>
-          {/* A gold fill across the row, fading out at the left and right where the hairlines stop short. */}
-          {engraved && (
-            <LinearGradient
-              pointerEvents="none"
-              colors={[withAlpha(colors.tint, 0), colors.engravedFill, colors.engravedFill, withAlpha(colors.tint, 0)]}
-              locations={[0, 0.05, 0.95, 1]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={StyleSheet.absoluteFill}
-            />
-          )}
+          {engraved && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: glow }]} />}
           <Pressable
             style={styles.cardButton}
             onPress={handlePress}
@@ -303,6 +306,7 @@ export function SwipeableCollectionCard({
           )}
         </Animated.View>
       </GestureDetector>
+      </View>
 
       {isCustom && (
         <PopoverMenu
@@ -328,8 +332,19 @@ export function SwipeableCollectionCard({
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
+  },
+  // Clips the row as it swipes over its delete action; the edge glow sits outside it.
+  clip: {
     overflow: 'hidden',
   },
+  edgeGlow: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: PAGE_MARGIN,
+  },
+  edgeLeft: { left: -PAGE_MARGIN },
+  edgeRight: { right: -PAGE_MARGIN },
   // A flat row on the page, like a verse row in a collection: a hairline between rows, no card.
   card: {
     flexDirection: 'row',
