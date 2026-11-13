@@ -62,6 +62,8 @@ export default function StudySetupScreen() {
   // models, not raw window height.
   const insets = useSafeAreaInsets();
   const barHeight = useTopBarHeight();
+  // With verses hidden, the text shows only in the expanded view.
+  const hideVerseText = useAppStore((state) => state.hideVerseText);
   const frameHeight = useSafeAreaFrame().height;
   const versePreviewLines = frameHeight > LARGE_SCREEN_THRESHOLD ? 4
     : frameHeight > MEDIUM_SCREEN_THRESHOLD ? 3
@@ -257,7 +259,7 @@ export default function StudySetupScreen() {
             >
               <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color={accentColor} />
             </Pressable>
-            {textLoading ? (
+            {hideVerseText ? null : textLoading ? (
               <ActivityIndicator size="small" color={colors.icon} style={styles.textLoader} />
             ) : (
               <Text style={[styles.previewText, { color: colors.text }]} numberOfLines={versePreviewLines}>

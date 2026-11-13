@@ -39,6 +39,7 @@ import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INT
 import { compareRecords, isVisible, mayBeMissing, onePerReference, planCollapse, planMoves, referenceKey, seedTranslation, type VerseRecord } from './translation';
 
 const COLOR_MODE_KEY = 'app_color_mode';
+const HIDE_VERSE_TEXT_KEY = 'app_hide_verse_text';
 // Local cache of the account translation (profiles.translation).
 const BIBLE_VERSION_KEY = 'app_bible_version';
 const KEPT_NOTICES_KEY = 'translation_kept_notices';
@@ -90,6 +91,8 @@ interface AppState {
 
   // Settings
   colorMode: ColorMode;
+  /** Device pref: collection rows and Study setup show references without the verse text. */
+  hideVerseText: boolean;
   bibleVersion: BibleVersion;
   // profiles.display_name: what members of a shared collection see ("Caelan L."). Null until saved.
   displayName: string | null;
@@ -123,6 +126,7 @@ interface AppState {
 
   // Actions - Settings
   setColorMode: (mode: ColorMode) => Promise<void>;
+  setHideVerseText: (hide: boolean) => Promise<void>;
   setBibleVersion: (version: BibleVersion) => Promise<void>;
   setName: (firstName: string, lastName: string) => Promise<void>;
   setReviewMaxIntervalDays: (days: number) => Promise<void>;
@@ -522,6 +526,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sharedCollections: {},
   sharedProgress: {},
   colorMode: 'system',
+  hideVerseText: false,
   bibleVersion: 'ESV',
   displayName: null,
   firstName: null,
@@ -749,18 +754,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     const generation = accountGeneration;
     // Load settings from AsyncStorage (doesn't require auth)
     try {
-      const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort] = await Promise.all([
+      const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText] = await Promise.all([
         AsyncStorage.getItem(COLOR_MODE_KEY),
         AsyncStorage.getItem(BIBLE_VERSION_KEY),
         AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
         getMasteredSort(),
         getInProgressSort(),
+        AsyncStorage.getItem(HIDE_VERSE_TEXT_KEY),
       ]);
 
       const updates: Partial<AppState> = {};
       if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
         updates.colorMode = savedColorMode as ColorMode;
       }
+      if (savedHideVerseText === 'true') updates.hideVerseText = true;
       if (isBibleVersion(savedBibleVersion)) {
         updates.bibleVersion = savedBibleVersion;
       }
@@ -851,6 +858,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       await AsyncStorage.setItem(COLOR_MODE_KEY, mode);
     } catch (e) {
       console.error('[STORE] Failed to save colorMode:', e);
+    }
+  },
+
+  setHideVerseText: async (hide: boolean) => {
+    set({ hideVerseText: hide });
+    try {
+      await AsyncStorage.setItem(HIDE_VERSE_TEXT_KEY, String(hide));
+    } catch (e) {
+      console.error('[STORE] Failed to save hideVerseText:', e);
     }
   },
 
@@ -1787,7 +1803,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       displayName: null,
       firstName: null,
       lastName: null,
-      // Device prefs (colorMode, reviewMaxIntervalDays, masteredSort,
+      // Device prefs (colorMode, hideVerseText, reviewMaxIntervalDays, masteredSort,
       // inProgressSort) and the cached account translation (bibleVersion,
       // replaced from the next account's profile on hydrate) are preserved
       // across sign-out by virtue of being absent from this set call —

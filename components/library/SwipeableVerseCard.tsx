@@ -1,3 +1,4 @@
+import { useAppStore } from '@/lib/store';
 import * as Haptics from 'expo-haptics';
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
@@ -51,16 +52,17 @@ export function SwipeableVerseCard({
   // Text loading state (for verses without cached text)
   const [text, setText] = useState<string>(verse.text || '');
   const [loading, setLoading] = useState(!verse.text);
+  const hideText = useAppStore((state) => state.hideVerseText);
 
   useEffect(() => {
-    if (!verse.text) {
+    if (!verse.text && !hideText) {
       setLoading(true);
       getVerseText(verse)
         .then(({ text }) => setText(text))
         .catch(() => setText('Failed to load verse text'))
         .finally(() => setLoading(false));
     }
-  }, [verse]);
+  }, [verse, hideText]);
 
   // Get highest completed difficulty (90%+)
   const getHighestDifficulty = (): Difficulty | null => {
@@ -213,7 +215,7 @@ export function SwipeableVerseCard({
                   <IconSymbol name="checkmark" size={13} color={colors.success} />
                 ) : null}
               </View>
-              {loading ? (
+              {hideText ? null : loading ? (
                 <Skeleton width="70%" height={14} borderRadius={4} style={styles.previewSkeleton} />
               ) : (
                 <Text style={[styles.preview, { color: colors.icon }]} numberOfLines={1}>

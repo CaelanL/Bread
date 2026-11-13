@@ -12,6 +12,7 @@ import {
   Platform,
   TextInput,
   Alert,
+  Switch,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
@@ -151,6 +152,8 @@ export default function SettingsScreen() {
   const hydrated = useAppStore((state) => state.hydrated);
   const colorMode = useAppStore((state) => state.colorMode);
   const setColorMode = useAppStore((state) => state.setColorMode);
+  const hideVerseText = useAppStore((state) => state.hideVerseText);
+  const setHideVerseText = useAppStore((state) => state.setHideVerseText);
   const bibleVersion = useAppStore((state) => state.bibleVersion);
   const setBibleVersion = useAppStore((state) => state.setBibleVersion);
   const reviewMaxIntervalDays = useAppStore((state) => state.reviewMaxIntervalDays);
@@ -302,6 +305,19 @@ export default function SettingsScreen() {
             <ColorModePicker
               value={colorMode}
               onChange={setColorMode}
+            />
+          </SettingsRow>
+          <SettingsRow
+            icon="eye.slash"
+            label="Hide verses"
+            description="Show only references in collections and Study setup"
+          >
+            <Switch
+              testID="hide-verses-switch"
+              accessibilityLabel="Hide verses"
+              value={hideVerseText}
+              onValueChange={(next) => { void setHideVerseText(next); }}
+              trackColor={{ false: colors.borderLight, true: colors.primary }}
             />
           </SettingsRow>
         </SettingsSection>

@@ -57,6 +57,11 @@ is in a shared one), then the due pill on Mastered, a check or engraved glyph on
 mastered or engraved (engraved also fills the square and washes the row gold; see
 [group progress](group-progress.md#library-cards)). No chevron: the whole row opens it.
 
+**Hide verses.** Settings → Appearance → Hide verses (`hideVerseText`, a device pref in the store,
+kept across sign-out like Theme, default off) drops the text line from a collection's verse rows
+(`SwipeableVerseCard`, which then skips the text fetch) and from Study setup's preview card, where
+the expand button still shows the full text.
+
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
 - It's created lazily by `addVerse`, `copyVerseToCollection` or `updateCollectionSort`, with `created_at`
@@ -246,6 +251,7 @@ way a verse leaves Mastered.
   Verses and Mastered are always present once hydrated.
 
 ## Browser checks
+- `npm run sim -- flow hide-verses`: turn Hide verses on, check My Verses and Study setup show no verse text, turn it off.
 
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-a`: My Verses, Mastered with a "1 due" pill, In Progress, and Psalms.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
