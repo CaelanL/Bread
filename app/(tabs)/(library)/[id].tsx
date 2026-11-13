@@ -1,3 +1,4 @@
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { CollectionHeader, groupProgressLabel, HeaderPill } from '@/components/library/CollectionHeader';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
@@ -199,7 +200,7 @@ export default function CollectionScreen() {
     try {
       await deleteVerse(verseId, id);
     } catch (e) {
-      showErrorToast('Failed to delete verse. Please try again.');
+      showErrorToast(sharedErrorMessage(e, 'Failed to delete verse. Please try again.'));
       throw e; // Re-throw so SwipeableVerseCard can handle animation
     }
   };

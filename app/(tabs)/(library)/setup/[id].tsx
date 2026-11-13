@@ -1,3 +1,4 @@
+import { showErrorToast } from '@/lib/toast';
 import { BAR_HEIGHT, LargeTitle, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
 import { ChunkSizeModal } from '@/components/study/ChunkSizeModal';
 import { ProgressCard } from '@/components/study/ProgressCard';
@@ -169,7 +170,9 @@ export default function StudySetupScreen() {
       {
         text: 'Reset',
         style: 'destructive',
-        onPress: () => resetVerseProgress(id),
+        onPress: () => {
+          resetVerseProgress(id).catch(() => showErrorToast("Couldn't reset progress. Try again."));
+        },
       },
     ]);
   };

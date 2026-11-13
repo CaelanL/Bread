@@ -209,8 +209,8 @@ export default function SettingsScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters');
       return;
     }
     if (newPassword !== confirmPassword) {
