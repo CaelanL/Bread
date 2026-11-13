@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-// The real store against a stubbed HTTP boundary (Supabase REST and auth): deleting a collection
-// is one server call that succeeds whole or changes nothing, and adding a verse the collection
-// already holds keeps its one card.
-test('deleting a collection and re-adding a held verse', async (t) => {
+// The real store against a stubbed HTTP boundary (Supabase REST and auth): deleting a verse or a
+// collection is one server call that succeeds whole or changes nothing, and adding a verse the
+// collection already holds keeps its one card.
+test('deleting a verse or a collection and re-adding a held verse', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-collection-test-'));
   const platform = join(fixture, 'platform.cjs');
   const storage = join(fixture, 'storage.cjs');
@@ -35,12 +35,14 @@ test('deleting a collection and re-adding a held verse', async (t) => {
       sort_preference: null, icon_key: null, shared_collection_id: null },
     { id: 'c-week', client_id: 'week', name: 'This Week', is_default: false, created_at: '2026-11-02T00:00:00Z',
       sort_preference: null, icon_key: null, shared_collection_id: null },
+    { id: 'c-today', client_id: 'today', name: 'Today', is_default: false, created_at: '2026-11-03T00:00:00Z',
+      sort_preference: null, icon_key: null, shared_collection_id: null },
   ];
   const verse = { id: 'v-1', client_id: 'verse-1', book: 'Psalms', chapter: 23, verse_start: 1, verse_end: 1, version: 'ESV',
     progress: { easy: { bestAccuracy: 100, completed: true }, medium: { bestAccuracy: null, completed: false },
       hard: { bestAccuracy: null, completed: false } },
     deleted_at: null, last_practiced_at: '2026-11-10T00:00:00Z', last_chunk_size: 3, last_difficulty: 'medium' };
-  let deleteFails = false;
+  const failing = new Set();
   const writes = [];
   const json = (body, status = 200) => Response.json(body, { status });
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
@@ -54,7 +56,7 @@ test('deleting a collection and re-adding a held verse', async (t) => {
     if (url.pathname.startsWith('/rest/v1/rpc/get_')) return json([]);
     if (method !== 'GET') {
       writes.push([`${method} ${url.pathname}`, init.body ? JSON.parse(init.body) : null]);
-      if (url.pathname === '/rest/v1/rpc/delete_collection' && deleteFails) {
+      if (failing.has(url.pathname)) {
         return json({ code: '57014', message: 'canceling statement due to statement timeout' }, 500);
       }
       return new Response(null, { status: 204 });
@@ -92,11 +94,29 @@ test('deleting a collection and re-adding a held verse', async (t) => {
     assert.equal(added.lastDifficulty, 'medium');
   });
 
+  await t.test('a failed verse delete throws and puts the card back', async () => {
+    writes.length = 0;
+    failing.add('/rest/v1/rpc/delete_verse');
+    await assert.rejects(state().deleteVerse('verse-1', 'today'));
+    failing.clear();
+    assert.deepEqual(writes.map(([w]) => w), ['POST /rest/v1/rpc/delete_verse']);
+    assert.equal(cards('today').length, 1);
+  });
+
+  await t.test('deleting a verse is one server call, and only that card leaves', async () => {
+    writes.length = 0;
+    await state().deleteVerse('verse-1', 'today');
+    assert.deepEqual(writes, [['POST /rest/v1/rpc/delete_verse', { verse_client_id: 'verse-1', collection_client_id: 'today' }]]);
+    assert.equal(cards('today').length, 0);
+    assert.equal(cards('psalms').length, 1, 'the verse stays in its other collections');
+    assert.equal(cards('week').length, 1);
+  });
+
   await t.test('a failed delete throws and changes nothing locally', async () => {
     writes.length = 0;
-    deleteFails = true;
+    failing.add('/rest/v1/rpc/delete_collection');
     await assert.rejects(state().deleteCollection('week'));
-    deleteFails = false;
+    failing.clear();
     assert.deepEqual(writes.map(([w]) => w), ['POST /rest/v1/rpc/delete_collection']);
     assert.ok(state().collections.some((c) => c.id === 'week'));
     assert.equal(cards('week').length, 1);

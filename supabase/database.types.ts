@@ -409,6 +409,9 @@ isOneToOne: false
 "delete_own_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"delete_verse":
+{ Args: { "collection_client_id": string,"verse_client_id": string }; Returns: undefined
+                           },
 "evict_lru_verses":
 { Args: { "p_max_count": number,"p_needed": number,"p_version": string }; Returns: number
                            },

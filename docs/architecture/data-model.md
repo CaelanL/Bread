@@ -132,10 +132,7 @@ Unique: `(verse_id, collection_id)`. Indexes on both FKs.
 
 RLS uses `EXISTS` on `user_verses.user_id` to require verse ownership for reads, inserts and deletes.
 
-A verse can live in any number of collections. Removing a verse from
-the *last* collection it belongs to triggers either a soft-delete
-(if mastered) or a hard-delete (if not), in the `deleteVerse` store
-action.
+A verse can be in many collections; see `delete_verse` for leaving the last.
 
 ### `verse_cache`
 
@@ -243,6 +240,7 @@ incrementally — the cron is the only writer.
 | `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment. See `docs/features/notifications.md` |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
 | `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction INSERT RLS checks only the verse owner) |
+| `delete_verse`, `delete_collection` | invoker, authenticated only | [delete rule](../features/library.md#deleting-a-verse), atomic |
 | shared collection functions | invoker wrappers | [table](../features/shared-collections.md#functions) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |

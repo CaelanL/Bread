@@ -170,7 +170,8 @@ Tap a custom collection's header icon, or Change icon in its menu, to change it.
 
 ## Deleting a verse
 
-`deleteVerse(id, collectionId)` in the store removes the verse from the store first, then:
+`deleteVerse(id, collectionId)` in the store removes the card first, then makes one call to
+`public.delete_verse` (`supabase/migrations/20261112230000_delete_verse.sql`), which:
 
 1. Removes the junction row for this collection.
 2. If other collections still hold the verse, stops.
@@ -178,12 +179,11 @@ Tap a custom collection's header icon, or Change icon in its menu, to change it.
 4. If none do and it isn't mastered, hard-deletes it. Junction rows cascade.
    `session_attempts` rows survive, since they have no foreign key to the verse.
 
-A failed lookup, junction delete or step 4 (owner DELETE policy; none deleted
-fails) restores the local list and rethrows. Step 3 only logs.
+It succeeds whole or changes nothing, and a retry after success is a no-op. It refuses a shared
+copy, whose verses leave through the group. A failure puts the card back and rethrows.
 
-The same rule has a SQL twin, `private.remove_verse_from_collection`, used when a member
-leaves or is removed from a [shared collection](shared-collections.md#leave-and-remove) and
-when an editor removes a reference. Change both together.
+`delete_collection` and `private.remove_verse_from_collection` ([shared leave and
+remove](shared-collections.md#leave-and-remove)) repeat the rule. Change all three together.
 
 `SwipeableVerseCard` picks its confirmation text from the same facts, using
 `collectionCount` from `[id].tsx`:
@@ -263,3 +263,4 @@ way a verse leaves Mastered.
 - 2026-04-28 · `last_practiced_at` is per verse, not per collection, with no backfill · Per collection would thread `collectionId` through the study loop and needs a special case for virtual collections. Verses float as they're practiced.
 - 2026-04-28 · Never-practiced verses sort after practiced ones · Recently practiced work floats to the top, and new verses queue below.
 - 2026-04-28 · Mastered defaults to Due first, and every other collection to Recent · Due first is the useful view for reviewing.
+- 2026-11-12 · One `delete_verse` call, not four requests · A failure partway left a verse in no collection.

@@ -120,8 +120,8 @@ can treat everything else in a copy as the member's own verse.
 ## Leave and remove
 
 `private.drop_member_collection` deletes the membership, then for each verse in the
-member's copy runs `private.remove_verse_from_collection`, the SQL twin of `deleteVerse`
-in `lib/store/index.ts` ([library.md](library.md#deleting-a-verse)): drop the link; a verse
+member's copy runs `private.remove_verse_from_collection`, the rule `delete_verse` applies
+for `deleteVerse` ([library.md](library.md#deleting-a-verse)): drop the link; a verse
 in no other collection is soft-deleted when mastered and hard-deleted otherwise. Then it
 soft-deletes the copy, keeping its `shared_collection_id` so a rejoin restores it.
 Nothing of another member's changes. The owner can't leave or be removed.

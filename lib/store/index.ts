@@ -1586,68 +1586,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
 
-    try {
-      // Get server IDs for verse and collection
-      const { data: verseData } = await supabase
-        .from('user_verses')
-        .select('id')
-        .eq('client_id', id)
-        .single();
-
-      const { data: collectionData } = await supabase
-        .from('user_collections')
-        .select('id')
-        .eq('client_id', collectionId)
-        .single();
-
-      if (!verseData || !collectionData) {
-        console.error('[STORE] Verse or collection not found');
-        throw new Error('Verse not found');
-      }
-
-      // Remove from junction table (remove from this collection)
-      const { error: junctionError } = await supabase
-        .from('verse_collections')
-        .delete()
-        .eq('verse_id', verseData.id)
-        .eq('collection_id', collectionData.id);
-
-      if (junctionError) {
-        console.error('[STORE] Failed to remove verse from collection:', junctionError);
-        throw new Error('Failed to delete verse');
-      }
-
-      // Check if verse is still in any other collections
-      const { count } = await supabase
-        .from('verse_collections')
-        .select('*', { count: 'exact', head: true })
-        .eq('verse_id', verseData.id);
-
-      if (count === 0) {
-        // No collections left - delete or soft-delete the verse itself
-        if (isMastered) {
-          // Soft delete - keep for Mastered list
-          const { error } = await supabase
-            .from('user_verses')
-            .update({ deleted_at: new Date().toISOString() })
-            .eq('id', verseData.id);
-
-          if (error) {
-            console.error('[STORE] Failed to soft delete verse:', error);
-          }
-        } else {
-          // Hard delete - remove completely
-          await hardDeleteVerses([verseData.id]);
-
-        }
-      }
-
-      return { wasMastered: isMastered };
-    } catch (error) {
-      // Rollback on failure
+    // One transaction on the server: the verse leaves, and if no other collection holds it, it is
+    // soft-deleted when mastered and deleted otherwise (supabase/migrations/*_delete_verse.sql).
+    const { error } = await supabase.rpc('delete_verse', { verse_client_id: id, collection_client_id: collectionId });
+    if (error) {
+      console.error('[STORE] Failed to delete verse:', error);
       set({ verses: previousVerses });
-      throw error;
+      throw new Error('Failed to delete verse');
     }
+    return { wasMastered: isMastered };
   },
 
   updateVerseProgress: async (id, difficulty, accuracy, fullSession = false) => {
