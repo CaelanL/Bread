@@ -19,7 +19,7 @@ import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
-import { claimWelcome, markWelcomeShown } from '@/lib/welcome';
+import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
 import {
   installDevTools as installNotifDevTools,
   registerDeepLinkHandler,
@@ -89,7 +89,8 @@ function RootLayoutNav() {
   // Waits for the tabs, so a redirect still settling (the sign-in gate, dev-sign-in's `next`) can't
   // replace the invite right after it's pushed.
   // With no invite, the 2.0 "What's new in Bread" walkthrough opens instead, once per account (see
-  // lib/welcome.ts), holding the card the same way. An invite this launch leaves it for the next.
+  // lib/welcome.ts), holding the card the same way. After an invite this launch it makes no new claim,
+  // but still shows one won before the invite landed (peekWelcome).
   const inTabs = segments[0] === '(tabs)';
   const sawInvite = useRef(false);
   if (segments[0] === 'join') sawInvite.current = true;
@@ -107,7 +108,7 @@ function RootLayoutNav() {
       .then(async (invite) => {
         if (settled) return;
         if (!invite) {
-          const welcome = !sawInvite.current && await claimWelcome(userId);
+          const welcome = sawInvite.current ? await peekWelcome(userId) : await claimWelcome(userId);
           if (settled) return;
           settled = true;
           if (welcome) {

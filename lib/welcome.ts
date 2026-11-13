@@ -30,6 +30,15 @@ export function claimWelcome(userId: string): Promise<boolean> {
   return claim;
 }
 
+/**
+ * This run's claim answer without making one: the claim already made (in flight or settled), else
+ * false. An invite that lands while a claim is in flight takes the screen; on the next return to the
+ * tabs this picks up a won claim, so the walkthrough the server marked seen still shows.
+ */
+export function peekWelcome(userId: string): Promise<boolean> {
+  return claims.get(userId) ?? Promise.resolve(false);
+}
+
 /** Call as the walkthrough opens, so a later claim in this run answers false. */
 export function markWelcomeShown(userId: string) {
   claims.set(userId, Promise.resolve(false));

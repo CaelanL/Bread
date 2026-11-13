@@ -220,7 +220,9 @@ and rows made later default to now, so new accounts never see it. The pending-in
 when there's no invite and none opened this launch, calls `claimWelcome` (`lib/welcome.ts`): one
 update that sets the column only while it's null. The walkthrough opens only if that returns the
 row, so it shows on one device, once, even across relaunches or two phones; a failed update shows
-nothing and the next launch tries again. It holds the reminders card like the join modal. Share a
+nothing and the next launch tries again. An invite that lands while the update is in flight takes
+the screen; back on the tabs, `peekWelcome` picks up a won claim without making a new one, so the
+walkthrough still shows. It holds the reminders card like the join modal. Share a
 collection opens the Library, or `/share/new` when there's no collection of your own. Locally, seed
 accounts start as seen. Flow: `npm run sim -- flow welcome` (marks reader-a unseen first).
 
