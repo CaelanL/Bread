@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Radius } from '@/constants/theme';
+import { Colors, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { COLLECTION_ICONS, DEFAULT_COLLECTION_ICON, isCollectionIconKey, type CollectionIconKey } from '@/lib/collections/icons';
 
@@ -15,7 +14,6 @@ export function CollectionIconPicker({ currentKey, onSave, onClose }: {
   onClose: () => void;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
-  const { bottom } = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
   const columns = fontScale > 1.6 ? 2 : width < 360 || fontScale > 1.2 ? 3 : 4;
   const initial = currentKey ?? DEFAULT_COLLECTION_ICON;
@@ -49,17 +47,14 @@ export function CollectionIconPicker({ currentKey, onSave, onClose }: {
   };
 
   return (
-    <Modal transparent visible animationType="slide" onRequestClose={onClose}>
+    <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <View style={styles.modal}>
         <Pressable
           accessible={false}
           onPress={onClose}
           style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]}
         />
-        <View accessibilityViewIsModal style={[styles.sheet, {
-          backgroundColor: colors.card,
-          paddingBottom: Math.max(bottom, 16),
-        }]}>
+        <View accessibilityViewIsModal style={[styles.sheet, { backgroundColor: colors.card }]}>
           <View style={styles.header}>
             <View style={styles.titleBlock}>
               <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
@@ -117,10 +112,10 @@ export function CollectionIconPicker({ currentKey, onSave, onClose }: {
             accessibilityState={{ disabled: saving, busy: saving }}
             disabled={saving}
             onPress={save}
-            style={[styles.save, { backgroundColor: colors.primary }]}
+            style={[styles.save, { backgroundColor: Colors.light.primary }]}
           >
-            {saving && <ActivityIndicator color={Colors.light.text} />}
-            <Text style={[styles.saveText, { color: Colors.light.text }]}>{saving ? 'Saving…' : 'Save icon'}</Text>
+            {saving && <ActivityIndicator color={colors.white} />}
+            <Text style={[styles.saveText, { color: colors.white }]}>{saving ? 'Saving…' : 'Save icon'}</Text>
           </Pressable>
         </View>
       </View>
@@ -129,16 +124,15 @@ export function CollectionIconPicker({ currentKey, onSave, onClose }: {
 }
 
 const styles = StyleSheet.create({
-  modal: { flex: 1, justifyContent: 'flex-end' },
+  // A centered card like ModalCard, fading in, rather than a sheet sliding up.
+  modal: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   sheet: {
-    width: '100%',
-    maxWidth: 560,
-    maxHeight: '78%',
-    alignSelf: 'center',
-    borderTopLeftRadius: Radius.huge,
-    borderTopRightRadius: Radius.huge,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    width: '90%',
+    maxWidth: 440,
+    maxHeight: '80%',
+    borderRadius: Radius.huge,
+    boxShadow: Shadows.floating,
+    padding: 16,
     gap: 12,
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -169,13 +163,14 @@ const styles = StyleSheet.create({
   check: { position: 'absolute', top: 5, right: 5 },
   label: { fontSize: 12, fontWeight: '500', textAlign: 'center' },
   error: { fontSize: 14 },
+  // Start session's button: the same bronze in both themes, white text.
   save: {
     minHeight: 48,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.full,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  saveText: { fontSize: 16, fontWeight: '700' },
+  saveText: { fontSize: 16, fontWeight: '600' },
 });
