@@ -3,10 +3,11 @@ import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppHeader } from '@/components/app-header';
 import { CollectionArt } from '@/components/collections/CollectionArt';
 import { CollectionPassages } from '@/components/collections/CollectionPassages';
+import { HeaderPill } from '@/components/library/CollectionHeader';
 import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
+import { TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, Fonts, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
@@ -28,6 +29,7 @@ function CollectionIntroduction({ collection, accountVersion }: {
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { bottom } = useSafeAreaInsets();
+  const barHeight = useTopBarHeight();
   // Preview only. Adding uses the account translation.
   const [version, setVersion] = useState(accountVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
@@ -96,16 +98,18 @@ function CollectionIntroduction({ collection, accountVersion }: {
 
   return (
     <>
-      <AppHeader
-        leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }}
-        rightButton={{
-          label: version,
-          accessibilityLabel: `Translation, ${version}`,
-          testID: 'curated-translation-picker',
-          disabled: working,
-          onPress: () => setVersionPickerVisible(true),
-        }}
-      />
+      <TopBar onBack={goBack}>
+        <View style={styles.pill}>
+          <HeaderPill
+            icon="book.closed"
+            label={version}
+            accessibilityLabel={`Translation, ${version}`}
+            testID="curated-translation-picker"
+            disabled={working}
+            onPress={() => setVersionPickerVisible(true)}
+          />
+        </View>
+      </TopBar>
       <BibleTranslationPicker
         version={version}
         visible={versionPickerVisible}
@@ -117,7 +121,7 @@ function CollectionIntroduction({ collection, accountVersion }: {
           setError(undefined);
         }}
       />
-      <ScrollView contentContainerStyle={styles.content} testID="collection-introduction">
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: barHeight + 8 }]} testID="collection-introduction">
         <CollectionArt icon={collection.icon} size="hero" />
         <View style={styles.intro}>
           <Text style={[styles.eyebrow, { color: colors.icon }]}>
@@ -171,6 +175,7 @@ function CollectionIntroduction({ collection, accountVersion }: {
 
 export default function CuratedCollectionScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
+  const barHeight = useTopBarHeight();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { user } = useAuth();
   const hydrated = useHydrated();
@@ -187,7 +192,8 @@ export default function CuratedCollectionScreen() {
         />
       ) : (
         <>
-          <AppHeader leftButton={{ icon: 'chevron.left', label: 'Back', onPress: goBack }} />
+          <TopBar onBack={goBack} />
+          <View style={{ height: barHeight }} />
           {collection ? (
             <ActivityIndicator color={colors.primary} style={styles.loading} />
           ) : (
@@ -210,6 +216,7 @@ export default function CuratedCollectionScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  pill: { marginRight: 10 },
   content: { paddingHorizontal: 16, paddingBottom: 24, gap: 20 },
   intro: { gap: 7 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.3 },

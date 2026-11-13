@@ -1,5 +1,4 @@
-import { AppHeader } from '@/components/app-header';
-import { BAR_HEIGHT } from '@/components/ui/TopBar';
+import { BAR_HEIGHT, LargeTitle, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
 import { ChunkSizeModal } from '@/components/study/ChunkSizeModal';
 import { ProgressCard } from '@/components/study/ProgressCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -62,6 +61,7 @@ export default function StudySetupScreen() {
   // breakpoint comparisons reflect usable height across iPhone
   // models, not raw window height.
   const insets = useSafeAreaInsets();
+  const barHeight = useTopBarHeight();
   const frameHeight = useSafeAreaFrame().height;
   const versePreviewLines = frameHeight > LARGE_SCREEN_THRESHOLD ? 4
     : frameHeight > MEDIUM_SCREEN_THRESHOLD ? 3
@@ -205,7 +205,7 @@ export default function StudySetupScreen() {
   if (!verse) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <AppHeader />
+        <TopBar onBack={() => router.back()} />
         <View style={[styles.container, styles.centered]}>
           <Text style={{ color: colors.text }}>Verse not found</Text>
         </View>
@@ -215,7 +215,9 @@ export default function StudySetupScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader rightButton={{ icon: 'ellipsis', accessibilityLabel: 'More', onPress: () => setMenuVisible(true) }} />
+      <TopBar onBack={() => router.back()}>
+        <TopBarButton icon="ellipsis" label="More" onPress={() => setMenuVisible(true)} />
+      </TopBar>
 
       <PopoverMenu
         visible={menuVisible}
@@ -235,11 +237,12 @@ export default function StudySetupScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + START_BUTTON_HEIGHT + 32 },
+          { paddingTop: barHeight + 8, paddingBottom: insets.bottom + START_BUTTON_HEIGHT + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.formColumn}>
+          <LargeTitle title="Study setup" />
           {/* Verse Preview */}
           <View style={[styles.previewCard, { backgroundColor: colors.cardAlt }]}>
             <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
@@ -447,8 +450,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    // paddingBottom is computed dynamically (insets + pill height)
+    // paddingTop sits under the floating bar; paddingBottom is computed dynamically (insets + pill height)
     // via inline style on the ScrollView.
   },
   formColumn: {
