@@ -12,9 +12,8 @@ import { useCuratedSaverCount } from '@/lib/store';
 
 const lastCardPress = { current: 0 };
 
-export function CuratedCollectionCard({ collection, compact = false, grouped = false }: {
+export function CuratedCollectionCard({ collection, grouped = false }: {
   collection: CuratedCollection;
-  compact?: boolean;
   grouped?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -28,30 +27,30 @@ export function CuratedCollectionCard({ collection, compact = false, grouped = f
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${collection.title}, ${collection.passages.length} passages${saverCount === undefined ? '' : `, ${saverCountLabel(saverCount)}`}`}
+      accessibilityLabel={`${collection.title}, ${collection.passages.length} passages${saverCount ? `, ${saverCountLabel(saverCount)}` : ''}`}
       testID={`discover-${collection.id}`}
       onPress={handlePress}
       style={({ pressed }) => [
         styles.card,
-        compact ? styles.tile : styles.row,
+        styles.row,
         grouped && styles.grouped,
-        { backgroundColor: pressed ? colors.cardAlt : colors.card, borderColor: colors.border },
+        grouped
+          ? pressed && styles.pressed
+          : { backgroundColor: pressed ? colors.cardAlt : colors.card, borderColor: colors.border },
       ]}
     >
-      <CollectionArt icon={collection.icon} size={compact ? 'tile' : 'thumbnail'} />
+      <CollectionArt icon={collection.icon} size="thumbnail" />
       <View style={styles.copy}>
         <Text style={[styles.title, { color: colors.text }]}>{collection.title}</Text>
-        {!compact && (
-          <Text style={[styles.subtitle, { color: colors.icon }]}>{collection.subtitle}</Text>
-        )}
+        <Text style={[styles.subtitle, { color: colors.icon }]}>{collection.subtitle}</Text>
         <Text style={[styles.count, { color: colors.icon }]}>{collection.passages.length} passages</Text>
-        {saverCount !== undefined && (
+        {!!saverCount && (
           <Text testID={`collection-savers-${collection.id}`} style={[styles.count, { color: colors.icon }]}>
             {saverCountLabel(saverCount)}
           </Text>
         )}
       </View>
-      {!compact && <IconSymbol name="chevron.right" size={16} color={colors.icon} />}
+      <IconSymbol name="chevron.right" size={16} color={colors.icon} />
     </Pressable>
   );
 }
@@ -63,13 +62,13 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 12,
   },
-  tile: {
-    flex: 1,
-  },
+  // Flat in a list on the page, with the list's own hairlines.
   grouped: {
     borderWidth: 0,
-    padding: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 12,
   },
+  pressed: { opacity: 0.6 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -14,8 +14,9 @@ What those numbers mean is in `docs/features/insights.md`.
 
 ## Explore collections
 
-Home groups the Explore heading and two suggested collections on one
-surface. See all opens the full catalog. These cards use bundled artwork
+Under the Explore heading, two suggested collections sit as flat rows on the page (art
+thumbnail, title, subtitle, passages, saves), with a hairline between them. The streak row
+above sits between hairlines too, with no card. See all opens the full catalog. These rows use bundled artwork
 and passage counts, so browsing does not fetch Bible text.
 
 An introduction lists tappable references. It preloads the first two
@@ -47,7 +48,7 @@ unknown icons render the Bible symbol. Built-in collection icons are fixed.
 ### Community saves
 
 Home, Explore and introductions show all-time unique accounts that saved each
-curated collection. A first successful import contributes once across translations.
+curated collection, as "Added by 3 people" (`saverCountLabel`). With nobody yet, the line is left out. A first successful import contributes once across translations.
 Editing, emptying, renaming, deleting or re-adding the personal copy leaves that
 contribution unchanged. This is not a count of current copies or completed passages.
 

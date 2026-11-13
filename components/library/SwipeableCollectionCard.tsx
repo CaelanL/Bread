@@ -6,7 +6,7 @@ import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/S
 import { firstName } from '@/lib/shared/display-name';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
-import { Colors, Motion, Radius } from '@/constants/theme';
+import { Colors, Motion, Radius, withAlpha } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
@@ -14,6 +14,7 @@ import { collectionRemoval, type Emblem } from '@/lib/shared/progress';
 import type { Collection, SharedRole } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -26,7 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-export const COLLECTION_ROW_GAP = 12;
+export const COLLECTION_ROW_GAP = 0;
 
 export interface CollectionReorder {
   index: number;
@@ -78,7 +79,6 @@ export function SwipeableCollectionCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)';
   const { height: windowHeight } = useWindowDimensions();
   const [menuTop, setMenuTop] = useState<number | null>(null);
   // Closed when the Library loses focus, so a modal route can't present over it.
@@ -211,7 +211,24 @@ export function SwipeableCollectionCard({
     >
       {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.card, { backgroundColor: engraved ? colors.engravedCard : colors.card, borderColor }, cardStyle]}>
+        <Animated.View style={[styles.card, { backgroundColor: colors.background, borderTopColor: colors.separator }, index > 0 && styles.divided, cardStyle]}>
+          {/* A gold glow behind the icon and name, faded on every side so it never shows the row's edges. */}
+          {engraved && (
+            <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+              <LinearGradient
+                colors={[withAlpha(colors.tint, 0), colors.engravedFill, withAlpha(colors.tint, 0)]}
+                locations={[0, 0.2, 0.85]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <LinearGradient
+                colors={[colors.background, withAlpha(colors.background, 0), withAlpha(colors.background, 0), colors.background]}
+                locations={[0, 0.35, 0.65, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+          )}
           <Pressable
             style={styles.cardButton}
             onPress={handlePress}
@@ -246,12 +263,12 @@ export function SwipeableCollectionCard({
                     accessibilityLabel={emblemLabel}
                     style={[
                       styles.badge,
-                      { backgroundColor: engraved ? colors.tint : colors.success, borderColor: engraved ? colors.engravedCard : colors.card },
+                      { backgroundColor: engraved ? colors.tint : colors.success, borderColor: colors.background },
                     ]}
                   >
                     {engraved
-                      ? <EngravedIcon size={11} color={colors.card} />
-                      : <IconSymbol name="checkmark" size={11} color={colors.card} weight="bold" />}
+                      ? <EngravedIcon size={11} color={colors.background} />
+                      : <IconSymbol name="checkmark" size={11} color={colors.background} weight="bold" />}
                   </View>
                 )}
               </View>
@@ -265,7 +282,6 @@ export function SwipeableCollectionCard({
             {!editing && (
               <View style={styles.cardRight}>
                 <DueCountPill count={dueCount} />
-                <IconSymbol name="chevron.right" size={18} color={colors.icon} />
               </View>
             )}
           </Pressable>
@@ -319,23 +335,20 @@ const styles = StyleSheet.create({
   container: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: Radius.xxl,
   },
+  // A flat row on the page, like a verse row in a collection: a hairline between rows, no card.
   card: {
     flexDirection: 'row',
-    borderRadius: Radius.xxl,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+  },
+  divided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   cardButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   cardLeft: {
     flexDirection: 'row',

@@ -18,6 +18,8 @@ export async function readCollectionSavers(
   return Object.fromEntries(data.map(({ catalog_id, saver_count }) => [catalog_id, saver_count]));
 }
 
+/** "Added by 3 people": how many have this collection in their Library. Nobody yet shows no line. */
 export function saverCountLabel(count: number): string {
-  return count === 1 ? '1 person saved' : `${count.toLocaleString()} people saved`;
+  if (count === 0) return '';
+  return count === 1 ? 'Added by 1 person' : `Added by ${count.toLocaleString()} people`;
 }

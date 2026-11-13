@@ -62,7 +62,6 @@ export const Colors = {
     recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(176,141,87,0.12)',
     engravedFill: 'rgba(245,158,11,0.12)', // Engraved pill and engraved collection icon
-    engravedCard: '#fef8ee',       // Library card of an engraved collection: card + a gold wash, opaque over the swipe action
     // A shared collection's group progress line at 100%: light to deep green, champagne to bronze
     masteredBarStart: '#86efac',
     masteredBarEnd: '#16a34a',
@@ -106,7 +105,6 @@ export const Colors = {
     recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(201,169,98,0.15)',
     engravedFill: 'rgba(245,158,11,0.15)',
-    engravedCard: '#393022',
     masteredBarStart: '#86efac',
     masteredBarEnd: '#22c55e',
     engravedBarStart: '#e7ce96',

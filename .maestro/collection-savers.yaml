@@ -22,7 +22,10 @@ name: collection-savers
       text: Light
     direction: DOWN
 - tapOn: Light
+# With nobody yet, the saves line is empty, so there's nothing to assert before the first add.
 - runFlow:
+    when:
+      true: ${output.savers.before > 0}
     file: subflows/assert-collection-savers.yaml
     env:
       SAVER_LABEL: ${output.savers.beforeLabel}
