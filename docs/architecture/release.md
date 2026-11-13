@@ -32,13 +32,10 @@ How a change gets from a branch to phones. Three things reach prod, on three clo
 - A match means the change is JS-only: `publish_ios_update` publishes an OTA update to the `production` branch.
 - No match means a native change: `build_ios` builds, and `submit_ios_build` submits to App Store Connect.
 
-**The workflow is paused.** The `build_ios`, `submit_ios_build` and `publish_ios_update` jobs are removed from the file, so a merge ships no build and no OTA update, and step 7 still prints "Deploy live". To end the pause, on the branch of the release that should ship:
+- `submit_ios_build` uploads the build to App Store Connect (`eas submit`). It doesn't submit it for review: that, the What's New text and the release are done by hand in App Store Connect.
+- Step 7 of `npm run release` waits up to 75 minutes for the run and prints "Submitted to the App Store" when the submit job passed, "Deploy live" otherwise.
 
-```
-git restore --source=7787992 -- .eas/workflows/deploy.yml
-```
-
-Don't use `git revert`: the release squash-merges, so that would undo the whole commit that paused it. Edit this section when the jobs return.
+To pause shipping for a release, remove the three jobs after `get_ios_build` on that release's branch and say so at the top of the file; step 7 then prints "Deploy live" with nothing reaching phones.
 
 ## What can ship over the air
 
