@@ -1,0 +1,82 @@
+# reader-a, an account from before 2.0, sees the walkthrough once: pages through it, goes back,
+# and Share a collection opens the Library. A relaunch doesn't show it again, and reader-b, marked
+# seen the way a new account starts, never sees it.
+appId: com.caelanliu.biblemem
+name: welcome
+---
+- runScript:
+    file: scripts/welcome.js
+    env:
+      READER: reader-a
+      MODE: unseen
+- runScript:
+    file: scripts/welcome.js
+    env:
+      READER: reader-b
+      MODE: seen
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a
+- extendedWaitUntil:
+    visible:
+      id: "welcome-page-1"
+    timeout: 30000
+- assertVisible: "Version 2.0"
+- assertVisible: "What’s new in Bread"
+- assertVisible: "Shared collections"
+- waitForAnimationToEnd
+- takeScreenshot: welcome-1-whats-new
+- tapOn:
+    id: "welcome-next"
+- extendedWaitUntil:
+    visible: "Mastered by everyone"
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: welcome-2-together
+- tapOn:
+    id: "welcome-next"
+- assertVisible: "Share in three taps"
+- takeScreenshot: welcome-3-share
+- tapOn:
+    id: "welcome-back"
+- assertVisible: "Memorize together"
+- tapOn:
+    id: "welcome-next"
+- tapOn:
+    id: "welcome-share"
+- extendedWaitUntil:
+    visible:
+      id: "library-add"
+    timeout: 10000
+- assertNotVisible:
+    id: "welcome-page-3"
+- tapOn:
+    text: "Maybe later"
+    optional: true
+- takeScreenshot: welcome-4-library
+- runScript:
+    file: scripts/welcome.js
+    env:
+      READER: reader-a
+      MODE: check-seen
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "tab-settings"
+    timeout: 60000
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: "welcome-page-1"
+- takeScreenshot: welcome-5-relaunch
+- runFlow: subflows/sign-out.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b
+- extendedWaitUntil:
+    visible:
+      id: "tab-settings"
+    timeout: 30000
+- tapOn:
+    text: "Maybe later"
+    optional: true
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: "welcome-page-1"
+- takeScreenshot: welcome-6-reader-b

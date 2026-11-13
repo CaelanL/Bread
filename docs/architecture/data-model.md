@@ -7,8 +7,8 @@ Schema: `supabase/migrations/`. Generated columns and types:
 
 | Table | Owner | Purpose |
 |---|---|---|
-| `profiles` | per-user | account `translation` (`bible-versions.md`), names ([auth](auth.md#display-name)) |
-| `usage_daily` | per-user | Free/Supporter rate-limit counters (transcribe seconds, evaluate count, Bible fetch count) |
+| `profiles` | per-user | account `translation` (`bible-versions.md`), names ([auth](auth.md#display-name)), 2.0 flag ([nav](navigation-and-routing.md#whats-new-in-20)) |
+| `usage_daily` | per-user | Free/Supporter rate-limit counters |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
 | `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits, see `docs/architecture/bible-api-and-caching.md` |
@@ -256,7 +256,7 @@ incrementally — the cron is the only writer.
 
 ```
 auth.users
- ├── profiles (account translation, display name)
+ ├── profiles (translation, names, welcome)
  ├── shared_collections ── members, verses (references), invites
  ├── user_collections (soft-delete; shared_collection_id → shared_collections)
  │     └── verse_collections (junction) ─── user_verses (soft-delete, no text)

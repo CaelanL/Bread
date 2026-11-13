@@ -123,14 +123,14 @@ export type Database = {
                   ]
                 },"profiles": {
                   Row: {
-                    "created_at": string,"display_name": string | null,"first_name": string | null,"last_name": string | null,"translation": string | null,"updated_at": string,"user_id": string
+                    "created_at": string,"display_name": string | null,"first_name": string | null,"last_name": string | null,"translation": string | null,"updated_at": string,"user_id": string,"welcome_v2_seen_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"last_name"?: string | null,"translation"?: string | null,"updated_at"?: string,"user_id": string
+                    "created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"last_name"?: string | null,"translation"?: string | null,"updated_at"?: string,"user_id": string,"welcome_v2_seen_at"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"last_name"?: string | null,"translation"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"last_name"?: string | null,"translation"?: string | null,"updated_at"?: string,"user_id"?: string,"welcome_v2_seen_at"?: string | null
                   }
                   Relationships: [
                     

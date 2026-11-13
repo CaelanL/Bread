@@ -82,7 +82,7 @@ Two modal styles, both handled at the root Stack:
 
 ### Modal routes
 
-`app/join/[code].tsx`, `app/join/index.tsx` and `app/share/[id].tsx` are `transparentModal`
+`app/join/[code].tsx`, `app/join/index.tsx`, `app/share/[id].tsx` and `app/welcome.tsx` are `transparentModal`
 with a fade, each a `ModalCard` over whatever was open
 ([shared collections](../features/shared-collections.md#in-the-app)). An invite can open over
 the share modal, and Open leaves both with one `router.dismissTo(<collection>)`.
@@ -211,6 +211,19 @@ retried next launch, and opening any invite marks the install checked. It's a gu
 so a household on one Wi-Fi can match the wrong invite: the join modal still needs Join.
 Flow: `npm run sim -- flow invite-handoff`.
 
+### What's new in 2.0
+
+`app/welcome.tsx` is a three-page walkthrough (Version 2.0 "What's new in Bread", memorizing
+together, sharing) for accounts from before 2.0, once per account. `profiles.welcome_v2_seen_at` is null until it's
+claimed: migration `20261113030000_welcome_v2` gave every account then a profile row with it null,
+and rows made later default to now, so new accounts never see it. The pending-invite effect above,
+when there's no invite and none opened this launch, calls `claimWelcome` (`lib/welcome.ts`): one
+update that sets the column only while it's null. The walkthrough opens only if that returns the
+row, so it shows on one device, once, even across relaunches or two phones; a failed update shows
+nothing and the next launch tries again. It holds the reminders card like the join modal. Share a
+collection opens the Library, or `/share/new` when there's no collection of your own. Locally, seed
+accounts start as seen. Flow: `npm run sim -- flow welcome` (marks reader-a unseen first).
+
 ## Header / tab bar
 
 - Tab bar uses `HapticTab` (`components/haptic-tab.tsx`) for haptic
@@ -267,5 +280,6 @@ Flow: `npm run sim -- flow invite-handoff`.
 
 ## Decisions
 
+- 2026-11-12 · The 2.0 walkthrough is claimed on the server before it shows, not marked seen on close · Marking on close shows it twice when two phones open at once, the app is killed before the write lands, or the write fails. At most once is the safe side for a one-time walkthrough.
 - 2026-11-12 · Swipe back from anywhere on pushed screens, and swipe-to-delete rows claim only leftward drags while closed · Swiping back from a collection often took two tries (Caelan's pass 4, C23): a verse row's pan activated at 10 pt in either direction, so a back swipe starting on a row raced the edge recognizer, and react-native-screens only makes scroll views wait for the edge, not gesture-handler pans. Swiping from anywhere is how Slack, Spotify and iOS 26's own apps go back; react-native-screens turns off iOS 26's content swipe and offers this instead.
 - 2026-11-12 · The shared-collection modals (share, join, typed code, display name) are native modal routes rendering `ModalCard`, not RN `Modal`s in screen state · An invite opened over the RN-modal share sheet left the Library unable to present its next modal; native modal routes unwind together.

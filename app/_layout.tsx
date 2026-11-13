@@ -19,6 +19,7 @@ import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
+import { claimWelcome, markWelcomeShown } from '@/lib/welcome';
 import {
   installDevTools as installNotifDevTools,
   registerDeepLinkHandler,
@@ -54,7 +55,8 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { isAuthenticated, isLoading, sessionRestored } = useAuth();
+  const { isAuthenticated, isLoading, sessionRestored, user } = useAuth();
+  const userId = user?.id;
   const segments = useSegments();
   const pathname = usePathname();
   const navigationState = useRootNavigationState();
@@ -86,9 +88,13 @@ function RootLayoutNav() {
   // holds it while mounted and releases it as it unmounts.
   // Waits for the tabs, so a redirect still settling (the sign-in gate, dev-sign-in's `next`) can't
   // replace the invite right after it's pushed.
+  // With no invite, the 2.0 "What's new in Bread" walkthrough opens instead, once per account (see
+  // lib/welcome.ts), holding the card the same way. An invite this launch leaves it for the next.
   const inTabs = segments[0] === '(tabs)';
+  const sawInvite = useRef(false);
+  if (segments[0] === 'join') sawInvite.current = true;
   useEffect(() => {
-    if (!isAuthenticated || !navigationState?.key || !inTabs) return;
+    if (!userId || !navigationState?.key || !inTabs) return;
     let settled = false;
     const flags = useUxFlagsStore.getState();
     flags.setInviteOpen(true);
@@ -98,13 +104,21 @@ function RootLayoutNav() {
         console.error('[join] Failed to read the kept invite:', e);
         return null;
       })
-      .then((invite) => {
+      .then(async (invite) => {
         if (settled) return;
-        settled = true;
         if (!invite) {
-          flags.setInviteOpen(false);
+          const welcome = !sawInvite.current && await claimWelcome(userId);
+          if (settled) return;
+          settled = true;
+          if (welcome) {
+            markWelcomeShown(userId);
+            router.push('/welcome');
+          } else {
+            flags.setInviteOpen(false);
+          }
           return;
         }
+        settled = true;
         router.replace('/(tabs)/(library)');
         router.push(`/join/${invite}`);
         forgetInstallHandoff();
@@ -116,7 +130,7 @@ function RootLayoutNav() {
       settled = true;
       flags.setInviteOpen(false);
     };
-  }, [isAuthenticated, navigationState?.key, inTabs, sessionRestored]);
+  }, [userId, navigationState?.key, inTabs, sessionRestored]);
 
   // Hydrate store and run migration when authenticated. Sequenced as
   // an inline async so a fast sign-out → sign-in cycle can't race the
@@ -215,6 +229,7 @@ function RootLayoutNav() {
         <Stack.Screen name="join/[code]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="join/index" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="share/[id]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="welcome" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <Q1ExplainerCard isAuthenticated={isAuthenticated} />
