@@ -34,6 +34,8 @@ const GLOW_ALPHA = 0.3;
 // smoothstep curve, so the end of the hairline never shows as a hard band edge.
 const GLOW_IN = 30;
 const GLOW_OUT = 10;
+// The right reads a touch short against the trailing hairline, so it carries a little further.
+const GLOW_OUT_RIGHT = 14;
 const OUTER_STEPS = [0, 0.043, 0.156];
 const INNER_STEPS = [0.156, 0.5, 0.844, 1];
 
@@ -350,7 +352,7 @@ const styles = StyleSheet.create({
   },
   glowOut: { position: 'absolute', top: 0, bottom: 0, width: GLOW_OUT },
   outLeft: { left: -GLOW_OUT },
-  outRight: { right: -GLOW_OUT },
+  outRight: { right: -GLOW_OUT_RIGHT, width: GLOW_OUT_RIGHT },
   glowIn: { position: 'absolute', top: 0, bottom: 0, width: GLOW_IN },
   inLeft: { left: 0 },
   inRight: { right: 0 },
