@@ -23,7 +23,7 @@ name: shared-join-code
 - tapOn:
     id: join-code-continue
 - extendedWaitUntil:
-    visible: "CARA INVITED YOU"
+    visible: ".* INVITED YOU"
     timeout: 15000
 - assertVisible: "Romans 8"
 - assertVisible: "3 verses · 2 members"

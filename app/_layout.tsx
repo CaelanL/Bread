@@ -84,8 +84,11 @@ function RootLayoutNav() {
   // over the Library, so the X and Join both land there. The reminders card is held before the
   // read, so it can't present first and be under (or closing under) the invite; JoinInvite then
   // holds it while mounted and releases it as it unmounts.
+  // Waits for the tabs, so a redirect still settling (the sign-in gate, dev-sign-in's `next`) can't
+  // replace the invite right after it's pushed.
+  const inTabs = segments[0] === '(tabs)';
   useEffect(() => {
-    if (!isAuthenticated || !navigationState?.key) return;
+    if (!isAuthenticated || !navigationState?.key || !inTabs) return;
     let settled = false;
     const flags = useUxFlagsStore.getState();
     flags.setInviteOpen(true);
@@ -113,7 +116,7 @@ function RootLayoutNav() {
       settled = true;
       flags.setInviteOpen(false);
     };
-  }, [isAuthenticated, navigationState?.key]);
+  }, [isAuthenticated, navigationState?.key, inTabs]);
 
   // Hydrate store and run migration when authenticated. Sequenced as
   // an inline async so a fast sign-out → sign-in cycle can't race the

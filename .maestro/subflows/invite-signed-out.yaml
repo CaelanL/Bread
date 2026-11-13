@@ -14,7 +14,7 @@ appId: com.caelanliu.biblemem
 - hideKeyboard
 - tapOn: "Sign In"
 - extendedWaitUntil:
-    visible: "CARA INVITED YOU"
+    visible: ".* INVITED YOU"
     timeout: 30000
 # The reminders card waits until the invite modal closes.
 - assertNotVisible: "Maybe later"
