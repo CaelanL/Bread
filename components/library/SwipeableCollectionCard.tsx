@@ -29,8 +29,13 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 export const COLLECTION_ROW_GAP = 0;
 /** The Library list's side padding, where an engraved row's glow fades out. */
-const PAGE_MARGIN = 16;
 const GLOW_ALPHA = 0.3;
+// An engraved row's gold eases out over GLOW_IN inside the row and GLOW_OUT past it, along one
+// smoothstep curve, so the end of the hairline never shows as a hard band edge.
+const GLOW_IN = 30;
+const GLOW_OUT = 10;
+const OUTER_STEPS = [0, 0.043, 0.156];
+const INNER_STEPS = [0.156, 0.5, 0.844, 1];
 
 export interface CollectionReorder {
   index: number;
@@ -100,7 +105,7 @@ export function SwipeableCollectionCard({
   const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
   const engraved = emblem === 'engraved';
   const glow = withAlpha(colors.engravedBarStart, GLOW_ALPHA);
-  const glowClear = withAlpha(colors.engravedBarStart, 0);
+  const glowAt = (steps: number[]) => steps.map((t) => withAlpha(colors.engravedBarStart, GLOW_ALPHA * t)) as [string, string, ...string[]];
   const subtitle = memberCount !== undefined
     ? [ownerName && firstName(ownerName), `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
     : verseCount;
@@ -217,15 +222,21 @@ export function SwipeableCollectionCard({
       {/* Engraved: gold across the whole row, fading out only in the page margin past the hairline. */}
       {engraved && (
         <>
-          <LinearGradient pointerEvents="none" colors={[glowClear, glow]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.edgeGlow, styles.edgeLeft]} />
-          <LinearGradient pointerEvents="none" colors={[glow, glowClear]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.edgeGlow, styles.edgeRight]} />
+          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowOut, styles.outLeft]} />
+          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowOut, styles.outRight]} />
         </>
       )}
       <View style={styles.clip}>
       {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.card, { backgroundColor: colors.background, borderTopColor: colors.separator }, index > 0 && styles.divided, cardStyle]}>
-          {engraved && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: glow }]} />}
+          {engraved && (
+            <>
+              <LinearGradient pointerEvents="none" colors={glowAt(INNER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowIn, styles.inLeft]} />
+              <View pointerEvents="none" style={[styles.glowMiddle, { backgroundColor: glow }]} />
+              <LinearGradient pointerEvents="none" colors={glowAt(INNER_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowIn, styles.inRight]} />
+            </>
+          )}
           <Pressable
             style={styles.cardButton}
             onPress={handlePress}
@@ -337,14 +348,13 @@ const styles = StyleSheet.create({
   clip: {
     overflow: 'hidden',
   },
-  edgeGlow: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: PAGE_MARGIN,
-  },
-  edgeLeft: { left: -PAGE_MARGIN },
-  edgeRight: { right: -PAGE_MARGIN },
+  glowOut: { position: 'absolute', top: 0, bottom: 0, width: GLOW_OUT },
+  outLeft: { left: -GLOW_OUT },
+  outRight: { right: -GLOW_OUT },
+  glowIn: { position: 'absolute', top: 0, bottom: 0, width: GLOW_IN },
+  inLeft: { left: 0 },
+  inRight: { right: 0 },
+  glowMiddle: { position: 'absolute', top: 0, bottom: 0, left: GLOW_IN, right: GLOW_IN },
   // A flat row on the page, like a verse row in a collection: a hairline between rows, no card.
   card: {
     flexDirection: 'row',

@@ -90,7 +90,7 @@ your verses), nothing new.
 
 A collection whose every square is mastered or engraved says so on its Library card with a badge
 on the corner of its icon: a green check for mastered, a gold engraved glyph for engraved. An
-engraved one also fills the icon square gold and takes a light gold fill across the whole row that fades out in the page margin past the hairline. The subtitle stays as it is, and the row
+engraved one also fills the icon square gold and takes a light gold fill across the row that eases out on one curve around the ends of the hairline. The subtitle stays as it is, and the row
 keeps the collection's own icon. The badge reads "Mastered" or "Engraved" to VoiceOver, plus "by everyone" on a shared card. The rules are `soloEmblem` and `sharedEmblem` in
 `lib/shared/progress.ts`, on `cellState`, so the mastered and engraved tests are the grid's
 (`progress.test.ts`). A shared collection uses the shared rule only once someone else joined;
