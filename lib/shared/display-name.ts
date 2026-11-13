@@ -8,6 +8,15 @@ export function composeDisplayName(firstName: string, lastName: string | null): 
   return initial ? `${first} ${initial.toUpperCase()}.` : first;
 }
 
+/** A member's emblem letters from the name members see: "Caelan L." → CL, "Cara" → C. */
+export function initials(displayName: string): string {
+  const words = displayName.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  const first = Array.from(words[0])[0];
+  const last = words.length > 1 ? Array.from(words[words.length - 1])[0] : '';
+  return (first + last).toUpperCase();
+}
+
 /** Names in a sentence: "Eli", "Eli and Faith", "Eli, Faith and Gabe", then "Eli, Faith and 3 others". */
 export function listNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? '';

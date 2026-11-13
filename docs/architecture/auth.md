@@ -170,6 +170,7 @@ when it finds tokens. The link table is in
 characters each, are the user's name. `profiles.display_name` is what members of a
 [shared collection](../features/shared-collections.md) see: first name and last initial,
 "Caelan L.", or the first name alone (`composeDisplayName` in `lib/shared/display-name.ts`).
+Member circles show its initials, CL or C (`initials`).
 `setName` in the store upserts all three together and rolls back with a toast, so every
 reader of `display_name` stays as it was. Settings → Account → Name shows the full name, or
 Add; its form (`NameFields`) starts empty, shows "Shown as Caelan L." as you type, and writes

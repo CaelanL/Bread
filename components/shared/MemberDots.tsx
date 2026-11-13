@@ -1,11 +1,12 @@
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { initials } from '@/lib/shared/display-name';
 import { StyleSheet, Text, View } from 'react-native';
 
 const MAX_DOTS = 5;
 
 /**
- * One member's initial in a circle: 24 in the strip and grid, `large` 32 in member rows. Yours is
+ * One member's initials in a circle (CL, or C with no last name): 24 in the strip and grid, `large` 32 in member rows. Yours is
  * the only solid one. `ring` adds an edge in the surface colour that separates overlapping circles.
  */
 export function InitialDot({ name, you = false, large = false, ring }: {
@@ -22,7 +23,7 @@ export function InitialDot({ name, you = false, large = false, ring }: {
     <View style={[large ? styles.large : styles.dot, ring ? [styles.ring, { borderColor: ring, backgroundColor: ring }] : { backgroundColor: fill }]}>
       {ring && <View style={[StyleSheet.absoluteFill, styles.inner, { backgroundColor: fill }]} />}
       <Text style={[large ? styles.largeInitial : styles.initial, { color: you ? colors.white : colors.text }]}>
-        {name.trim().charAt(0).toUpperCase() || '?'}
+        {initials(name)}
       </Text>
     </View>
   );

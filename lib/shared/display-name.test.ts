@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { composeDisplayName, listNames } from './display-name';
+import { composeDisplayName, initials, listNames } from './display-name';
 
 test('members see the first name and the last initial', () => {
   assert.equal(composeDisplayName('Caelan', 'Liu'), 'Caelan L.');
@@ -21,4 +21,11 @@ test('names read as a sentence, with the rest counted past three', () => {
   assert.equal(listNames(['Eli', 'Faith']), 'Eli and Faith');
   assert.equal(listNames(['Eli', 'Faith', 'Gabe']), 'Eli, Faith and Gabe');
   assert.equal(listNames(['Eli', 'Faith', 'Gabe', 'Hana', 'Isaac']), 'Eli, Faith and 3 others');
+});
+
+test('emblems show the first initial, plus the last initial when there is one', () => {
+  assert.equal(initials('Caelan L.'), 'CL');
+  assert.equal(initials('Cara'), 'C');
+  assert.equal(initials(' ana  ñ. '), 'AÑ');
+  assert.equal(initials('  '), '?');
 });
