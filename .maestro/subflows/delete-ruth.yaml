@@ -2,7 +2,7 @@
 appId: com.caelanliu.biblemem
 ---
 - swipe:
-    from: ".*Ruth 1:1 • (ESV|KJV).*"
+    from: ".*Ruth 1:1 · (ESV|KJV).*"
     direction: LEFT
 - tapOn:
     id: swipe-delete
