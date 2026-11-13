@@ -8,6 +8,11 @@ export function composeDisplayName(firstName: string, lastName: string | null): 
   return initial ? `${first} ${initial.toUpperCase()}.` : first;
 }
 
+/** The first name alone, for tight spots like a Library card: "Caelan L." → Caelan. */
+export function firstName(displayName: string): string {
+  return displayName.trim().split(/\s+/)[0] ?? '';
+}
+
 /** A member's emblem letters from the name members see: "Caelan L." → CL, "Cara" → C. */
 export function initials(displayName: string): string {
   const words = displayName.trim().split(/\s+/).filter(Boolean);

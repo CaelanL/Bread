@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { composeDisplayName, initials, listNames } from './display-name';
+import { composeDisplayName, firstName, initials, listNames } from './display-name';
 
 test('members see the first name and the last initial', () => {
   assert.equal(composeDisplayName('Caelan', 'Liu'), 'Caelan L.');
@@ -28,4 +28,9 @@ test('emblems show the first initial, plus the last initial when there is one', 
   assert.equal(initials('Cara'), 'C');
   assert.equal(initials(' ana  ñ. '), 'AÑ');
   assert.equal(initials('  '), '?');
+});
+
+test('a Library card shows the first name alone', () => {
+  assert.equal(firstName('Caelan L.'), 'Caelan');
+  assert.equal(firstName(' Cara '), 'Cara');
 });

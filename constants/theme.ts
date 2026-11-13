@@ -37,6 +37,9 @@ export const Shadows = {
   borderHover: '0px 0px 0px 1px rgba(0,0,0,0.08), 0px 1px 2px -1px rgba(0,0,0,0.08), 0px 2px 4px 0px rgba(0,0,0,0.06)',
 } as const;
 
+/** Every card on Library and Home: one radius and a faint edge, no border or drop shadow. */
+export const CardSurface = { borderRadius: Radius.xxl, boxShadow: Shadows.border } as const;
+
 /** How much of a collection's accent shows behind its icon and across the top of its screen. */
 export const AccentAlpha = { fill: 0.14, wash: 0.18 } as const;
 

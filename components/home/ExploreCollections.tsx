@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 
 import { CuratedCollectionCard } from '@/components/collections/CuratedCollectionCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Radius } from '@/constants/theme';
+import { CardSurface, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
@@ -43,7 +43,7 @@ export function ExploreCollections() {
 }
 
 const styles = StyleSheet.create({
-  section: { borderRadius: Radius.huge, padding: 16, gap: 8 },
+  section: { ...CardSurface, padding: 16, gap: 8 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
