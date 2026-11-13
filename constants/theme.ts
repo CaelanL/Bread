@@ -78,6 +78,7 @@ export const Colors = {
     // Borders
     border: '#e0dcd6',            // Warm gray border
     borderLight: '#ebe7e1',       // Lighter warm border
+    separator: '#cfc8bd',         // Hairline between verse rows: a step darker than border
 
     // Status (keep functional)
     success: '#22c55e',
@@ -120,6 +121,7 @@ export const Colors = {
     // Borders
     border: '#3a3a3a',            // Charcoal border
     borderLight: '#444444',       // Lighter charcoal
+    separator: '#4a4a4a',
 
     // Status (same both modes)
     success: '#22c55e',

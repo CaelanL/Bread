@@ -343,7 +343,7 @@ export default function CollectionScreen() {
       } : undefined}
     />
     );
-  const divider = () => <View style={[styles.divider, { backgroundColor: colors.border }]} />;
+  const divider = () => <View style={[styles.divider, { backgroundColor: colors.separator }]} />;
 
   const header = (
     <CollectionHeader
