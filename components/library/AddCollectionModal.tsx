@@ -93,7 +93,10 @@ export function AddCollectionModal({ visible, initialName, onClose, onAdd }: Add
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
       >
-        <Pressable style={styles.backdrop} onPress={handleClose}>
+        {/* Hidden from accessibility (Cancel and the X close for VoiceOver). Left exposed, a Join
+            with code card reopened after this modal left the accessibility tree empty (seen in
+            Maestro), as in ModalCard (F40). */}
+        <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.backdrop} onPress={handleClose}>
           <BlurView intensity={20} style={StyleSheet.absoluteFill} tint={isDark ? 'dark' : 'light'} />
         </Pressable>
 
