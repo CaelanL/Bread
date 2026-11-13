@@ -2,6 +2,7 @@
 -- private.remove_verse_from_collection: each verse leaves the collection; a verse in no other
 -- collection is soft-deleted when mastered (it stays on the Mastered list) and hard-deleted
 -- otherwise. Either all of it happens or none. Old clients keep their own path.
+-- destructive-ok: delete statements in a new function that applies the existing collection-delete rule when a user deletes a collection, no existing data deleted, approved by Caelan 2026-11-12
 create function public.delete_collection(collection_client_id text)
 returns void
 language plpgsql
