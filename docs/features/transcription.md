@@ -197,8 +197,8 @@ the full file.
 `transcription-token` checks `LIVE_TRANSCRIPTION_ENABLED` after auth. Anything but
 `true` returns 403 `{ error: "LIVE_DISABLED" }`, which the client treats like any
 other mint failure. A secret change takes effect with no deploy or app update, and
-in-flight streams finish normally. The batch path doesn't read the secret. A local
-run takes the batch path until the secret is set for local functions.
+in-flight streams finish normally. The batch path doesn't read the secret. Locally it
+goes in `supabase/functions/.env`, then `db:stop` and `db:start`.
 
 ## Sharp edges
 

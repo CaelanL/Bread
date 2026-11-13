@@ -66,6 +66,11 @@ These were interactive steps with no repo artifact, so git can't show them:
 
 Which build and version is live on the App Store is in App Store Connect, not here.
 
+Invite links depend on sendlabs.dev (repo `sendlabs-portfolio`, Vercel): it must serve
+`/.well-known/apple-app-site-association` and `/bread/join/[code]` before an app version whose
+invite message links there reaches anyone, OTA included. See
+[navigation-and-routing.md](navigation-and-routing.md#deep-links).
+
 ## Limits
 
 - iOS only. Android isn't shipped, and the Expo example has matching jobs to add when it is.

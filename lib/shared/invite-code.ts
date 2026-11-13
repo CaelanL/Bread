@@ -12,17 +12,23 @@ export function normalizeInviteCode(input: string): string {
   return input.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, INVITE_CODE_LENGTH);
 }
 
-export const APP_STORE_URL = 'https://apps.apple.com/app/id6757946016';
-
+/**
+ * A web link every chat app makes tappable. With Bread installed iOS opens the app on it (the
+ * applinks claim in app.config.js, verified by sendlabs.dev's apple-app-site-association);
+ * without Bread it's sendlabs.dev's join page, with the App Store link and the code.
+ */
 export function inviteLink(code: string): string {
-  return `com.biblemem://join/${code}`;
+  return `https://sendlabs.dev/bread/join/${code}`;
 }
 
-// The app link joins in one tap where Bread is installed; it can't reach anyone without Bread,
-// so the App Store link and the code are there for them.
 export function inviteMessage(collectionName: string, code: string): string {
-  return `Join "${collectionName}" with me on Bread: ${inviteLink(code)}\n\n`
-    + `New to Bread? Get it at ${APP_STORE_URL}, then tap + → Join with code and enter ${code}`;
+  return `Join "${collectionName}" with me on Bread: ${inviteLink(code)}\n\nOr in Bread, tap + → Join with code: ${code}`;
+}
+
+/** An opened sendlabs.dev invite link as Bread's own join route; any other path unchanged. */
+export function joinRouteFromLink(path: string): string {
+  const code = path.match(/^(?:https?:\/\/(?:www\.)?sendlabs\.dev)?\/bread\/join\/([^/?#]+)/i)?.[1];
+  return code ? `/join/${normalizeInviteCode(decodeURIComponent(code))}` : path;
 }
 
 export function daysLeft(expiresAt: string, now = Date.now()): number {

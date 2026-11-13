@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { daysLeft, inviteMessage, normalizeInviteCode, sharedErrorMessage } from './invite-code';
+import { daysLeft, inviteMessage, joinRouteFromLink, normalizeInviteCode, sharedErrorMessage } from './invite-code';
 
 test('a typed code is normalized the way the server reads it', () => {
   assert.equal(normalizeInviteCode('bread-828'), 'BREAD828');
@@ -11,8 +11,8 @@ test('a typed code is normalized the way the server reads it', () => {
 
 test('the share text carries the link and the code in plain words', () => {
   assert.equal(inviteMessage('Romans 8', 'ABCD2345'),
-    'Join "Romans 8" with me on Bread: com.biblemem://join/ABCD2345\n\n'
-    + 'New to Bread? Get it at https://apps.apple.com/app/id6757946016, then tap + → Join with code and enter ABCD2345');
+    'Join "Romans 8" with me on Bread: https://sendlabs.dev/bread/join/ABCD2345\n\n'
+    + 'Or in Bread, tap + → Join with code: ABCD2345');
 });
 
 test('days left round up and never go negative', () => {
@@ -28,4 +28,13 @@ test('server messages show as is, invite errors read as advice, everything else 
   assert.equal(sharedErrorMessage({ code: '22023', message: 'Invite expired' }, 'x'), 'This invite has expired. Ask for a new link.');
   assert.equal(sharedErrorMessage({ code: '42501', message: 'Not a member' }, 'Try again.'), 'Try again.');
   assert.equal(sharedErrorMessage(new Error('network'), 'Try again.'), 'Try again.');
+});
+
+test('a sendlabs.dev invite link opens Bread\'s join route; other links pass through', () => {
+  assert.equal(joinRouteFromLink('https://sendlabs.dev/bread/join/ABCD2345'), '/join/ABCD2345');
+  assert.equal(joinRouteFromLink('https://www.sendlabs.dev/bread/join/abcd-2345?ref=x'), '/join/ABCD2345');
+  assert.equal(joinRouteFromLink('/bread/join/ABCD2345'), '/join/ABCD2345');
+  assert.equal(joinRouteFromLink('com.biblemem://join/ABCD2345'), 'com.biblemem://join/ABCD2345');
+  assert.equal(joinRouteFromLink('/(tabs)/(library)'), '/(tabs)/(library)');
+  assert.equal(joinRouteFromLink('https://sendlabs.dev/work/linc'), 'https://sendlabs.dev/work/linc');
 });

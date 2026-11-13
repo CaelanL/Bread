@@ -21,6 +21,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.caelanliu.biblemem",
+      // Invite links (https://sendlabs.dev/bread/join/<code>) open Bread. sendlabs.dev serves the
+      // matching apple-app-site-association; a native change, so it ships in a store build.
+      associatedDomains: ["applinks:sendlabs.dev"],
       // Ignored: appVersionSource "remote" in eas.json means EAS owns
       // the real buildNumber (14+ as of Aug 2026).
       buildNumber: "1",

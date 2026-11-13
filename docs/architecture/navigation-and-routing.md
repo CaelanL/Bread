@@ -181,6 +181,15 @@ Configured via Expo's URL scheme `com.biblemem://` (in
 | `com.biblemem://reset-password#access_token=...&refresh_token=...&type=recovery` | Password reset |
 | `com.biblemem://dev-sign-in?next=/settings&as=reader-b` | Dev sign-in, handled by the route itself |
 | `com.biblemem://join/<code>` | The invite modal, routed by Expo Router to `join/[code]` |
+| `https://sendlabs.dev/bread/join/<code>` | The same modal: a Universal Link (`associatedDomains` in `app.config.js`), rewritten to `/join/<code>` by `app/+native-intent.tsx` (`joinRouteFromLink`) |
+
+Invite links are web links because chat apps only make `https://` tappable (iMessage links
+`com.biblemem://`, WhatsApp doesn't). sendlabs.dev is Caelan's site (repo `sendlabs-portfolio`,
+on Vercel): its `/.well-known/apple-app-site-association` claims only `/bread/join/*` for
+`G94DG594W9.com.caelanliu.biblemem`, and `/bread/join/[code]` is the page someone without Bread
+sees (Bread's look, App Store link, the code, Safari's app banner). iOS verifies the claim
+through Apple's CDN when Bread installs, so it works only in a store or EAS build, never before
+sendlabs.dev serves the file.
 
 The handler extracts tokens from the URL and calls
 `supabase.auth.setSession(...)`. Auth state change then drives the
