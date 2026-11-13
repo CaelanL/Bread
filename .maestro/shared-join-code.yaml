@@ -29,8 +29,10 @@ name: shared-join-code
 - assertVisible: "3 verses · 2 members"
 - tapOn:
     id: join-button
-- tapOn:
-    id: display-name-continue
+- runFlow:
+    file: subflows/enter-name.yaml
+    env:
+      FIRST: Reader
 - extendedWaitUntil:
     visible: "Cara · 3 members.*"
     timeout: 20000
@@ -103,8 +105,10 @@ name: shared-join-code
       CODE: ${output.code}
 - tapOn:
     id: join-button
-- tapOn:
-    id: display-name-continue
+- runFlow:
+    file: subflows/enter-name.yaml
+    env:
+      FIRST: Bea
 - extendedWaitUntil:
     visible: "Maybe later"
     timeout: 20000

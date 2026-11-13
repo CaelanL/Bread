@@ -25,7 +25,6 @@ import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion, type ColorMode } from '
 import { useAuth } from '@/lib/auth';
 import { useAppStore } from '@/lib/store';
 import { MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from '@/lib/store/review-config';
-import { prefillDisplayName } from '@/lib/shared/display-name';
 import {
   getPermissionStatus,
   markSettingsVisited,
@@ -156,10 +155,10 @@ export default function SettingsScreen() {
   const setBibleVersion = useAppStore((state) => state.setBibleVersion);
   const reviewMaxIntervalDays = useAppStore((state) => state.reviewMaxIntervalDays);
   const setReviewMaxIntervalDays = useAppStore((state) => state.setReviewMaxIntervalDays);
-  const displayName = useAppStore((state) => state.displayName);
-  const setDisplayName = useAppStore((state) => state.setDisplayName);
+  const firstName = useAppStore((state) => state.firstName);
+  const lastName = useAppStore((state) => state.lastName);
+  const setName = useAppStore((state) => state.setName);
   const { user, signOut, updatePassword, deleteAccount } = useAuth();
-  const namePrefill = prefillDisplayName(user?.email);
   const [nameModalVisible, setNameModalVisible] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
@@ -356,14 +355,13 @@ export default function SettingsScreen() {
             <SettingsRow
               icon="person.crop.circle.fill"
               label="Name"
-              description="What friends see in shared collections"
             >
               <View style={styles.dropdownTrigger}>
                 <Text
-                  style={[styles.dropdownValue, { color: displayName ? colors.text : colors.icon }]}
+                  style={[styles.dropdownValue, { color: firstName ? colors.text : colors.icon }]}
                   numberOfLines={1}
                 >
-                  {displayName ?? namePrefill}
+                  {firstName ? [firstName, lastName].filter(Boolean).join(' ') : 'Add'}
                 </Text>
                 <IconSymbol name="chevron.right" size={16} color={colors.icon} />
               </View>
@@ -517,9 +515,9 @@ export default function SettingsScreen() {
 
       <DisplayNameModal
         visible={nameModalVisible}
-        savedName={displayName}
-        prefill={namePrefill}
-        onSave={setDisplayName}
+        savedFirst={firstName}
+        savedLast={lastName}
+        onSave={setName}
         onClose={() => setNameModalVisible(false)}
       />
 

@@ -1,12 +1,11 @@
-// lib-ok: The display name prefill, shared by Settings and the share and join name sheet, and names in a sentence.
-export const MAX_DISPLAY_NAME_LENGTH = 40;
+// lib-ok: The name members see, built from first and last name, and names in a sentence.
+export const MAX_NAME_PART_LENGTH = 30;
 
-/** The leading run of letters of the email handle, first letter capitalized: caelan.liu → Caelan. */
-export function prefillDisplayName(email: string | null | undefined): string {
-  const handle = (email ?? '').split('@')[0];
-  const letters = handle.match(/^\p{L}+/u)?.[0] || handle.replace(/\P{L}/gu, '');
-  if (!letters) return 'Friend';
-  return (letters[0].toUpperCase() + letters.slice(1)).slice(0, MAX_DISPLAY_NAME_LENGTH);
+/** What members of a shared collection see: "Caelan L.", or "Caelan" with no last name. */
+export function composeDisplayName(firstName: string, lastName: string | null): string {
+  const first = firstName.trim();
+  const initial = Array.from(lastName?.trim() ?? '')[0];
+  return initial ? `${first} ${initial.toUpperCase()}.` : first;
 }
 
 /** Names in a sentence: "Eli", "Eli and Faith", "Eli, Faith and Gabe", then "Eli, Faith and 3 others". */

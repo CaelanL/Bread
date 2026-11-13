@@ -1,0 +1,20 @@
+# The one-time name step before a first share or join: types FIRST (and LAST when given),
+# then Continue.
+appId: com.caelanliu.biblemem
+---
+- extendedWaitUntil:
+    visible:
+      id: display-name-form-first
+    timeout: 8000
+- tapOn:
+    id: display-name-form-first
+- inputText: ${FIRST}
+- runFlow:
+    when:
+      true: ${LAST != undefined && LAST != ''}
+    commands:
+      - tapOn:
+          id: display-name-form-last
+      - inputText: ${LAST}
+- tapOn:
+    id: display-name-continue

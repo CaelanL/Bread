@@ -16,6 +16,7 @@ import { validateCollectionPassages } from '@/lib/collections/passages';
 import { readCollectionSavers } from '@/lib/collections/savers';
 import type { CollectionIconKey } from '@/lib/collections/icons';
 import { BIBLE_VERSIONS, type ColorMode } from '@/lib/settings';
+import { composeDisplayName } from '@/lib/shared/display-name';
 import { isSharedRole, normalizeInviteCode } from '@/lib/shared/invite-code';
 import { getSharedMembers, type SharedMember } from '@/lib/shared/invites';
 import type { ProgressCell, SharedReference } from '@/lib/shared/progress';
@@ -90,8 +91,10 @@ interface AppState {
   // Settings
   colorMode: ColorMode;
   bibleVersion: BibleVersion;
-  // profiles.display_name: what members of a shared collection see. Null until saved.
+  // profiles.display_name: what members of a shared collection see ("Caelan L."). Null until saved.
   displayName: string | null;
+  firstName: string | null;
+  lastName: string | null;
   reviewMaxIntervalDays: number;
 
   // Sort preferences for virtual collections (device-local; mirrored to AsyncStorage)
@@ -121,7 +124,7 @@ interface AppState {
   // Actions - Settings
   setColorMode: (mode: ColorMode) => Promise<void>;
   setBibleVersion: (version: BibleVersion) => Promise<void>;
-  setDisplayName: (name: string) => Promise<void>;
+  setName: (firstName: string, lastName: string) => Promise<void>;
   setReviewMaxIntervalDays: (days: number) => Promise<void>;
 
   // Actions - Collections
@@ -386,10 +389,14 @@ async function tellKeptVerses(kept: HeldVerse[], translation: BibleVersion) {
  */
 async function syncAccountTranslation(generation: number) {
   const userId = await getCurrentUserId();
-  const { data, error } = await supabase.from('profiles').select('translation, display_name').eq('user_id', userId).maybeSingle();
+  const { data, error } = await supabase.from('profiles').select('translation, display_name, first_name, last_name').eq('user_id', userId).maybeSingle();
   if (error) throw error;
   if (generation !== accountGeneration) return;
-  useAppStore.setState({ displayName: data?.display_name ?? null });
+  useAppStore.setState({
+    displayName: data?.display_name ?? null,
+    firstName: data?.first_name ?? null,
+    lastName: data?.last_name ?? null,
+  });
 
   let translation: BibleVersion;
   let rows: VerseIdentityRow[] | undefined;
@@ -517,6 +524,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   colorMode: 'system',
   bibleVersion: 'ESV',
   displayName: null,
+  firstName: null,
+  lastName: null,
   reviewMaxIntervalDays: DEFAULT_MAX_INTERVAL_DAYS,
   // Mastered defaults to due-first (review-aware default). Overwritten
   // by hydrate() if AsyncStorage has a saved value. In Progress and
@@ -888,20 +897,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  setDisplayName: async (name: string) => {
-    const previous = get().displayName;
-    const displayName = name.trim();
-    if (displayName === previous) return;
+  setName: async (first: string, last: string) => {
+    const previous = { displayName: get().displayName, firstName: get().firstName, lastName: get().lastName };
+    const firstName = first.trim();
+    const lastName = last.trim() || null;
+    if (firstName === previous.firstName && lastName === previous.lastName) return;
+    const next = { displayName: composeDisplayName(firstName, lastName), firstName, lastName };
     const generation = accountGeneration;
-    set({ displayName });
+    set(next);
     try {
       const userId = await getCurrentUserId();
-      const { error } = await supabase.from('profiles').upsert({ user_id: userId, display_name: displayName });
+      const { error } = await supabase.from('profiles').upsert({
+        user_id: userId, display_name: next.displayName, first_name: firstName, last_name: lastName,
+      });
       if (error) throw error;
     } catch (e) {
-      console.error('[STORE] Failed to save display name:', e);
+      console.error('[STORE] Failed to save name:', e);
       if (generation !== accountGeneration) return;
-      if (get().displayName === displayName) set({ displayName: previous });
+      if (get().firstName === firstName && get().lastName === lastName) set(previous);
       showErrorToast("Couldn't save your name. Try again.");
     }
   },
@@ -1886,6 +1899,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       sharedCollections: {},
       sharedProgress: {},
       displayName: null,
+      firstName: null,
+      lastName: null,
       // Device prefs (colorMode, reviewMaxIntervalDays, masteredSort,
       // inProgressSort) and the cached account translation (bibleVersion,
       // replaced from the next account's profile on hydrate) are preserved

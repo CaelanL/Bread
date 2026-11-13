@@ -68,10 +68,10 @@ insert into public.user_stats (user_id, avg_time_per_word_ms, total_words_master
 values ('aaaaaaaa-0000-4000-8000-000000000001', null, 25);
 
 -- The shared group: Cara's own collection plus Dana's member copy, linked by shared_collection_id.
-insert into public.profiles (user_id, translation, display_name)
+insert into public.profiles (user_id, translation, display_name, first_name)
 values
-  ('cccccccc-0000-4000-8000-000000000001', 'ESV', 'Cara'),
-  ('dddddddd-0000-4000-8000-000000000001', 'NIV', 'Dana');
+  ('cccccccc-0000-4000-8000-000000000001', 'ESV', 'Cara', 'Cara'),
+  ('dddddddd-0000-4000-8000-000000000001', 'NIV', 'Dana', 'Dana');
 
 insert into public.shared_collections (id, owner_id, name, icon_key, created_at)
 values ('cccccccc-0000-4000-8000-000000000031', 'cccccccc-0000-4000-8000-000000000001', 'Romans 8', 'heart', now() - interval '10 days');
@@ -129,8 +129,8 @@ from (values (1, 'Eli', 'ESV'), (2, 'Faith', 'NIV'), (3, 'Gabe', 'ESV'), (4, 'Ha
   (6, 'Jo', 'ESV'), (7, 'Kai', 'ESV'), (8, 'Lena', 'NIV'), (9, 'Micah', 'ESV')) as p(n, name, translation)
 union all select 0, 'cccccccc-0000-4000-8000-000000000001', 'Cara', 'ESV';
 
-insert into public.profiles (user_id, translation, display_name)
-select user_id, translation, name from seed_people where n > 0;
+insert into public.profiles (user_id, translation, display_name, first_name)
+select user_id, translation, name, name from seed_people where n > 0;
 
 -- g: 32 Sermon on the Mount, 33 Philippians 4, 34 Joshua 1; 0 for Cara's solo collections.
 create temp table seed_groups (g int primary key, id uuid, client_id text, name text, icon_key text, created_at timestamptz);

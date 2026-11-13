@@ -7,7 +7,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 
 | Table | Owner | Purpose |
 |---|---|---|
-| `profiles` | per-user | account `translation` (`bible-versions.md`), `display_name` ([shared](../features/shared-collections.md)) |
+| `profiles` | per-user | account `translation` (`bible-versions.md`), names ([auth](auth.md#display-name)) |
 | `usage_daily` | per-user | Free/Supporter rate-limit counters (transcribe seconds, evaluate count, Bible fetch count) |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |

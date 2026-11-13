@@ -1,58 +1,52 @@
+import { NameFields } from '@/components/shared/NameFields';
 import { modalStyles } from '@/components/ui/ModalCard';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useAuth } from '@/lib/auth';
-import { MAX_DISPLAY_NAME_LENGTH, prefillDisplayName } from '@/lib/shared/display-name';
 import { useAppStore } from '@/lib/store';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 /**
- * The one-time name step before a first share or join. Continue saves through setDisplayName
+ * The one-time name step before a first share or join. Continue saves through setName
  * (which shows its own toast on failure) and calls onDone only once the name is saved.
  */
 export function DisplayNameForm({ onDone }: { onDone: () => void }) {
   const colors = Colors[useColorScheme() ?? 'light'];
-  const { user } = useAuth();
-  const [draft, setDraft] = useState(() => useAppStore.getState().displayName ?? prefillDisplayName(user?.email));
+  const [first, setFirst] = useState(() => useAppStore.getState().firstName ?? '');
+  const [last, setLast] = useState(() => useAppStore.getState().lastName ?? '');
   const [saving, setSaving] = useState(false);
-  const name = draft.trim();
+  const ready = first.trim().length > 0 && !saving;
 
   const save = async () => {
-    if (!name || saving) return;
+    if (!ready) return;
     setSaving(true);
-    await useAppStore.getState().setDisplayName(name);
+    await useAppStore.getState().setName(first, last);
     setSaving(false);
-    if (useAppStore.getState().displayName === name) onDone();
+    if (useAppStore.getState().firstName === first.trim()) onDone();
   };
 
   return (
     <>
-      <Text accessibilityRole="header" style={[modalStyles.title, { color: colors.text }]}>What should friends call you?</Text>
-      <Text style={[modalStyles.copy, styles.copy, { color: colors.icon }]}>
-        Members of shared collections see this name. You can change it in Settings.
-      </Text>
-      <TextInput
-        testID="display-name-form-input"
-        style={[modalStyles.input, styles.input, { backgroundColor: colors.input, color: colors.text, borderColor: colors.border }]}
-        value={draft}
-        onChangeText={setDraft}
-        placeholder="Name"
-        placeholderTextColor={colors.icon}
-        maxLength={MAX_DISPLAY_NAME_LENGTH}
-        autoCapitalize="words"
-        autoCorrect={false}
-        returnKeyType="done"
-        onSubmitEditing={save}
-        editable={!saving}
-      />
+      <Text accessibilityRole="header" style={[modalStyles.title, styles.title, { color: colors.text }]}>Your name</Text>
+      <View style={styles.fields}>
+        <NameFields
+          first={first}
+          last={last}
+          onChangeFirst={setFirst}
+          onChangeLast={setLast}
+          onSubmit={save}
+          inputStyle={[modalStyles.input, { backgroundColor: colors.input, color: colors.text, borderColor: colors.border }]}
+          editable={!saving}
+          testIDPrefix="display-name-form"
+        />
+      </View>
       <Pressable
         testID="display-name-continue"
         accessibilityRole="button"
-        accessibilityState={{ disabled: !name || saving, busy: saving }}
-        disabled={!name || saving}
+        accessibilityState={{ disabled: !ready, busy: saving }}
+        disabled={!ready}
         onPress={save}
-        style={[modalStyles.button, { backgroundColor: name ? colors.text : colors.borderLight }]}
+        style={[modalStyles.button, { backgroundColor: ready || saving ? colors.text : colors.borderLight }]}
       >
         {saving
           ? <ActivityIndicator color={colors.background} />
@@ -63,6 +57,6 @@ export function DisplayNameForm({ onDone }: { onDone: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  copy: { marginTop: 6, marginBottom: 20 },
-  input: { marginBottom: 16 },
+  title: { marginBottom: 16 },
+  fields: { gap: 10, marginBottom: 16 },
 });

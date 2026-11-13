@@ -1,34 +1,37 @@
+import { NameFields } from '@/components/shared/NameFields';
 import { Colors, Radius, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { MAX_DISPLAY_NAME_LENGTH } from '@/lib/shared/display-name';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface Props {
   visible: boolean;
-  /** The saved name, or null when none is saved yet. */
-  savedName: string | null;
-  prefill: string;
-  onSave: (name: string) => void;
+  /** The saved names, or null when none is saved yet. */
+  savedFirst: string | null;
+  savedLast: string | null;
+  onSave: (firstName: string, lastName: string) => void;
   onClose: () => void;
 }
 
-/** One field; nothing is written until Save. */
-export function DisplayNameModal({ visible, savedName, prefill, onSave, onClose }: Props) {
+/** First and last name; nothing is written until Save. */
+export function DisplayNameModal({ visible, savedFirst, savedLast, onSave, onClose }: Props) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const [draft, setDraft] = useState(savedName ?? prefill);
+  const [first, setFirst] = useState(savedFirst ?? '');
+  const [last, setLast] = useState(savedLast ?? '');
 
   useEffect(() => {
-    if (visible) setDraft(savedName ?? prefill);
-  }, [visible, savedName, prefill]);
+    if (!visible) return;
+    setFirst(savedFirst ?? '');
+    setLast(savedLast ?? '');
+  }, [visible, savedFirst, savedLast]);
 
-  const name = draft.trim();
-  const canSave = name.length > 0 && name !== savedName;
+  const canSave = first.trim().length > 0
+    && (first.trim() !== savedFirst || (last.trim() || null) !== savedLast);
 
   const handleSave = () => {
     if (!canSave) return;
-    onSave(name);
+    onSave(first, last);
     onClose();
   };
 
@@ -41,21 +44,17 @@ export function DisplayNameModal({ visible, savedName, prefill, onSave, onClose 
             onStartShouldSetResponder={() => true}
           >
             <Text style={[styles.title, { color: colors.text }]}>Your name</Text>
-            <Text style={[styles.copy, { color: colors.icon }]}>What friends see in shared collections.</Text>
-            <TextInput
-              testID="display-name-input"
-              style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.borderLight }]}
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Name"
-              placeholderTextColor={colors.icon}
-              maxLength={MAX_DISPLAY_NAME_LENGTH}
-              autoCapitalize="words"
-              autoCorrect={false}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={handleSave}
-            />
+            <View style={styles.fields}>
+              <NameFields
+                first={first}
+                last={last}
+                onChangeFirst={setFirst}
+                onChangeLast={setLast}
+                onSubmit={handleSave}
+                inputStyle={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.borderLight }]}
+                testIDPrefix="display-name"
+              />
+            </View>
             <View style={styles.buttonRow}>
               <Pressable style={styles.button} onPress={onClose}>
                 <Text style={[styles.cancelText, { color: colors.icon }]}>Cancel</Text>
@@ -95,13 +94,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 8,
-  },
-  copy: {
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
     marginBottom: 16,
+  },
+  fields: {
+    gap: 10,
   },
   input: {
     ...InputText,
@@ -113,7 +109,7 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 16,
+    marginTop: 6,
   },
   button: {
     flex: 1,

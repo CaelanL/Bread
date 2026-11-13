@@ -18,7 +18,7 @@ AsyncStorage holds device settings and small local caches.
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
 | Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
-| Display name (`displayName`) | ✓ (`profiles.display_name`) | ✓ | — |
+| Name (`displayName`, `firstName`, `lastName`) | ✓ (`profiles`) | ✓ | — |
 | [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ last seen ids and names (`shared_known_groups:<user>`) |
 | [Group progress](../features/group-progress.md#collection-screen) | ✓ (read) | ✓ (`sharedProgress`) | — |
 | Invite from a signed-out link | — | — | ✓ (`shared_pending_join`) |
@@ -55,7 +55,8 @@ interface AppState {
   // Settings (also in AsyncStorage)
   colorMode: 'system' | 'light' | 'dark';
   bibleVersion: BibleVersion;
-  displayName: string | null;   // profiles.display_name; not in AsyncStorage, cleared by clear()
+  displayName: string | null;   // profiles.display_name ("Caelan L."); not in AsyncStorage, cleared by clear()
+  firstName, lastName           // profiles.first_name, last_name; same
   reviewMaxIntervalDays: number;
   masteredSort: SortOption;
   inProgressSort: SortOption;

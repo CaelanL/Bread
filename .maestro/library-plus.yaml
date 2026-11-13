@@ -21,11 +21,10 @@ name: library-plus
 
 # New shared collection: display name, collection name, then the code.
 - tapOn: "New shared collection"
-- extendedWaitUntil:
-    visible: "What should friends call you?"
-    timeout: 8000
-- tapOn:
-    id: display-name-continue
+- runFlow:
+    file: subflows/enter-name.yaml
+    env:
+      FIRST: Bea
 - extendedWaitUntil:
     visible:
       id: collection-name

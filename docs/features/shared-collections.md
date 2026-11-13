@@ -28,7 +28,7 @@ user_collections.shared_collection_id → shared_collections (nullable, ON DELET
   `book` must be one of the 66 canonical names in `BIBLE_BOOKS` (`lib/bible/books.ts`);
   `lib/shared/books.test.ts` keeps the SQL list in step.
 - `shared_collection_members` has one owner per group (partial unique index).
-- `profiles.display_name` (1 to 40 characters) is the name members see. See
+- `profiles.display_name` ("Caelan L.") is the name members see. See
   [auth.md](../architecture/auth.md#display-name).
 
 The next sync (below) repairs what an old client does to a member's copy.
