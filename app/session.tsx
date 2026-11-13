@@ -317,11 +317,15 @@ export default function StudySessionScreen() {
     );
   }
 
-  // Error state
   if (!session.verse || session.chunks.length === 0) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>Something went wrong</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <AppHeader leftButton={{ icon: 'xmark', label: 'Close', onPress: session.done }} />
+        <View style={[styles.container, styles.centered, styles.loadError]}>
+          <Text style={[styles.loadErrorText, { color: colors.text }]}>
+            {session.loadError ?? 'Something went wrong'}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -542,6 +546,13 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadError: {
+    paddingHorizontal: 32,
+  },
+  loadErrorText: {
+    fontSize: 16,
+    textAlign: 'center',
   },
   progressContainer: {
     flexDirection: 'row',

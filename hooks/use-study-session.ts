@@ -2,12 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FlatList } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import {
-  getSavedVerses,
-  type SavedVerse,
-  type Difficulty as StorageDifficulty,
-} from '@/lib/storage';
-import { useAppStore } from '@/lib/store';
+import { type SavedVerse, type Difficulty as StorageDifficulty } from '@/lib/storage';
+import { findVerse, useAppStore, useHydrated } from '@/lib/store';
 import { getVerseText } from '@/lib/api/bible';
 import {
   type Chunk,
@@ -35,6 +31,8 @@ interface UseStudySessionReturn {
   verse: SavedVerse | null;
   chunks: Chunk[];
   loading: boolean;
+  /** Why the session couldn't open, shown with a way back. */
+  loadError: string | null;
   currentIndex: number;
   completedChunks: Set<number>;
   showResults: boolean;
@@ -73,6 +71,7 @@ export function useStudySession({
 }: UseStudySessionOptions): UseStudySessionReturn {
   const [verse, setVerse] = useState<SavedVerse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [chunkResults, setChunkResults] = useState<ChunkResults>(new Map());
@@ -84,13 +83,20 @@ export function useStudySession({
   const peekedChunksRef = useRef<ReadonlySet<number>>(new Set());
   const savedAttemptRef = useRef(false);
 
-  // Load verse on mount
+  const hydrated = useHydrated();
+
+  // Load once the store has the library. The store, not a refetch, so a mastered verse
+  // removed from every collection opens here just as it does on the setup screen.
   useEffect(() => {
+    if (!hydrated) return;
     async function loadVerse() {
-      const verses = await getSavedVerses();
-      const found = verses.find((v) => v.id === verseId);
-      if (found) {
-        // Ensure we have both text and keyed verses data
+      const found = findVerse(useAppStore.getState(), verseId);
+      if (!found) {
+        setLoadError('This verse is no longer in your library.');
+        setLoading(false);
+        return;
+      }
+      try {
         let verseWithText = found;
         if (!found.text || !found.verses) {
           const { text, verses: keyedVerses } = await getVerseText(found);
@@ -99,13 +105,15 @@ export function useStudySession({
         setVerse(verseWithText);
         const seed = Math.floor(Math.random() * 2);
         setSessionSeed(seed);
-        const parsedChunks = parseVerseIntoChunks(verseWithText, difficulty, chunkSize, seed);
-        setChunks(parsedChunks);
+        setChunks(parseVerseIntoChunks(verseWithText, difficulty, chunkSize, seed));
+      } catch (e) {
+        console.error('[STUDY] Failed to load verse text:', e);
+        setLoadError("Couldn't load this verse. Check your connection and try again.");
       }
       setLoading(false);
     }
     loadVerse();
-  }, [verseId, difficulty, chunkSize]);
+  }, [hydrated, verseId, difficulty, chunkSize]);
 
   // Computed values
   const completedChunks = useMemo(() => new Set(chunkResults.keys()), [chunkResults]);
@@ -262,6 +270,7 @@ export function useStudySession({
     verse,
     chunks,
     loading,
+    loadError,
     currentIndex,
     completedChunks,
     showResults,

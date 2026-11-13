@@ -1614,10 +1614,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateVerseProgress: async (id, difficulty, accuracy, fullSession = false) => {
-    // Look up the verse in `state.verses` only — `masteredVerses` may
-    // contain soft-deleted rows that aren't in `state.verses` and shouldn't
-    // be progressing anyway (no active session can reach them today).
-    //
     // Multi-device note: writes to Supabase are last-write-wins. Two
     // devices reviewing the same verse against their own stale local
     // `nextDueAt` can each treat the review as on-time and double-bump
@@ -1625,14 +1621,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     // accepts this as drift-by-1 for personal use (review-system.md
     // "Concurrent updates from two devices"). If realtime sync is added
     // later, reconcile passCount via lastReviewedAt comparison.
-    // Look up across both arrays — a soft-deleted-but-mastered verse
-    // is in `masteredVerses` only (not in `verses`), and the study setup
-    // screen routes through useVerse() which checks both. Without this
-    // fallback, practicing such a verse would silently no-op the
-    // timestamp bump and the "Recent" sort wouldn't reflect the session.
-    const verse =
-      get().verses.find((v) => v.id === id) ??
-      get().masteredVerses.find((v) => v.id === id);
+    // A soft-deleted-but-mastered verse is in `masteredVerses` only, and
+    // the setup screen and study session reach it through findVerse too.
+    const verse = findVerse(get(), id);
     if (!verse) return;
 
     const currentBest = verse.progress[difficulty]?.bestAccuracy;
@@ -1766,9 +1757,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // on session start, and a redundant set() would swap the verse's
     // object identity — re-rendering every subscriber (visible as a
     // flicker on the setup screen mid-navigation) for nothing.
-    const existing =
-      get().verses.find((v) => v.id === id) ??
-      get().masteredVerses.find((v) => v.id === id);
+    const existing = findVerse(get(), id);
     if (!existing || (existing.lastChunkSize === chunkSize && existing.lastDifficulty === difficulty)) {
       return;
     }
@@ -1852,13 +1841,13 @@ export function useVersesByCollection(collectionId: string) {
   );
 }
 
+/** One verse by id, including a mastered verse removed from every collection (it's in `masteredVerses` only). */
+export function findVerse(state: Pick<AppState, 'verses' | 'masteredVerses'>, id: string): SavedVerse | undefined {
+  return state.verses.find((v) => v.id === id) ?? state.masteredVerses.find((v) => v.id === id);
+}
+
 export function useVerse(id: string) {
-  const verses = useAppStore(useShallow((state) => state.verses));
-  const masteredVerses = useAppStore(useShallow((state) => state.masteredVerses));
-  return useMemo(
-    () => verses.find((v) => v.id === id) || masteredVerses.find((v) => v.id === id),
-    [verses, masteredVerses, id]
-  );
+  return useAppStore((state) => findVerse(state, id));
 }
 
 export function useCollection(id: string) {

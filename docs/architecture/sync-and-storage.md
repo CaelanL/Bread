@@ -117,7 +117,7 @@ The convention is `useX(...)` selectors, not direct
 | `useCollectionSort(id)` | the collection's `SortOption` |
 | `useVerses()` | `SavedVerse[]` |
 | `useHydrated()` | `boolean` |
-| `useVerse(id)` | one verse from `verses` or `masteredVerses` |
+| `useVerse(id)` | one verse from `verses` or `masteredVerses` (`findVerse` outside React) |
 | `useVersesByCollection(id)` | filtered verse list |
 | `useMasteredVerses()`, `useMasteredVerseCount()` | `masteredVerses`, its count |
 | `useInProgressVerses()`, `useInProgressVerseCount()` | the virtual In Progress list, its count |
@@ -267,8 +267,8 @@ Holds the shared types (`SavedVerse`, `Collection`, `VerseProgress`),
 IDs, and `formatVerseReference`.
 
 Its two writes, `updateCollectionSort` and `updateVerseStudyPrefs`, are
-called by the store, and `getSavedVerses` is read by the study session.
-Every other verse and collection write is a store action.
+called by the store. Every other verse and collection write is a store
+action, and every verse read goes through the store.
 
 ## Verse text caching
 

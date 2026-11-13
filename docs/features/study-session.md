@@ -58,11 +58,13 @@ Restore runs once per screen open, behind `defaultsApplied`:
 
 `useStudySession` loads once per verse, difficulty and chunk size:
 
-1. `getSavedVerses()` from `lib/storage` queries Supabase for the verse. This is
-   a network read, not the store.
+1. Once the store is hydrated, `findVerse` (store) reads the verse from `verses`,
+   then `masteredVerses`, like `useVerse`, so a removed mastered verse opens.
 2. If `text` or `verses` is missing, `getVerseText` fetches them. Read rules:
    `docs/architecture/bible-api-and-caching.md`.
 3. `sessionSeed` is drawn as 0 or 1, and `parseVerseIntoChunks` builds the chunks.
+
+A missing verse or a failed text fetch shows a message and Close.
 
 ## Chunks
 
@@ -222,13 +224,6 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 
 ## Sharp edges
 
-- **Load failure traps the reader.** `loadVerse` has no catch, so a thrown
-  `getVerseText` (offline, rate limit) leaves the spinner up forever. A verse
-  `getSavedVerses` can't find gives "Something went wrong". Neither state renders
-  a header, and the screen is a `fullScreenModal`, so iOS has no way out.
-- **Soft-deleted mastered verses can't start a session.** Setup finds them through
-  `useVerse`, but `getSavedVerses` filters on `deleted_at`, so the session lands on
-  "Something went wrong".
 - **Partial scores can mark mastery.** See `docs/features/review.md`.
 - **Partial scores read low.** One of two equal chunks at 100% saves about 50%.
 - **Empty chunks.** A keyed map missing a verse gives a chunk with empty `text`,
@@ -243,6 +238,8 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - `npm run sim -- shot "/(tabs)/(library)/setup/seed-john-3-16" --as reader-a`: Hard selected (mastered with nothing saved), no chunk row.
 - `npm run sim -- shot "/session?id=seed-psalm-23-1-3&difficulty=medium&chunkSize=1" --as reader-a`: "Verse 1" card with every other word as one unbroken blank, three progress segments, mic button. Needs the local `bible` function serving ESV.
 - `npm run sim -- flow practice-session`: reader-a opens Psalm 23:1-3 setup, picks Medium, taps Start session, sees "Verse 1" and the mic, taps the mic and gets the iOS microphone prompt. Don't Allow shows "Permission required" and dismissing it restores the mic.
+- `npm run sim -- flow practice-removed-mastered`: reader-a's mastered John 3:16, removed from My Verses, still starts a session; the flow puts it back.
+- `npm run sim -- shot "/session?id=x" --as reader-a`: Close and "This verse is no longer in your library."
 - `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. The mic stays circular with a loading ring during permission, then becomes a slimmer pill with the waveform and actions once capture starts. One recording starts on the double tap. Discard returns the mic to the same chunk.
 - Real device, Medium, multi-verse: tap the eye, re-hide, recite, submit. The card shows the real score and "Revealed — this chunk won't count", and the final score treats those words as missing.
 
@@ -255,3 +252,4 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - 2026-08-25 · Prefs are per-verse columns, not `progress` keys; mastered verses with none open on Hard, whole passage · `progress` round-trips through `parseProgress`, so older clients would clobber JSONB keys. Engraved reviews only qualify on Hard, so Easy would stall them.
 - 2026-09-17 · Blanks are drawn apart from the glyph and stay word-width · Fixes one word looking like several blanks, without changing the length hint or wrapping.
 - 2026-09-17 · Numbers compare as canonical spans before the diff, standard grammar only · Translations and the recognizer both mix digits and words. Exact value and kind keep false positives out.
+- 2026-11-12 · The session reads its verse from the store, not a second query · Same lookup as setup, so removed mastered verses open and failures show.

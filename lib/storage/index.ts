@@ -208,44 +208,6 @@ async function getCurrentUserId(): Promise<string> {
 // ============ VERSE FUNCTIONS ============
 
 /**
- * Get all saved verses from Supabase (via junction table)
- */
-export async function getSavedVerses(): Promise<SavedVerse[]> {
-  try {
-    const { data, error } = await supabase
-      .from('verse_collections')
-      .select(`
-        added_at,
-        user_collections!inner(client_id),
-        user_verses!inner(*)
-      `)
-      .is('user_verses.deleted_at', null)
-      .order('added_at', { ascending: false });
-
-    if (error) {
-      console.error('[STORAGE] Failed to fetch verses:', error);
-      return [];
-    }
-
-    return data.map((vc: any) => ({
-      id: vc.user_verses.client_id,
-      collectionId: vc.user_collections.client_id,
-      book: vc.user_verses.book,
-      chapter: vc.user_verses.chapter,
-      verseStart: vc.user_verses.verse_start,
-      verseEnd: vc.user_verses.verse_end,
-      version: vc.user_verses.version as BibleVersion,
-      createdAt: new Date(vc.added_at).getTime(),
-      progress: parseProgress(vc.user_verses.progress),
-      ...parseVerseRowExtras(vc.user_verses),
-    }));
-  } catch (e) {
-    console.error('[STORAGE] Verse fetch error:', e);
-    return [];
-  }
-}
-
-/**
  * Remember the study setup (chunk size + difficulty) the user chose for
  * a verse. Preference write, fire-and-forget: callers don't surface
  * failures — a lost write just means the setup screen falls back to
