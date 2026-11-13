@@ -8,7 +8,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
 import { hasOtherMembers, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
-import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useSharedOwnerName, useVersesByCollection, useVersesLostWith } from '@/lib/store';
+import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useSharedOwnerName, useVersesByCollection } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useFocusEffect } from 'expo-router';
@@ -28,7 +28,6 @@ function CollectionCard({
   collection,
   index,
   onPress,
-  onDelete,
   onRename,
   onReorder,
   onShare,
@@ -38,7 +37,6 @@ function CollectionCard({
   collection: Collection;
   index: number;
   onPress: () => void;
-  onDelete: () => Promise<void>;
   onRename: () => void;
   onReorder: () => void;
   onShare: () => void;
@@ -54,7 +52,6 @@ function CollectionCard({
   const dueCounts = useDueCounts(now);
   const shared = useSharedCollection(collection.id);
   const ownerName = useSharedOwnerName(collection.id);
-  const lostCount = useVersesLostWith(collection.id);
 
   const verseCount = isMastered
     ? masteredVerseCount
@@ -75,14 +72,12 @@ function CollectionCard({
       collection={{ ...collection, verseCount }}
       index={index}
       onPress={onPress}
-      onDelete={onDelete}
       onRename={onRename}
       onReorder={onReorder}
       reorder={reorder}
       actionsDisabled={actionsDisabled}
       dueCount={dueCount}
       sharedRole={shared?.role}
-      lostCount={lostCount}
       onShare={onShare}
       emblem={emblem}
       memberCount={group?.memberCount}
@@ -107,7 +102,6 @@ export default function LibraryScreen() {
   const renameCollection = useAppStore((s) => s.renameCollection);
   const reorderCollections = useAppStore((s) => s.reorderCollections);
   const orderSaving = useAppStore((s) => s.collectionOrderSaving);
-  const deleteCollection = useAppStore((s) => s.deleteCollection);
   const refresh = useAppStore((s) => s.refresh);
 
   const [refreshing, setRefreshing] = useState(false);
@@ -167,15 +161,6 @@ export default function LibraryScreen() {
     }
   };
 
-  const handleDeleteCollection = async (id: string) => {
-    try {
-      await deleteCollection(id);
-    } catch (e) {
-      showErrorToast('Failed to delete collection.');
-      throw e;
-    }
-  };
-
   // The share modal is a route, never an RN Modal held here: see ModalCard. `new` names one first.
   const handleShare = (collectionId: string) => {
     if (shareHitsCap(allCollections.find((c) => c.id === collectionId)?.sharedId, sharedCount)) {
@@ -227,7 +212,6 @@ export default function LibraryScreen() {
                     collection={collection}
                     index={index}
                     onPress={() => handleCollectionPress(collection)}
-                    onDelete={() => handleDeleteCollection(collection.id)}
                     onRename={() => setNameDialog({ collection })}
                     onReorder={() => setEditing(true)}
                     onShare={() => handleShare(collection.id)}

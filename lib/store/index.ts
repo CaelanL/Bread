@@ -1880,15 +1880,13 @@ export function useAddableCollections() {
 }
 
 /**
- * Verses that deleting or leaving this collection would lose: not mastered and in no other
+ * Verses that deleting or leaving this collection would lose now: not mastered and in no other
  * collection (the delete rule in docs/features/library.md#deleting-a-verse).
  */
-export function useVersesLostWith(collectionId: string) {
-  const verses = useAppStore(useShallow((state) => state.verses));
-  return useMemo(() => {
-    const elsewhere = new Set(verses.filter((v) => v.collectionId !== collectionId).map((v) => v.id));
-    return verses.filter((v) => v.collectionId === collectionId && !elsewhere.has(v.id) && !v.progress.hard.completed).length;
-  }, [verses, collectionId]);
+export function versesLostWith(collectionId: string): number {
+  const { verses } = useAppStore.getState();
+  const elsewhere = new Set(verses.filter((v) => v.collectionId !== collectionId).map((v) => v.id));
+  return verses.filter((v) => v.collectionId === collectionId && !elsewhere.has(v.id) && !v.progress.hard.completed).length;
 }
 
 /**

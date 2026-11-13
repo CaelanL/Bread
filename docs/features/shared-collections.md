@@ -169,10 +169,10 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   syncs; `deleteVerse` deletes it ("Remove for everyone?" once others joined).
   Copy-to-collection lists your own that no one joined (`addSharedVerse`); Add-to-collection,
   ones you edit (sync moves hand-linked verses to My Verses).
-- **Leave and delete**: a member's swipe and menu read Leave (`collectionRemoval`),
-  neither until the role loads; the confirm counts verses lost
-  (`useVersesLostWith`). Once others joined, the owner's Delete asks "Delete for everyone?
-  Members keep their own copy."; it stops sharing, then deletes the owner's copy.
+- **Leave and delete**: a member's swipe and menu read Leave (`collectionRemoval`); the
+  confirm counts verses lost. Once others joined, the owner's Delete asks "Delete for everyone?
+  Members keep their own copy."; it stops sharing, then deletes the owner's copy. Confirms and
+  their failure toasts: `member-actions.ts`.
 - **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
   toasts once: "You were removed from <name>." or "<name> is now your own copy." (dissolved).
   Not for groups you left or own.
@@ -217,4 +217,4 @@ card personal, Stop sharing alone and with members, the old code dead).
 - 2026-11-12 · Shared only once someone besides the owner is in it, from `member_count`, no new column · Caelan: an accidental Share tap mustn't turn a collection shared.
 - 2026-11-12 · Stop sharing deletes the group, members or not · The dissolve keeps copies and kills codes; no migration.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.
-- 2026-11-12 · No Leave or Delete until the role loads · A guess shows the wrong confirm, and the store refuses an unloaded role.
+- 2026-11-12 · No Leave or Delete until the role loads · A guess shows the wrong confirm; the store refuses it anyway.

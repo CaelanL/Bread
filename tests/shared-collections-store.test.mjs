@@ -42,6 +42,7 @@ test('joining and leaving a shared collection', async (t) => {
   let referenceRemoved = false;
   let masteredSquares = 0;
   let leaveGate = null;
+  let leaveFails = false;
   let syncFails = false;
   const rpcs = [];
   const reads = [];
@@ -62,6 +63,7 @@ test('joining and leaving a shared collection', async (t) => {
       if (name === 'join_shared_collection') { joined = true; copyRow = copy; return json(copy.client_id); }
       if (name === 'leave_shared_collection') {
         await leaveGate;
+        if (leaveFails) return json({ code: '57014', message: 'canceling statement due to statement timeout' }, 500);
         joined = false;
         copyRow = null;
         return new Response(null, { status: 204 });
@@ -186,6 +188,33 @@ test('joining and leaving a shared collection', async (t) => {
     assert.deepEqual(rpcs, []);
     await state().updateVerseProgress('verse-1', 'hard', 95, true);
     assert.deepEqual(rpcs.map(([name]) => name), ['get_shared_status', 'get_shared_members']);
+  });
+
+  await t.test("a member's Library delete confirms Leave, and a failed leave toasts leave and keeps the card", async () => {
+    const { Alert } = await import('react-native');
+    const { confirmRemoveCollection } = await import('../components/shared/member-actions.ts');
+    const alerts = [];
+    t.mock.method(Alert, 'alert', (...args) => alerts.push(args));
+    let kept = 0;
+
+    const loaded = state().sharedCollections;
+    useAppStore.setState({ sharedCollections: {} });
+    confirmRemoveCollection(copy.client_id, { onKept: () => kept++ });
+    assert.deepEqual(alerts, [], 'nothing is offered while the role is unknown');
+    useAppStore.setState({ sharedCollections: loaded });
+
+    confirmRemoveCollection(copy.client_id, { onKept: () => kept++ });
+    const [title, , buttons] = alerts[0];
+    assert.equal(title, 'Leave "Romans 8"?');
+    toasts.length = 0;
+    leaveFails = true;
+    buttons.find((b) => b.text === 'Leave').onPress();
+    while (toasts.length === 0) await new Promise((r) => setTimeout(r, 1));
+    leaveFails = false;
+    assert.deepEqual(toasts, ["Couldn't leave this collection. Try again."]);
+    assert.equal(kept, 1);
+    assert.ok(state().collections.some((c) => c.id === copy.client_id));
+    Alert.alert.mock.restore();
   });
 
   await t.test("a member's delete is leave: the leave RPC, and the copy leaves the store", async () => {

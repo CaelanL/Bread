@@ -125,7 +125,7 @@ The convention is `useX(...)` selectors, not direct
 | `useMostMemorizedBooks()` | top 5 books by mastered count |
 | `useSharedCollection(id)` | the group a collection is a copy of: role, member and verse counts, mastered and engraved squares |
 | `useSharedOwnerName(id)` | that group's owner's display name (yours when you own it), or null |
-| `useAddableCollections()`, `useVersesLostWith(id)` | collections the user may add to; verses a delete or leave would lose |
+| `useAddableCollections()`, `versesLostWith(id)` | collections the user may add to; verses a delete or leave would lose now (not a hook) |
 | `useInsightsStats()` | `{ versesMastered, inProgress }` |
 
 ### Persistence

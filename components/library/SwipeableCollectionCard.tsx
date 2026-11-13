@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { confirmDeleteCollection, confirmDeleteForEveryone, confirmLeave } from '@/components/shared/confirm-removal';
+import { confirmRemoveCollection } from '@/components/shared/member-actions';
 import { DueCountPill } from '@/components/library/DueCountPill';
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
@@ -42,7 +42,6 @@ interface SwipeableCollectionCardProps {
   collection: Collection & { verseCount: number };
   index: number;
   onPress: () => void;
-  onDelete: () => Promise<void>;
   onRename: () => void;
   onReorder: () => void;
   reorder?: CollectionReorder;
@@ -50,8 +49,6 @@ interface SwipeableCollectionCardProps {
   dueCount?: number;
   /** Set for a shared collection: a member's delete is Leave, the owner's deletes for everyone. */
   sharedRole?: SharedRole;
-  /** Verses deleting or leaving would lose (not mastered, in no other collection). */
-  lostCount?: number;
   /** Shown for a personal collection; opens sharing. */
   onShare?: () => void;
   /** Every verse mastered or engraved; on a shared collection with others in it, by every member. */
@@ -66,14 +63,12 @@ export function SwipeableCollectionCard({
   collection,
   index,
   onPress,
-  onDelete,
   onRename,
   onReorder,
   reorder,
   actionsDisabled,
   dueCount = 0,
   sharedRole,
-  lostCount = 0,
   onShare,
   emblem,
   memberCount,
@@ -191,18 +186,7 @@ export function SwipeableCollectionCard({
     translateX.value = withTiming(0, { duration: Motion.pressMs });
   };
 
-  const handleDelete = () => {
-    const confirm = async () => {
-      try {
-        await onDelete();
-      } catch {
-        closeSwipe();
-      }
-    };
-    if (isLeave) return confirmLeave(collection.name, lostCount, confirm, closeSwipe);
-    if (memberCount !== undefined) return confirmDeleteForEveryone(lostCount, confirm, closeSwipe);
-    confirmDeleteCollection(collection.name, collection.verseCount, confirm, closeSwipe);
-  };
+  const handleDelete = () => confirmRemoveCollection(collection.id, { onKept: closeSwipe });
 
   const openActions = (pageY: number) => {
     if (!isCustom || actionsDisabled) return;

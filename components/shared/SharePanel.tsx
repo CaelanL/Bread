@@ -1,6 +1,5 @@
-import { confirmLeave, confirmStopSharing } from '@/components/shared/confirm-removal';
 import { shareInvite, useCopyCode } from '@/components/shared/invite-actions';
-import { manageMember } from '@/components/shared/member-actions';
+import { confirmRemoveCollection, confirmStopSharing, manageMember } from '@/components/shared/member-actions';
 import { MemberRow, MemberRowPlaceholder } from '@/components/shared/MemberRow';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { modalStyles } from '@/components/ui/ModalCard';
@@ -11,7 +10,7 @@ import { useAuth } from '@/lib/auth';
 import { daysLeft, sharedErrorMessage } from '@/lib/shared/invite-code';
 import { getLiveInvite, getSharedMembers, type LiveInvite, type SharedMember } from '@/lib/shared/invites';
 import { collectionRemoval } from '@/lib/shared/progress';
-import { useAppStore, useCollection, useSharedCollection, useVersesLostWith } from '@/lib/store';
+import { useAppStore, useCollection, useSharedCollection } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -39,7 +38,6 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
   const { user } = useAuth();
   const collection = useCollection(collectionId);
   const shared = useSharedCollection(collectionId);
-  const lost = useVersesLostWith(collectionId);
   const sharedId = shared?.id;
   const isOwner = shared?.role === 'owner';
   const name = collection?.name ?? shared?.name ?? '';
@@ -108,24 +106,14 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
       : list?.filter((m) => m.userId !== member.userId)) ?? null));
   };
 
-  const leave = () => {
-    if (!sharedId) return;
-    confirmLeave(name, lost, () => run(async () => {
-      await useAppStore.getState().leaveSharedCollection(sharedId);
-      onLeft();
-    }, "Couldn't leave this collection. Try again."));
-  };
+  const leave = () => confirmRemoveCollection(collectionId, { run, onDone: onLeft });
 
   const memberCount = members?.length ?? shared?.memberCount ?? 0;
   const othersJoined = memberCount > 1;
 
   const stopSharing = () => {
     if (!sharedId) return;
-    const others = members ? members.filter((m) => m.userId !== user?.id).map((m) => m.displayName) : Math.max(memberCount - 1, 0);
-    confirmStopSharing(name, others, () => run(async () => {
-      await useAppStore.getState().stopSharing(sharedId);
-      onStopped();
-    }, "Couldn't stop sharing. Try again."));
+    confirmStopSharing(sharedId, name, members, memberCount, user?.id, { run, onDone: onStopped });
   };
 
   const plural = `${memberCount} member${memberCount === 1 ? '' : 's'}`;

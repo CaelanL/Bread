@@ -1,8 +1,8 @@
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { CollectionHeader, groupProgressLabel, HeaderPill } from '@/components/library/CollectionHeader';
 import { CollectionIconPicker } from '@/components/library/CollectionIconPicker';
-import { confirmDeleteCollection, confirmDeleteForEveryone, confirmLeave, confirmStopSharing } from '@/components/shared/confirm-removal';
 import { InviteLine } from '@/components/shared/InviteLine';
+import { confirmRemoveCollection, confirmStopSharing } from '@/components/shared/member-actions';
 import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
@@ -17,13 +17,12 @@ import { useAuth } from '@/lib/auth';
 import { useSharedGrid } from '@/hooks/use-shared-grid';
 import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
 import { listNames } from '@/lib/shared/display-name';
-import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import { canEditShared, collectionRemoval, groupProgress, hasOtherMembers, masteredByEveryoneCount, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
 import { referenceKey } from '@/lib/store/translation';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection, useVersesLostWith } from '@/lib/store';
+import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
@@ -79,7 +78,6 @@ export default function CollectionScreen() {
   const isOwner = removal === 'delete';
   const isLeave = removal === 'leave';
   const isCustom = Boolean(collection && !collection.isDefault && !collection.isVirtual);
-  const lostCount = useVersesLostWith(id || '');
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const barHeight = useTopBarHeight();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -184,33 +182,12 @@ export default function CollectionScreen() {
     router.push(`/share/${id}?view=members`);
   });
 
-  const removeCollection = () => {
-    if (!collection) return;
-    const confirm = async () => {
-      backToLibrary();
-      try {
-        await useAppStore.getState().deleteCollection(collection.id);
-      } catch (e) {
-        showErrorToast(sharedErrorMessage(e, isLeave ? "Couldn't leave this collection. Try again." : 'Failed to delete collection.'));
-      }
-    };
-    if (isLeave) confirmLeave(collection.name, lostCount, confirm);
-    else if (withOthers) confirmDeleteForEveryone(lostCount, confirm);
-    else confirmDeleteCollection(collection.name, verses.length, confirm);
-  };
+  const removeCollection = () => confirmRemoveCollection(id || '', { onConfirm: backToLibrary });
 
   const stopSharing = () => {
     if (!collection || !sharedId) return;
-    const others = sharedProgress?.fetchedAt
-      ? sharedProgress.members.filter((m) => m.userId !== user?.id).map((m) => m.displayName)
-      : Math.max((shared?.memberCount ?? 1) - 1, 0);
-    confirmStopSharing(collection.name, withOthers ? others : 0, async () => {
-      try {
-        await useAppStore.getState().stopSharing(sharedId);
-      } catch (e) {
-        showErrorToast(sharedErrorMessage(e, "Couldn't stop sharing. Try again."));
-      }
-    });
+    confirmStopSharing(sharedId, collection.name, sharedProgress?.fetchedAt ? sharedProgress.members : null,
+      shared?.memberCount ?? 1, user?.id);
   };
 
   const handleVersePress = (verse: SavedVerse) => {
