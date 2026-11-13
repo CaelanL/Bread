@@ -1,0 +1,123 @@
+# Start from npm run db:reset. reader-a types the seeded code BREAD828 from the Library and joins
+# Romans 8 (their own Romans 8:28 is reused); reader-c makes a new code, so BREAD828 stops
+# working for reader-b; a link opened signed out shows the join modal over the Library after
+# sign-in, and joins from there. The collection's people line names the members (lib/shared/display-name.ts).
+appId: com.caelanliu.biblemem
+name: shared-join-code
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Psalms, 1 verse.*"
+    timeout: 20000
+- tapOn:
+    id: library-add
+- tapOn: "Join with code"
+- extendedWaitUntil:
+    visible:
+      id: join-code-input
+    timeout: 8000
+- inputText: "bread-828"
+- assertVisible: "BREAD828"
+- takeScreenshot: join-code-1-typed
+- tapOn:
+    id: join-code-continue
+- extendedWaitUntil:
+    visible: ".* INVITED YOU"
+    timeout: 15000
+- assertVisible: "Romans 8"
+- assertVisible: "3 verses · 2 members"
+- tapOn:
+    id: join-button
+- runFlow:
+    file: subflows/enter-name.yaml
+    env:
+      FIRST: Reader
+- extendedWaitUntil:
+    visible: "Cara, Dana and Reader · 3 verses.*"
+    timeout: 20000
+- assertVisible: ".*Romans 8:28 · ESV.*"
+- takeScreenshot: join-code-2-joined
+
+# The owner replaces the link; the old code stops working.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fseed-romans-8
+- extendedWaitUntil:
+    visible:
+      id: collection-share
+    timeout: 20000
+- tapOn:
+    id: collection-share
+- extendedWaitUntil:
+    visible: "BREAD828"
+    timeout: 10000
+- assertVisible: "Reader, Member"
+- tapOn:
+    id: invite-new
+- assertVisible: "Make a new code?"
+- tapOn: "New code"
+- extendedWaitUntil:
+    notVisible: "BREAD828"
+    timeout: 10000
+- runScript:
+    file: scripts/shared-collections.js
+    env:
+      READER: reader-c
+      MODE: invite
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fjoin
+- extendedWaitUntil:
+    visible:
+      id: join-code-input
+    timeout: 20000
+- inputText: "BREAD828"
+- tapOn:
+    id: join-code-continue
+- extendedWaitUntil:
+    visible: "Invite unavailable"
+    timeout: 15000
+- assertVisible: ".*doesn't match an invite.*"
+- takeScreenshot: join-code-3-revoked
+- tapOn:
+    id: modal-close
+
+# Signed out: the link waits through sign-in, then the modal opens over the Library. Twice:
+# Closing lands on the Library (the modal hides it from accessibility), then Join from there.
+- runFlow:
+    file: subflows/invite-signed-out.yaml
+    env:
+      CODE: ${output.code}
+- assertVisible: "3 verses · 3 members"
+- takeScreenshot: join-code-4-after-sign-in
+- tapOn:
+    id: modal-close
+# The reminders card follows the modal, over the Library.
+- extendedWaitUntil:
+    visible: "Maybe later"
+    timeout: 10000
+- tapOn: "Maybe later"
+- assertVisible:
+    id: library-add
+- assertNotVisible: "Sign In"
+- runFlow:
+    file: subflows/invite-signed-out.yaml
+    env:
+      CODE: ${output.code}
+- tapOn:
+    id: join-button
+- runFlow:
+    file: subflows/enter-name.yaml
+    env:
+      FIRST: Bea
+- extendedWaitUntil:
+    visible: "Maybe later"
+    timeout: 20000
+- tapOn: "Maybe later"
+- extendedWaitUntil:
+    visible: "Cara, .* and 2 others · 3 verses.*"
+    timeout: 15000
+- takeScreenshot: join-code-5-joined-after-sign-in
+- tapOn: Back
+- assertVisible:
+    id: library-add
+- assertVisible: ".*Romans 8.*"

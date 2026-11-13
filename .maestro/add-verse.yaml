@@ -9,7 +9,7 @@ name: add-verse
 # A failed earlier run can leave the verse behind.
 - runFlow:
     when:
-      visible: ".*Ruth 1:1 • (ESV|KJV).*"
+      visible: ".*Ruth 1:1 · (ESV|KJV).*"
     file: subflows/delete-ruth.yaml
 - extendedWaitUntil:
     visible: "No verses yet"
@@ -45,7 +45,7 @@ name: add-verse
 - takeScreenshot: add-verse-1-selected
 - tapOn: "Add Verse 1"
 - extendedWaitUntil:
-    visible: ".*Ruth 1:1 • KJV.*"
+    visible: ".*Ruth 1:1 · KJV.*"
     timeout: 20000
 - takeScreenshot: add-verse-2-added
 - runFlow: subflows/delete-ruth.yaml

@@ -5,7 +5,8 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchChapter } from '@/lib/api';
 import { getVerseCount, normalizeBookName } from '@/lib/bible';
-import { type BibleVersion } from '@/lib/storage';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
+import { DEFAULT_COLLECTION_ID, type BibleVersion } from '@/lib/storage';
 import { useAppStore } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import NetInfo from '@react-native-community/netinfo';
@@ -302,7 +303,7 @@ export default function VerseSelectScreen() {
         chapter: chapterNum,
         verseStart: min,
         verseEnd: max,
-      }, collectionId || 'my-verses');
+      }, collectionId || DEFAULT_COLLECTION_ID);
 
       // Navigate back to collection or library
       if (collectionId) {
@@ -312,7 +313,7 @@ export default function VerseSelectScreen() {
       }
     } catch (error) {
       console.error('Failed to add verses:', error);
-      showErrorToast('Failed to add verse. Please try again.');
+      showErrorToast(sharedErrorMessage(error, 'Failed to add verse. Please try again.'));
     } finally {
       setIsSaving(false);
     }
@@ -345,7 +346,6 @@ export default function VerseSelectScreen() {
           accessibilityLabel: `Translation, ${selectedVersion}`,
           testID: 'verse-translation-picker',
           onPress: () => setVersionPickerVisible(true),
-          variant: 'text',
         }}
       />
 

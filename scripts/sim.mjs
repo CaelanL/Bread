@@ -81,9 +81,10 @@ function takeLock() {
 // ---------- native fingerprint
 
 function currentFingerprint() {
-  // 7168 = package.json scripts (1024) + .gitignore (2048) + the config's extra section (4096), and eas.json is ignored.
-  // None of these change what's in the installed build, and extra holds this folder's Supabase URL, which differs per worktree.
-  const out = must('npx', ['@expo/fingerprint', 'fingerprint:generate', '--source-skips', '7168', '--ignore-path', 'eas.json']);
+  // 7169 = the config's version (1) + package.json scripts (1024) + .gitignore (2048) + the config's extra section (4096),
+  // and eas.json is ignored. None of these change how the installed build behaves (a version bump needs no simulator
+  // rebuild), and extra holds this folder's Supabase URL, which differs per worktree.
+  const out = must('npx', ['@expo/fingerprint', 'fingerprint:generate', '--source-skips', '7169', '--ignore-path', 'eas.json']);
   const hash = JSON.parse(out).hash;
   if (!hash) die('Could not read the native fingerprint.');
   return hash;

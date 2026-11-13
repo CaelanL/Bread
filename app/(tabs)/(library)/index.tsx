@@ -1,18 +1,20 @@
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
+import { PopoverMenu } from '@/components/ui/PopoverMenu';
+import { LargeTitle, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
-import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useDueCounts, useInProgressVerseCount, useMasteredVerseCount } from '@/lib/store';
+import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
+import { hasOtherMembers, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
+import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useSharedOwnerName, useVersesByCollection } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
-import { router } from 'expo-router';
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -26,47 +28,60 @@ function CollectionCard({
   collection,
   index,
   onPress,
-  onDelete,
   onRename,
   onReorder,
+  onShare,
   reorder,
   actionsDisabled,
 }: {
   collection: Collection;
   index: number;
   onPress: () => void;
-  onDelete: () => Promise<void>;
   onRename: () => void;
   onReorder: () => void;
+  onShare: () => void;
   reorder?: CollectionReorder;
   actionsDisabled: boolean;
 }) {
   const isMastered = collection.id === MASTERED_COLLECTION_ID;
   const isInProgress = collection.id === IN_PROGRESS_COLLECTION_ID;
-  const collectionVerseCount = useCollectionVerseCount(collection.id);
+  const collectionVerses = useVersesByCollection(collection.id);
   const masteredVerseCount = useMasteredVerseCount();
   const inProgressVerseCount = useInProgressVerseCount();
   const now = useReviewNowValue();
   const dueCounts = useDueCounts(now);
+  const shared = useSharedCollection(collection.id);
+  const ownerName = useSharedOwnerName(collection.id);
 
   const verseCount = isMastered
     ? masteredVerseCount
     : isInProgress
       ? inProgressVerseCount
-      : collectionVerseCount;
+      : collectionVerses.length;
   const dueCount = isMastered ? dueCounts.mastered : 0;
+  // Shared only once someone else joined; until then it's a personal card (docs/features/shared-collections.md).
+  const group = shared && hasOtherMembers(shared) ? shared : undefined;
+  const emblem = useMemo(() => {
+    if (collection.isVirtual) return null;
+    if (group) return sharedEmblem(group);
+    return soloEmblem(collectionVerses.map((v) => v.progress));
+  }, [collection.isVirtual, group, collectionVerses]);
 
   return (
     <SwipeableCollectionCard
       collection={{ ...collection, verseCount }}
       index={index}
       onPress={onPress}
-      onDelete={onDelete}
       onRename={onRename}
       onReorder={onReorder}
       reorder={reorder}
       actionsDisabled={actionsDisabled}
       dueCount={dueCount}
+      sharedRole={shared?.role}
+      onShare={onShare}
+      emblem={emblem}
+      memberCount={group?.memberCount}
+      ownerName={group ? ownerName : undefined}
     />
   );
 }
@@ -87,13 +102,26 @@ export default function LibraryScreen() {
   const renameCollection = useAppStore((s) => s.renameCollection);
   const reorderCollections = useAppStore((s) => s.reorderCollections);
   const orderSaving = useAppStore((s) => s.collectionOrderSaving);
-  const deleteCollection = useAppStore((s) => s.deleteCollection);
   const refresh = useAppStore((s) => s.refresh);
 
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const barHeight = useTopBarHeight();
+  const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
+  // A link can present a modal route over the Library; its RN Modals must not stay up under it.
+  // Two quick taps on different cards would push two collections; the first push locks until the
+  // Library is focused again.
+  const opening = useRef(false);
+  useFocusEffect(useCallback(() => {
+    opening.current = false;
+    return () => {
+      setAddMenuOpen(false);
+      setNameDialog(null);
+    };
+  }, []));
   const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
   const actionsDisabled = refreshing || orderSaving;
   const scrollGesture = useMemo(() => Gesture.Native(), []);
@@ -133,21 +161,21 @@ export default function LibraryScreen() {
     }
   };
 
-  const handleDeleteCollection = async (id: string) => {
-    try {
-      await deleteCollection(id);
-    } catch (e) {
-      showErrorToast('Failed to delete collection.');
-      throw e;
+  // The share modal is a route, never an RN Modal held here: see ModalCard. `new` names one first.
+  const handleShare = (collectionId: string) => {
+    if (shareHitsCap(allCollections.find((c) => c.id === collectionId)?.sharedId, sharedCount)) {
+      showErrorToast(`${MAX_SHARED_COLLECTIONS} shared collections is the limit.`);
+      return;
     }
+    router.push(`/share/${collectionId}`);
   };
 
   const handleCollectionPress = (collection: Collection) => {
-    if (editing) return;
+    if (editing || opening.current) return;
+    opening.current = true;
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 
-  const primaryColor = colors.primary;
 
   const renderEmptyHint = () => (
     <Animated.View
@@ -163,39 +191,15 @@ export default function LibraryScreen() {
   return (
     <ReviewNowProvider value={now}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Library</Text>
-          <View style={styles.headerActions}>
-            {(editing || customCollections.length > 0) && (
-              <Pressable
-                style={styles.editButton}
-                onPress={() => setEditing(!editing)}
-                accessibilityRole="button"
-                disabled={actionsDisabled}
-              >
-                <Text style={[styles.editLabel, { color: colors.text }]}>{editing ? 'Done' : 'Edit'}</Text>
-              </Pressable>
-            )}
-            <Pressable
-              style={styles.addButton}
-              accessibilityRole="button"
-              accessibilityLabel="New collection"
-              onPress={() => setNameDialog({})}
-              disabled={actionsDisabled}
-            >
-              <IconSymbol name="plus" size={28} color={primaryColor} />
-            </Pressable>
-          </View>
-        </View>
-
         <GestureDetector gesture={scrollGesture}>
-        <ScrollView
+        <Animated.ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.collectionsContainer}
+          contentContainerStyle={[styles.collectionsContainer, { paddingTop: barHeight }]}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
           }
         >
+          <View style={styles.titleGap}><LargeTitle root title="Library" /></View>
           {!hydrated ? (
             <CollectionCardSkeleton count={3} />
           ) : (
@@ -208,9 +212,9 @@ export default function LibraryScreen() {
                     collection={collection}
                     index={index}
                     onPress={() => handleCollectionPress(collection)}
-                    onDelete={() => handleDeleteCollection(collection.id)}
                     onRename={() => setNameDialog({ collection })}
                     onReorder={() => setEditing(true)}
+                    onShare={() => handleShare(collection.id)}
                     actionsDisabled={actionsDisabled}
                     reorder={editing && customIndex >= 0 ? {
                       index: customIndex,
@@ -228,8 +232,21 @@ export default function LibraryScreen() {
               {collections.length <= 1 && renderEmptyHint()}
             </>
           )}
-        </ScrollView>
+        </Animated.ScrollView>
         </GestureDetector>
+        <TopBar>
+          {(editing || customCollections.length > 0) && (
+            <Pressable
+              style={styles.editButton}
+              onPress={() => setEditing(!editing)}
+              accessibilityRole="button"
+              disabled={actionsDisabled}
+            >
+              <Text style={[styles.editLabel, { color: colors.text }]}>{editing ? 'Done' : 'Edit'}</Text>
+            </Pressable>
+          )}
+          <TopBarButton testID="library-add" icon="plus" label="Add" onPress={() => setAddMenuOpen(true)} disabled={actionsDisabled} />
+        </TopBar>
 
         {nameDialog && (
           <AddCollectionModal
@@ -241,6 +258,16 @@ export default function LibraryScreen() {
               : handleAddCollection}
           />
         )}
+        <PopoverMenu
+          visible={addMenuOpen}
+          onClose={() => setAddMenuOpen(false)}
+          anchorPosition={{ top: barHeight, right: 12 }}
+          items={[
+            { label: 'New collection', icon: 'folder.fill', onPress: () => setNameDialog({}) },
+            { label: 'New shared collection', icon: 'person.2.fill', onPress: () => handleShare('new') },
+            { label: 'Join with code', icon: 'number', onPress: () => router.push('/join') },
+          ]}
+        />
       </View>
     </ReviewNowProvider>
   );
@@ -250,25 +277,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: 'bold',
-  },
-  addButton: {
-    padding: 8,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  titleGap: {
+    paddingHorizontal: 4,
+    marginBottom: 4,
   },
   editButton: {
     padding: 10,

@@ -96,6 +96,10 @@ The function is `SECURITY DEFINER` so it can touch `auth.users`. It
 only deletes the calling user — there's no parameter to delete
 someone else.
 
+A shared collection the user owns cascades away with `auth.users`, and every member
+keeps their copy as a personal collection ([dissolve](../features/shared-collections.md#dissolve)).
+Memberships in other people's groups cascade too.
+
 Curated save totals follow the [anonymous retention rule](../features/home.md#community-saves).
 Intro presentation markers cascade with the account; see [Home](../features/home.md#encouragement-video).
 
@@ -160,6 +164,19 @@ fragment into query params, and calls `supabase.auth.setSession(...)`
 when it finds tokens. The link table is in
 `docs/architecture/navigation-and-routing.md`.
 
+## Display name
+
+`profiles.first_name` (required once saved) and `profiles.last_name` (optional), 1 to 30
+characters each, are the user's name. `profiles.display_name` is what members of a
+[shared collection](../features/shared-collections.md) see: first name and last initial,
+"Caelan L.", or the first name alone (`composeDisplayName` in `lib/shared/display-name.ts`).
+Member circles show its initials, CL or C (`initials`).
+`setName` in the store upserts all three together and rolls back with a toast, so every
+reader of `display_name` stays as it was. Settings → Account → Name shows the full name, or
+Add; its form (`NameFields`) starts empty, shows "Shown as Caelan L." as you type, and writes
+nothing until Save. The share and join name step uses the same fields. A `display_name` saved
+before first and last names became the first name.
+
 ## Where the user ID is read
 
 Components use `useAuth().user`. Code in `lib/` reads it from
@@ -169,7 +186,7 @@ Supabase:
 const { data: { user } } = await supabase.auth.getUser();
 ```
 
-`lib/store/index.ts`, `lib/storage/index.ts` and `lib/sync/` call
+`lib/store/index.ts` and `lib/storage/index.ts` call
 `ensureAuth()` first (`getCurrentUserId` in each). `lib/api/analytics.ts`
 and `lib/notifications/api.ts` don't. RLS on every user-owned table
 enforces `auth.uid() = user_id`, so even if a mistake bypasses the
@@ -209,5 +226,12 @@ check, the database refuses the write.
 
 ## Browser checks
 
+- `npm run sim -- flow display-name`: reader-b sees Add, saves "Bea Lopez", sees "Shown as
+  Bea L.", and the name is back after a relaunch and fresh sign-in. Needs a fresh seed.
 - `npm run sim -- flow sign-in-out`: reader-b signs in through the form, Settings shows
   `reader-b@example.test`, Sign Out returns to the Sign In screen.
+
+## Decisions
+
+- 2026-11-12 · Credential fields (sign-in, sign-up, forgot and reset password) set `autoCorrect={false}`, `spellCheck={false}` and their `textContentType` · The predictive bar changed the keyboard's height on the first letter of each word, and `KeyboardAwareScrollView` re-scrolled each time (the screen jittered on a phone). It already scrolls only when the field is covered, so the scroll view is unchanged.
+- 2026-11-12 · First name plus optional last name; members see "First L."; no usernames, nothing unique; no prefill · Groups join by invite code, so nobody searches for a name and uniqueness buys nothing. The last initial tells two Sarahs apart without showing a full last name to a group. The old email-handle prefill got tapped through, leaving names like "liucaelan".

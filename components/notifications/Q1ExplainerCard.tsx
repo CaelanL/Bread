@@ -13,7 +13,7 @@
  * syncForegroundState).
  */
 
-import { Colors } from '@/constants/theme';
+import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -46,6 +46,18 @@ export function Q1ExplainerCard({ isAuthenticated }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const q1Dismissed = useUxFlagsStore((s) => s.q1Dismissed);
   const flagsHydrated = useUxFlagsStore((s) => s.hydrated);
+  // An RN Modal presented over the invite route, or as it closes, never shows and leaves an
+  // invisible layer that takes every tap. So the card waits until just after the sheet is gone.
+  const inviteOpen = useUxFlagsStore((s) => s.inviteOpen);
+  const [held, setHeld] = useState(inviteOpen);
+  useEffect(() => {
+    if (inviteOpen) {
+      setHeld(true);
+      return;
+    }
+    const timer = setTimeout(() => setHeld(false), Motion.exitMs);
+    return () => clearTimeout(timer);
+  }, [inviteOpen]);
   const prefs = useNotificationPreferences();
 
   // iOS one-shots requestPermissionsAsync. Guard against double-tap
@@ -54,8 +66,8 @@ export function Q1ExplainerCard({ isAuthenticated }: Props) {
 
   useEffect(() => () => useUxFlagsStore.getState().setQ1Presented(false), []);
   useEffect(() => {
-    if (process.env.EXPO_OS !== 'ios') useUxFlagsStore.getState().setQ1Presented(visible);
-  }, [visible]);
+    if (process.env.EXPO_OS !== 'ios') useUxFlagsStore.getState().setQ1Presented(visible && !held);
+  }, [visible, held]);
 
   useEffect(() => {
     // Sign-out closes the card immediately — don't leave it hovering
@@ -112,7 +124,7 @@ export function Q1ExplainerCard({ isAuthenticated }: Props) {
 
   return (
     <Modal
-      visible={visible} transparent animationType="fade" onRequestClose={handleMaybeLater}
+      visible={visible && !held} transparent animationType="fade" onRequestClose={handleMaybeLater}
       onShow={() => useUxFlagsStore.getState().setQ1Presented(true)}
       onDismiss={() => useUxFlagsStore.getState().setQ1Presented(false)}
     >

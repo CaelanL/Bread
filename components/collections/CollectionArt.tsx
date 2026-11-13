@@ -16,7 +16,7 @@ const paletteByIcon: Partial<Record<CollectionIconKey, keyof typeof CollectionAr
   prayer: 'violet',
   heart: 'rose',
   lamp: 'green',
-  sun: 'gold',
+  gift: 'gold',
 };
 
 export function CollectionArt({ icon, size = 'tile' }: {

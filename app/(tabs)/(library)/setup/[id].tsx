@@ -1,4 +1,5 @@
-import { AppHeader } from '@/components/app-header';
+import { showErrorToast } from '@/lib/toast';
+import { BAR_HEIGHT, LargeTitle, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
 import { ChunkSizeModal } from '@/components/study/ChunkSizeModal';
 import { ProgressCard } from '@/components/study/ProgressCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -61,6 +62,9 @@ export default function StudySetupScreen() {
   // breakpoint comparisons reflect usable height across iPhone
   // models, not raw window height.
   const insets = useSafeAreaInsets();
+  const barHeight = useTopBarHeight();
+  // With verses hidden, the text shows only in the expanded view.
+  const hideVerseText = useAppStore((state) => state.hideVerseText);
   const frameHeight = useSafeAreaFrame().height;
   const versePreviewLines = frameHeight > LARGE_SCREEN_THRESHOLD ? 4
     : frameHeight > MEDIUM_SCREEN_THRESHOLD ? 3
@@ -166,7 +170,9 @@ export default function StudySetupScreen() {
       {
         text: 'Reset',
         style: 'destructive',
-        onPress: () => resetVerseProgress(id),
+        onPress: () => {
+          resetVerseProgress(id).catch(() => showErrorToast("Couldn't reset progress. Try again."));
+        },
       },
     ]);
   };
@@ -203,29 +209,25 @@ export default function StudySetupScreen() {
 
   if (!verse) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
-        <AppHeader title="Setup" />
-        <Text style={{ color: colors.text }}>Verse not found</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <TopBar onBack={() => router.back()} />
+        <View style={[styles.container, styles.centered]}>
+          <Text style={{ color: colors.text }}>Verse not found</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader
-        title="Setup"
-        rightButton={{
-          label: '',
-          icon: 'ellipsis',
-          onPress: () => setMenuVisible(true),
-          variant: 'text',
-        }}
-      />
+      <TopBar onBack={() => router.back()}>
+        <TopBarButton icon="ellipsis" label="More" onPress={() => setMenuVisible(true)} />
+      </TopBar>
 
       <PopoverMenu
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
-        anchorPosition={{ top: 105, right: 16 }}
+        anchorPosition={{ top: insets.top + BAR_HEIGHT, right: 12 }}
         items={[
           {
             label: 'Reset Progress',
@@ -240,11 +242,12 @@ export default function StudySetupScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + START_BUTTON_HEIGHT + 32 },
+          { paddingTop: barHeight + 8, paddingBottom: insets.bottom + START_BUTTON_HEIGHT + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.formColumn}>
+          <LargeTitle title="Study setup" />
           {/* Verse Preview */}
           <View style={[styles.previewCard, { backgroundColor: colors.cardAlt }]}>
             <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
@@ -259,7 +262,7 @@ export default function StudySetupScreen() {
             >
               <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color={accentColor} />
             </Pressable>
-            {textLoading ? (
+            {hideVerseText ? null : textLoading ? (
               <ActivityIndicator size="small" color={colors.icon} style={styles.textLoader} />
             ) : (
               <Text style={[styles.previewText, { color: colors.text }]} numberOfLines={versePreviewLines}>
@@ -452,8 +455,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    // paddingBottom is computed dynamically (insets + pill height)
+    // paddingTop sits under the floating bar; paddingBottom is computed dynamically (insets + pill height)
     // via inline style on the ScrollView.
   },
   formColumn: {

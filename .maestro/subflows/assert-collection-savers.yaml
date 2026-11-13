@@ -1,5 +1,10 @@
 appId: com.caelanliu.biblemem
 ---
+# SAVER_LABEL is "12 saves", or empty below 10, when the line is left out.
+# The Home tab keeps its stack (Explore may still be on top); a second tap on the selected tab
+# pops it to Home.
+- tapOn:
+    id: tab-home
 - tapOn:
     id: tab-home
 - scrollUntilVisible:
@@ -8,20 +13,32 @@ appId: com.caelanliu.biblemem
     direction: DOWN
     visibilityPercentage: 100
 - extendedWaitUntil:
-    visible: "Anxiety & Peace, 12 passages, ${SAVER_LABEL}"
+    visible: "Anxiety & Peace, 12 passages${SAVER_LABEL ? ', ' + SAVER_LABEL : ''}"
     timeout: 20000
 - takeScreenshot: savers-${STEP}-home
 - tapOn:
     id: explore-see-all
 - extendedWaitUntil:
-    visible: "Anxiety & Peace, 12 passages, ${SAVER_LABEL}"
+    visible: "Anxiety & Peace, 12 passages${SAVER_LABEL ? ', ' + SAVER_LABEL : ''}"
     timeout: 20000
 - takeScreenshot: savers-${STEP}-explore
 - tapOn:
     id: discover-anxiety-and-peace
 - extendedWaitUntil:
     visible:
-      id: collection-savers-anxiety-and-peace
-      text: ${SAVER_LABEL}
+      id: collection-introduction
     timeout: 20000
+- runFlow:
+    when:
+      true: ${SAVER_LABEL !== ''}
+    commands:
+      - assertVisible:
+          id: collection-savers-anxiety-and-peace
+          text: ${SAVER_LABEL}
+- runFlow:
+    when:
+      true: ${SAVER_LABEL === ''}
+    commands:
+      - assertNotVisible:
+          id: collection-savers-anxiety-and-peace
 - takeScreenshot: savers-${STEP}-detail

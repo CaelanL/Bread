@@ -33,6 +33,7 @@ appId: com.caelanliu.biblemem
     text: "Save"
     enabled: true
     optional: true
+# The bar's back button reads "Settings" (TopBar backLabel); the tab bar is hidden here.
 - tapOn:
-    text: "Back, Settings"
+    text: "Settings"
     optional: true

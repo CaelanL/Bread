@@ -1,0 +1,115 @@
+# Start from npm run db:reset. The seeded "Romans 8" group (reader-c Cara owns, reader-d Dana is a
+# member): the header's progress and each row's Group count from the seed; the people line opens
+# the member list, the menu has Details and Leave, the progress line opens Who's where; then Cara
+# makes Dana an editor, Dana adds Romans 8:31 and Cara sees it with the group numbers updated.
+# docs/features/group-progress.md
+appId: com.caelanliu.biblemem
+name: shared-progress
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)%2Fshared-cccccccc-0000-4000-8000-000000000031
+- extendedWaitUntil:
+    visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "Cara and Dana · 3 verses. Show members"
+    timeout: 10000
+- assertVisible: ".*Romans 8:1 ·.*Group: 2 of 2 mastered"
+- assertVisible: ".*Romans 8:28 ·.*Group: 1 of 2 mastered"
+- assertVisible: ".*Romans 8:38-39 ·.*Group: 0 of 2 mastered"
+- assertNotVisible: "Practice your.*"
+- assertNotVisible:
+    id: open-verses-filter
+# A member can't add, and can't invite.
+- assertNotVisible:
+    id: collection-add
+- assertNotVisible:
+    id: collection-share
+- takeScreenshot: shared-progress-1-member
+# The members line: the member list alone.
+- tapOn:
+    id: shared-row
+- extendedWaitUntil:
+    visible: "Dana, you, Member"
+    timeout: 10000
+- assertVisible: "Cara, Owner"
+- assertNotVisible:
+    id: shared-leave
+- takeScreenshot: shared-progress-2-members
+- tapOn:
+    id: modal-close
+# The dots: Details and Leave for a member, no Rename; Details opens Who's where.
+- tapOn:
+    id: collection-menu
+- assertVisible: "Leave"
+- assertNotVisible: "Rename"
+- takeScreenshot: shared-progress-2b-menu
+- tapOn: "Details"
+- extendedWaitUntil:
+    visible: "Cara, Romans 8:28, Mastered"
+    timeout: 15000
+- tapOn: "Back"
+# The progress line: Who's where.
+- tapOn:
+    id: shared-progress
+- extendedWaitUntil:
+    visible: "Cara, Romans 8:28, Mastered"
+    timeout: 15000
+- tapOn: "Back"
+
+# Cara, the owner: her own states, then she makes Dana an editor.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fseed-romans-8
+- extendedWaitUntil:
+    visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
+    timeout: 20000
+- assertVisible: ".*Romans 8:28 ·.*Group: 1 of 2 mastered"
+- takeScreenshot: shared-progress-3-owner
+- tapOn:
+    id: shared-row
+- extendedWaitUntil:
+    visible: "Dana, Member"
+    timeout: 10000
+- tapOn:
+    id: member-Dana
+- tapOn: "Make editor"
+- extendedWaitUntil:
+    visible: "Dana, Editor"
+    timeout: 10000
+- tapOn:
+    id: modal-close
+
+# Dana, now an editor, adds Romans 8:31; the group grows to four verses.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)%2Fshared-cccccccc-0000-4000-8000-000000000031
+- extendedWaitUntil:
+    visible: "Group progress 50%. 1 of 3 verses mastered by everyone"
+    timeout: 20000
+- tapOn:
+    id: collection-add
+- tapOn:
+    id: quick-add-field
+- inputText: "Romans 8:31"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Added Romans 8:31"
+    timeout: 20000
+# Quick add is a search mode with no Back: Cancel first.
+- tapOn:
+    id: quick-add-cancel
+- tapOn: Back
+- extendedWaitUntil:
+    visible: ".*Romans 8:31 ·.*Group: 0 of 2 mastered"
+    timeout: 20000
+- assertVisible: "Cara and Dana · 4 verses. Show members"
+- assertVisible: "Group progress 38%. 1 of 4 verses mastered by everyone"
+- takeScreenshot: shared-progress-4-editor-added
+
+# Cara's copy catches up when she opens it.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)%2Fseed-romans-8
+- extendedWaitUntil:
+    visible: ".*Romans 8:31 ·.*Group: 0 of 2 mastered"
+    timeout: 20000
+- assertVisible: "Group progress 38%. 1 of 4 verses mastered by everyone"
+- takeScreenshot: shared-progress-5-owner-sees-add

@@ -1,16 +1,22 @@
 import * as Haptics from 'expo-haptics';
+import { confirmRemoveCollection } from '@/components/shared/member-actions';
 import { DueCountPill } from '@/components/library/DueCountPill';
+import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
+import { firstName } from '@/lib/shared/display-name';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
-import { Colors, Motion, Radius } from '@/constants/theme';
+import { Colors, Motion, Radius, withAlpha } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
-import type { Collection } from '@/lib/storage';
+import { collectionRemoval, type Emblem } from '@/lib/shared/progress';
+import type { Collection, SharedRole } from '@/lib/storage';
 import type { SymbolViewProps } from 'expo-symbols';
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   FadeInDown,
@@ -21,7 +27,20 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-export const COLLECTION_ROW_GAP = 12;
+export const COLLECTION_ROW_GAP = 0;
+/** The Library list's side padding, where an engraved row's glow fades out. */
+const GLOW_ALPHA = 0.3;
+// An engraved row's gold eases out over GLOW_IN inside the row and GLOW_OUT past it, along one
+// smoothstep curve, so the end of the hairline never shows as a hard band edge.
+const GLOW_IN = 30;
+const GLOW_OUT = 10;
+// The right starts its fade later and finishes at the screen edge: the same curve, shifted right.
+const GLOW_IN_RIGHT = 24;
+const GLOW_OUT_RIGHT = 16;
+const OUTER_RIGHT_STEPS = [0, 0.104, 0.352];
+const INNER_RIGHT_STEPS = [0.352, 0.648, 0.896, 1];
+const OUTER_STEPS = [0, 0.043, 0.156];
+const INNER_STEPS = [0.156, 0.5, 0.844, 1];
 
 export interface CollectionReorder {
   index: number;
@@ -38,31 +57,45 @@ interface SwipeableCollectionCardProps {
   collection: Collection & { verseCount: number };
   index: number;
   onPress: () => void;
-  onDelete: () => Promise<void>;
   onRename: () => void;
   onReorder: () => void;
   reorder?: CollectionReorder;
   actionsDisabled: boolean;
   dueCount?: number;
+  /** Set for a shared collection: a member's delete is Leave, the owner's deletes for everyone. */
+  sharedRole?: SharedRole;
+  /** Shown for a personal collection; opens sharing. */
+  onShare?: () => void;
+  /** Every verse mastered or engraved; on a shared collection with others in it, by every member. */
+  emblem?: Emblem | null;
+  /** Set once someone besides the owner is in the shared collection, from `get_shared_status`. */
+  memberCount?: number;
+  /** The shared collection's owner, shown before the member count; null until known. */
+  ownerName?: string | null;
 }
 
 export function SwipeableCollectionCard({
   collection,
   index,
   onPress,
-  onDelete,
   onRename,
   onReorder,
   reorder,
   actionsDisabled,
   dueCount = 0,
+  sharedRole,
+  onShare,
+  emblem,
+  memberCount,
+  ownerName,
 }: SwipeableCollectionCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)';
   const { height: windowHeight } = useWindowDimensions();
   const [menuTop, setMenuTop] = useState<number | null>(null);
+  // Closed when the Library loses focus, so a modal route can't present over it.
+  useFocusEffect(useCallback(() => () => setMenuTop(null), []));
 
   const translateX = useSharedValue(0);
   const swipeStart = useSharedValue(0);
@@ -70,7 +103,19 @@ export function SwipeableCollectionCard({
   const debouncedPress = useDebouncedPress(onPress);
   const isCustom = !collection.isDefault && !collection.isVirtual;
   const editing = Boolean(reorder);
-  const canSwipe = isCustom && !editing && !actionsDisabled;
+  // Null while a shared collection's role loads: no Delete or Leave until it's known.
+  const removal = collectionRemoval(collection.sharedId, sharedRole);
+  const isLeave = removal === 'leave';
+  const canSwipe = isCustom && !editing && !actionsDisabled && removal !== null;
+  const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
+  const engraved = emblem === 'engraved';
+  const glow = withAlpha(colors.engravedBarStart, GLOW_ALPHA);
+  const glowAt = (steps: number[]) => steps.map((t) => withAlpha(colors.engravedBarStart, GLOW_ALPHA * t)) as [string, string, ...string[]];
+  const subtitle = memberCount !== undefined
+    ? [ownerName && firstName(ownerName), `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
+    : verseCount;
+  // Read into the card's label after the subtitle, so it's spoken though not written.
+  const emblemLabel = `${engraved ? 'Engraved' : 'Mastered'}${memberCount !== undefined ? ' by everyone' : ''}`;
 
   useEffect(() => {
     if (!canSwipe) translateX.value = 0;
@@ -157,27 +202,7 @@ export function SwipeableCollectionCard({
     translateX.value = withTiming(0, { duration: Motion.pressMs });
   };
 
-  const handleDelete = () => {
-    const title = `Delete "${collection.name}"?`;
-    const message = collection.verseCount > 0
-      ? 'Verses not mastered or in another collection will be deleted and lose progress.'
-      : 'This collection will be permanently deleted.';
-
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel', onPress: closeSwipe },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await onDelete();
-          } catch {
-            closeSwipe();
-          }
-        },
-      },
-    ]);
-  };
+  const handleDelete = () => confirmRemoveCollection(collection.id, { onKept: closeSwipe });
 
   const openActions = (pageY: number) => {
     if (!isCustom || actionsDisabled) return;
@@ -185,7 +210,7 @@ export function SwipeableCollectionCard({
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     closeSwipe();
-    setMenuTop(Math.min(pageY + 8, windowHeight - 180));
+    setMenuTop(pageY + 8);
   };
 
   const handlePress = () => {
@@ -199,9 +224,24 @@ export function SwipeableCollectionCard({
       onLayout={(event) => { rowHeight.value = event.nativeEvent.layout.height; }}
       style={[styles.container, reorder && dragStyle]}
     >
-      {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} />}
+      {/* Engraved: gold across the whole row, fading out only in the page margin past the hairline. */}
+      {engraved && (
+        <>
+          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowOut, styles.outLeft]} />
+          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_RIGHT_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowOut, styles.outRight]} />
+        </>
+      )}
+      <View style={styles.clip}>
+      {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.card, { backgroundColor: colors.card, borderColor }, cardStyle]}>
+        <Animated.View style={[styles.card, { backgroundColor: colors.background, borderTopColor: colors.separator }, index > 0 && styles.divided, cardStyle]}>
+          {engraved && (
+            <>
+              <LinearGradient pointerEvents="none" colors={glowAt(INNER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowIn, styles.inLeft]} />
+              <View pointerEvents="none" style={[styles.glowMiddle, { backgroundColor: glow }]} />
+              <LinearGradient pointerEvents="none" colors={glowAt(INNER_RIGHT_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowIn, styles.inRight]} />
+            </>
+          )}
           <Pressable
             style={styles.cardButton}
             onPress={handlePress}
@@ -213,35 +253,48 @@ export function SwipeableCollectionCard({
             }}
           >
             <View style={styles.cardLeft}>
+              {/* Engraved fills the square like the engraved pill on a verse; the icon stays the collection's own. */}
               <View style={[
                 styles.iconContainer,
                 {
-                  backgroundColor: collection.iconColor
-                    ? `${collection.iconColor}20`
-                    : collection.isDefault
-                      ? colors.primaryLight
-                      : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                  backgroundColor: engraved
+                    ? colors.engravedFill
+                    : collection.iconColor
+                      ? `${collection.iconColor}20`
+                      : collection.isDefault
+                        ? colors.primaryLight
+                        : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                 },
               ]}>
                 <IconSymbol
                   name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
                   size={24}
-                  color={collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
+                  color={engraved ? colors.tint : collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
                 />
+                {emblem && (
+                  <View
+                    accessibilityLabel={emblemLabel}
+                    style={[
+                      styles.badge,
+                      { backgroundColor: engraved ? colors.tint : colors.success, borderColor: colors.background },
+                    ]}
+                  >
+                    {engraved
+                      ? <EngravedIcon size={11} color={colors.background} />
+                      : <IconSymbol name="checkmark" size={11} color={colors.background} weight="bold" />}
+                  </View>
+                )}
               </View>
               <View style={styles.cardText}>
                 <Text style={[styles.collectionName, { color: colors.text }]} numberOfLines={1}>
                   {collection.name}
                 </Text>
-                <Text style={[styles.verseCount, { color: colors.icon }]}>
-                  {collection.verseCount} verse{collection.verseCount !== 1 ? 's' : ''}
-                </Text>
+                <Text style={[styles.verseCount, { color: colors.icon }]} numberOfLines={1}>{subtitle}</Text>
               </View>
             </View>
             {!editing && (
               <View style={styles.cardRight}>
                 <DueCountPill count={dueCount} />
-                <IconSymbol name="chevron.right" size={18} color={colors.icon} />
               </View>
             )}
           </Pressable>
@@ -269,6 +322,7 @@ export function SwipeableCollectionCard({
           )}
         </Animated.View>
       </GestureDetector>
+      </View>
 
       {isCustom && (
         <PopoverMenu
@@ -276,9 +330,14 @@ export function SwipeableCollectionCard({
           onClose={() => setMenuTop(null)}
           anchorPosition={menuTop === null ? undefined : { top: menuTop, right: 16 }}
           items={[
-            { label: 'Rename', icon: 'pencil', onPress: onRename },
+            // A member's copy takes its name from the group, so only the owner renames it.
+            ...(removal === 'delete' ? [{ label: 'Rename', icon: 'pencil', onPress: onRename }] : []),
+            // The owner's Share… opens the code again (or Stop sharing) on a collection already shared.
+            ...(onShare && removal === 'delete' ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
             { label: 'Reorder', icon: 'line.3.horizontal', onPress: onReorder },
-            { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true },
+            ...(removal ? [isLeave
+              ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: handleDelete, destructive: true }
+              : { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true }] : []),
           ]}
         />
       )}
@@ -289,24 +348,31 @@ export function SwipeableCollectionCard({
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
-    overflow: 'hidden',
-    borderRadius: Radius.xxl,
   },
+  // Clips the row as it swipes over its delete action; the edge glow sits outside it.
+  clip: {
+    overflow: 'hidden',
+  },
+  glowOut: { position: 'absolute', top: 0, bottom: 0, width: GLOW_OUT },
+  outLeft: { left: -GLOW_OUT },
+  outRight: { right: -GLOW_OUT_RIGHT, width: GLOW_OUT_RIGHT },
+  glowIn: { position: 'absolute', top: 0, bottom: 0, width: GLOW_IN },
+  inLeft: { left: 0 },
+  inRight: { right: 0, width: GLOW_IN_RIGHT },
+  glowMiddle: { position: 'absolute', top: 0, bottom: 0, left: GLOW_IN, right: GLOW_IN_RIGHT },
+  // A flat row on the page, like a verse row in a collection: a hairline between rows, no card.
   card: {
     flexDirection: 'row',
-    borderRadius: Radius.xxl,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+  },
+  divided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   cardButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   cardLeft: {
     flexDirection: 'row',
@@ -335,7 +401,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   verseCount: {
+    flexShrink: 1,
     fontSize: 14,
+  },
+  // Corner badge on the icon, the way iOS marks a finished item: green check for mastered, gold for engraved.
+  badge: {
+    position: 'absolute',
+    right: -5,
+    bottom: -5,
+    width: 22,
+    height: 22,
+    borderRadius: Radius.full,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dragHandle: {
     width: 52,

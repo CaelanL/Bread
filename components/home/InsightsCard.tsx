@@ -1,5 +1,5 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useCountUp } from '@/hooks/use-count-up';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
@@ -16,7 +16,6 @@ export interface InsightsCardRef {
 export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_, ref) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const openInsights = useDebouncedPress(() => router.push('/insights'));
 
@@ -31,14 +30,12 @@ export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_,
   const streakColor = streak > 0 ? '#f97316' : '#60a5fa'; // Keep streak colors domain-specific
   const streakBg = streak > 0 ? 'rgba(249,115,22,0.15)' : 'rgba(96,165,250,0.15)';
 
-  const cardBg = colors.card;
-  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: cardBg, borderColor },
+        { borderColor: colors.separator },
         pressed && styles.cardPressed,
       ]}
       onPress={openInsights}
@@ -79,26 +76,25 @@ export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_,
 });
 
 const styles = StyleSheet.create({
+  // A flat row between hairlines, like the rows in Library.
   card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   cardPressed: {
-    opacity: 0.8,
-    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-    transform: [{ scale: 0.99 }],
+    opacity: 0.6,
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
     gap: 14,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 48,
+    height: 48,
+    borderRadius: Radius.lg,
     justifyContent: 'center',
     alignItems: 'center',
   },

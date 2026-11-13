@@ -4,6 +4,7 @@ import { WAVEFORM_SAMPLES } from '@/components/study/Waveform';
 import { VerseCard } from '@/components/study/VerseCard';
 import { ResultCard, getScoreColor } from '@/components/study/ResultCard';
 import { RecordingBar } from '@/components/study/RecordingBar';
+import { SessionFinish } from '@/components/study/SessionFinish';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStudySession } from '@/hooks/use-study-session';
@@ -22,13 +23,18 @@ import {
   startLiveTranscription,
   base64ToUint8Array,
 } from '@/lib/transcription/live-session';
-import { createRecordingControls, type RecordingState } from '@/lib/transcription/recording-controls';
+import {
+  createRecordingControls,
+  removeAbandonedRecordings,
+  type RecordingState,
+} from '@/lib/transcription/recording-controls';
 import {
   useAudioRecorder,
   AudioStudioModule,
   type AudioDataEvent,
 } from '@siteed/audio-studio';
 import { LegacyEventEmitter } from 'expo-modules-core';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -92,6 +98,10 @@ export default function StudySessionScreen() {
   }, []);
 
   useEffect(() => () => { void recorder.cancel(); }, [recorder]);
+
+  useEffect(() => {
+    void removeAbandonedRecordings(FileSystem);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!recorder.isRecording()) return;
@@ -229,13 +239,15 @@ export default function StudySessionScreen() {
           });
         },
         stop: stopRecording,
+        remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
       });
       if (result === 'denied') {
         Alert.alert('Permission required', 'Please allow microphone access to record.');
       }
     } catch (error) {
       console.error('Failed to start recording:', error);
-      Alert.alert('Error', 'Failed to start recording');
+      // The usual cause is the mic held by a call or another app; the error doesn't say which.
+      Alert.alert("Couldn't start recording", "If you're on a call or another app is using the microphone, close it and try again.");
     }
   }, [handleAudioStream, recorder, session.chunks, session.currentIndex, startRecording, stopRecording, waveformLevels]);
 
@@ -305,11 +317,15 @@ export default function StudySessionScreen() {
     );
   }
 
-  // Error state
   if (!session.verse || session.chunks.length === 0) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>Something went wrong</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <AppHeader leftButton={{ icon: 'xmark', label: 'Close', onPress: session.done }} />
+        <View style={[styles.container, styles.centered, styles.loadError]}>
+          <Text style={[styles.loadErrorText, { color: colors.text }]}>
+            {session.loadError ?? 'Something went wrong'}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -317,40 +333,16 @@ export default function StudySessionScreen() {
   const renderItem = ({ item, index }: { item: Chunk | ResultsPageItem; index: number }) => {
     // Results page
     if (isResultsPage(item)) {
-      const passed = session.finalScore >= 90;
-
       return (
         <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
-          <View style={styles.resultsContent}>
-            <Text style={[styles.resultsTitle, { color: colors.text }]}>Session Complete</Text>
-
-            <View style={[styles.scoreCircle, { borderColor: passed ? colors.success : colors.error }]}>
-              <Text style={[styles.scoreText, { color: passed ? colors.success : colors.error }]}>
-                {session.finalScore}%
-              </Text>
-            </View>
-
-            <Text style={[styles.scoreLabel, { color: colors.icon }]}>
-              {passed ? 'Great job! You passed!' : 'Keep practicing!'}
-            </Text>
-
-            <View style={styles.resultsButtons}>
-              <Pressable
-                style={[styles.resultsButton, { backgroundColor: colors.cardAlt }]}
-                onPress={session.viewResults}
-              >
-                <Text style={[styles.resultsButtonText, { color: colors.text }]}>View Results</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.resultsButton, { backgroundColor: buttonBg }]}
-                onPress={session.done}
-              >
-                <Text style={[styles.resultsButtonText, { color: colors.white }]}>Done</Text>
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.controlsContainer} />
+          <SessionFinish
+            score={session.finalScore}
+            difficulty={difficulty ?? 'easy'}
+            reference={formatVerseReference(session.verse!)}
+            active={session.showResults && currentIndex === session.chunks.length}
+            onDone={session.done}
+            onReview={session.viewResults}
+          />
         </View>
       );
     }
@@ -383,8 +375,8 @@ export default function StudySessionScreen() {
         memoryPlaceholder = true;
       }
     }
-    // Eye toggle lives on the card; hidden once the chunk completes
-    // (the card is already revealed there).
+    // Eye toggle lives on the card; hidden once the chunk completes (the card is
+    // already revealed there), back during a Retry, which is practice and never rescored.
     const wordsCurrentlyShown = isEasy ? hideMode === undefined : hideMode === 'show';
 
     // Build verse label
@@ -427,7 +419,7 @@ export default function StudySessionScreen() {
             memoryPlaceholder={memoryPlaceholder}
             visibilityIcon={wordsCurrentlyShown ? 'eye' : 'eye.slash'}
             onToggleVisibility={
-              isCompleted || transcribing ? undefined : () => handleToggleVisibility(index)
+              (isCompleted && !isRetrying) || transcribing ? undefined : () => handleToggleVisibility(index)
             }
           />
 
@@ -445,6 +437,16 @@ export default function StudySessionScreen() {
         <View style={styles.controlsContainer}>
           {canContinue && (
             <View style={styles.controlsRow}>
+              {session.allChunksCompleted && (
+                <Pressable
+                  style={({ pressed }) => [styles.retryButton, { backgroundColor: colors.text }, pressed && styles.pressedControl]}
+                  onPress={session.done}
+                  accessibilityLabel="Exit"
+                  testID="exit-session-button"
+                >
+                  <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={colors.background} />
+                </Pressable>
+              )}
               {canRetry && (
                 <Pressable
                   style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
@@ -475,9 +477,9 @@ export default function StudySessionScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeader
         title={formatVerseReference(session.verse)}
-        showBack={false}
         leftButton={{
           icon: 'xmark',
+          label: 'Close',
           onPress: () => {
             if (closingRef.current) return;
             closingRef.current = true;
@@ -545,6 +547,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadError: {
+    paddingHorizontal: 32,
+  },
+  loadErrorText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
   progressContainer: {
     flexDirection: 'row',
     height: 4,
@@ -589,6 +598,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  pressedControl: {
+    opacity: 0.7,
+  },
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -615,46 +627,6 @@ const styles = StyleSheet.create({
   },
   scoreBadgeInlineText: {
     fontSize: 13,
-    fontWeight: '600',
-  },
-  resultsContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 24,
-  },
-  resultsTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  scoreCircle: {
-    width: 140,
-    height: 140,
-    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-    borderRadius: 70,
-    borderWidth: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scoreText: {
-    fontSize: 42,
-    fontWeight: 'bold',
-  },
-  scoreLabel: {
-    fontSize: 18,
-  },
-  resultsButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-  },
-  resultsButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-  },
-  resultsButtonText: {
-    fontSize: 16,
     fontWeight: '600',
   },
 });

@@ -1,4 +1,4 @@
-import { AppHeader } from '@/components/app-header';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { AddToCollectionModal } from '@/components/ui/AddToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { VerseExpandModal, VerseData } from '@/components/ui/VerseExpandModal';
@@ -11,7 +11,8 @@ import { getPopularRanges, formatRange, PopularRange } from '@/lib/api/popular-v
 import { useAppStore, useInsightsStats, useMostMemorizedBooks, useVerses } from '@/lib/store';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 interface StatCardProps {
   value: number | string;
@@ -116,6 +117,7 @@ function formatAvgTime(ms: number): string {
 }
 
 export default function InsightsScreen() {
+  const barHeight = useTopBarHeight();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -214,14 +216,14 @@ export default function InsightsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Insights" leftButton={{ icon: 'chevron.left', label: 'Back to Home', onPress: () => router.back() }} />
-      <ScrollView
+      <Animated.ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
       >
+        <LargeTitle title="Insights" />
         {/* Hero Stats */}
         <View style={styles.statsRow}>
           <StatCard
@@ -277,7 +279,7 @@ export default function InsightsScreen() {
         {/* Most Memorized Books */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.icon }]}>YOUR MOST MEMORIZED BOOKS</Text>
-          <View style={[styles.booksList, { backgroundColor: cardBg }]}>
+          <View>
             {topBooks.length > 0 ? (
               topBooks.map((book, index) => (
                 <View
@@ -285,7 +287,7 @@ export default function InsightsScreen() {
                   style={[
                     styles.bookItem,
                     index < topBooks.length - 1 && styles.bookItemBorder,
-                    { borderBottomColor: colors.border },
+                    { borderBottomColor: colors.borderLight },
                   ]}
                 >
                   <View style={styles.bookInfo}>
@@ -315,14 +317,14 @@ export default function InsightsScreen() {
               <IconSymbol name="person.2" size={14} color={colors.icon} />
               <Text style={[styles.sectionTitle, { color: colors.icon }]}>POPULAR VERSES</Text>
             </View>
-            <View style={[styles.booksList, { backgroundColor: cardBg }]}>
+            <View>
               {popularRanges.map((range, index) => (
                 <Pressable
                   key={`${range.book}-${range.chapter}-${range.verseStart}-${range.verseEnd}`}
                   style={({ pressed }) => [
                     styles.bookItem,
                     index < popularRanges.length - 1 && styles.bookItemBorder,
-                    { borderBottomColor: colors.border },
+                    { borderBottomColor: colors.borderLight },
                     pressed && { opacity: 0.7 },
                   ]}
                   onPress={() => handleRangePress(range)}
@@ -344,7 +346,8 @@ export default function InsightsScreen() {
             </View>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+      <TopBar onBack={() => router.back()} backLabel="Back to Home" />
 
       {/* Time Studied Info Modal */}
       <Modal
@@ -441,7 +444,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
     gap: 16,
   },
   statsRow: {
@@ -502,7 +506,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   section: {
-    gap: 8,
+    marginTop: 12,
+    gap: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -514,18 +519,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  booksList: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
   bookItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
+    paddingVertical: 12,
   },
   bookItemBorder: {
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   bookInfo: {
     flexDirection: 'row',

@@ -65,6 +65,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"invite_handoffs": {
+                  Row: {
+                    "code": string,"created_at": string,"id": number,"network": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code": string,"created_at"?: string,"id"?: never,"network": string
+                  }
+                  Update: {
+                    "code"?: string,"created_at"?: string,"id"?: never,"network"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"notification_log": {
                   Row: {
                     "body": string | null,"error": string | null,"expo_ticket": string | null,"fired_at": string,"id": number,"source": string,"status": string,"user_id": string
@@ -109,14 +123,14 @@ export type Database = {
                   ]
                 },"profiles": {
                   Row: {
-                    "created_at": string,"translation": string | null,"updated_at": string,"user_id": string
+                    "created_at": string,"display_name": string | null,"first_name": string | null,"last_name": string | null,"translation": string | null,"updated_at": string,"user_id": string,"welcome_v2_seen_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"translation"?: string | null,"updated_at"?: string,"user_id": string
+                    "created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"last_name"?: string | null,"translation"?: string | null,"updated_at"?: string,"user_id": string,"welcome_v2_seen_at"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"translation"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "created_at"?: string,"display_name"?: string | null,"first_name"?: string | null,"last_name"?: string | null,"translation"?: string | null,"updated_at"?: string,"user_id"?: string,"welcome_v2_seen_at"?: string | null
                   }
                   Relationships: [
                     
@@ -134,6 +148,80 @@ export type Database = {
                   }
                   Relationships: [
                     
+                  ]
+                },"shared_collection_members": {
+                  Row: {
+                    "joined_at": string,"role": string,"shared_collection_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "joined_at"?: string,"role": string,"shared_collection_id": string,"user_id": string
+                  }
+                  Update: {
+                    "joined_at"?: string,"role"?: string,"shared_collection_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "shared_collection_members_shared_collection_id_fkey"
+      columns: ["shared_collection_id"]
+isOneToOne: false
+      referencedRelation: "shared_collections"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"shared_collection_verses": {
+                  Row: {
+                    "added_at": string,"added_by": string | null,"book": string,"chapter": number,"shared_collection_id": string,"verse_end": number,"verse_start": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "added_at"?: string,"added_by"?: string | null,"book": string,"chapter": number,"shared_collection_id": string,"verse_end": number,"verse_start": number
+                  }
+                  Update: {
+                    "added_at"?: string,"added_by"?: string | null,"book"?: string,"chapter"?: number,"shared_collection_id"?: string,"verse_end"?: number,"verse_start"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "shared_collection_verses_shared_collection_id_fkey"
+      columns: ["shared_collection_id"]
+isOneToOne: false
+      referencedRelation: "shared_collections"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"shared_collections": {
+                  Row: {
+                    "created_at": string,"icon_key": string | null,"id": string,"name": string,"owner_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"icon_key"?: string | null,"id"?: string,"name": string,"owner_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"icon_key"?: string | null,"id"?: string,"name"?: string,"owner_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"shared_invites": {
+                  Row: {
+                    "code": string,"created_at": string,"expires_at": string,"id": string,"revoked_at": string | null,"shared_collection_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code"?: string,"created_at"?: string,"expires_at"?: string,"id"?: string,"revoked_at"?: string | null,"shared_collection_id": string
+                  }
+                  Update: {
+                    "code"?: string,"created_at"?: string,"expires_at"?: string,"id"?: string,"revoked_at"?: string | null,"shared_collection_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "shared_invites_shared_collection_id_fkey"
+      columns: ["shared_collection_id"]
+isOneToOne: false
+      referencedRelation: "shared_collections"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"subscriptions": {
                   Row: {
@@ -179,17 +267,23 @@ export type Database = {
                   ]
                 },"user_collections": {
                   Row: {
-                    "client_id": string,"created_at": string,"deleted_at": string | null,"icon_key": string | null,"id": string,"is_default": boolean,"name": string,"position": number | null,"sort_preference": string | null,"updated_at": string,"user_id": string
+                    "client_id": string,"created_at": string,"deleted_at": string | null,"icon_key": string | null,"id": string,"is_default": boolean,"name": string,"position": number | null,"shared_collection_id": string | null,"sort_preference": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
+                    "client_id": string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name": string,"position"?: number | null,"shared_collection_id"?: string | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"position"?: number | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "client_id"?: string,"created_at"?: string,"deleted_at"?: string | null,"icon_key"?: string | null,"id"?: string,"is_default"?: boolean,"name"?: string,"position"?: number | null,"shared_collection_id"?: string | null,"sort_preference"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
-                    
+                    {
+      foreignKeyName: "user_collections_shared_collection_id_fkey"
+      columns: ["shared_collection_id"]
+isOneToOne: false
+      referencedRelation: "shared_collections"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"user_intro_presentations": {
                   Row: {
@@ -301,7 +395,31 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "claim_intro_presentation":
+            "add_verse":
+{ Args: { "p_book": string,"p_chapter": number,"p_collection_client_id": string,"p_keep_restored_version"?: boolean,"p_verse_end": number,"p_verse_start": number,"p_version": string }; Returns: {
+              "book": string,
+"chapter": number,
+"client_id": string,
+"created_at": string,
+"deleted_at": string | null,
+"id": string,
+"last_chunk_size": number | null,
+"last_difficulty": string | null,
+"last_practiced_at": string | null,
+"progress": NonNullable<Json>,
+"updated_at": string,
+"user_id": string,
+"verse_end": number,
+"verse_start": number,
+"version": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "user_verses"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"claim_intro_presentation":
 { Args: { "p_intro_id": string }; Returns: boolean
                            },
 "cleanup_expired_verse_cache":
@@ -323,8 +441,14 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"delete_collection":
+{ Args: { "collection_client_id": string }; Returns: undefined
+                           },
 "delete_own_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"delete_verse":
+{ Args: { "collection_client_id": string,"verse_client_id": string }; Returns: undefined
                            },
 "evict_lru_verses":
 { Args: { "p_max_count": number,"p_needed": number,"p_version": string }; Returns: number
@@ -340,6 +464,21 @@ isOneToOne: false
 "get_current_streak":
 { Args: { "p_tz_offset_min": number,"p_user_id": string }; Returns: number
                            },
+"get_shared_members":
+{ Args: { "p_shared": string }; Returns: {
+              "display_name": string,"joined_at": string,"role": string,"user_id": string
+            }[]
+                           },
+"get_shared_progress":
+{ Args: { "p_shared": string }; Returns: {
+              "book": string,"chapter": number,"engraved": boolean,"mastered": boolean,"practiced": boolean,"user_id": string,"verse_end": number,"verse_start": number
+            }[]
+                           },
+"get_shared_status":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "engraved_squares": number,"mastered_squares": number,"member_count": number,"shared_id": string,"verse_count": number
+            }[]
+                           },
 "get_total_time_studied":
 { Args: { "p_user_id": string }; Returns: number
                            },
@@ -349,14 +488,43 @@ isOneToOne: false
 "import_curated_collection":
 { Args: { "p_catalog_id": string,"p_icon_key": string,"p_name": string,"p_passages": Json,"p_version": string }; Returns: string
                            },
+"join_shared_collection":
+{ Args: { "p_code": string,"p_version": string }; Returns: string
+                           },
+"leave_shared_collection":
+{ Args: { "p_shared": string }; Returns: undefined
+                           },
 "local_time_in_tz":
 { Args: { "tz": string }; Returns: string
+                           },
+"mint_invite":
+{ Args: { "p_shared": string }; Returns: {
+              "code": string,"expires_at": string
+            }[]
+                           },
+"preview_invite":
+{ Args: { "p_code": string }; Returns: {
+              "already_member": boolean,"inviter_name": string,"member_count": number,"name": string,"shared_id": string,"verse_count": number
+            }[]
                            },
 "register_device_token":
 { Args: { "p_expo_token": string,"p_platform": string }; Returns: undefined
                            },
+"remove_shared_member":
+{ Args: { "p_shared": string,"p_user": string }; Returns: undefined
+                           },
 "reorder_collections":
 { Args: { "collection_ids": (string)[] }; Returns: undefined
+                           },
+"share_collection":
+{ Args: { "p_collection_client_id": string }; Returns: {
+              "code": string,"shared_id": string
+            }[]
+                           },
+"sync_shared_collection":
+{ Args: { "p_shared": string,"p_version": string }; Returns: {
+              "changed": boolean,"client_id": string
+            }[]
                            },
 "update_popular_ranges":
 { Args: Record<PropertyKey, never>; Returns: undefined

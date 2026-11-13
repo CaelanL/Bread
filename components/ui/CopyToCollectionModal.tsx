@@ -2,6 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { hasOtherMembers } from '@/lib/shared/progress';
 import type { Collection, SavedVerse } from '@/lib/storage';
 import { useAppStore, useCollections, useVerses } from '@/lib/store';
 import { useRef, useState } from 'react';
@@ -19,6 +20,7 @@ export function CopyToCollectionModal({
   const colors = Colors[useColorScheme() ?? 'light'];
   const collections = useCollections();
   const verses = useVerses();
+  const shared = useAppStore((s) => s.sharedCollections);
   const memberships = new Set(verses.filter((v) => v.id === verse.id).map((v) => v.collectionId));
   const pending = useRef(false);
   const [copyingTo, setCopyingTo] = useState<string | null>(null);
@@ -65,7 +67,9 @@ export function CopyToCollectionModal({
             />
           </View>
           <ScrollView style={styles.destinations}>
-            {collections.filter((c) => !c.isVirtual).map((collection) => {
+            {/* A shared collection with no one else in it is still yours alone, so it's listed. */}
+            {collections.filter((c) => !c.isVirtual && (!c.sharedId
+              || (shared[c.sharedId]?.role === 'owner' && !hasOtherMembers(shared[c.sharedId])))).map((collection) => {
               const alreadyAdded = memberships.has(collection.id);
               const disabled = alreadyAdded || copyingTo !== null;
               return (

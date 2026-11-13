@@ -47,7 +47,8 @@ select lives_ok($$delete from public.verse_collections$$, 'Reader B deletes vers
 reset role;
 select is((select count(*)::int from public.user_verses where progress = '{}'::jsonb), 0, 'Reader A''s progress is unchanged');
 select is((select count(*)::int from public.user_collections where name = 'taken'), 0, 'Reader A''s collections are unchanged');
-select is((select count(*)::int from public.verse_collections), 3, 'Reader A''s verse links are all there');
+select is((select count(*)::int from public.verse_collections vc join public.user_verses v on v.id = vc.verse_id
+  where v.user_id = current_setting('test.reader_a')::uuid), 3, 'Reader A''s verse links are all there');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', current_setting('test.reader_b'), true);

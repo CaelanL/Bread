@@ -1,0 +1,96 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors, Fonts, InputText, Radius, Shadows } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import type { ReactNode } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+
+/**
+ * A card centered on a dimmed backdrop with an X to close. Render it from a route
+ * presented as a native transparentModal, never inside an RN Modal: an RN Modal under a native
+ * modal is dismissed natively while React still holds it, and the screen can't present another.
+ */
+export function ModalCard({ onClose, closeDisabled, children }: {
+  onClose: () => void;
+  closeDisabled?: boolean;
+  children: ReactNode;
+}) {
+  const scheme = useColorScheme() ?? 'light';
+  const colors = Colors[scheme];
+  return (
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Hidden from accessibility (the X closes for VoiceOver). With accessible={false} instead, a
+          card reopened after an X close left the whole window empty to VoiceOver and Maestro. */}
+      {/* A dim, no blur: the route fades in and out natively, and a blur view under a fading parent
+          drops its effect for the whole fade, so closing flashed from blurred to sharp (C17). */}
+      <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" disabled={closeDisabled} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} />
+      <View accessibilityViewIsModal style={[styles.card, { backgroundColor: colors.card }]}>
+        {children}
+        <Pressable
+          testID="modal-close"
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          disabled={closeDisabled}
+          onPress={onClose}
+          hitSlop={8}
+          style={[styles.close, { backgroundColor: colors.cardAlt }]}
+        >
+          <IconSymbol name="xmark" size={14} color={colors.icon} />
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const CLOSE_SIZE = 30;
+const PADDING = 24;
+
+/** The shared modals' type and controls, so every one reads the same. */
+export const modalStyles = StyleSheet.create({
+  // Leaves room for the X on the first line.
+  eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginRight: CLOSE_SIZE },
+  title: { fontSize: 20, lineHeight: 26, fontWeight: '600', marginRight: CLOSE_SIZE },
+  name: { fontFamily: Fonts.serif, fontSize: 28, lineHeight: 34, marginTop: 4, marginRight: CLOSE_SIZE },
+  copy: { fontSize: 15, lineHeight: 21 },
+  meta: { fontSize: 13, lineHeight: 18 },
+  input: {
+    ...InputText,
+    height: 52,
+    paddingHorizontal: 16,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    fontSize: 17,
+  },
+  button: {
+    height: 52,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: { fontSize: 16, fontWeight: '600' },
+  // A ScrollView under the card's header: it reaches the card's edges, so its scroll indicator
+  // sits at the edge instead of over the content, and the content keeps the card's padding.
+  edgeScroll: { flexGrow: 0, flexShrink: 1, marginHorizontal: -PADDING },
+  edgeScrollContent: { paddingHorizontal: PADDING },
+});
+
+const styles = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  card: {
+    width: '90%',
+    maxWidth: 440,
+    maxHeight: '86%',
+    padding: PADDING,
+    borderRadius: Radius.huge,
+    boxShadow: Shadows.floating,
+  },
+  close: {
+    position: 'absolute',
+    top: PADDING - 4,
+    right: PADDING - 4,
+    width: CLOSE_SIZE,
+    height: CLOSE_SIZE,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

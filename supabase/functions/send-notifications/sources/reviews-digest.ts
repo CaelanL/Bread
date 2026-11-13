@@ -173,8 +173,9 @@ async function loadDueVerses(
   // the shape: { hard: { completed: bool }, engraved: { nextDueAt:
   // string|null, ... } }. Verses with no engraved sub-object — pre-SR
   // legacy mastered verses — are treated as "due now" until the user
-  // does a qualifying review (matches client behavior in
-  // useReviewState at lib/store/index.ts:1090).
+  // does a qualifying review (matches the client, where parseProgress
+  // fills a missing engraved with nextDueAt null and isDueForReview in
+  // lib/store/review.ts calls that due).
   const { data, error } = await admin
     .from("user_verses")
     .select("id, book, chapter, verse_start, verse_end, created_at, progress")

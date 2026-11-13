@@ -10,6 +10,7 @@ import { COLLECTION_ICONS, collectionSymbolFallback, isCollectionIconKey, resolv
 test('curated collections contain distinct, short canonical references and original introductions', () => {
   assert.equal(CURATED_COLLECTIONS.length, 10);
   assert.equal(new Set(CURATED_COLLECTIONS.map(({ id }) => id)).size, 10);
+  assert.equal(new Set(CURATED_COLLECTIONS.map(({ icon }) => resolveCollectionIcon(icon).symbol)).size, 10);
 
   for (const collection of CURATED_COLLECTIONS) {
     assert.match(collection.id, /^[a-z]+(?:-[a-z]+)*$/);

@@ -14,7 +14,7 @@ name: account-translation
     id: tab-library
 - tapOn: ".*My Verses.*"
 - extendedWaitUntil:
-    visible: ".*John 3:16 • ESV.*"
+    visible: ".*John 3:16 · ESV.*"
     timeout: 20000
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fadd%3FcollectionId%3Dmy-verses
 - tapOn:
@@ -29,12 +29,12 @@ name: account-translation
 - tapOn:
     id: bible-translation-KJV
 - assertNotVisible: "Translation"
-- assertVisible: "Add Verse"
+- assertVisible: "Add verses"
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fmy-verses
 - extendedWaitUntil:
-    visible: ".*John 3:16 • KJV.*"
+    visible: ".*John 3:16 · KJV.*"
     timeout: 20000
-- assertVisible: ".*Romans 8:28 • KJV.*"
+- assertVisible: ".*Romans 8:28 · KJV.*"
 - assertVisible: ".*Review now.*"
 - takeScreenshot: account-translation-2-collection
 - tapOn:
@@ -43,7 +43,7 @@ name: account-translation
 - takeScreenshot: account-translation-3-settings
 - tapOn:
     id: tab-library
-- tapOn: ".*John 3:16 • KJV.*"
+- tapOn: ".*John 3:16 · KJV.*"
 - extendedWaitUntil:
     visible: ".*begotten.*"
     timeout: 20000
@@ -60,5 +60,5 @@ name: account-translation
 - takeScreenshot: account-translation-4-setup
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fmy-verses
 - extendedWaitUntil:
-    visible: ".*John 3:16 • ESV.*"
+    visible: ".*John 3:16 · ESV.*"
     timeout: 20000

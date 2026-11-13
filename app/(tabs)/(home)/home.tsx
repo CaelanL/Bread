@@ -1,7 +1,7 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@/lib/auth';
 import type { VOTM } from '@/lib/api/votm';
-import { AppHeader } from '@/components/app-header';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { ExploreCollections } from '@/components/home/ExploreCollections';
 import { InsightsCard, type InsightsCardRef } from '@/components/home/InsightsCard';
 import { IntroVideo } from '@/components/home/IntroVideo';
@@ -17,11 +17,11 @@ import {
   Animated,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Reanimated from 'react-native-reanimated';
 
 function SkeletonCard({ isDark }: { isDark: boolean }) {
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
@@ -78,6 +78,7 @@ function SkeletonCard({ isDark }: { isDark: boolean }) {
 }
 
 export default function HomeScreen() {
+  const barHeight = useTopBarHeight();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -167,14 +168,14 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="Home" showBack={false} />
-      <ScrollView
+      <Reanimated.ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }
       >
+        <LargeTitle root title="Home" />
         {/* VOTM Section */}
         {votmLoading ? (
           <SkeletonCard isDark={isDark} />
@@ -210,7 +211,8 @@ export default function HomeScreen() {
         <InsightsCard ref={insightsCardRef} />
         <ExploreCollections />
         <IntroVideo blocked={expanded || collectionPickerVisible || modalTransition || expandedPresented || pickerPresented} />
-      </ScrollView>
+      </Reanimated.ScrollView>
+      <TopBar />
 
       {/* Expanded Verse Modal */}
       <VerseExpandModal

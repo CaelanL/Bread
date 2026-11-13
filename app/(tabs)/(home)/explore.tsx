@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/app-header';
 import { CuratedCollectionCard } from '@/components/collections/CuratedCollectionCard';
+import { TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
@@ -11,11 +11,12 @@ import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 export default function ExploreScreen() {
   useCollectionSaversRefresh();
   const colors = Colors[useColorScheme() ?? 'light'];
+  const barHeight = useTopBarHeight();
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <AppHeader leftButton={{ icon: 'chevron.left', label: 'Back to Home', onPress: () => router.back() }} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <TopBar onBack={() => router.back()} backLabel="Back to Home" />
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: barHeight + 8 }]}>
         <View style={styles.intro}>
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
             Explore collections

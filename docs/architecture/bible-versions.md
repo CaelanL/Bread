@@ -93,10 +93,11 @@ foreign key to `user_verses`, so their history and stats stay.
 refresh and switch, not only once, because old clients keep adding verses in
 their device translation. Tests: `lib/store/__tests__/translation.test.ts`.
 
-Adding a verse finds it by reference in any version (`addVerse`), so the add
+Adding a verse finds it by reference in any version (`add_verse`), so the add
 flow can't create a second translation of a held verse. A soft-deleted match
 comes back in the account translation, unless another row of that reference
-already holds it or the verse may be left out there; then it keeps its own.
+already holds it or the verse may be left out there (the client passes
+`mayBeMissing`); then it keeps its own.
 
 ## Propagation
 

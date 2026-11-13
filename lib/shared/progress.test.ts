@@ -1,0 +1,194 @@
+// lib-ok: Unit tests for the shared collection progress grid.
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  buildGrid,
+  canEditShared,
+  cellState,
+  collectionRemoval,
+  GRID_PITCH,
+  gridScrolls,
+  groupProgress,
+  hasOtherMembers,
+  masteredByEveryoneCount,
+  progressFlags,
+  replaceMemberCells,
+  sharedEmblem,
+  soloEmblem,
+  whoIsWhere,
+  type ProgressCell,
+  type SharedReference,
+} from './progress';
+
+const r828: SharedReference = { book: 'Romans', chapter: 8, verseStart: 28, verseEnd: 28 };
+const r81: SharedReference = { book: 'Romans', chapter: 8, verseStart: 1, verseEnd: 1 };
+const r838: SharedReference = { book: 'Romans', chapter: 8, verseStart: 38, verseEnd: 39 };
+const none = { practiced: false, mastered: false, engraved: false };
+const learning = { practiced: true, mastered: false, engraved: false };
+const mastered = { practiced: true, mastered: true, engraved: false };
+const engraved = { practiced: true, mastered: true, engraved: true };
+const cell = (userId: string, ref: SharedReference, flags: typeof none): ProgressCell => ({ userId, ...ref, ...flags });
+
+test('a square is Engraved over Mastered over Learning over Open', () => {
+  assert.equal(cellState(none), 'open');
+  assert.equal(cellState(learning), 'learning');
+  assert.equal(cellState(mastered), 'mastered');
+  assert.equal(cellState(engraved), 'engraved');
+  assert.equal(cellState({ practiced: false, mastered: false, engraved: true }), 'engraved');
+});
+
+test('Due and Locked verses count as Mastered: only hard.completed decides', () => {
+  const score = (bestAccuracy: number | null, completed = false) => ({ bestAccuracy, completed });
+  const engraved = (nextDueAt: string | null) =>
+    ({ completed: false, passCount: 1, nextDueAt, lifetimeReviews: 1, lastReviewedAt: null, months: [] });
+  const due = { easy: score(95, true), medium: score(null), hard: score(92, true), engraved: engraved(null) };
+  const locked = { ...due, engraved: engraved('2999-01-01T00:00:00.000Z') };
+  assert.equal(cellState(progressFlags(due)), 'mastered');
+  assert.equal(cellState(progressFlags(locked)), 'mastered');
+  const fresh = { easy: score(null), medium: score(null), hard: score(null) };
+  assert.equal(cellState(progressFlags(fresh)), 'open');
+  assert.equal(cellState(progressFlags({ ...fresh, medium: score(40) })), 'learning');
+});
+
+// The seed: Cara and Dana engraved 8:1, Cara mastered 8:28 and Dana is learning it, no one started 8:38-39.
+const seed = buildGrid(['C', 'D'], [r81, r828, r838], [
+  cell('C', r81, engraved), cell('C', r828, mastered),
+  cell('D', r81, engraved), cell('D', r828, learning),
+]);
+
+test('a verse no one has started is Open for everyone', () => {
+  assert.deepEqual(seed.rows[2].states, ['open', 'open']);
+  assert.equal(seed.rows[2].masteredCount, 0);
+});
+
+test('the group count per verse counts mastered and engraved members', () => {
+  assert.deepEqual(seed.rows.map((row) => row.masteredCount), [2, 1, 0]);
+  assert.deepEqual(seed.rows[1].states, ['mastered', 'learning']);
+});
+
+test('group progress is mastered squares over all squares', () => {
+  assert.equal(groupProgress(seed), 3 / 6);
+  assert.equal(masteredByEveryoneCount(seed), 1);
+});
+
+test('a member with no copy yet has an Open square on every verse', () => {
+  const grid = buildGrid(['C', 'D', 'E'], [r81, r828, r838], [cell('C', r81, mastered)]);
+  assert.deepEqual(grid.rows.map((row) => row.states[2]), ['open', 'open', 'open']);
+  assert.equal(groupProgress(grid), 1 / 9);
+});
+
+test('every square mastered, engraved included, is 100%', () => {
+  const allMastered = buildGrid(['C', 'D'], [r81, r828], [
+    cell('C', r81, engraved), cell('C', r828, mastered), cell('D', r81, mastered), cell('D', r828, engraved),
+  ]);
+  assert.equal(groupProgress(allMastered), 1);
+});
+
+test('an empty grid is 0%', () => {
+  for (const grid of [buildGrid([], [r81], []), buildGrid(['C'], [], [])]) {
+    assert.equal(groupProgress(grid), 0);
+  }
+});
+
+test('ranges match exactly, and cells for other verses or non-members are ignored', () => {
+  const r82830 = { ...r828, verseEnd: 30 };
+  const grid = buildGrid(['C'], [r828], [cell('C', r82830, mastered), cell('X', r828, mastered)]);
+  assert.deepEqual(grid.rows[0].states, ['open']);
+});
+
+test('several rows for one square fold with OR, like the server', () => {
+  const grid = buildGrid(['C'], [r828], [cell('C', r828, learning), cell('C', r828, { ...none, mastered: true })]);
+  assert.deepEqual(grid.rows[0].states, ['mastered']);
+});
+
+test("a member's own squares can be swapped for their local verses", () => {
+  const server = [cell('C', r828, mastered), cell('C', r81, learning), cell('D', r828, mastered)];
+  const swapped = replaceMemberCells(server, 'C', [cell('C', r828, none)]);
+  const grid = buildGrid(['C', 'D'], [r81, r828], swapped);
+  assert.deepEqual(grid.rows.map((row) => row.states), [['learning', 'open'], ['open', 'mastered']]);
+});
+
+test('a collection reads as shared only once someone besides the owner is in it', () => {
+  assert.equal(hasOtherMembers(undefined), false);
+  assert.equal(hasOtherMembers({ memberCount: 1 }), false);
+  assert.equal(hasOtherMembers({ memberCount: 2 }), true);
+});
+
+test('owners and editors edit a shared collection; an unloaded role edits nothing', () => {
+  assert.equal(canEditShared('owner'), true);
+  assert.equal(canEditShared('editor'), true);
+  assert.equal(canEditShared('member'), false);
+  assert.equal(canEditShared(undefined), false);
+});
+
+test('a personal or owned collection is deleted, anyone else leaves, an unloaded role offers neither', () => {
+  assert.equal(collectionRemoval(undefined, undefined), 'delete');
+  assert.equal(collectionRemoval('g', 'owner'), 'delete');
+  assert.equal(collectionRemoval('g', 'editor'), 'leave');
+  assert.equal(collectionRemoval('g', 'member'), 'leave');
+  assert.equal(collectionRemoval('g', undefined), null);
+});
+
+const cara = { userId: 'C', displayName: 'Cara', role: 'owner' as const };
+const dana = { userId: 'D', displayName: 'Dana', role: 'member' as const };
+
+test("Who's where puts your column first, then the owner and members in join order", () => {
+  const asDana = whoIsWhere(seed, [cara, dana], 'D');
+  assert.deepEqual(asDana.columns.map((c) => [c.displayName, c.you]), [['Dana', true], ['Cara', false]]);
+  assert.deepEqual(asDana.columns[0].states, ['engraved', 'learning', 'open']);
+  assert.deepEqual(asDana.columns.map((c) => c.masteredCount), [1, 2]);
+
+  const asCara = whoIsWhere(seed, [cara, dana], 'C');
+  assert.deepEqual(asCara.columns.map((c) => [c.displayName, c.you]), [['Cara', true], ['Dana', false]]);
+  assert.deepEqual(asCara.columns[0].states, ['engraved', 'mastered', 'open']);
+});
+
+test("Who's where has no You column for someone outside the grid, and skips members it has no squares for", () => {
+  const eve = { userId: 'E', displayName: 'Eve', role: 'editor' as const };
+  const { columns } = whoIsWhere(seed, [cara, eve, dana], 'stranger');
+  assert.deepEqual(columns.map((c) => [c.displayName, c.you]), [['Cara', false], ['Dana', false]]);
+});
+
+test("Who's where lists references in Bible order, whatever order they were added", () => {
+  const john316 = { book: 'John', chapter: 3, verseStart: 16, verseEnd: 16 };
+  const gen11 = { book: 'Genesis', chapter: 1, verseStart: 1, verseEnd: 1 };
+  const r82830 = { ...r828, verseEnd: 30 };
+  const grid = buildGrid(['C'], [r838, john316, r82830, r828, gen11, r81], [cell('C', john316, mastered)]);
+  const { rows, columns } = whoIsWhere(grid, [cara], 'C');
+  assert.deepEqual(rows.map((row) => row.reference), [gen11, john316, r81, r828, r82830, r838]);
+  assert.deepEqual(columns[0].states, ['open', 'mastered', 'open', 'open', 'open', 'open']);
+});
+
+test("Who's where scrolls when the columns are wider than the space measured for them", () => {
+  // A 393 pt phone: 393 - 32 page - 28 card - 124 references - 12 = 197 pt for columns.
+  assert.equal(GRID_PITCH, 26);
+  assert.equal(gridScrolls(7, 197), false);
+  assert.equal(gridScrolls(8, 197), true);
+  assert.equal(gridScrolls(2, 197), false);
+  assert.equal(gridScrolls(30, 197), true);
+  assert.equal(gridScrolls(8, 8 * GRID_PITCH), false);
+});
+
+test('a personal collection is Mastered when every verse is, and Engraved only when every verse is engraved', () => {
+  const score = (bestAccuracy: number | null, completed = false) => ({ bestAccuracy, completed });
+  const review = (completed: boolean) =>
+    ({ completed, passCount: completed ? 10 : 1, nextDueAt: null, lifetimeReviews: 1, lastReviewedAt: null, months: [] });
+  const fresh = { easy: score(null), medium: score(null), hard: score(null) };
+  const learnt = { easy: score(95, true), medium: score(94, true), hard: score(92, true), engraved: review(false) };
+  const carved = { ...learnt, engraved: review(true) };
+  assert.equal(soloEmblem([]), null);
+  assert.equal(soloEmblem([learnt, fresh]), null);
+  assert.equal(soloEmblem([learnt, { ...fresh, easy: score(80) }]), null);
+  assert.equal(soloEmblem([learnt, carved]), 'mastered');
+  assert.equal(soloEmblem([carved, carved]), 'engraved');
+});
+
+test('a shared collection needs every member on every verse: the seed has neither emblem', () => {
+  const status = { memberCount: 2, verseCount: 3, masteredSquares: 3, engravedSquares: 2 };
+  assert.equal(sharedEmblem(status), null);
+  assert.equal(sharedEmblem({ ...status, masteredSquares: 6 }), 'mastered');
+  assert.equal(sharedEmblem({ ...status, masteredSquares: 6, engravedSquares: 5 }), 'mastered');
+  assert.equal(sharedEmblem({ ...status, masteredSquares: 6, engravedSquares: 6 }), 'engraved');
+  assert.equal(sharedEmblem({ memberCount: 2, verseCount: 0, masteredSquares: 0, engravedSquares: 0 }), null);
+});

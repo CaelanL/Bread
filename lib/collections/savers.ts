@@ -18,6 +18,10 @@ export async function readCollectionSavers(
   return Object.fromEntries(data.map(({ catalog_id, saver_count }) => [catalog_id, saver_count]));
 }
 
+/** Below this many, a curated collection shows no saves line: small numbers read as empty. */
+export const MIN_SHOWN_SAVES = 10;
+
+/** "12 saves", or '' below `MIN_SHOWN_SAVES`. */
 export function saverCountLabel(count: number): string {
-  return count === 1 ? '1 person saved' : `${count.toLocaleString()} people saved`;
+  return count < MIN_SHOWN_SAVES ? '' : `${count.toLocaleString()} saves`;
 }

@@ -57,6 +57,11 @@ verify_jwt = false
 [functions.send-notifications]
 verify_jwt = false
 
+# invite-handoff: `record` comes from the sendlabs.dev page with no session; `claim`
+# verifies the user's ES256 token itself.
+[functions.invite-handoff]
+verify_jwt = false
+
 [experimental]
 stack = true
 

@@ -18,13 +18,33 @@ export const Motion = {
   expandMs: 200,
   staggerMs: 100,
   spinnerMs: 900,
+  sweepMs: 900,
+  pulseMs: 1200,
+  pulseRestMs: 1100,
+  jumpMs: 0, // An instant reset inside an animation sequence
+  scoreMs: 1100, // The session finish's count-up and line fill
   easing: [0.2, 0, 0, 1],
 } as const;
+/**
+ * Spread first into every TextInput style. iOS on the New Architecture recycles TextInput views,
+ * and a recycled view keeps the last input's letter spacing and weight when the next one sets
+ * none (react-native#42589), so each input states both.
+ */
+export const InputText = { letterSpacing: 0, fontWeight: '400' } as const;
 export const Shadows = {
   floating: '0px 4px 10px rgba(0,0,0,0.14)',
   border: '0px 0px 0px 1px rgba(0,0,0,0.06), 0px 1px 2px -1px rgba(0,0,0,0.06), 0px 2px 4px 0px rgba(0,0,0,0.04)',
   borderHover: '0px 0px 0px 1px rgba(0,0,0,0.08), 0px 1px 2px -1px rgba(0,0,0,0.08), 0px 2px 4px 0px rgba(0,0,0,0.06)',
 } as const;
+
+/** How much of a collection's accent shows behind its icon and across the top of its screen. */
+export const AccentAlpha = { fill: 0.14, wash: 0.18 } as const;
+
+/** `#rrggbb` at `alpha`, for an accent that isn't a token itself (a collection's icon colour). */
+export function withAlpha(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1, 7), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
 
 export const Colors = {
   light: {
@@ -41,16 +61,24 @@ export const Colors = {
     recordingControl: '#987142',
     recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(176,141,87,0.12)',
+    engravedFill: 'rgba(245,158,11,0.12)', // Engraved pill and engraved collection icon
+    // A shared collection's group progress line at 100%: light to deep green, champagne to bronze
+    masteredBarStart: '#86efac',
+    masteredBarEnd: '#16a34a',
+    engravedBarStart: '#e8d4a9',
+    engravedBarEnd: '#987142',
 
     // Surfaces
     card: '#ffffff',              // Pure white cards for contrast
     cardAlt: '#f5f3f0',           // Warm light gray
+    fill: 'rgba(0,0,0,0.05)',     // Quiet fill on the page: pills, pressed rows
     input: '#f5f3f0',             // Warm input background
     overlay: 'rgba(0,0,0,0.5)',
 
     // Borders
     border: '#e0dcd6',            // Warm gray border
     borderLight: '#ebe7e1',       // Lighter warm border
+    separator: '#9a9184',         // Hairline between verse rows: a step darker than border
 
     // Status (keep functional)
     success: '#22c55e',
@@ -76,16 +104,23 @@ export const Colors = {
     recordingControl: '#a8824c',
     recordingAction: 'rgba(0,0,0,0.10)',
     primaryLight: 'rgba(201,169,98,0.15)',
+    engravedFill: 'rgba(245,158,11,0.15)',
+    masteredBarStart: '#86efac',
+    masteredBarEnd: '#22c55e',
+    engravedBarStart: '#e7ce96',
+    engravedBarEnd: '#b08d57',
 
     // Surfaces
     card: '#242424',              // Dark charcoal card
     cardAlt: '#2e2e2e',           // Slightly lighter
+    fill: 'rgba(255,255,255,0.08)',
     input: '#2e2e2e',             // Input background
     overlay: 'rgba(0,0,0,0.6)',
 
     // Borders
     border: '#3a3a3a',            // Charcoal border
     borderLight: '#444444',       // Lighter charcoal
+    separator: '#6e6e6e',
 
     // Status (same both modes)
     success: '#22c55e',

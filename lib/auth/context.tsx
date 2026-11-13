@@ -10,6 +10,8 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** The session came back from storage at launch, not from a sign-in during this run. */
+  sessionRestored: boolean;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
@@ -25,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [restoredUserId, setRestoredUserId] = useState<string | null>(null);
 
   // Handle deep link URLs (for password reset, OAuth callbacks)
   const handleDeepLink = async (url: string) => {
@@ -60,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setRestoredUserId(session.user.id);
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
@@ -67,7 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        if (event === 'INITIAL_SESSION' && session) setRestoredUserId(session.user.id);
+        if (event === 'SIGNED_OUT') setRestoredUserId(null);
         setSession(session);
         setUser(session?.user ?? null);
         setIsLoading(false);
@@ -178,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     isLoading,
     isAuthenticated: !!session && !!user,
+    sessionRestored: !!user && user.id === restoredUserId,
     signUp,
     signIn,
     signInWithGoogle,

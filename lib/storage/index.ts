@@ -6,7 +6,6 @@
  */
 
 import { supabase } from '@/lib/api/client';
-import { ensureAuth } from '@/lib/api';
 import { isCollectionIconKey, type CollectionIconKey } from '@/lib/collections/icons';
 import { ENGRAVED_THRESHOLD } from '@/lib/store/review-config';
 
@@ -70,13 +69,29 @@ export interface Collection {
   iconColor?: string; // Hex color for icon
   createdAt: number;
   sortPreference?: SortOption; // Per-collection sort, NULL = default
+  sharedId?: string; // shared_collections.id when this is a member's copy of a shared collection
+}
+
+export type SharedRole = 'owner' | 'editor' | 'member';
+
+/** One shared collection the user belongs to, from shared_collections and get_shared_status(). */
+export interface SharedCollectionInfo {
+  id: string;
+  /** The owner's display name for a group you joined; null for your own (read `displayName`) or when it couldn't be read. */
+  ownerName: string | null;
+  name: string;
+  role: SharedRole;
+  memberCount: number;
+  verseCount: number;
+  masteredSquares: number;
+  engravedSquares: number;
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
 // ============ CONSTANTS ============
 
-const DEFAULT_COLLECTION_ID = 'my-verses';
+export const DEFAULT_COLLECTION_ID = 'my-verses';
 
 export const DEFAULT_PROGRESS: VerseProgress = {
   easy: { bestAccuracy: null, completed: false },
@@ -164,6 +179,7 @@ export function parseCollectionRow(row: {
   created_at: string;
   sort_preference?: unknown;
   icon_key?: unknown;
+  shared_collection_id?: string | null;
 }): Collection {
   return {
     id: row.client_id,
@@ -172,551 +188,14 @@ export function parseCollectionRow(row: {
     createdAt: new Date(row.created_at).getTime(),
     sortPreference: parseSortPreference(row.sort_preference),
     iconKey: !row.is_default && isCollectionIconKey(row.icon_key) ? row.icon_key : undefined,
+    sharedId: row.shared_collection_id ?? undefined,
   };
 }
-
-const DEFAULT_COLLECTION: Collection = {
-  id: DEFAULT_COLLECTION_ID,
-  name: 'My Verses',
-  isDefault: true,
-  createdAt: 0,
-};
 
 export const MASTERED_COLLECTION_ID = 'mastered';
 export const IN_PROGRESS_COLLECTION_ID = 'in-progress';
 
-const MASTERED_COLLECTION: Collection = {
-  id: MASTERED_COLLECTION_ID,
-  name: 'Mastered',
-  isDefault: false,
-  isVirtual: true,
-  icon: 'checkmark.circle.fill',
-  iconColor: '#22c55e', // Green
-  createdAt: 0,
-};
-
-const IN_PROGRESS_COLLECTION: Collection = {
-  id: IN_PROGRESS_COLLECTION_ID,
-  name: 'In Progress',
-  isDefault: false,
-  isVirtual: true,
-  icon: 'hourglass',
-  iconColor: '#f59e0b', // Amber
-  createdAt: 0,
-};
-
-// ============ HELPERS ============
-
-async function getCurrentUserId(): Promise<string> {
-  await ensureAuth();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  return user.id;
-}
-
-// ============ COLLECTION FUNCTIONS ============
-
-/**
- * Get all collections from Supabase
- */
-export async function getCollections(): Promise<Collection[]> {
-  try {
-    const { data, error } = await supabase
-      .from('user_collections')
-      .select('*')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      console.error('[STORAGE] Failed to fetch collections:', error);
-      return [DEFAULT_COLLECTION];
-    }
-
-    const collections: Collection[] = data.map((c) => ({
-      id: c.client_id,
-      name: c.name,
-      isDefault: c.is_default,
-      createdAt: new Date(c.created_at).getTime(),
-      sortPreference: parseSortPreference(c.sort_preference),
-    }));
-
-    // Ensure default collection always exists
-    const hasDefault = collections.some((c) => c.isDefault);
-    if (!hasDefault) {
-      collections.unshift(DEFAULT_COLLECTION);
-    }
-
-    // Add Mastered + In Progress virtual collections after default
-    const defaultIndex = collections.findIndex((c) => c.isDefault);
-    collections.splice(defaultIndex + 1, 0, MASTERED_COLLECTION, IN_PROGRESS_COLLECTION);
-
-    return collections;
-  } catch (e) {
-    console.error('[STORAGE] Collection fetch error:', e);
-    return [DEFAULT_COLLECTION];
-  }
-}
-
-/**
- * Create a collection in Supabase
- */
-export async function createCollection(name: string): Promise<Collection> {
-  const userId = await getCurrentUserId();
-  const clientId = `collection-${Date.now()}`;
-  const createdAt = new Date();
-
-  const { error } = await supabase.from('user_collections').insert({
-    user_id: userId,
-    client_id: clientId,
-    name,
-    is_default: false,
-    created_at: createdAt.toISOString(),
-  });
-
-  if (error) {
-    console.error('[STORAGE] Failed to create collection:', error);
-    throw new Error('Failed to create collection');
-  }
-
-  return {
-    id: clientId,
-    name,
-    isDefault: false,
-    createdAt: createdAt.getTime(),
-  };
-}
-
-/**
- * Delete a collection (soft delete) and move verses to default
- */
-export async function deleteCollection(id: string): Promise<void> {
-  if (id === DEFAULT_COLLECTION_ID) return;
-
-  // Get server UUID for this collection
-  const { data: collection } = await supabase
-    .from('user_collections')
-    .select('id')
-    .eq('client_id', id)
-    .is('deleted_at', null)
-    .single();
-
-  if (!collection) return;
-
-  // Get default collection server ID
-  const { data: defaultCollection } = await supabase
-    .from('user_collections')
-    .select('id')
-    .eq('client_id', DEFAULT_COLLECTION_ID)
-    .is('deleted_at', null)
-    .single();
-
-  if (defaultCollection) {
-    // Get all verse IDs in this collection via junction table
-    const { data: verseLinks } = await supabase
-      .from('verse_collections')
-      .select('verse_id')
-      .eq('collection_id', collection.id);
-
-    if (verseLinks && verseLinks.length > 0) {
-      // Move verses to default collection via junction table
-      // Use upsert to handle verses that might already be in default collection
-      const newLinks = verseLinks.map((link) => ({
-        verse_id: link.verse_id,
-        collection_id: defaultCollection.id,
-        added_at: new Date().toISOString(),
-      }));
-
-      await supabase
-        .from('verse_collections')
-        .upsert(newLinks, { onConflict: 'verse_id,collection_id', ignoreDuplicates: true });
-    }
-  }
-
-  // Delete junction entries for this collection (will be cleaned up by CASCADE anyway)
-  await supabase
-    .from('verse_collections')
-    .delete()
-    .eq('collection_id', collection.id);
-
-  // Soft-delete the collection
-  await supabase
-    .from('user_collections')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', collection.id);
-}
-
-/**
- * Get verse count for a collection (via junction table)
- */
-export async function getCollectionVerseCount(collectionId: string): Promise<number> {
-  const { data: collection } = await supabase
-    .from('user_collections')
-    .select('id')
-    .eq('client_id', collectionId)
-    .is('deleted_at', null)
-    .single();
-
-  if (!collection) return 0;
-
-  // Count via junction table, filtering out soft-deleted verses
-  const { count, error } = await supabase
-    .from('verse_collections')
-    .select('user_verses!inner(id)', { count: 'exact', head: true })
-    .eq('collection_id', collection.id)
-    .is('user_verses.deleted_at', null);
-
-  if (error) {
-    console.error('[STORAGE] Failed to count verses:', error);
-    return 0;
-  }
-
-  return count || 0;
-}
-
 // ============ VERSE FUNCTIONS ============
-
-/**
- * Get all saved verses from Supabase (via junction table)
- */
-export async function getSavedVerses(): Promise<SavedVerse[]> {
-  try {
-    const { data, error } = await supabase
-      .from('verse_collections')
-      .select(`
-        added_at,
-        user_collections!inner(client_id),
-        user_verses!inner(*)
-      `)
-      .is('user_verses.deleted_at', null)
-      .order('added_at', { ascending: false });
-
-    if (error) {
-      console.error('[STORAGE] Failed to fetch verses:', error);
-      return [];
-    }
-
-    return data.map((vc: any) => ({
-      id: vc.user_verses.client_id,
-      collectionId: vc.user_collections.client_id,
-      book: vc.user_verses.book,
-      chapter: vc.user_verses.chapter,
-      verseStart: vc.user_verses.verse_start,
-      verseEnd: vc.user_verses.verse_end,
-      version: vc.user_verses.version as BibleVersion,
-      createdAt: new Date(vc.added_at).getTime(),
-      progress: parseProgress(vc.user_verses.progress),
-      ...parseVerseRowExtras(vc.user_verses),
-    }));
-  } catch (e) {
-    console.error('[STORAGE] Verse fetch error:', e);
-    return [];
-  }
-}
-
-/**
- * Get verses for a specific collection (via junction table)
- */
-export async function getVersesByCollection(collectionId: string): Promise<SavedVerse[]> {
-  try {
-    const { data: collection } = await supabase
-      .from('user_collections')
-      .select('id')
-      .eq('client_id', collectionId)
-      .is('deleted_at', null)
-      .single();
-
-    if (!collection) return [];
-
-    const { data, error } = await supabase
-      .from('verse_collections')
-      .select(`
-        added_at,
-        user_verses!inner(*)
-      `)
-      .eq('collection_id', collection.id)
-      .is('user_verses.deleted_at', null)
-      .order('added_at', { ascending: false });
-
-    if (error) {
-      console.error('[STORAGE] Failed to fetch verses:', error);
-      return [];
-    }
-
-    return data.map((vc: any) => ({
-      id: vc.user_verses.client_id,
-      collectionId: collectionId,
-      book: vc.user_verses.book,
-      chapter: vc.user_verses.chapter,
-      verseStart: vc.user_verses.verse_start,
-      verseEnd: vc.user_verses.verse_end,
-      version: vc.user_verses.version as BibleVersion,
-      createdAt: new Date(vc.added_at).getTime(),
-      progress: parseProgress(vc.user_verses.progress),
-      ...parseVerseRowExtras(vc.user_verses),
-    }));
-  } catch (e) {
-    console.error('[STORAGE] Verse fetch error:', e);
-    return [];
-  }
-}
-
-/**
- * Save a verse to Supabase (via junction table)
- * - If verse exists (including soft-deleted): restore and add to collection
- * - If new: create verse and add to collection
- */
-export async function saveVerse(
-  verse: Omit<SavedVerse, 'id' | 'createdAt' | 'progress' | 'collectionId' | 'version'>,
-  collectionId: string = DEFAULT_COLLECTION_ID,
-  version: BibleVersion = 'ESV'
-): Promise<SavedVerse> {
-  const userId = await getCurrentUserId();
-  const createdAt = new Date();
-
-  // Get server collection ID
-  let serverCollectionId: string;
-  const { data: collection } = await supabase
-    .from('user_collections')
-    .select('id')
-    .eq('client_id', collectionId)
-    .is('deleted_at', null)
-    .single();
-
-  if (collection) {
-    serverCollectionId = collection.id;
-  } else {
-    // Ensure default collection exists
-    const { data: defaultColl, error: defaultError } = await supabase
-      .from('user_collections')
-      .select('id')
-      .eq('client_id', DEFAULT_COLLECTION_ID)
-      .is('deleted_at', null)
-      .single();
-
-    if (defaultColl) {
-      serverCollectionId = defaultColl.id;
-    } else {
-      // Create default collection
-      const { data: newDefault, error: createError } = await supabase
-        .from('user_collections')
-        .insert({
-          user_id: userId,
-          client_id: DEFAULT_COLLECTION_ID,
-          name: 'My Verses',
-          is_default: true,
-          created_at: new Date(0).toISOString(),
-        })
-        .select('id')
-        .single();
-
-      if (createError || !newDefault) {
-        throw new Error('Failed to create default collection');
-      }
-      serverCollectionId = newDefault.id;
-    }
-  }
-
-  // Check if verse already exists (including soft-deleted)
-  const { data: existing } = await supabase
-    .from('user_verses')
-    .select('id, client_id, deleted_at, progress')
-    .eq('user_id', userId)
-    .eq('book', verse.book)
-    .eq('chapter', verse.chapter)
-    .eq('verse_start', verse.verseStart)
-    .eq('verse_end', verse.verseEnd)
-    .eq('version', version)
-    .maybeSingle();
-
-  let clientId: string;
-  let progress: VerseProgress = DEFAULT_PROGRESS;
-
-  if (existing) {
-    clientId = existing.client_id;
-    progress = parseProgress(existing.progress);
-
-    // Restore if soft-deleted
-    if (existing.deleted_at) {
-      await supabase
-        .from('user_verses')
-        .update({ deleted_at: null })
-        .eq('id', existing.id);
-    }
-
-    // Add to collection via junction table (ignore if already exists)
-    await supabase
-      .from('verse_collections')
-      .upsert(
-        { verse_id: existing.id, collection_id: serverCollectionId, added_at: createdAt.toISOString() },
-        { onConflict: 'verse_id,collection_id', ignoreDuplicates: true }
-      );
-  } else {
-    // Create new verse
-    clientId = `${verse.book}-${verse.chapter}-${verse.verseStart}-${verse.verseEnd}-${Date.now()}`;
-
-    const { data: newVerse, error: insertError } = await supabase
-      .from('user_verses')
-      .insert({
-        user_id: userId,
-        client_id: clientId,
-        book: verse.book,
-        chapter: verse.chapter,
-        verse_start: verse.verseStart,
-        verse_end: verse.verseEnd,
-        version,
-        progress: DEFAULT_PROGRESS,
-        created_at: createdAt.toISOString(),
-      })
-      .select('id')
-      .single();
-
-    if (insertError || !newVerse) {
-      console.error('[STORAGE] Failed to save verse:', insertError);
-      throw new Error('Failed to save verse');
-    }
-
-    // Add to collection via junction table
-    await supabase
-      .from('verse_collections')
-      .insert({ verse_id: newVerse.id, collection_id: serverCollectionId, added_at: createdAt.toISOString() });
-  }
-
-  return {
-    id: clientId,
-    collectionId,
-    book: verse.book,
-    chapter: verse.chapter,
-    verseStart: verse.verseStart,
-    verseEnd: verse.verseEnd,
-    version,
-    createdAt: createdAt.getTime(),
-    progress,
-  };
-}
-
-/**
- * Delete a verse from a collection
- * - Removes from junction table
- * - If no collections left: soft delete if mastered, hard delete otherwise
- *
- * @returns whether verse was mastered (for UI to show appropriate message)
- */
-export async function deleteVerse(id: string, collectionId: string): Promise<{ wasMastered: boolean }> {
-  // First check if verse is mastered
-  const { data: verse } = await supabase
-    .from('user_verses')
-    .select('id, progress')
-    .eq('client_id', id)
-    .single();
-
-  if (!verse) {
-    console.error('[STORAGE] Verse not found:', id);
-    return { wasMastered: false };
-  }
-
-  const isMastered = verse?.progress?.hard?.completed === true;
-
-  // Get collection server ID
-  const { data: collection } = await supabase
-    .from('user_collections')
-    .select('id')
-    .eq('client_id', collectionId)
-    .single();
-
-  if (!collection) {
-    console.error('[STORAGE] Collection not found:', collectionId);
-    return { wasMastered: isMastered };
-  }
-
-  // Remove from junction table
-  const { error: junctionError } = await supabase
-    .from('verse_collections')
-    .delete()
-    .eq('verse_id', verse.id)
-    .eq('collection_id', collection.id);
-
-  if (junctionError) {
-    console.error('[STORAGE] Failed to remove verse from collection:', junctionError);
-    return { wasMastered: isMastered };
-  }
-
-  // Check if verse is still in any other collections
-  const { count } = await supabase
-    .from('verse_collections')
-    .select('*', { count: 'exact', head: true })
-    .eq('verse_id', verse.id);
-
-  if (count === 0) {
-    // No collections left
-    if (isMastered) {
-      // Soft delete - keep for Mastered list
-      const { error } = await supabase
-        .from('user_verses')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', verse.id);
-
-      if (error) {
-        console.error('[STORAGE] Failed to soft delete verse:', error);
-      }
-    } else {
-      // Hard delete - remove completely
-      const { error } = await supabase
-        .from('user_verses')
-        .delete()
-        .eq('id', verse.id);
-
-      if (error) {
-        console.error('[STORAGE] Failed to hard delete verse:', error);
-      }
-    }
-  }
-
-  return { wasMastered: isMastered };
-}
-
-/**
- * Update verse progress
- */
-export async function updateVerseProgress(
-  id: string,
-  difficulty: Difficulty,
-  accuracy: number
-): Promise<void> {
-  // Get current progress
-  const { data: verse, error: fetchError } = await supabase
-    .from('user_verses')
-    .select('progress')
-    .eq('client_id', id)
-    .single();
-
-  if (fetchError || !verse) {
-    console.error('[STORAGE] Failed to fetch verse progress:', fetchError);
-    return;
-  }
-
-  const currentProgress = parseProgress(verse.progress);
-  const currentBest = currentProgress[difficulty]?.bestAccuracy;
-
-  // Only update if this is a new best score
-  if (currentBest === null || accuracy > currentBest) {
-    const newProgress = {
-      ...currentProgress,
-      [difficulty]: {
-        bestAccuracy: accuracy,
-        completed: accuracy >= 90,
-      },
-    };
-
-    const { error: updateError } = await supabase
-      .from('user_verses')
-      .update({ progress: newProgress })
-      .eq('client_id', id);
-
-    if (updateError) {
-      console.error('[STORAGE] Failed to update progress:', updateError);
-    }
-  }
-}
 
 /**
  * Remember the study setup (chunk size + difficulty) the user chose for
@@ -736,76 +215,6 @@ export async function updateVerseStudyPrefs(
 
   if (error) {
     console.error('[STORAGE] Failed to save study prefs:', error);
-  }
-}
-
-// ============ MASTERED VERSES ============
-
-/**
- * Get all mastered verses (hard mode completed)
- * Includes soft-deleted verses - mastery is permanent
- */
-export async function getMasteredVerses(): Promise<SavedVerse[]> {
-  try {
-    const { data, error } = await supabase
-      .from('user_verses')
-      .select('*')
-      .eq('progress->hard->completed', true)
-      .order('updated_at', { ascending: false });
-
-    if (error) {
-      console.error('[STORAGE] Failed to get mastered verses:', error);
-      return [];
-    }
-
-    return data.map((v) => ({
-      id: v.client_id,
-      collectionId: 'mastered', // Virtual collection
-      book: v.book,
-      chapter: v.chapter,
-      verseStart: v.verse_start,
-      verseEnd: v.verse_end,
-      version: v.version as BibleVersion,
-      createdAt: new Date(v.created_at).getTime(),
-      progress: parseProgress(v.progress),
-      ...parseVerseRowExtras(v),
-    }));
-  } catch (e) {
-    console.error('[STORAGE] Mastered verses fetch error:', e);
-    return [];
-  }
-}
-
-/**
- * Get count of mastered verses
- */
-export async function getMasteredVerseCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from('user_verses')
-    .select('*', { count: 'exact', head: true })
-    .eq('progress->hard->completed', true);
-
-  if (error) {
-    console.error('[STORAGE] Failed to count mastered verses:', error);
-    return 0;
-  }
-
-  return count || 0;
-}
-
-/**
- * Reset verse progress to initial state
- * Clears all difficulty scores and removes from Mastered list
- */
-export async function resetVerseProgress(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('user_verses')
-    .update({ progress: DEFAULT_PROGRESS })
-    .eq('client_id', id);
-
-  if (error) {
-    console.error('[STORAGE] Failed to reset verse progress:', error);
-    throw new Error('Failed to reset progress');
   }
 }
 
@@ -838,8 +247,7 @@ export async function updateCollectionSort(
   collectionId: string,
   sort: SortOption,
 ): Promise<void> {
-  // Use .select() so we can detect zero-row updates (the default
-  // collection's row may not exist yet for users with no verses).
+  // .select() so a stale id (zero rows) is visible in the log.
   const { data, error } = await supabase
     .from('user_collections')
     .update({ sort_preference: sort })
@@ -850,35 +258,8 @@ export async function updateCollectionSort(
     console.error('[STORAGE] Failed to update collection sort:', error);
     throw new Error('Failed to save sort preference');
   }
-
-  // If the UPDATE matched a row, we're done.
-  if (data && data.length > 0) return;
-
-  // Zero rows matched. Only the default collection can legitimately
-  // be missing from the DB (lazy-created on first verse add). For any
-  // other collection, this is a stale ID — surface as an error rather
-  // than silently inserting a row.
-  if (collectionId !== DEFAULT_COLLECTION_ID) {
+  if (data.length === 0) {
     console.warn(`[STORAGE] updateCollectionSort: no row matched for ${collectionId}`);
-    return;
-  }
-
-  // Lazy-create the default collection with the chosen sort.
-  const userId = await getCurrentUserId();
-  const { error: insertError } = await supabase
-    .from('user_collections')
-    .insert({
-      user_id: userId,
-      client_id: DEFAULT_COLLECTION_ID,
-      name: 'My Verses',
-      is_default: true,
-      sort_preference: sort,
-      created_at: new Date(0).toISOString(),
-    });
-
-  if (insertError) {
-    console.error('[STORAGE] Failed to lazy-create default collection:', insertError);
-    throw new Error('Failed to save sort preference');
   }
 }
 

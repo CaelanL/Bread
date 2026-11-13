@@ -1,312 +1,300 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { VerseExpandModal } from '@/components/ui/VerseExpandModal';
-import { Colors, Radius } from '@/constants/theme';
+import { Colors, InputText, Motion, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { fetchVerse } from '@/lib/api';
-import { completeBook, hintFor, parseQuickAdd } from '@/lib/bible/quick-add';
-import { formatVerseReference } from '@/lib/storage';
+import { completeBook, MAX_ROWS, parseQuickAdd, quickAddRows, type QuickAddReference, type QuickAddRow } from '@/lib/bible/quick-add';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
+import { DEFAULT_COLLECTION_ID, formatVerseReference, type SavedVerse } from '@/lib/storage';
 import { useAppStore, useVersesByCollection } from '@/lib/store';
-import { showErrorToast } from '@/lib/toast';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-interface QuickAddChip {
-  key: string;
-  book: string;
-  chapter: number;
-  verseStart: number;
-  verseEnd: number;
-  status: 'ready' | 'error';
-  hint?: string;
+const TOAST_MS = 4000;
+
+const referenceKey = (ref: QuickAddReference) => `${ref.book}-${ref.chapter}-${ref.verseStart}-${ref.verseEnd}`;
+const rowLabel = (row: QuickAddRow) => (row.kind === 'fill' ? row.text.trim() : formatVerseReference(row));
+
+interface Toast {
+  message: string;
+  error?: boolean;
+  added?: SavedVerse;
 }
 
-const MAX_SUGGESTIONS = 5;
-
-const testIdPart = (book: string) => book.replace(/ /g, '-');
-
-/** How many characters of `book` the typed query covers, ignoring spaces. */
-function typedLength(book: string, query: string): number {
-  const key = query.toLowerCase().replace(/\s+/g, '');
-  if (!book.toLowerCase().replace(/\s+/g, '').startsWith(key)) return 0;
-  let seen = 0;
-  for (let i = 0; i < book.length; i++) {
-    if (seen === key.length) return i;
-    if (book[i] !== ' ') seen++;
-  }
-  return book.length;
-}
-
+/**
+ * The add screen's search field. Focusing it enters search mode (the parent hides the book
+ * list); Cancel leaves it. Rows narrow the field or add a reference at once.
+ */
 export function QuickAddField({
   collectionId,
-  onTypingChange,
+  searching,
+  onSearchChange,
 }: {
   collectionId?: string;
-  onTypingChange: (hasText: boolean) => void;
+  searching: boolean;
+  onSearchChange: (searching: boolean) => void;
 }) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const bibleVersion = useAppStore((state) => state.bibleVersion);
-  const targetId = collectionId ?? 'my-verses';
+  const tabBarHeight = useBottomTabBarHeight();
+  const targetId = collectionId ?? DEFAULT_COLLECTION_ID;
   const existing = useVersesByCollection(targetId);
+  const verses = useAppStore((state) => state.verses);
+  const inputRef = useRef<TextInput>(null);
+  const pending = useRef(new Set<string>());
 
   const [input, setInput] = useState('');
-  const [chips, setChips] = useState<QuickAddChip[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [peek, setPeek] = useState<QuickAddChip | null>(null);
-  const [peekText, setPeekText] = useState<string | null>(null);
-  const peekRequest = useRef(0);
+  const [toast, setToast] = useState<Toast | null>(null);
 
-  const parse = parseQuickAdd(input);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
-  const statusOf = (chip: QuickAddChip) => {
-    if (chip.status === 'error') return 'error';
-    const held = existing.some(
-      (v) => v.book === chip.book && v.chapter === chip.chapter && v.verseStart === chip.verseStart && v.verseEnd === chip.verseEnd,
-    );
-    return held ? 'held' : 'ready';
-  };
-  const readyChips = chips.filter((chip) => statusOf(chip) === 'ready');
+  const held = (ref: QuickAddReference) => existing.some((v) => referenceKey(v) === referenceKey(ref));
 
-  const updateInput = (value: string) => {
-    setInput(value);
-    onTypingChange(value.length > 0);
-  };
+  // An empty field lists the latest references added elsewhere, newest first.
+  const recent = useMemo(() => {
+    const here = new Set(existing.map(referenceKey));
+    const seen = new Set<string>();
+    return [...verses]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .filter((v) => {
+        const key = referenceKey(v);
+        if (here.has(key) || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, MAX_ROWS)
+      .map((v): QuickAddRow => ({ kind: 'add', book: v.book, chapter: v.chapter, verseStart: v.verseStart, verseEnd: v.verseEnd }));
+  }, [verses, existing]);
+
+  const rows = input.trim() ? quickAddRows(input) : recent;
+  const undoable = toast?.added;
 
   // A typed space or digit right after a book with one match completes its name.
   const handleChangeText = (next: string) => {
+    const parse = parseQuickAdd(input);
     const typedOne = next.length === input.length + 1 && next.startsWith(input);
     const uniqueBook = parse.kind === 'book' && parse.matches.length === 1;
     const completes = typedOne && uniqueBook && /[ \d]$/.test(next);
-    updateInput(completes ? completeBook(next.trimEnd()) ?? next : next);
+    setInput(completes ? completeBook(next.trimEnd()) ?? next : next);
   };
 
-  const addChip = (chip: Omit<QuickAddChip, 'key'>) => {
-    const key = `${testIdPart(chip.book)}-${chip.chapter}-${chip.verseStart}-${chip.verseEnd}`;
-    setChips((prev) => (prev.some((c) => c.key === key) ? prev : [...prev, { ...chip, key }]));
-    updateInput('');
-  };
-
-  const handleSubmit = () => {
-    if (parse.kind === 'book' && parse.matches.length > 0) {
-      updateInput(completeBook(input, parse.matches[0]) ?? input);
-    } else if (parse.kind === 'verse') {
-      addChip({ ...parse, status: 'ready' });
-    } else if (parse.kind === 'error' && parse.verseStart !== undefined) {
-      addChip({
-        book: parse.book,
-        chapter: parse.chapter,
-        verseStart: parse.verseStart,
-        verseEnd: parse.verseEnd ?? parse.verseStart,
-        status: 'error',
-        hint: hintFor(parse) ?? undefined,
-      });
-    }
-  };
-
-  const removeChip = (key: string) => setChips((prev) => prev.filter((c) => c.key !== key));
-
-  const handleAdd = async () => {
-    if (isSaving) return;
-    setIsSaving(true);
-    let failed: QuickAddChip | null = null;
-    for (const chip of readyChips) {
-      try {
-        await useAppStore.getState().addVerse(
-          { book: chip.book, chapter: chip.chapter, verseStart: chip.verseStart, verseEnd: chip.verseEnd },
-          targetId,
-        );
-        removeChip(chip.key);
-      } catch (error) {
-        console.error('Failed to add verse:', error);
-        failed ??= chip;
-      }
-    }
-    setIsSaving(false);
-    if (failed) {
-      showErrorToast(`Could not add ${formatVerseReference(failed)}. Please try again.`);
-    } else if (collectionId) {
-      router.navigate(`/(tabs)/(library)/${collectionId}`);
-    } else {
-      router.navigate('/(tabs)/(library)');
-    }
-  };
-
-  const handlePeek = async (chip: QuickAddChip) => {
-    if (process.env.EXPO_OS === 'ios') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const request = ++peekRequest.current;
-    setPeek(chip);
-    setPeekText(null);
+  const add = async (ref: QuickAddReference) => {
+    const key = referenceKey(ref);
+    if (held(ref) || pending.current.has(key)) return;
+    pending.current.add(key);
+    setInput('');
+    const reference = formatVerseReference(ref);
     try {
-      const { text } = await fetchVerse(formatVerseReference(chip), bibleVersion);
-      if (request === peekRequest.current) setPeekText(text);
+      const added = await useAppStore.getState().addVerse(
+        { book: ref.book, chapter: ref.chapter, verseStart: ref.verseStart, verseEnd: ref.verseEnd },
+        targetId,
+      );
+      if (process.env.EXPO_OS === 'ios') void Haptics.selectionAsync();
+      setToast({ message: `Added ${reference}`, added });
     } catch (error) {
-      console.error('Failed to fetch verse text:', error);
-      if (request === peekRequest.current) setPeekText('Unable to load verse text');
+      console.error('Failed to add verse:', error);
+      setToast({ message: sharedErrorMessage(error, `Could not add ${reference}. Please try again.`), error: true });
+    } finally {
+      pending.current.delete(key);
     }
   };
 
-  const suggestions = parse.kind === 'book' ? parse.matches.slice(0, MAX_SUGGESTIONS) : [];
-  const hint = [hintFor(parse), ...chips.map((chip) => chip.hint)].filter(Boolean).join(' · ');
+  const undo = async (verse: SavedVerse) => {
+    setToast(null);
+    try {
+      await useAppStore.getState().deleteVerse(verse.id, targetId);
+    } catch (error) {
+      console.error('Failed to undo add:', error);
+      setToast({ message: `Could not remove ${formatVerseReference(verse)}. Please try again.`, error: true });
+    }
+  };
+
+  const pick = (row: QuickAddRow) => {
+    if (row.kind === 'fill') setInput(row.text);
+    else void add(row);
+  };
+
+  // Return takes the top row. Recent rows wait for a tap.
+  const handleSubmit = () => {
+    if (input.trim() && rows[0]) pick(rows[0]);
+  };
+
+  const cancel = () => {
+    setInput('');
+    setToast(null);
+    inputRef.current?.blur();
+    onSearchChange(false);
+  };
 
   return (
-    <View style={styles.container}>
-      {chips.length > 0 && (
-        <View style={styles.chipRow}>
-          {chips.map((chip) => {
-            const status = statusOf(chip);
-            const tone = status === 'ready' ? colors.success : status === 'error' ? colors.error : colors.icon;
-            const reference = formatVerseReference(chip);
-            return (
-              <View
-                key={chip.key}
-                style={[
-                  styles.chip,
-                  { backgroundColor: colors.cardAlt, borderColor: status === 'held' ? colors.border : tone },
-                ]}
-              >
-                <Pressable
-                  testID={`quick-add-chip-${chip.key}`}
-                  onLongPress={status === 'error' ? undefined : () => void handlePeek(chip)}
-                >
-                  <Text style={[styles.chipText, { color: tone }]}>
-                    {status === 'held' ? `${reference} · already here` : reference}
-                  </Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${reference}`} hitSlop={8} onPress={() => removeChip(chip.key)}>
-                  <IconSymbol name="xmark" size={12} color={tone} />
-                </Pressable>
-              </View>
-            );
-          })}
+    <View style={searching ? styles.searching : undefined}>
+      <View style={styles.fieldRow}>
+        <View style={[styles.field, { backgroundColor: colors.input, borderColor: colors.border }]}>
+          <IconSymbol name="magnifyingglass" size={16} color={colors.icon} />
+          <TextInput
+            ref={inputRef}
+            testID="quick-add-field"
+            style={[styles.input, { color: colors.text }]}
+            value={input}
+            onChangeText={handleChangeText}
+            onSubmitEditing={handleSubmit}
+            onFocus={() => onSearchChange(true)}
+            placeholder="Search"
+            placeholderTextColor={colors.icon}
+            autoCapitalize="none"
+            autoCorrect={false}
+            submitBehavior="submit"
+            returnKeyType="done"
+          />
         </View>
-      )}
-
-      <View style={[styles.field, { backgroundColor: colors.input, borderColor: colors.border }]}>
-        <IconSymbol name="magnifyingglass" size={16} color={colors.icon} />
-        <TextInput
-          testID="quick-add-field"
-          style={[styles.input, { color: colors.text }]}
-          value={input}
-          onChangeText={handleChangeText}
-          onSubmitEditing={handleSubmit}
-          placeholder="Type a reference, like Rom 8 28"
-          placeholderTextColor={colors.icon}
-          autoCapitalize="none"
-          autoCorrect={false}
-          submitBehavior="submit"
-          returnKeyType="done"
-        />
-        {readyChips.length > 0 && (
-          <Pressable
-            testID="quick-add-submit"
-            accessibilityRole="button"
-            style={[styles.addPill, { backgroundColor: colors.primary }]}
-            onPress={handleAdd}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Text style={[styles.addPillText, { color: colors.white }]}>Add {readyChips.length}</Text>
-            )}
+        {searching && (
+          <Pressable testID="quick-add-cancel" accessibilityRole="button" hitSlop={8} onPress={cancel}>
+            <Text style={[styles.cancel, { color: colors.tint }]}>Cancel</Text>
           </Pressable>
         )}
       </View>
 
-      {suggestions.map((book) => {
-        const typed = parse.kind === 'book' ? typedLength(book, parse.query) : 0;
-        return (
-          <Pressable
-            key={book}
-            testID={`quick-add-suggestion-${testIdPart(book)}`}
-            style={[styles.suggestion, { borderBottomColor: colors.border }]}
-            onPress={() => updateInput(completeBook(input, book) ?? input)}
-          >
-            <Text style={[styles.suggestionText, { color: colors.text }]}>
-              <Text style={{ color: colors.tint }}>{book.slice(0, typed)}</Text>
-              {book.slice(typed)}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {searching && (
+        <Animated.View entering={FadeIn.duration(Motion.expandMs)} exiting={FadeOut.duration(Motion.exitMs)} style={styles.body}>
+          {!input.trim() && rows.length > 0 && (
+            <Text style={[styles.sectionLabel, { color: colors.primary }]}>Recent</Text>
+          )}
+          {rows.map((row, index) => {
+            const label = rowLabel(row);
+            const isHeld = row.kind === 'add' && held(row);
+            const isTop = index === 0 && input.trim().length > 0;
+            return (
+              <Pressable
+                key={label}
+                testID={`quick-add-row-${label.replace(/ /g, '-')}`}
+                accessibilityRole="button"
+                accessibilityLabel={row.kind === 'fill' ? label : isHeld ? `${label}, already in this collection` : `Add ${label}`}
+                style={[styles.row, isTop && { backgroundColor: colors.primaryLight }]}
+                onPress={() => pick(row)}
+              >
+                <Text style={[styles.rowText, { color: colors.text }]}>{label}</Text>
+                {row.kind === 'fill' ? (
+                  <IconSymbol name="arrow.up.left" size={16} color={colors.icon} />
+                ) : isHeld ? (
+                  <Text style={[styles.heldText, { color: colors.icon }]}>Already in this collection</Text>
+                ) : (
+                  <IconSymbol name="plus" size={18} color={colors.tint} />
+                )}
+              </Pressable>
+            );
+          })}
 
-      {hint.length > 0 && <Text style={[styles.hint, { color: colors.icon }]}>{hint}</Text>}
-
-      <VerseExpandModal
-        visible={peek !== null}
-        verse={peek}
-        verseText={peekText}
-        version={bibleVersion}
-        onClose={() => setPeek(null)}
-      />
+          {toast && (
+            <KeyboardStickyView style={styles.toastDock} offset={{ opened: tabBarHeight }}>
+              <Animated.View
+                entering={FadeIn.duration(Motion.expandMs)}
+                exiting={FadeOut.duration(Motion.exitMs)}
+                testID="quick-add-toast"
+                style={[styles.toast, { backgroundColor: colors.card, borderColor: colors.border }]}
+              >
+                <Text style={[styles.toastText, { color: toast.error ? colors.error : colors.text }]}>{toast.message}</Text>
+                {undoable && (
+                  <Pressable testID="quick-add-undo" accessibilityRole="button" hitSlop={8} onPress={() => void undo(undoable)}>
+                    <Text style={[styles.undo, { color: colors.tint }]}>Undo</Text>
+                  </Pressable>
+                )}
+              </Animated.View>
+            </KeyboardStickyView>
+          )}
+        </Animated.View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
+  searching: {
+    flex: 1,
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 8,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: Radius.full,
-    paddingVertical: 6,
-    paddingLeft: 12,
-    paddingRight: 10,
-  },
-  chipText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
   field: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.lg,
-    paddingLeft: 12,
-    paddingRight: 6,
+    paddingHorizontal: 12,
     minHeight: 44,
   },
   input: {
+    ...InputText,
     flex: 1,
     fontSize: 16,
     paddingVertical: 10,
   },
-  addPill: {
-    borderRadius: Radius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    minWidth: 64,
-    alignItems: 'center',
+  cancel: {
+    fontSize: 17,
   },
-  addPillText: {
+  body: {
+    flex: 1,
+    paddingHorizontal: 8,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+  },
+  rowText: {
+    flex: 1,
+    fontSize: 17,
+  },
+  heldText: {
+    fontSize: 14,
+  },
+  toastDock: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 16,
+  },
+  toast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.lg,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    boxShadow: Shadows.floating,
+  },
+  toastText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  undo: {
     fontSize: 15,
     fontWeight: '600',
-  },
-  suggestion: {
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  suggestionText: {
-    fontSize: 16,
-  },
-  hint: {
-    fontSize: 13,
-    marginTop: 8,
   },
 });

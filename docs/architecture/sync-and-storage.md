@@ -18,6 +18,11 @@ AsyncStorage holds device settings and small local caches.
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
 | Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
+| Name (`displayName`, `firstName`, `lastName`) | ✓ (`profiles`) | ✓ | — |
+| [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ last seen ids and names (`shared_known_groups:<user>`) |
+| [Group progress](../features/group-progress.md#collection-screen) | ✓ (read) | ✓ (`sharedProgress`) | — |
+| Invite from a signed-out link or a claimed handoff | — | — | ✓ (`shared_pending_join`) |
+| Install handoff asked once | — | — | ✓ (`shared_handoff_checked`) |
 | Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
 | Virtual collection sorts | — | ✓ | ✓ (`library_sort_mastered`, `library_sort_in_progress`) |
@@ -25,7 +30,6 @@ AsyncStorage holds device settings and small local caches.
 | Notification prefs | ✓ | ✓ (`usePrefsStore`) | ✓ cache (`notifications_prefs_cache`) |
 | Notification flags, push token | — | ✓ (`useUxFlagsStore`, flags) | ✓ (`notifications_q1_dismissed`, `notifications_settings_visited`, `notifications_cached_expo_token`) |
 | Auth session | — | (via Supabase) | ✓ (Supabase-managed) |
-| Migration flag | — | — | `data_synced_to_server`, only set by unused code in `lib/sync/migration.ts` |
 
 **Verses, collections and progress are never persisted to
 AsyncStorage.** The app does not work offline for writes — see the
@@ -45,10 +49,14 @@ interface AppState {
   collections: Collection[];
   verses: SavedVerse[];
   masteredVerses: SavedVerse[];
+  sharedCollections: Record<string, SharedCollectionInfo>; // by group id, see shared-collections.md
+  sharedProgress: Record<string, SharedProgress>; // members × references, read when a shared collection opens
 
   // Settings (also in AsyncStorage)
   colorMode: 'system' | 'light' | 'dark';
   bibleVersion: BibleVersion;
+  displayName: string | null;   // profiles.display_name ("Caelan L."); not in AsyncStorage, cleared by clear()
+  firstName, lastName           // profiles.first_name, last_name; same
   reviewMaxIntervalDays: number;
   masteredSort: SortOption;
   inProgressSort: SortOption;
@@ -78,6 +86,17 @@ interface AppState {
   reorderCollections: (ids) => Promise<void>;
   deleteCollection: (id) => Promise<void>;
   setCollectionSort: (collectionId, sort) => Promise<void>;
+  // Shared collections: docs/features/shared-collections.md#in-the-app
+  fetchSharedCollections: () => Promise<boolean>;
+  shareCollection: (collectionId) => Promise<{ sharedId: string; code: string }>;
+  mintInvite: (sharedId) => Promise<{ code: string; expiresAt: string }>;
+  joinSharedCollection: (code) => Promise<string>;   // the copy's client_id
+  syncSharedCollection: (sharedId) => Promise<boolean>; // true when something changed
+  fetchSharedProgress: (sharedId) => Promise<boolean>;  // never throws; a failure sets `failed` on the entry
+  openSharedCollection: (sharedId) => Promise<boolean>; // sync, then reloads; false once no longer shared
+  leaveSharedCollection: (sharedId) => Promise<void>;
+  removeSharedMember: (sharedId, userId) => Promise<void>;
+  setSharedMemberRole: (sharedId, userId, role) => Promise<void>;
   addVerse: (verse, collectionId) => Promise<SavedVerse>;
   copyVerseToCollection: (verseId, collectionId) => Promise<void>;
   deleteVerse: (id, collectionId) => Promise<{ wasMastered: boolean }>;
@@ -98,13 +117,16 @@ The convention is `useX(...)` selectors, not direct
 | `useCollections()`, `useCollection(id)` | `Collection[]`, one collection |
 | `useCollectionSort(id)` | the collection's `SortOption` |
 | `useVerses()` | `SavedVerse[]` |
-| `useHydrated()`, `useStoreError()` | `boolean`, `string \| null` |
-| `useVerse(id)` | one verse from `verses` or `masteredVerses` |
-| `useVersesByCollection(id)`, `useCollectionVerseCount(id)` | filtered verse list, its length |
+| `useHydrated()` | `boolean` |
+| `useVerse(id)` | one verse from `verses` or `masteredVerses` (`findVerse` outside React) |
+| `useVersesByCollection(id)` | filtered verse list |
 | `useMasteredVerses()`, `useMasteredVerseCount()` | `masteredVerses`, its count |
 | `useInProgressVerses()`, `useInProgressVerseCount()` | the virtual In Progress list, its count |
-| `useReviewMaxIntervalDays()`, `useReviewState(id)`, `useDueCounts()` | review state, see `docs/features/review.md` |
+| `useDueCounts()` | review state, see `docs/features/review.md` |
 | `useMostMemorizedBooks()` | top 5 books by mastered count |
+| `useSharedCollection(id)` | the group a collection is a copy of: role, member and verse counts, mastered and engraved squares |
+| `useSharedOwnerName(id)` | that group's owner's display name (yours when you own it), or null |
+| `useAddableCollections()`, `versesLostWith(id)` | collections the user may add to; verses a delete or leave would lose now (not a hook) |
 | `useInsightsStats()` | `{ versesMastered, inProgress }` |
 
 ### Persistence
@@ -143,7 +165,7 @@ hydrate()
   │
   ├── syncAccountTranslation (queued with other translation work)
   │     → profiles.translation into the store and cache, or the device
-  │       value into an empty profile
+  │       value into an empty profile; profiles.display_name into the store
   │     → alignVerses: collapse two translations of one verse, move
   │       every row to the account translation
   │     → on error: logged, the cached translation stands
@@ -173,7 +195,7 @@ arrays.
 or screens.** Components and screens never call the supabase client
 directly. They call Zustand actions, or a function from `lib/api/` or
 `lib/notifications/`. The writes are in `lib/store/index.ts` (verse and
-collection mutations), `lib/storage/`, `lib/api/`, `lib/sync/` and
+collection mutations), `lib/storage/`, `lib/api/` and
 `lib/notifications/api.ts`. Exception: auth calls in
 `lib/auth/context.tsx`. This is what keeps optimistic updates, RLS, and
 rollback consistent.
@@ -209,7 +231,7 @@ for the server.
 | Sign-in or app start with a session | Pull (collections, verses, mastered) | via `hydrate()` |
 | Pull-to-refresh | Pull | `refresh()` syncs the translation like hydrate, then re-fetches all three |
 | Add/delete collection | Push, then local | |
-| Add verse | Push, then local | finds the verse by reference in any version; may upsert junction or restore soft-deleted |
+| Add verse | Push, then local | one `add_verse` call ([adding-verses.md](../features/adding-verses.md#verse-identity)); shared copies use `addSharedVerse` |
 | Delete verse | Local, then push, rollback on failure | |
 | Verse progress update | Push, then local | `updateVerseProgress`; also computes engraved progression into `progress` JSONB |
 | Session attempt | Push only | `logSessionAttempt` in `lib/api/analytics.ts`, called fire-and-forget by `hooks/use-study-session.ts` |
@@ -242,24 +264,12 @@ still fail without retry.
 
 Holds the shared types (`SavedVerse`, `Collection`, `VerseProgress`),
 `DEFAULT_PROGRESS`, the row parsers (`parseProgress`,
-`parseVerseRowExtras`, `parseSortPreference`, `parseCollectionRow`), the virtual collection
-IDs, and `formatVerseReference`.
+`parseVerseRowExtras`, `parseSortPreference`, `parseCollectionRow`), `DEFAULT_COLLECTION_ID`
+and the virtual collection IDs, and `formatVerseReference`.
 
-The store calls two of its writes: `updateCollectionSort` and
-`updateVerseStudyPrefs`. It also has a full set of CRUD functions
-(`saveVerse`, `deleteVerse`, `deleteCollection`, `updateVerseProgress`
-and others) with the upsert / soft-delete semantics described in
-`docs/architecture/data-model.md`. The store doesn't use those; its
-actions run their own queries, so a change to the semantics belongs in
-the store.
-
-## Sync layer — `lib/sync/`
-
-A one-time migration helper from the local-only era
-(`migrateLocalDataToServer`) plus `sync*` wrappers over `lib/storage/`.
-Nothing outside `lib/sync/` imports it. The flag
-`data_synced_to_server` in AsyncStorage would mark that the migration
-ran.
+Its two writes, `updateCollectionSort` and `updateVerseStudyPrefs`, are
+called by the store. Every other verse and collection write is a store
+action, and every verse read goes through the store.
 
 ## Verse text caching
 

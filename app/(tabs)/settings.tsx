@@ -12,11 +12,15 @@ import {
   Platform,
   TextInput,
   Alert,
+  Switch,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
+import { DisplayNameModal } from '@/components/settings/DisplayNameModal';
 import { ReviewIntervalModal } from '@/components/settings/ReviewIntervalModal';
 import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion, type ColorMode } from '@/lib/settings';
 import { useAuth } from '@/lib/auth';
@@ -141,17 +145,24 @@ function ColorModePicker({ value, onChange }: ColorModePickerProps) {
 }
 
 export default function SettingsScreen() {
+  const barHeight = useTopBarHeight();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
   const hydrated = useAppStore((state) => state.hydrated);
   const colorMode = useAppStore((state) => state.colorMode);
   const setColorMode = useAppStore((state) => state.setColorMode);
+  const hideVerseText = useAppStore((state) => state.hideVerseText);
+  const setHideVerseText = useAppStore((state) => state.setHideVerseText);
   const bibleVersion = useAppStore((state) => state.bibleVersion);
   const setBibleVersion = useAppStore((state) => state.setBibleVersion);
   const reviewMaxIntervalDays = useAppStore((state) => state.reviewMaxIntervalDays);
   const setReviewMaxIntervalDays = useAppStore((state) => state.setReviewMaxIntervalDays);
+  const firstName = useAppStore((state) => state.firstName);
+  const lastName = useAppStore((state) => state.lastName);
+  const setName = useAppStore((state) => state.setName);
   const { user, signOut, updatePassword, deleteAccount } = useAuth();
+  const [nameModalVisible, setNameModalVisible] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [versionPickerVisible, setVersionPickerVisible] = React.useState(false);
   const [copyrightVisible, setCopyrightVisible] = React.useState(false);
@@ -198,8 +209,8 @@ export default function SettingsScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -265,12 +276,8 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
-      </View>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]}>
+        <View style={styles.titleGap}><LargeTitle root title="Settings" /></View>
         {/* Bible Settings */}
         <SettingsSection title="BIBLE">
           <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
@@ -298,6 +305,19 @@ export default function SettingsScreen() {
             <ColorModePicker
               value={colorMode}
               onChange={setColorMode}
+            />
+          </SettingsRow>
+          <SettingsRow
+            icon="eye.slash"
+            label="Hide verses"
+            description="Show only references in collections and Study setup"
+          >
+            <Switch
+              testID="hide-verses-switch"
+              accessibilityLabel="Hide verses"
+              value={hideVerseText}
+              onValueChange={(next) => { void setHideVerseText(next); }}
+              trackColor={{ false: colors.borderLight, true: colors.primary }}
             />
           </SettingsRow>
         </SettingsSection>
@@ -347,6 +367,22 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <SettingsSection title="ACCOUNT">
+          <Pressable testID="settings-display-name" onPress={() => setNameModalVisible(true)}>
+            <SettingsRow
+              icon="person.crop.circle.fill"
+              label="Name"
+            >
+              <View style={styles.dropdownTrigger}>
+                <Text
+                  style={[styles.dropdownValue, { color: firstName ? colors.text : colors.icon }]}
+                  numberOfLines={1}
+                >
+                  {firstName ? [firstName, lastName].filter(Boolean).join(' ') : 'Add'}
+                </Text>
+                <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+              </View>
+            </SettingsRow>
+          </Pressable>
           <SettingsRow
             icon="person.fill"
             label="Email"
@@ -405,7 +441,8 @@ export default function SettingsScreen() {
             Delete Account
           </Text>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
+      <TopBar />
 
       {/* Review Info Modal (shared with study screen) */}
       <ProgressInfoModal
@@ -491,6 +528,14 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <DisplayNameModal
+        visible={nameModalVisible}
+        savedFirst={firstName}
+        savedLast={lastName}
+        onSave={setName}
+        onClose={() => setNameModalVisible(false)}
+      />
 
       {/* Review Interval Modal */}
       <ReviewIntervalModal
@@ -613,14 +658,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 34,
-    fontWeight: 'bold',
+  titleGap: {
+    marginBottom: 4,
   },
   scrollView: {
     flex: 1,
@@ -767,6 +806,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   passwordInput: {
+    ...InputText,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
@@ -790,6 +830,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   deleteInput: {
+    ...InputText,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,

@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, router, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack, router, usePathname, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -18,6 +18,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
+import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
+import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
 import {
   installDevTools as installNotifDevTools,
   registerDeepLinkHandler,
@@ -53,8 +55,10 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, sessionRestored, user } = useAuth();
+  const userId = user?.id;
   const segments = useSegments();
+  const pathname = usePathname();
   const navigationState = useRootNavigationState();
 
   // Handle navigation based on auth state
@@ -66,13 +70,68 @@ function RootLayoutNav() {
     const isDevSignIn = segments[0] === 'dev-sign-in';
 
     if (!isAuthenticated && !inAuthGroup && !isResetPassword && !isDevSignIn) {
+      // An invite link opened signed out joins after sign-in (effect below).
+      const invite = pathname.match(/^\/join\/([^/]+)/)?.[1];
+      if (invite) stashPendingJoin(invite).catch((e) => console.error('[join] Failed to keep the invite:', e));
       // Not authenticated and not on auth screen - redirect to sign in
       router.replace('/(auth)/sign-in');
     } else if (isAuthenticated && inAuthGroup) {
       // Authenticated but on auth screen - redirect to main app
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, segments, navigationState?.key]);
+  }, [isAuthenticated, isLoading, segments, pathname, navigationState?.key]);
+
+  // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in
+  // (or, once per install, one handed off from the sendlabs.dev page across the App Store install),
+  // over the Library, so the X and Join both land there. The reminders card is held before the
+  // read, so it can't present first and be under (or closing under) the invite; JoinInvite then
+  // holds it while mounted and releases it as it unmounts.
+  // Waits for the tabs, so a redirect still settling (the sign-in gate, dev-sign-in's `next`) can't
+  // replace the invite right after it's pushed.
+  // With no invite, the 2.0 "What's new in Bread" walkthrough opens instead, once per account (see
+  // lib/welcome.ts), holding the card the same way. After an invite this launch it makes no new claim,
+  // but still shows one won before the invite landed (peekWelcome).
+  const inTabs = segments[0] === '(tabs)';
+  const sawInvite = useRef(false);
+  if (segments[0] === 'join') sawInvite.current = true;
+  useEffect(() => {
+    if (!userId || !navigationState?.key || !inTabs) return;
+    let settled = false;
+    const flags = useUxFlagsStore.getState();
+    flags.setInviteOpen(true);
+    readPendingJoin()
+      .then((kept) => kept ?? claimInstallHandoff(sessionRestored))
+      .catch((e) => {
+        console.error('[join] Failed to read the kept invite:', e);
+        return null;
+      })
+      .then(async (invite) => {
+        if (settled) return;
+        if (!invite) {
+          const welcome = sawInvite.current ? await peekWelcome(userId) : await claimWelcome(userId);
+          if (settled) return;
+          settled = true;
+          if (welcome) {
+            markWelcomeShown(userId);
+            router.push('/welcome');
+          } else {
+            flags.setInviteOpen(false);
+          }
+          return;
+        }
+        settled = true;
+        router.replace('/(tabs)/(library)');
+        router.push(`/join/${invite}`);
+        forgetInstallHandoff();
+        clearPendingJoin().catch((e) => console.error('[join] Failed to clear the kept invite:', e));
+      });
+    return () => {
+      // Still reading: this run won't push, so it lets go of the card.
+      if (settled) return;
+      settled = true;
+      flags.setInviteOpen(false);
+    };
+  }, [userId, navigationState?.key, inTabs, sessionRestored]);
 
   // Hydrate store and run migration when authenticated. Sequenced as
   // an inline async so a fast sign-out → sign-in cycle can't race the
@@ -161,13 +220,17 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack screenOptions={{ headerShown: false, fullScreenGestureEnabled: true }}>
         <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="reset-password" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="collections/[slug]" />
         <Stack.Screen name="session" options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="join/[code]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="join/index" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="share/[id]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="welcome" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <Q1ExplainerCard isAuthenticated={isAuthenticated} />

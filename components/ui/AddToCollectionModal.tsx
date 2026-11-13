@@ -4,8 +4,9 @@ import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import type { VerseData } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import type { BibleVersion } from '@/lib/storage';
-import { useAppStore, useCollections } from '@/lib/store';
+import { useAddableCollections, useAppStore, useCollections } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { BlurView } from 'expo-blur';
 import { useMemo, useState } from 'react';
@@ -48,10 +49,8 @@ export function AddToCollectionModal({
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
 
-  // Filter collections for picker (exclude virtual collections like Mastered)
-  const pickableCollections = useMemo(() => {
-    return collections.filter((c) => !c.isVirtual);
-  }, [collections]);
+  // Exclude virtual collections like Mastered, and shared ones the user only reads
+  const pickableCollections = useAddableCollections();
 
   // Pre-select default collection when modal opens
   useMemo(() => {
@@ -91,7 +90,7 @@ export function AddToCollectionModal({
       onSuccess?.();
     } catch (e) {
       console.error('[AddToCollectionModal] Failed to add verse:', e);
-      showErrorToast('Failed to add verse. Please try again.');
+      showErrorToast(sharedErrorMessage(e, 'Failed to add verse. Please try again.'));
     } finally {
       setAdding(false);
     }
