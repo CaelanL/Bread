@@ -212,22 +212,16 @@ export function SwipeableCollectionCard({
       {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.card, { backgroundColor: colors.background, borderTopColor: colors.separator }, index > 0 && styles.divided, cardStyle]}>
-          {/* A gold glow behind the icon and name, faded on every side so it never shows the row's edges. */}
+          {/* A gold fill across the row, fading out at the left and right where the hairlines stop short. */}
           {engraved && (
-            <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-              <LinearGradient
-                colors={[withAlpha(colors.tint, 0), colors.engravedFill, withAlpha(colors.tint, 0)]}
-                locations={[0, 0.2, 0.85]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <LinearGradient
-                colors={[colors.background, withAlpha(colors.background, 0), withAlpha(colors.background, 0), colors.background]}
-                locations={[0, 0.35, 0.65, 1]}
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
+            <LinearGradient
+              pointerEvents="none"
+              colors={[withAlpha(colors.tint, 0), colors.engravedFill, colors.engravedFill, withAlpha(colors.tint, 0)]}
+              locations={[0, 0.12, 0.75, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
           )}
           <Pressable
             style={styles.cardButton}

@@ -432,6 +432,16 @@ export default function StudySessionScreen() {
         <View style={styles.controlsContainer}>
           {canContinue && (
             <View style={styles.controlsRow}>
+              {session.allChunksCompleted && (
+                <Pressable
+                  style={({ pressed }) => [styles.retryButton, { backgroundColor: colors.text }, pressed && styles.pressedControl]}
+                  onPress={session.done}
+                  accessibilityLabel="Exit"
+                  testID="exit-session-button"
+                >
+                  <IconSymbol name="xmark" size={20} color={colors.background} />
+                </Pressable>
+              )}
               {canRetry && (
                 <Pressable
                   style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
@@ -575,6 +585,9 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  pressedControl: {
+    opacity: 0.7,
   },
   nextButton: {
     flexDirection: 'row',

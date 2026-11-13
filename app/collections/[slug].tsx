@@ -129,9 +129,9 @@ function CollectionIntroduction({ collection, accountVersion }: {
           </Text>
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{collection.title}</Text>
           <Text style={[styles.subtitle, { color: colors.icon }]}>{collection.subtitle}</Text>
-          {!!saverCount && (
+          {!!saverCountLabel(saverCount ?? 0) && (
             <Text testID={`collection-savers-${collection.id}`} style={[styles.savers, { color: colors.icon }]}>
-              {saverCountLabel(saverCount)}
+              {saverCountLabel(saverCount ?? 0)}
             </Text>
           )}
         </View>

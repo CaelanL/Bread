@@ -24,7 +24,8 @@ function hadSaved(headers) {
   if (!Array.isArray(rows)) throw new Error('Could not read own import evidence');
   return rows.some(function(row) { return /^curated-anxiety-and-peace-[A-Z0-9][A-Z0-9-]{1,15}$/.test(row.client_id); });
 }
-function label(count) { return count === 1 ? 'Added by 1 person' : 'Added by ' + count + ' people'; }
+// Mirrors saverCountLabel: no line below 10.
+function label(count) { return count < 10 ? '' : count + ' saves'; }
 const a = signIn('reader-a');
 if (MODE === 'baseline') {
   const b = signIn('reader-b');

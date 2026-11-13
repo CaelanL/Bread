@@ -27,7 +27,7 @@ export function CuratedCollectionCard({ collection, grouped = false }: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${collection.title}, ${collection.passages.length} passages${saverCount ? `, ${saverCountLabel(saverCount)}` : ''}`}
+      accessibilityLabel={[collection.title, `${collection.passages.length} passages`, saverCountLabel(saverCount ?? 0)].filter(Boolean).join(', ')}
       testID={`discover-${collection.id}`}
       onPress={handlePress}
       style={({ pressed }) => [
@@ -44,9 +44,9 @@ export function CuratedCollectionCard({ collection, grouped = false }: {
         <Text style={[styles.title, { color: colors.text }]}>{collection.title}</Text>
         <Text style={[styles.subtitle, { color: colors.icon }]}>{collection.subtitle}</Text>
         <Text style={[styles.count, { color: colors.icon }]}>{collection.passages.length} passages</Text>
-        {!!saverCount && (
+        {!!saverCountLabel(saverCount ?? 0) && (
           <Text testID={`collection-savers-${collection.id}`} style={[styles.count, { color: colors.icon }]}>
-            {saverCountLabel(saverCount)}
+            {saverCountLabel(saverCount ?? 0)}
           </Text>
         )}
       </View>

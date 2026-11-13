@@ -48,7 +48,8 @@ unknown icons render the Bible symbol. Built-in collection icons are fixed.
 ### Community saves
 
 Home, Explore and introductions show all-time unique accounts that saved each
-curated collection, as "Added by 3 people" (`saverCountLabel`). With nobody yet, the line is left out. A first successful import contributes once across translations.
+curated collection, as "12 saves" (`saverCountLabel`). Below `MIN_SHOWN_SAVES` (10) the line is left out,
+since small numbers read as empty. A first successful import contributes once across translations.
 Editing, emptying, renaming, deleting or re-adding the personal copy leaves that
 contribution unchanged. This is not a count of current copies or completed passages.
 
@@ -181,7 +182,7 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- shot /home --as reader-b`: the same current monthly card, an insights card with 0 day streak, 0 mastered, 0 in progress, Explore collections, and no video card.
 - `npm run sim -- flow collection-discovery`: sets reader-b's account translation to KJV, then Home and Explore in both themes, introduction, KJV preview, add and open the saved copy, and an ESV preview that still opens it.
 - `npm run sim -- flow collection-icons`: save icons on an imported and a personal collection, cancel a pending change, and relaunch to verify both saves.
-- `npm run sim -- flow collection-savers`: save with two seed accounts, compare all three count surfaces, and verify another translation and edits/delete/re-add do not add a second contribution.
+- `npm run sim -- flow collection-savers`: save with two seed accounts, check all three surfaces show the line only from 10 saves (local counts stay under 10, so it checks the line is hidden; the counting itself is covered by the DB and integration tests), and verify another translation and edits/delete/re-add do not add a second contribution.
 - Against a freshly reset disposable local stack, run `tests/curated-collection.integration.ts` with local seed credentials for concurrent imports/lost responses, and `tests/curated-savers-migration.integration.ts` for the real migration's backfill. Both are local; the migration test rolls back its fixtures.
 - `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes. Compare with the original card using the same actual artwork and reference; a placeholder cannot verify continuity.
 - Each intro flow needs unclaimed accounts, so run it on a freshly reset disposable stack.

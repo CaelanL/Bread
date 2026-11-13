@@ -202,6 +202,9 @@ The final score computes only once every chunk has a result. Then the hook:
 
 A chunk that scores 90 or more without a reveal plays a success haptic too.
 
+Once every chunk has a result, a black X sits left of Retry and See Results. It calls `done`, since
+the score is already saved, and leaves without the results page.
+
 **Early exit.** The X in the header calls `saveAndExit`. With some chunks complete
 but not all, it calls `updateVerseProgress` with `calculatePartialScore` and no
 `fullSession` flag, logs an attempt, and leaves at once. Failures only reach the
