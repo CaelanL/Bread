@@ -222,9 +222,12 @@ update that sets the column only while it's null. The walkthrough opens only if 
 row, so it shows on one device, once, even across relaunches or two phones; a failed update shows
 nothing and the next launch tries again. An invite that lands while the update is in flight takes
 the screen; back on the tabs, `peekWelcome` picks up a won claim without making a new one, so the
-walkthrough still shows. It holds the reminders card like the join modal. Share a
-collection opens the Library, or `/share/new` when there's no collection of your own. Locally, seed
-accounts start as seen. Flow: `npm run sim -- flow welcome` (marks reader-a unseen first).
+walkthrough still shows. It holds the reminders card like the join modal. The sharing page shows
+the collection screen's Share icon (`person.badge.plus`) in its steps and mentions long-press in
+the Library. Share a collection counts your own collections that aren't shared or joined (not My
+Verses): exactly one opens its `/share/<id>` over the Library, several open the Library, none opens
+`/share/new`. Locally, seed accounts start as seen. Flow: `npm run sim -- flow welcome` after
+`npm run db:reset` (marks reader-a unseen first, and shares reader-a's Psalms).
 
 ## Header / tab bar
 

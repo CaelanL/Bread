@@ -5,7 +5,7 @@ import { ModalCard, modalStyles } from '@/components/ui/ModalCard';
 import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useUxFlagsStore } from '@/lib/notifications';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, useCollections } from '@/lib/store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState, type ComponentProps } from 'react';
@@ -29,6 +29,7 @@ export default function WelcomeScreen() {
   const [forward, setForward] = useState(true);
   // Every page takes the tallest one's height, so the card doesn't jump between pages.
   const [pageHeight, setPageHeight] = useState(0);
+  const collections = useCollections();
 
   useEffect(() => {
     useUxFlagsStore.getState().setInviteOpen(true);
@@ -43,11 +44,13 @@ export default function WelcomeScreen() {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   };
-  // Library shows the Share action on every collection; with none yet, start a new shared one.
+  // One collection to share opens its share card over the Library; several leave the pick to the
+  // Library; none starts a new shared one.
   const share = () => {
-    const hasCustom = useAppStore.getState().collections.some((c) => !c.isDefault && !c.isVirtual);
+    const own = collections.filter((c) => !c.isDefault && !c.isVirtual && !c.sharedId);
     router.dismissTo('/(tabs)/(library)');
-    if (!hasCustom) router.push('/share/new');
+    if (own.length === 1) router.push(`/share/${own[0].id}`);
+    else if (own.length === 0) router.push('/share/new');
   };
 
   const entering = reduced ? FadeIn.duration(Motion.expandMs) : (forward ? FadeInRight : FadeInLeft).duration(Motion.expandMs).easing(easing);
@@ -219,11 +222,21 @@ function ShareSteps() {
               <View style={[styles.badge, { backgroundColor: active ? colors.primary : colors.cardAlt }]}>
                 <Text style={[styles.badgeText, { color: active ? colors.white : colors.icon }]}>{i + 1}</Text>
               </View>
-              <Text style={[styles.itemTitle, { color: colors.text }]}>{label}</Text>
+              {label === 'Tap Share' ? (
+                // The collection screen's Share button, as it looks there.
+                <View accessible accessibilityLabel={label} style={styles.inline}>
+                  <Text style={[styles.itemTitle, { color: colors.text }]}>Tap</Text>
+                  <IconSymbol name="person.badge.plus" size={20} color={colors.text} />
+                  <Text style={[styles.itemTitle, { color: colors.text }]}>at the top</Text>
+                </View>
+              ) : (
+                <Text style={[styles.itemTitle, { color: colors.text }]}>{label}</Text>
+              )}
             </View>
           );
         })}
       </View>
+      <Text style={[modalStyles.meta, styles.hint, { color: colors.icon }]}>Or long-press a collection in your Library.</Text>
       <Text style={[modalStyles.copy, { color: colors.icon }]}>Friends tap the link to join.</Text>
       </View>
     </>
@@ -251,9 +264,11 @@ const styles = StyleSheet.create({
   track: { alignSelf: 'stretch', height: 6, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { borderRadius: Radius.full, transformOrigin: 'left' },
   status: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
-  steps: { marginTop: 20, marginBottom: 16 },
+  steps: { marginTop: 20, marginBottom: 8 },
   highlight: { position: 'absolute', left: 0, right: 0, height: STEP_HEIGHT, borderRadius: Radius.lg },
   step: { height: STEP_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  hint: { marginBottom: 16 },
   badge: { width: 26, height: 26, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontSize: 13, fontWeight: '600' },
 });

@@ -1,6 +1,7 @@
-# reader-a, an account from before 2.0, sees the walkthrough once: pages through it, goes back,
-# and Share a collection opens the Library. A relaunch doesn't show it again, and reader-b, marked
-# seen the way a new account starts, never sees it.
+# Start from npm run db:reset. reader-a, an account from before 2.0, sees the walkthrough once:
+# pages through it, goes back, and Share a collection opens the share card for Psalms, its one
+# collection, over the Library. A relaunch doesn't show it again, and reader-b, marked seen the
+# way a new account starts, never sees it.
 appId: com.caelanliu.biblemem
 name: welcome
 ---
@@ -35,6 +36,8 @@ name: welcome
 - tapOn:
     id: "welcome-next"
 - assertVisible: "Share in three taps"
+- assertVisible: "Tap Share"
+- assertVisible: "Or long-press a collection in your Library."
 - takeScreenshot: welcome-3-share
 - tapOn:
     id: "welcome-back"
@@ -43,12 +46,24 @@ name: welcome
     id: "welcome-next"
 - tapOn:
     id: "welcome-share"
+- runFlow:
+    file: subflows/enter-name.yaml
+    env:
+      FIRST: Reader
+- extendedWaitUntil:
+    visible:
+      id: invite-code
+    timeout: 15000
+- assertVisible: "Psalms"
+- assertNotVisible:
+    id: "welcome-page-3"
+- takeScreenshot: welcome-4-share-psalms
+- tapOn:
+    id: modal-close
 - extendedWaitUntil:
     visible:
       id: "library-add"
     timeout: 10000
-- assertNotVisible:
-    id: "welcome-page-3"
 - tapOn:
     text: "Maybe later"
     optional: true
