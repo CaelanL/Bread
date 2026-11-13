@@ -395,7 +395,31 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "claim_intro_presentation":
+            "add_verse":
+{ Args: { "p_book": string,"p_chapter": number,"p_collection_client_id": string,"p_keep_restored_version"?: boolean,"p_verse_end": number,"p_verse_start": number,"p_version": string }; Returns: {
+              "book": string,
+"chapter": number,
+"client_id": string,
+"created_at": string,
+"deleted_at": string | null,
+"id": string,
+"last_chunk_size": number | null,
+"last_difficulty": string | null,
+"last_practiced_at": string | null,
+"progress": NonNullable<Json>,
+"updated_at": string,
+"user_id": string,
+"verse_end": number,
+"verse_start": number,
+"version": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "user_verses"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"claim_intro_presentation":
 { Args: { "p_intro_id": string }; Returns: boolean
                            },
 "cleanup_expired_verse_cache":

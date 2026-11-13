@@ -3,7 +3,7 @@ import { Colors, InputText, Motion, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { completeBook, MAX_ROWS, parseQuickAdd, quickAddRows, type QuickAddReference, type QuickAddRow } from '@/lib/bible/quick-add';
 import { sharedErrorMessage } from '@/lib/shared/invite-code';
-import { formatVerseReference, type SavedVerse } from '@/lib/storage';
+import { DEFAULT_COLLECTION_ID, formatVerseReference, type SavedVerse } from '@/lib/storage';
 import { useAppStore, useVersesByCollection } from '@/lib/store';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
@@ -39,7 +39,7 @@ export function QuickAddField({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const tabBarHeight = useBottomTabBarHeight();
-  const targetId = collectionId ?? 'my-verses';
+  const targetId = collectionId ?? DEFAULT_COLLECTION_ID;
   const existing = useVersesByCollection(targetId);
   const verses = useAppStore((state) => state.verses);
   const inputRef = useRef<TextInput>(null);

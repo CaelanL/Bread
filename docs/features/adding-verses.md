@@ -27,14 +27,21 @@ distance thresholds and auto-scroll together, so test on a device after any chan
 
 ## Verse identity
 
-`addVerse` in `lib/store/index.ts` looks for rows with the same user, book, chapter
-and range in any version, including soft-deleted ones:
+`addVerse` in `lib/store/index.ts` makes one `public.add_verse` call
+(`supabase/migrations/20261113020000_add_verse.sql`). In one transaction it finds rows with the
+same user, book, chapter and range in any version, including soft-deleted ones:
 
 | Existing row | What happens |
 |---|---|
-| Active | Upsert the junction row, ignoring duplicates |
-| Soft-deleted only | Restore the best one (version rule in `bible-versions.md`), then the junction row |
-| None | Insert the verse with `DEFAULT_PROGRESS`, then the junction row |
+| Active | Link it to the collection, ignoring a duplicate link |
+| Soft-deleted only | Restore the best one (ranked as `compareRecords`, version rule in `bible-versions.md`), then link |
+| None | Insert the verse in the account translation, then link |
+
+My Verses is created on first use. An unknown, deleted or virtual collection is a 22023
+`Collection not found`, never a silent move to My Verses, and a shared copy is refused too
+(shared adds go through the group, `addSharedVerse`). The add screens toast the server's
+reason through `sharedErrorMessage`. It's all or nothing, so a restored verse never sits in no
+collection. Old clients keep their own multi-request path.
 
 A verse is one row per reference (`bible-versions.md`). The restore
 path means a soft-deleted row never blocks a re-add. The local card carries the row's last
@@ -130,3 +137,4 @@ only a re-tap of the same book inside 500 ms; a quick tap on another book goes t
 - 2026-11-11 · Book rows ignore only a quick re-tap of the same book, chapters share one window · a book row stays on screen, so a fast tap on another book is a real choice; a chapter tap leaves the screen.
 - 2026-11-12 · Quick add is a search mode with immediate adds, no chips · Caelan found chips over the book list incoherent.
 - 2026-11-12 · Recent rows and Return on an empty field add nothing until tapped · Return on an empty field shouldn't add a verse the user didn't type.
+- 2026-11-12 · A personal add is one `add_verse` transaction, and an unknown collection is an error · The old six requests could leave a restored verse in no collection, and a stale collection id filed the verse into My Verses without saying so.

@@ -4,6 +4,7 @@ import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import type { VerseData } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import type { BibleVersion } from '@/lib/storage';
 import { useAddableCollections, useAppStore, useCollections } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
@@ -89,7 +90,7 @@ export function AddToCollectionModal({
       onSuccess?.();
     } catch (e) {
       console.error('[AddToCollectionModal] Failed to add verse:', e);
-      showErrorToast('Failed to add verse. Please try again.');
+      showErrorToast(sharedErrorMessage(e, 'Failed to add verse. Please try again.'));
     } finally {
       setAdding(false);
     }

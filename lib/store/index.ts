@@ -21,7 +21,7 @@ import { isSharedRole, normalizeInviteCode } from '@/lib/shared/invite-code';
 import { getSharedMembers, type SharedMember } from '@/lib/shared/invites';
 import { canEditShared, collectionRemoval, type ProgressCell, type SharedReference } from '@/lib/shared/progress';
 import type { BibleVersion, Collection, Difficulty, SavedVerse, SharedCollectionInfo, SharedRole, SortOption, VerseProgress } from '@/lib/storage';
-import { DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, formatVerseReference, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
+import { DEFAULT_COLLECTION_ID, DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID, formatVerseReference, parseCollectionRow, parseProgress, parseVerseRowExtras, updateCollectionSort, updateVerseStudyPrefs } from '@/lib/storage';
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,7 +36,7 @@ import {
 } from './library-sort';
 import { computeNextSrState, hasPracticed, isDueForReview } from './review';
 import { DEFAULT_MAX_INTERVAL_DAYS, MAX_USER_MAX_INTERVAL_DAYS, MIN_USER_MAX_INTERVAL_DAYS } from './review-config';
-import { compareRecords, isVisible, mayBeMissing, onePerReference, planCollapse, planMoves, referenceKey, seedTranslation, type VerseRecord } from './translation';
+import { isVisible, mayBeMissing, onePerReference, planCollapse, planMoves, referenceKey, seedTranslation, type VerseRecord } from './translation';
 
 const COLOR_MODE_KEY = 'app_color_mode';
 const HIDE_VERSE_TEXT_KEY = 'app_hide_verse_text';
@@ -46,8 +46,6 @@ const KEPT_NOTICES_KEY = 'translation_kept_notices';
 const REVIEW_MAX_INTERVAL_DAYS_KEY = 'review_max_interval_days';
 
 // ============ CONSTANTS ============
-
-const DEFAULT_COLLECTION_ID = 'my-verses';
 
 const DEFAULT_COLLECTION: Collection = {
   id: DEFAULT_COLLECTION_ID,
@@ -1399,162 +1397,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   addVerse: async (verse, collectionId) => {
     const sharedId = sharedIdOf(collectionId);
     if (sharedId) return addSharedVerse(sharedId, collectionId, verse);
-    const userId = await getCurrentUserId();
-    const createdAt = new Date();
-    const translation = get().bibleVersion;
-
-    // Get server collection ID
-    let serverCollectionId: string;
-    const { data: collection } = await supabase
-      .from('user_collections')
-      .select('id')
-      .eq('client_id', collectionId)
-      .is('deleted_at', null)
-      .single();
-
-    if (collection) {
-      serverCollectionId = collection.id;
-    } else {
-      // Ensure default collection exists
-      const { data: defaultColl } = await supabase
-        .from('user_collections')
-        .select('id')
-        .eq('client_id', DEFAULT_COLLECTION_ID)
-        .is('deleted_at', null)
-        .single();
-
-      if (defaultColl) {
-        serverCollectionId = defaultColl.id;
-      } else {
-        // Create default collection
-        const { data: newDefault, error: createError } = await supabase
-          .from('user_collections')
-          .insert({
-            user_id: userId,
-            client_id: DEFAULT_COLLECTION_ID,
-            name: 'My Verses',
-            is_default: true,
-            created_at: new Date(0).toISOString(),
-          })
-          .select('id')
-          .single();
-
-        if (createError || !newDefault) {
-          throw new Error('Failed to create default collection');
-        }
-        serverCollectionId = newDefault.id;
-      }
+    // One transaction on the server (supabase/migrations/*_add_verse.sql): My Verses is made on
+    // first use, an unknown collection is an error, and the reference's held or best removed row
+    // is reused and linked; or nothing changes.
+    const generation = accountGeneration;
+    const session = await getCollectionWriteSession(generation);
+    if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
+    const { data: row, error } = await db.rpc('add_verse', {
+      p_book: verse.book,
+      p_chapter: verse.chapter,
+      p_verse_start: verse.verseStart,
+      p_verse_end: verse.verseEnd,
+      p_version: get().bibleVersion,
+      p_collection_client_id: collectionId,
+      p_keep_restored_version: mayBeMissing(verse),
+    }).setHeader('Authorization', `Bearer ${session.access_token}`);
+    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    if (error) {
+      console.error('[STORE] Failed to add verse:', error);
+      throw error;
     }
 
-    // One verse per reference, in any translation, including soft-deleted rows.
-    // A held verse is reused; otherwise the best soft-deleted row comes back.
-    const { data: rows, error: lookupError } = await supabase
-      .from('user_verses')
-      .select(`${VERSE_IDENTITY_COLUMNS}, last_practiced_at, last_chunk_size, last_difficulty`)
-      .eq('user_id', userId)
-      .eq('book', verse.book)
-      .eq('chapter', verse.chapter)
-      .eq('verse_start', verse.verseStart)
-      .eq('verse_end', verse.verseEnd);
-    if (lookupError) {
-      console.error('[STORE] Failed to look up verse:', lookupError);
-      throw new Error('Failed to save verse');
-    }
-    const records = rows.map(toRecord);
-    const existing = records.find(({ deleted }) => !deleted) ?? [...records].sort(compareRecords(translation))[0];
-
-    let verseId: string;
-    let clientId: string;
-    let version = translation;
-    let progress: SavedVerse['progress'] = DEFAULT_PROGRESS;
-    const existingRow = existing && rows.find((r) => r.id === existing.id);
-
-    if (existing) {
-      verseId = existing.id;
-      clientId = existing.clientId;
-      progress = existing.progress;
-      // A restored verse comes back in the account translation, unless the translation
-      // may leave it out or another row of the reference already holds that version.
-      if (!existing.deleted || mayBeMissing(existing)
-        || records.some((r) => r !== existing && r.version === translation)) {
-        version = existing.version as BibleVersion;
-      }
-
-      if (existing.deleted) {
-        const { error: restoreError } = await supabase
-          .from('user_verses')
-          .update({ deleted_at: null, version })
-          .eq('id', existing.id);
-
-
-        if (restoreError) {
-          console.error('[STORE] Failed to restore verse:', restoreError);
-          throw new Error('Failed to restore verse');
-        }
-      }
-
-      // Add to collection via junction table (ignore if already exists)
-      const { error: junctionError } = await supabase
-        .from('verse_collections')
-        .upsert(
-          { verse_id: existing.id, collection_id: serverCollectionId, added_at: createdAt.toISOString() },
-          { onConflict: 'verse_id,collection_id', ignoreDuplicates: true }
-        );
-
-      if (junctionError) {
-        console.error('[STORE] Failed to add verse to collection:', junctionError);
-        throw new Error('Failed to add verse to collection');
-      }
-    } else {
-      // Create new verse
-      clientId = `${verse.book}-${verse.chapter}-${verse.verseStart}-${verse.verseEnd}-${Date.now()}`;
-
-      const { data: newVerse, error: insertError } = await supabase
-        .from('user_verses')
-        .insert({
-          user_id: userId,
-          client_id: clientId,
-          book: verse.book,
-          chapter: verse.chapter,
-          verse_start: verse.verseStart,
-          verse_end: verse.verseEnd,
-          version,
-          progress: DEFAULT_PROGRESS,
-          created_at: createdAt.toISOString(),
-        })
-        .select('id')
-        .single();
-
-      if (insertError || !newVerse) {
-        console.error('[STORE] Failed to save verse:', insertError);
-        throw new Error('Failed to save verse');
-      }
-
-      verseId = newVerse.id;
-
-      // Add to collection via junction table
-      const { error: junctionError } = await supabase
-        .from('verse_collections')
-        .insert({ verse_id: newVerse.id, collection_id: serverCollectionId, added_at: createdAt.toISOString() });
-
-      if (junctionError) {
-        console.error('[STORE] Failed to add verse to collection:', junctionError);
-        throw new Error('Failed to add verse to collection');
-      }
-    }
-
-    const resultVerse: SavedVerse = {
-      id: clientId,
-      collectionId,
-      book: verse.book,
-      chapter: verse.chapter,
-      verseStart: verse.verseStart,
-      verseEnd: verse.verseEnd,
-      version,
-      createdAt: createdAt.getTime(),
-      progress,
-      ...(existingRow ? parseVerseRowExtras(existingRow) : {}),
-    };
+    const resultVerse = parseVerseMembership(row, collectionId, new Date().toISOString());
+    const clientId = resultVerse.id;
 
     // Adding a verse the collection already holds keeps the one card it has.
     const isThisMembership = (v: SavedVerse) => v.id === clientId && v.collectionId === collectionId;

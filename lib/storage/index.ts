@@ -6,7 +6,6 @@
  */
 
 import { supabase } from '@/lib/api/client';
-import { ensureAuth } from '@/lib/api';
 import { isCollectionIconKey, type CollectionIconKey } from '@/lib/collections/icons';
 import { ENGRAVED_THRESHOLD } from '@/lib/store/review-config';
 
@@ -92,7 +91,7 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 
 // ============ CONSTANTS ============
 
-const DEFAULT_COLLECTION_ID = 'my-verses';
+export const DEFAULT_COLLECTION_ID = 'my-verses';
 
 export const DEFAULT_PROGRESS: VerseProgress = {
   easy: { bestAccuracy: null, completed: false },
@@ -196,15 +195,6 @@ export function parseCollectionRow(row: {
 export const MASTERED_COLLECTION_ID = 'mastered';
 export const IN_PROGRESS_COLLECTION_ID = 'in-progress';
 
-// ============ HELPERS ============
-
-async function getCurrentUserId(): Promise<string> {
-  await ensureAuth();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  return user.id;
-}
-
 // ============ VERSE FUNCTIONS ============
 
 /**
@@ -257,8 +247,7 @@ export async function updateCollectionSort(
   collectionId: string,
   sort: SortOption,
 ): Promise<void> {
-  // Use .select() so we can detect zero-row updates (the default
-  // collection's row may not exist yet for users with no verses).
+  // .select() so a stale id (zero rows) is visible in the log.
   const { data, error } = await supabase
     .from('user_collections')
     .update({ sort_preference: sort })
@@ -269,35 +258,8 @@ export async function updateCollectionSort(
     console.error('[STORAGE] Failed to update collection sort:', error);
     throw new Error('Failed to save sort preference');
   }
-
-  // If the UPDATE matched a row, we're done.
-  if (data && data.length > 0) return;
-
-  // Zero rows matched. Only the default collection can legitimately
-  // be missing from the DB (lazy-created on first verse add). For any
-  // other collection, this is a stale ID — surface as an error rather
-  // than silently inserting a row.
-  if (collectionId !== DEFAULT_COLLECTION_ID) {
+  if (data.length === 0) {
     console.warn(`[STORAGE] updateCollectionSort: no row matched for ${collectionId}`);
-    return;
-  }
-
-  // Lazy-create the default collection with the chosen sort.
-  const userId = await getCurrentUserId();
-  const { error: insertError } = await supabase
-    .from('user_collections')
-    .insert({
-      user_id: userId,
-      client_id: DEFAULT_COLLECTION_ID,
-      name: 'My Verses',
-      is_default: true,
-      sort_preference: sort,
-      created_at: new Date(0).toISOString(),
-    });
-
-  if (insertError) {
-    console.error('[STORAGE] Failed to lazy-create default collection:', insertError);
-    throw new Error('Failed to save sort preference');
   }
 }
 

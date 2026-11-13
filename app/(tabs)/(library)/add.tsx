@@ -8,7 +8,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
-import { type BibleVersion } from '@/lib/storage';
+import { DEFAULT_COLLECTION_ID, type BibleVersion } from '@/lib/storage';
 import { useAppStore, useCollection } from '@/lib/store';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -38,7 +38,7 @@ export default function AddVerseScreen() {
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
   const [searching, setSearching] = useState(false);
-  const collection = useCollection(collectionId ?? 'my-verses');
+  const collection = useCollection(collectionId ?? DEFAULT_COLLECTION_ID);
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   // Search lifts the field to the top: the bar and title slide up and fade, and the column grows

@@ -230,7 +230,7 @@ for the server.
 | Sign-in or app start with a session | Pull (collections, verses, mastered) | via `hydrate()` |
 | Pull-to-refresh | Pull | `refresh()` syncs the translation like hydrate, then re-fetches all three |
 | Add/delete collection | Push, then local | |
-| Add verse | Push, then local | finds the verse by reference in any version; may upsert junction or restore soft-deleted |
+| Add verse | Push, then local | one `add_verse` call ([adding-verses.md](../features/adding-verses.md#verse-identity)); shared copies use `addSharedVerse` |
 | Delete verse | Local, then push, rollback on failure | |
 | Verse progress update | Push, then local | `updateVerseProgress`; also computes engraved progression into `progress` JSONB |
 | Session attempt | Push only | `logSessionAttempt` in `lib/api/analytics.ts`, called fire-and-forget by `hooks/use-study-session.ts` |
@@ -263,8 +263,8 @@ still fail without retry.
 
 Holds the shared types (`SavedVerse`, `Collection`, `VerseProgress`),
 `DEFAULT_PROGRESS`, the row parsers (`parseProgress`,
-`parseVerseRowExtras`, `parseSortPreference`, `parseCollectionRow`), the virtual collection
-IDs, and `formatVerseReference`.
+`parseVerseRowExtras`, `parseSortPreference`, `parseCollectionRow`), `DEFAULT_COLLECTION_ID`
+and the virtual collection IDs, and `formatVerseReference`.
 
 Its two writes, `updateCollectionSort` and `updateVerseStudyPrefs`, are
 called by the store. Every other verse and collection write is a store

@@ -64,12 +64,12 @@ the expand button still shows the full text.
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
-- It's created lazily by `addVerse`, `copyVerseToCollection` or `updateCollectionSort`, with `created_at`
+- It's created lazily by `add_verse` or `copy_verse_to_collection`, with `created_at`
   at the epoch so it sorts first. Until then `fetchCollections` adds a local
   `DEFAULT_COLLECTION`.
 - Its name and position are fixed in the app. `SwipeableCollectionCard` disables
   its delete action, and the store's `deleteCollection` returns early.
-- `addVerse` falls back to it if the requested collection isn't found.
+- An add to a collection that no longer exists is an error, not a move here.
 
 **Mastered** has the ID `mastered` (`MASTERED_COLLECTION_ID`).
 
@@ -130,9 +130,8 @@ The sort pill cycles through `cycleSort` (`lib/store/library-sort.ts`). Only Mas
 | In Progress | AsyncStorage `library_sort_in_progress`, this device only | `recent` |
 
 `setCollectionSort` updates the store first. For a real collection, a failed write
-rolls back and shows a toast. `updateCollectionSort` creates the My Verses row if it
-doesn't exist yet, so a preference set before the first verse survives a restart. The
-two AsyncStorage values survive sign-out, because `clear` doesn't touch them.
+rolls back and shows a toast. The sort pill shows only on a collection with verses, so its
+row exists. The two AsyncStorage values survive sign-out, because `clear` doesn't touch them.
 `parseSortPreference` treats an unknown value as no preference.
 
 **`last_practiced_at`** (migration `016_sort_and_last_practiced.sql`) is per verse. The

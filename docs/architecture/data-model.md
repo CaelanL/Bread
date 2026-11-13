@@ -240,7 +240,7 @@ incrementally — the cron is the only writer.
 | `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment. See `docs/features/notifications.md` |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
 | `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction INSERT RLS checks only the verse owner) |
-| `delete_verse`, `delete_collection` | invoker, authenticated only | [delete rule](../features/library.md#deleting-a-verse), atomic |
+| `add_verse`, `delete_verse`, `delete_collection` | invoker, authenticated only | [add](../features/adding-verses.md#verse-identity), [delete](../features/library.md#deleting-a-verse) rules, atomic |
 | shared collection functions | invoker wrappers | [table](../features/shared-collections.md#functions) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
@@ -295,9 +295,8 @@ Soft delete is asymmetric and intentional:
 
 The unique index on `user_verses` is partial (`WHERE deleted_at IS
 NULL`), so the database alone wouldn't stop a second row for a
-soft-deleted verse. The `addVerse` store action looks the verse up
-including soft-deleted rows and un-soft-deletes the existing row
-instead of inserting a new one.
+soft-deleted verse. `add_verse` looks it up with soft-deleted rows
+and restores one instead of inserting.
 
 ## Migration safety (invariant 11)
 

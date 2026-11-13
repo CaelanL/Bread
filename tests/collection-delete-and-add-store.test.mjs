@@ -7,8 +7,8 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 // The real store against a stubbed HTTP boundary (Supabase REST and auth): deleting a verse or a
-// collection is one server call that succeeds whole or changes nothing, and adding a verse the
-// collection already holds keeps its one card.
+// collection is one server call that succeeds whole or changes nothing, and adding a verse is one
+// call that keeps the one card a collection already holds.
 test('deleting a verse or a collection and re-adding a held verse', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-collection-test-'));
   const platform = join(fixture, 'platform.cjs');
@@ -54,6 +54,14 @@ test('deleting a verse or a collection and re-adding a held verse', async (t) =>
     }
     if (url.pathname === '/auth/v1/user') return json({ id: 'A' });
     if (url.pathname.startsWith('/rest/v1/rpc/get_')) return json([]);
+    if (url.pathname === '/rest/v1/rpc/add_verse') {
+      const body = JSON.parse(init.body);
+      writes.push([`${method} ${url.pathname}`, body]);
+      // The server holds the reference already, in every collection the stub knows.
+      return collections.some((c) => c.client_id === body.p_collection_client_id)
+        ? json(verse)
+        : json({ code: '22023', message: 'Collection not found' }, 400);
+    }
     if (method !== 'GET') {
       writes.push([`${method} ${url.pathname}`, init.body ? JSON.parse(init.body) : null]);
       if (failing.has(url.pathname)) {
@@ -85,13 +93,21 @@ test('deleting a verse or a collection and re-adding a held verse', async (t) =>
   assert.equal(cards('psalms').length, 1);
   assert.equal(cards('week').length, 1);
 
-  await t.test('adding a verse the collection already holds keeps one card with its study choices', async () => {
+  await t.test('adding a verse the collection already holds is one server call and keeps one card with its study choices', async () => {
     writes.length = 0;
     const added = await state().addVerse({ book: 'Psalms', chapter: 23, verseStart: 1, verseEnd: 1 }, 'psalms');
-    assert.ok(writes.some(([w]) => w === 'POST /rest/v1/verse_collections'), 'the membership upsert still runs');
+    assert.deepEqual(writes, [['POST /rest/v1/rpc/add_verse', { p_book: 'Psalms', p_chapter: 23, p_verse_start: 1,
+      p_verse_end: 1, p_version: 'ESV', p_collection_client_id: 'psalms', p_keep_restored_version: false }]]);
     assert.equal(cards('psalms').length, 1);
     assert.equal(added.lastChunkSize, 3);
     assert.equal(added.lastDifficulty, 'medium');
+  });
+
+  await t.test("adding to a collection the server doesn't have throws its reason and adds no card", async () => {
+    const before = state().verses.length;
+    await assert.rejects(state().addVerse({ book: 'Psalms', chapter: 23, verseStart: 1, verseEnd: 1 }, 'deleted-elsewhere'),
+      { code: '22023', message: 'Collection not found' });
+    assert.equal(state().verses.length, before);
   });
 
   await t.test('a failed verse delete throws and puts the card back', async () => {
