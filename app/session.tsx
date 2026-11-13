@@ -393,8 +393,8 @@ export default function StudySessionScreen() {
         memoryPlaceholder = true;
       }
     }
-    // Eye toggle lives on the card; hidden once the chunk completes
-    // (the card is already revealed there).
+    // Eye toggle lives on the card; hidden once the chunk completes (the card is
+    // already revealed there), back during a Retry, which is practice and never rescored.
     const wordsCurrentlyShown = isEasy ? hideMode === undefined : hideMode === 'show';
 
     // Build verse label
@@ -437,7 +437,7 @@ export default function StudySessionScreen() {
             memoryPlaceholder={memoryPlaceholder}
             visibilityIcon={wordsCurrentlyShown ? 'eye' : 'eye.slash'}
             onToggleVisibility={
-              isCompleted || transcribing ? undefined : () => handleToggleVisibility(index)
+              (isCompleted && !isRetrying) || transcribing ? undefined : () => handleToggleVisibility(index)
             }
           />
 

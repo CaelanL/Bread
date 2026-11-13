@@ -110,7 +110,7 @@ only, and re-hide resets it in a layout effect, so the answer can't flash.
 
 ## Peek and reveal
 
-An eye button sits on each `VerseCard` until the chunk completes. Visibility
+An eye button sits on each `VerseCard` until the chunk completes, and comes back during a Retry. Visibility
 (`hideModes`, screen-local) is separate from taint (`peekedChunksRef`, hook).
 
 - **Medium and Hard:** the button toggles the chunk's words, at twice the normal
