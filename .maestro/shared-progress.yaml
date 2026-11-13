@@ -94,6 +94,9 @@ name: shared-progress
 - extendedWaitUntil:
     visible: "Added Romans 8:31"
     timeout: 20000
+# Quick add is a search mode with no Back: Cancel first.
+- tapOn:
+    id: quick-add-cancel
 - tapOn: Back
 - extendedWaitUntil:
     visible: ".*Romans 8:31 ·.*Group: 0 of 2 mastered"

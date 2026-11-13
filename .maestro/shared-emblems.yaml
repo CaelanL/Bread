@@ -2,6 +2,7 @@
 # reader-d Dana is a member): plain "Cara · 2 members" from the seed, "Mastered by everyone" once
 # the script masters every square and "Engraved by everyone" once it engraves them, the personal
 # "3 verses" and the engraved glyph (read as "Engraved") on Dana's copy after Cara deletes for everyone, and reader-a's Psalms mastered solo. docs/features/group-progress.md
+# A row reads its emblem first ("Mastered by everyone, …, Romans 8, …"), since the emblem sits on the icon.
 appId: com.caelanliu.biblemem
 name: shared-emblems
 ---
@@ -28,7 +29,7 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, .*Mastered by everyone.*"
+    visible: ".*Mastered by everyone.*Romans 8, .*"
     timeout: 20000
 - takeScreenshot: emblems-2-mastered-by-everyone
 
@@ -48,7 +49,7 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, .*Engraved by everyone.*"
+    visible: ".*Engraved by everyone.*Romans 8, .*"
     timeout: 20000
 - takeScreenshot: emblems-3-engraved-by-everyone
 
@@ -56,9 +57,9 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, .*Engraved by everyone.*"
+    visible: ".*Engraved by everyone.*Romans 8, .*"
     timeout: 20000
-- longPressOn: ".*Romans 8, .*Engraved by everyone.*"
+- longPressOn: ".*Engraved by everyone.*Romans 8, .*"
 - tapOn: Delete
 - assertVisible: "Delete for everyone?"
 - tapOn: Delete
@@ -68,7 +69,7 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, 3 verses, Engraved.*"
+    visible: ".*Engraved.*Romans 8, 3 verses.*"
     timeout: 20000
 - assertNotVisible: ".*Romans 8, .*Shared.*"
 - takeScreenshot: emblems-4-dissolved-solo-engraved
@@ -83,7 +84,7 @@ name: shared-emblems
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Psalms, 1 verse, Mastered.*"
+    visible: ".*Mastered.*Psalms, 1 verse.*"
     timeout: 20000
 - assertVisible: ".*My Verses, 2 verses.*"
 - takeScreenshot: emblems-5-solo-mastered

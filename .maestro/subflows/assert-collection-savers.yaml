@@ -1,6 +1,10 @@
 appId: com.caelanliu.biblemem
 ---
 # SAVER_LABEL is "12 saves", or empty below 10, when the line is left out.
+# The Home tab keeps its stack (Explore may still be on top); a second tap on the selected tab
+# pops it to Home.
+- tapOn:
+    id: tab-home
 - tapOn:
     id: tab-home
 - scrollUntilVisible:
