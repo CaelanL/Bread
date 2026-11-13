@@ -24,13 +24,31 @@ export async function clearPendingJoin() {
  * network in the last hour, so someone who installed from an invite lands on it. A failed call
  * asks again next launch; the server keeps a handoff only an hour. See
  * docs/architecture/navigation-and-routing.md#invite-handoff.
+ *
+ * The claim deletes the server's row, so a caller cancelled mid-flight (the pending-invite effect
+ * re-runs as sign-in settles) must not lose it: every caller shares the one in-flight claim until
+ * `forgetInstallHandoff` marks its code as opened.
  */
-export async function claimInstallHandoff(): Promise<string | null> {
+let handoff: Promise<string | null> | null = null;
+
+export function claimInstallHandoff(): Promise<string | null> {
+  handoff ??= claimOnce();
+  return handoff;
+}
+
+export function forgetInstallHandoff() {
+  handoff = Promise.resolve(null);
+}
+
+async function claimOnce(): Promise<string | null> {
   if (await AsyncStorage.getItem(HANDOFF_CHECKED_KEY)) return null;
   const { data, error } = await supabase.functions.invoke<{ code: string | null }>('invite-handoff', {
     body: { action: 'claim' },
   });
-  if (error) return null;
+  if (error) {
+    handoff = null;
+    return null;
+  }
   await AsyncStorage.setItem(HANDOFF_CHECKED_KEY, '1');
   return typeof data?.code === 'string' ? normalizeInviteCode(data.code) || null : null;
 }

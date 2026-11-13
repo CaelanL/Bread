@@ -6,7 +6,8 @@
 // MODE=remove-members: READER, an owner, removes every plain member of their groups.
 // MODE=mastered|engraved: READER's verses matching FILTER (PostgREST query) get the seed's progress for that state.
 const host = (API_URL.match(/^https?:\/\/([^:/]+)/) || [])[1];
-if (host !== '127.0.0.1' && host !== 'localhost') throw new Error('shared-collections requires local Supabase');
+const isLocal = host === '127.0.0.1' || host === 'localhost' || /^(10|192\.168)\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+if (!isLocal) throw new Error('shared-collections requires local Supabase');
 
 const session = json(http.post(API_URL + '/auth/v1/token?grant_type=password', {
   headers: { apikey: ANON_KEY, 'Content-Type': 'application/json' },

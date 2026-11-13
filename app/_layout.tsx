@@ -18,7 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
-import { claimInstallHandoff, clearPendingJoin, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
+import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import {
   installDevTools as installNotifDevTools,
   registerDeepLinkHandler,
@@ -104,6 +104,7 @@ function RootLayoutNav() {
         }
         router.replace('/(tabs)/(library)');
         router.push(`/join/${invite}`);
+        forgetInstallHandoff();
         clearPendingJoin().catch((e) => console.error('[join] Failed to clear the kept invite:', e));
       });
     return () => {
