@@ -187,7 +187,7 @@ Invite links are web links because chat apps only make `https://` tappable (iMes
 `com.biblemem://`, WhatsApp doesn't). sendlabs.dev is Caelan's site (repo `sendlabs-portfolio`,
 on Vercel): its `/.well-known/apple-app-site-association` claims only `/bread/join/*` for
 `G94DG594W9.com.caelanliu.biblemem`, and `/bread/join/[code]` is the page someone without Bread
-sees (Bread's look, App Store link, the code, Safari's app banner). iOS verifies the claim
+sees when the app didn't open: Open in Bread (`com.biblemem://join/<code>`), Get Bread, then the code. iOS verifies the claim
 through Apple's CDN when Bread installs, so it works only in a store or EAS build, never before
 sendlabs.dev serves the file.
 
