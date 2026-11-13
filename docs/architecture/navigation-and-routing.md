@@ -191,6 +191,17 @@ sees when the app didn't open: Open in Bread (`com.biblemem://join/<code>`), Get
 through Apple's CDN when Bread installs, so it works only in a store or EAS build, never before
 sendlabs.dev serves the file.
 
+### Invite handoff
+
+Someone without Bread who opens an invite link lands on sendlabs.dev's join page, which posts
+`record` to the `invite-handoff` edge function: the code plus a hash of the caller's IP
+(`public.invite_handoffs`, service role only, rows live an hour). On the first sign-in of an
+install, `claimInstallHandoff` (`lib/shared/pending-join.ts`, called from the pending-invite
+effect in `app/_layout.tsx`) posts `claim` and opens `/join/<code>` for the newest match; a
+claimed row is deleted and the install never asks again. It's a guess by network, so a
+household on one Wi-Fi can match the wrong invite: the join modal still needs Join.
+Flow: `npm run sim -- flow invite-handoff`.
+
 The handler extracts tokens from the URL and calls
 `supabase.auth.setSession(...)`. Auth state change then drives the
 gating logic above. A notification tap routes through

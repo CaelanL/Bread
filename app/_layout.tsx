@@ -18,7 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { useAppStore } from '@/lib/store';
-import { clearPendingJoin, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
+import { claimInstallHandoff, clearPendingJoin, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import {
   installDevTools as installNotifDevTools,
   registerDeepLinkHandler,
@@ -79,7 +79,8 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated, isLoading, segments, pathname, navigationState?.key]);
 
-  // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in,
+  // After the gate above has sent a fresh sign-in to the tabs, open the invite stashed on the way in
+  // (or, once per install, one handed off from the sendlabs.dev page across the App Store install),
   // over the Library, so the X and Join both land there. The reminders card is held before the
   // read, so it can't present first and be under (or closing under) the invite; JoinInvite then
   // holds it while mounted and releases it as it unmounts.
@@ -89,6 +90,7 @@ function RootLayoutNav() {
     const flags = useUxFlagsStore.getState();
     flags.setInviteOpen(true);
     readPendingJoin()
+      .then((kept) => kept ?? claimInstallHandoff())
       .catch((e) => {
         console.error('[join] Failed to read the kept invite:', e);
         return null;

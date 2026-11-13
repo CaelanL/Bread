@@ -65,6 +65,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"invite_handoffs": {
+                  Row: {
+                    "code": string,"created_at": string,"id": number,"network": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code": string,"created_at"?: string,"id"?: never,"network": string
+                  }
+                  Update: {
+                    "code"?: string,"created_at"?: string,"id"?: never,"network"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"notification_log": {
                   Row: {
                     "body": string | null,"error": string | null,"expo_ticket": string | null,"fired_at": string,"id": number,"source": string,"status": string,"user_id": string

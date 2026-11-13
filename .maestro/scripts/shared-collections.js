@@ -1,5 +1,6 @@
 // Shared collection checks over local REST, signed in as a seed user. Runs only against the seed database.
 // MODE=invite: output.code is READER's newest live invite.
+// MODE=handoff: records CODE as an install handoff for this Mac's network, as the sendlabs.dev join page does.
 // MODE=no-copy: READER holds no row for Psalm 23:1-3 (left with an unmastered verse).
 // MODE=personal-copy: READER's "Psalms" is a personal collection again, still holding Psalm 23:1-3.
 // MODE=remove-members: READER, an owner, removes every plain member of their groups.
@@ -15,7 +16,13 @@ if (!session.access_token) throw new Error('Local seed sign-in failed');
 const headers = { apikey: ANON_KEY, Authorization: 'Bearer ' + session.access_token };
 const get = (path) => json(http.get(API_URL + '/rest/v1/' + path, { headers: headers }).body);
 
-if (MODE === 'invite') {
+if (MODE === 'handoff') {
+  const response = http.post(API_URL + '/functions/v1/invite-handoff', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'record', code: CODE }),
+  });
+  if (response.status !== 200) throw new Error('Handoff record failed: ' + response.status);
+} else if (MODE === 'invite') {
   const rows = get('shared_invites?select=code&revoked_at=is.null&order=created_at.desc&limit=1');
   if (rows.length !== 1) throw new Error('No live invite for ' + READER);
   output.code = rows[0].code;
