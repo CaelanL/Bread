@@ -9,14 +9,16 @@ name: add-double-tap
 - extendedWaitUntil:
     visible: "Genesis, Forward"
     timeout: 20000
-# A quick tap on a different book still goes through. With Genesis open, one point sits on
-# Exodus; tapping it opens Exodus and closes Genesis, which slides Numbers under the same
-# point, so the second tap of a double tap lands on Numbers inside the 500 ms window.
+# A quick tap on a different book still goes through. With Genesis open, Exodus's row sits
+# under Genesis's chapters; a double tap there (Maestro repeats at the point it found first)
+# opens Exodus and closes Genesis, which slides Numbers under the same point, so the second
+# tap lands on Numbers inside the 500 ms window. Found by label, not a fixed point, so a
+# header change above the list doesn't move the tap onto Genesis's grid.
 - tapOn: "Genesis, Forward"
 - assertVisible: "50"
 - assertVisible: "Exodus, Forward"
 - tapOn:
-    point: "50%,82%"
+    text: "Exodus, Forward"
     repeat: 2
     delay: 100
 - assertVisible: "Exodus, Forward"

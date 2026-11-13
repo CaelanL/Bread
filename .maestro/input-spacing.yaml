@@ -6,7 +6,7 @@ name: input-spacing
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Romans 8, Shared.*"
+    visible: ".*Romans 8, .* members.*"
     timeout: 20000
 - tapOn:
     id: library-add
@@ -22,7 +22,7 @@ name: input-spacing
     notVisible:
       id: join-code-input
     timeout: 5000
-- tapOn: ".*Romans 8, Shared.*"
+- tapOn: ".*Romans 8, .* members.*"
 - extendedWaitUntil:
     visible:
       id: collection-search-open

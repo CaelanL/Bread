@@ -12,9 +12,9 @@ name: shared-stop
     visible: ".*Romans 8, Cara · 2 members.*"
     timeout: 20000
 - scrollUntilVisible:
-    element: ".*Psalm 23, .*Mastered.*"
+    element: ".*Mastered.*Psalm 23, .*"
     direction: DOWN
-- longPressOn: ".*Psalm 23, .*Mastered.*"
+- longPressOn: ".*Mastered.*Psalm 23, .*"
 - assertVisible: "Rename"
 - assertVisible: "Share…"
 - assertVisible: "Delete"
@@ -33,11 +33,11 @@ name: shared-stop
     id: modal-close
 # A code alone changes nothing on the card.
 - extendedWaitUntil:
-    visible: ".*Psalm 23, .* verses, Mastered.*"
+    visible: ".*Mastered.*Psalm 23, .* verses.*"
     timeout: 10000
 - assertNotVisible: ".*Psalm 23, .*members.*"
 # Inside, the code sits in the header.
-- tapOn: ".*Psalm 23, .*Mastered.*"
+- tapOn: ".*Mastered.*Psalm 23, .*"
 - extendedWaitUntil:
     visible:
       id: strip-invite-code
@@ -45,7 +45,7 @@ name: shared-stop
 - assertVisible: "Invite code"
 - takeScreenshot: stop-2b-invite-in-collection
 - tapOn: "Back"
-- longPressOn: ".*Psalm 23, .*Mastered.*"
+- longPressOn: ".*Mastered.*Psalm 23, .*"
 - tapOn: "Share…"
 - extendedWaitUntil:
     visible:
@@ -63,7 +63,7 @@ name: shared-stop
     notVisible:
       id: invite-code
     timeout: 10000
-- assertVisible: ".*Psalm 23, .*Mastered.*"
+- assertVisible: ".*Mastered.*Psalm 23, .*"
 # The old code is dead.
 - openLink: com.biblemem://join/${maestro.copiedText}
 - extendedWaitUntil:
@@ -77,9 +77,9 @@ name: shared-stop
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Philippians 4, .*Mastered by everyone.*"
+    visible: ".*Mastered by everyone.*Philippians 4, .*"
     timeout: 20000
-- longPressOn: ".*Philippians 4, .*Mastered by everyone.*"
+- longPressOn: ".*Mastered by everyone.*Philippians 4, .*"
 - tapOn: "Share…"
 - extendedWaitUntil:
     visible:
@@ -95,13 +95,13 @@ name: shared-stop
     text: "Stop sharing"
     index: 0
 - extendedWaitUntil:
-    visible: ".*Philippians 4, .*verses?, Mastered.*"
+    visible: ".*Mastered.*Philippians 4, .*verses?.*"
     timeout: 15000
 - assertNotVisible: ".*Philippians 4, .*everyone.*"
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-e&next=%2F(tabs)%2F(library)
 - extendedWaitUntil:
-    visible: ".*Philippians 4, .*verses?, Mastered.*"
+    visible: ".*Mastered.*Philippians 4, .*verses?.*"
     timeout: 20000
 - assertNotVisible: ".*Philippians 4, .*everyone.*"
 - takeScreenshot: stop-5-member-copy-personal
