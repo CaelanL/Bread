@@ -11,7 +11,8 @@ test('a typed code is normalized the way the server reads it', () => {
 
 test('the share text carries the link and the code in plain words', () => {
   assert.equal(inviteMessage('Romans 8', 'ABCD2345'),
-    'Join "Romans 8" on Bread: com.biblemem://join/ABCD2345 — or enter code ABCD2345 in Bread');
+    'Join "Romans 8" with me on Bread, a Bible memory app.\n\n'
+    + 'Get Bread: https://apps.apple.com/app/id6757946016\nThen tap + → Join with code and enter ABCD2345');
 });
 
 test('days left round up and never go negative', () => {

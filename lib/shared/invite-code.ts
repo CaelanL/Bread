@@ -12,13 +12,13 @@ export function normalizeInviteCode(input: string): string {
   return input.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, INVITE_CODE_LENGTH);
 }
 
-export function inviteLink(code: string): string {
-  return `com.biblemem://join/${code}`;
-}
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6757946016';
 
-// Messages and most chat apps don't make custom-scheme links tappable, so the code is in plain words too.
+// Most people invited don't have Bread yet, and chat apps don't make com.biblemem:// links
+// tappable, so the message carries the App Store link and the code to type once installed.
 export function inviteMessage(collectionName: string, code: string): string {
-  return `Join "${collectionName}" on Bread: ${inviteLink(code)} — or enter code ${code} in Bread`;
+  return `Join "${collectionName}" with me on Bread, a Bible memory app.\n\n`
+    + `Get Bread: ${APP_STORE_URL}\nThen tap + → Join with code and enter ${code}`;
 }
 
 export function daysLeft(expiresAt: string, now = Date.now()): number {

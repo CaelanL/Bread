@@ -155,7 +155,7 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   `?view=members` shows only the members. It opens at full size (stand-ins until loaded).
   The owner also gets the code, copy icon, days left, Share, New code (confirmed, old code
   dies), the [member actions](group-progress.md#whos-where) and Stop sharing. Share sends
-  `inviteMessage`, link and code (chat apps rarely link). Members get Leave.
+  `inviteMessage`: App Store link and code. Members get Leave.
 - **Stop sharing** (owner; confirm names who's affected): `stopSharing` deletes the group ([dissolve](#dissolve));
   codes die, every copy is personal again.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed) show `JoinInvite`:
