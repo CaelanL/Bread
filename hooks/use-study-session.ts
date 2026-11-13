@@ -152,6 +152,9 @@ export function useStudySession({
 
     const nextResults = saveChunkResult(chunkResults, index, result, isPeeked);
     setChunkResults(nextResults);
+    if (result.scored && !isPeeked && result.display.score >= 90 && process.env.EXPO_OS === 'ios') {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
 
     if (result.scored && nextResults.size === chunks.length && !savedAttemptRef.current) {
       savedAttemptRef.current = true;

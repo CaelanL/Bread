@@ -151,7 +151,7 @@ export function CollectionHeader({
 }
 
 /** A quick highlight across the finished line when it first shows, then a steady slower pulse. */
-function Sweep({ color }: { color: string }) {
+export function Sweep({ color }: { color: string }) {
   const reduced = useReducedMotion();
   const x = useSharedValue(-SWEEP_WIDTH);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));

@@ -195,8 +195,12 @@ The final score computes only once every chunk has a result. Then the hook:
    awaiting it. A failure shows the toast "Failed to save your progress."
 2. Calls `logSessionAttempt`, fire-and-forget, console-only on failure.
 3. Sets `showResults`. The list gains a results page, and Next reads "See
-   Results". That page shows the score, passing at 90 or more, View Results and
-   Done.
+   Results". That page is `components/study/SessionFinish.tsx`: the first time it
+   shows, the score counts up while a line fills toward a 90 mark (`Motion.scoreMs`).
+   A pass turns them green, plays a success haptic and runs the finished-line
+   highlight (`Sweep`). Then Done, and Review chunks back to the first chunk.
+
+A chunk that scores 90 or more without a reveal plays a success haptic too.
 
 **Early exit.** The X in the header calls `saveAndExit`. With some chunks complete
 but not all, it calls `updateVerseProgress` with `calculatePartialScore` and no

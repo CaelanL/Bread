@@ -4,6 +4,7 @@ import { WAVEFORM_SAMPLES } from '@/components/study/Waveform';
 import { VerseCard } from '@/components/study/VerseCard';
 import { ResultCard, getScoreColor } from '@/components/study/ResultCard';
 import { RecordingBar } from '@/components/study/RecordingBar';
+import { SessionFinish } from '@/components/study/SessionFinish';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStudySession } from '@/hooks/use-study-session';
@@ -327,40 +328,16 @@ export default function StudySessionScreen() {
   const renderItem = ({ item, index }: { item: Chunk | ResultsPageItem; index: number }) => {
     // Results page
     if (isResultsPage(item)) {
-      const passed = session.finalScore >= 90;
-
       return (
         <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
-          <View style={styles.resultsContent}>
-            <Text style={[styles.resultsTitle, { color: colors.text }]}>Session Complete</Text>
-
-            <View style={[styles.scoreCircle, { borderColor: passed ? colors.success : colors.error }]}>
-              <Text style={[styles.scoreText, { color: passed ? colors.success : colors.error }]}>
-                {session.finalScore}%
-              </Text>
-            </View>
-
-            <Text style={[styles.scoreLabel, { color: colors.icon }]}>
-              {passed ? 'Great job! You passed!' : 'Keep practicing!'}
-            </Text>
-
-            <View style={styles.resultsButtons}>
-              <Pressable
-                style={[styles.resultsButton, { backgroundColor: colors.cardAlt }]}
-                onPress={session.viewResults}
-              >
-                <Text style={[styles.resultsButtonText, { color: colors.text }]}>View Results</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.resultsButton, { backgroundColor: buttonBg }]}
-                onPress={session.done}
-              >
-                <Text style={[styles.resultsButtonText, { color: colors.white }]}>Done</Text>
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.controlsContainer} />
+          <SessionFinish
+            score={session.finalScore}
+            difficulty={difficulty ?? 'easy'}
+            reference={formatVerseReference(session.verse!)}
+            active={session.showResults && currentIndex === session.chunks.length}
+            onDone={session.done}
+            onReview={session.viewResults}
+          />
         </View>
       );
     }
@@ -625,46 +602,6 @@ const styles = StyleSheet.create({
   },
   scoreBadgeInlineText: {
     fontSize: 13,
-    fontWeight: '600',
-  },
-  resultsContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 24,
-  },
-  resultsTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  scoreCircle: {
-    width: 140,
-    height: 140,
-    // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-    borderRadius: 70,
-    borderWidth: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scoreText: {
-    fontSize: 42,
-    fontWeight: 'bold',
-  },
-  scoreLabel: {
-    fontSize: 18,
-  },
-  resultsButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-  },
-  resultsButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-  },
-  resultsButtonText: {
-    fontSize: 16,
     fontWeight: '600',
   },
 });

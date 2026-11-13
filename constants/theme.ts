@@ -22,6 +22,7 @@ export const Motion = {
   pulseMs: 1200,
   pulseRestMs: 1100,
   jumpMs: 0, // An instant reset inside an animation sequence
+  scoreMs: 1100, // The session finish's count-up and line fill
   easing: [0.2, 0, 0, 1],
 } as const;
 /**
