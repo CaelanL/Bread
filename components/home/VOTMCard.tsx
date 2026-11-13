@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { CardSurface, Colors, MonthlyCardColors, Radius } from '@/constants/theme';
+import { Colors, MonthlyCardColors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { VOTM } from '@/lib/api/votm';
 import { formatReference } from '@/lib/bible';
@@ -114,7 +114,7 @@ export function VOTMCard({
 }
 
 const styles = StyleSheet.create({
-  card: { ...CardSurface, overflow: 'hidden' },
+  card: { borderRadius: Radius.xxl, overflow: 'hidden' },
   contentWrapper: { position: 'relative' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: MonthlyCardColors.overlay },
   content: { padding: 16, gap: 12 },

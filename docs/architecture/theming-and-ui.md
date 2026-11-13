@@ -74,9 +74,7 @@ A collection's accent (its `iconColor`, or `primary`) isn't a token: `withAlpha(
 
 ## Radius, motion and shadows
 
-`constants/theme.ts` also exports `Radius`, `Motion` and `Shadows`, and `CardSurface`: the
-one card look on Library and Home (Library collection cards, Verse of the Month, the streak card,
-Explore), `Radius.xxl` with the faint `Shadows.border` edge and no border or drop shadow.
+`constants/theme.ts` also exports `Radius`, `Motion` and `Shadows`.
 `eslint.config.mjs` rejects radii, durations and press scales outside
 those values, so `npm run lint` catches a stray one.
 

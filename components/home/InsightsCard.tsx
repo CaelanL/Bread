@@ -1,5 +1,5 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { CardSurface, Colors } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useCountUp } from '@/hooks/use-count-up';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
@@ -16,6 +16,7 @@ export interface InsightsCardRef {
 export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_, ref) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const openInsights = useDebouncedPress(() => router.push('/insights'));
 
@@ -31,12 +32,13 @@ export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_,
   const streakBg = streak > 0 ? 'rgba(249,115,22,0.15)' : 'rgba(96,165,250,0.15)';
 
   const cardBg = colors.card;
+  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: cardBg },
+        { backgroundColor: cardBg, borderColor },
         pressed && styles.cardPressed,
       ]}
       onPress={openInsights}
@@ -78,7 +80,9 @@ export const InsightsCard = forwardRef<InsightsCardRef>(function InsightsCard(_,
 
 const styles = StyleSheet.create({
   card: {
-    ...CardSurface,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   cardPressed: {
     opacity: 0.8,

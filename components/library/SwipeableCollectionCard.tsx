@@ -6,7 +6,7 @@ import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/S
 import { firstName } from '@/lib/shared/display-name';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
-import { CardSurface, Colors, Motion, Radius } from '@/constants/theme';
+import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
@@ -78,6 +78,7 @@ export function SwipeableCollectionCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)';
   const { height: windowHeight } = useWindowDimensions();
   const [menuTop, setMenuTop] = useState<number | null>(null);
   // Closed when the Library loses focus, so a modal route can't present over it.
@@ -210,7 +211,7 @@ export function SwipeableCollectionCard({
     >
       {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.card, { backgroundColor: engraved ? colors.engravedCard : colors.card }, cardStyle]}>
+        <Animated.View style={[styles.card, { backgroundColor: engraved ? colors.engravedCard : colors.card, borderColor }, cardStyle]}>
           <Pressable
             style={styles.cardButton}
             onPress={handlePress}
@@ -318,11 +319,17 @@ const styles = StyleSheet.create({
   container: {
     position: 'relative',
     overflow: 'hidden',
-    ...CardSurface,
+    borderRadius: Radius.xxl,
   },
   card: {
     flexDirection: 'row',
-    borderRadius: CardSurface.borderRadius,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   cardButton: {
     flex: 1,
