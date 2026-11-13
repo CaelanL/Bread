@@ -197,7 +197,7 @@ export function SwipeableVerseCard({
               if (!disableSwipe && event.nativeEvent.actionName === 'delete') handleDelete();
             }}
           >
-            <View style={styles.rowText}>
+            <View style={[styles.rowText, hideText && styles.rowTextHidden]}>
               <View style={styles.referenceRow}>
                 <Text style={[styles.reference, { color: engraved ? colors.tint : colors.text }]} numberOfLines={1}>
                   {formatVerseReference(verse)}
@@ -254,6 +254,10 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     gap: 2,
+  },
+  // With the text line hidden, a little more air between the reference and the pill below it.
+  rowTextHidden: {
+    gap: 6,
   },
   referenceRow: {
     flexDirection: 'row',
