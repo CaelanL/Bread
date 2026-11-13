@@ -206,14 +206,13 @@ Swipe a custom collection or a verse in a real collection left to reveal Delete.
 The same inset action opens the confirmation on both types of card. Collection
 actions also offer Delete on long press.
 
-The store's `deleteCollection` returns early for My Verses. A shared collection is left
-(member) or stops sharing first (owner). Then one call to `public.delete_collection`
-(`supabase/migrations/20261112190000_delete_collection.sql`) does the rest in one
-transaction: every verse leaves the collection, a verse no other collection holds is
-soft-deleted if mastered and hard-deleted otherwise, and the collection gets `deleted_at`.
-It succeeds whole or changes nothing, and a retry after success is a no-op. The function
-refuses My Verses and a collection still linked to a shared group. Only after it succeeds
-does the store drop the collection and its cards locally. The virtual collections never get
+`deleteCollection` returns early for My Verses; a member's shared copy is left. Otherwise
+one `public.delete_collection` call (latest in `*_delete_collection_for_everyone.sql`) does it
+in one transaction: an owner's group [dissolves](shared-collections.md#dissolve), every verse
+leaves, a verse no other collection holds is soft-deleted if mastered and hard-deleted
+otherwise, and the collection gets `deleted_at`. All or nothing; a retry after success is a
+no-op. It refuses My Verses and a member's copy. Only after it succeeds does the store drop
+the collection (and its group) locally. The virtual collections never get
 here, because the card disables their swipe; if they did, the function would answer
 `Collection not found`.
 

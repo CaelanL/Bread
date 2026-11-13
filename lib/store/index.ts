@@ -1122,19 +1122,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteCollection: async (id: string) => {
     if (id === DEFAULT_COLLECTION_ID) return;
 
-    // A member's delete is leave. The owner's stops sharing first: every member keeps their
-    // copy (docs/features/shared-collections.md#dissolve), then the owner's goes as below.
+    // A member's delete is leave.
     const sharedId = sharedIdOf(id);
-    if (sharedId) {
-      if (collectionRemoval(sharedId, sharedRole(sharedId)) === 'leave') {
-        await get().leaveSharedCollection(sharedId);
-        return;
-      }
-      await get().stopSharing(sharedId);
+    if (sharedId && collectionRemoval(sharedId, sharedRole(sharedId)) === 'leave') {
+      await get().leaveSharedCollection(sharedId);
+      return;
     }
 
-    // One transaction on the server: every verse leaves, held-elsewhere verses stay, and the
-    // collection goes, or nothing changes (supabase/migrations/*_delete_collection.sql).
+    // One transaction on the server: an owner's group dissolves first (every member keeps their
+    // copy, docs/features/shared-collections.md#dissolve), then every verse leaves, held-elsewhere
+    // verses stay, and the collection goes; or nothing changes
+    // (supabase/migrations/*_delete_collection*.sql).
     const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
     if (!session || generation !== accountGeneration) return;
@@ -1143,13 +1141,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (generation !== accountGeneration) return;
     if (error) {
       console.error('[STORE] Failed to delete collection:', error);
-      throw new Error('Failed to delete collection');
+      throw error;
     }
 
     // Mastered verses held nowhere else stay on the Mastered list (soft-deleted).
     set((state) => ({
       collections: state.collections.filter((c) => c.id !== id),
       verses: state.verses.filter((v) => v.collectionId !== id),
+      ...(sharedId && {
+        sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
+        sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
+      }),
     }));
   },
 

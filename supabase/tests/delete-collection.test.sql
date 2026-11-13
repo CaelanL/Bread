@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(30);
 
 -- reader-b starts empty. "Doomed" holds a mastered verse also in "Kept", plus a mastered and an
 -- unmastered verse held nowhere else.
@@ -29,6 +29,46 @@ values
   ('b0000000-0000-4000-8000-0000000000b1', 'b0000000-0000-4000-8000-0000000000a3'),
   ('b0000000-0000-4000-8000-0000000000b2', 'b0000000-0000-4000-8000-0000000000a2'),
   ('b0000000-0000-4000-8000-0000000000b3', 'b0000000-0000-4000-8000-0000000000a2');
+
+-- reader-b also owns the shared "Team" (a mastered and an unmastered reference), and reader-a is
+-- a member whose copy is still empty. test.fail_team_delete makes the last step fail on demand.
+insert into public.shared_collections (id, owner_id, name, created_at)
+values ('b0000000-0000-4000-8000-0000000000c1', current_setting('test.reader_b')::uuid, 'Team', now());
+insert into public.shared_collection_members (shared_collection_id, user_id, role)
+values
+  ('b0000000-0000-4000-8000-0000000000c1', current_setting('test.reader_b')::uuid, 'owner'),
+  ('b0000000-0000-4000-8000-0000000000c1', current_setting('test.reader_a')::uuid, 'member');
+insert into public.shared_collection_verses (shared_collection_id, book, chapter, verse_start, verse_end)
+values
+  ('b0000000-0000-4000-8000-0000000000c1', 'John', 1, 4, 4),
+  ('b0000000-0000-4000-8000-0000000000c1', 'John', 1, 5, 5);
+insert into public.user_collections (id, user_id, client_id, name, is_default, created_at, shared_collection_id)
+values
+  ('b0000000-0000-4000-8000-0000000000a4', current_setting('test.reader_b')::uuid, 'team', 'Team', false, now(),
+    'b0000000-0000-4000-8000-0000000000c1'),
+  ('b0000000-0000-4000-8000-0000000000a5', current_setting('test.reader_a')::uuid, 'shared-b0000000-0000-4000-8000-0000000000c1',
+    'Team', false, now(), 'b0000000-0000-4000-8000-0000000000c1');
+insert into public.user_verses (id, user_id, client_id, book, chapter, verse_start, verse_end, version, progress)
+values
+  ('b0000000-0000-4000-8000-0000000000b4', current_setting('test.reader_b')::uuid, 'team-mastered', 'John', 1, 4, 4, 'ESV',
+    '{"hard":{"bestAccuracy":95,"completed":true}}'),
+  ('b0000000-0000-4000-8000-0000000000b5', current_setting('test.reader_b')::uuid, 'team-learning', 'John', 1, 5, 5, 'ESV',
+    '{"hard":{"bestAccuracy":40,"completed":false}}');
+insert into public.verse_collections (verse_id, collection_id)
+values
+  ('b0000000-0000-4000-8000-0000000000b4', 'b0000000-0000-4000-8000-0000000000a4'),
+  ('b0000000-0000-4000-8000-0000000000b5', 'b0000000-0000-4000-8000-0000000000a4');
+
+create function pg_temp.fail_team_delete() returns trigger language plpgsql as $$
+begin
+  if current_setting('test.fail_team_delete', true) = 'on' and new.client_id = 'team' and new.deleted_at is not null then
+    raise exception 'injected failure';
+  end if;
+  return new;
+end;
+$$;
+create trigger fail_team_delete before update on public.user_collections
+  for each row execute function pg_temp.fail_team_delete();
 
 select ok(not has_function_privilege('anon', 'public.delete_collection(text)', 'EXECUTE'),
   'anonymous API calls cannot delete collections');
@@ -72,6 +112,42 @@ select throws_ok($$select public.delete_collection('shared-cccccccc-0000-4000-80
   'a shared copy must be left or unshared first');
 select is((select deleted_at from public.user_collections where client_id = 'shared-cccccccc-0000-4000-8000-000000000031'),
   null::timestamptz, 'the shared copy is untouched');
+
+-- The owner's "Delete for everyone": the group dissolves and the owner's copy goes, in one call.
+select set_config('request.jwt.claim.sub', current_setting('test.reader_a'), true);
+select throws_ok($$select public.delete_collection('shared-b0000000-0000-4000-8000-0000000000c1')$$, '22023',
+  'Stop sharing or leave this collection first', 'a member still leaves instead of deleting');
+select is((select count(*)::int from public.shared_collection_members where shared_collection_id = 'b0000000-0000-4000-8000-0000000000c1'), 2,
+  'the member delete changed nothing');
+
+select set_config('request.jwt.claim.sub', current_setting('test.reader_b'), true);
+select set_config('test.fail_team_delete', 'on', true);
+select throws_ok($$select public.delete_collection('team')$$, 'P0001', 'injected failure',
+  'a failure after the group is deleted fails the call');
+select set_config('test.fail_team_delete', 'off', true);
+select is((select count(*)::int from public.shared_collections where id = 'b0000000-0000-4000-8000-0000000000c1'), 1,
+  'and the group is still there');
+select is((select shared_collection_id from public.user_collections where client_id = 'team'),
+  'b0000000-0000-4000-8000-0000000000c1'::uuid, 'the owner''s copy is still shared');
+select is((select count(*)::int from public.verse_collections where collection_id = 'b0000000-0000-4000-8000-0000000000a4'), 2,
+  'and still holds both verses');
+
+select lives_ok($$select public.delete_collection('team')$$, 'the owner deletes a shared collection for everyone');
+select is((select count(*)::int from public.shared_collections where id = 'b0000000-0000-4000-8000-0000000000c1'), 0,
+  'the group is gone');
+select isnt((select deleted_at from public.user_collections where client_id = 'team'), null::timestamptz,
+  'the owner''s copy is deleted');
+select isnt((select deleted_at from public.user_verses where client_id = 'team-mastered'), null::timestamptz,
+  'the owner''s mastered verse is soft-deleted, kept for the Mastered list');
+select is((select count(*)::int from public.user_verses where client_id = 'team-learning'), 0,
+  'the owner''s unmastered verse is deleted');
+select lives_ok($$select public.delete_collection('team')$$, 'a retry after success is a no-op');
+
+reset role;
+select is((select shared_collection_id from public.user_collections where id = 'b0000000-0000-4000-8000-0000000000a5'), null::uuid,
+  'the member''s copy is personal now');
+select is((select count(*)::int from public.verse_collections where collection_id = 'b0000000-0000-4000-8000-0000000000a5'), 2,
+  'and holds every reference the group had');
 
 select * from finish();
 rollback;

@@ -171,8 +171,8 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   ones you edit (sync moves hand-linked verses to My Verses).
 - **Leave and delete**: a member's swipe and menu read Leave (`collectionRemoval`); the
   confirm counts verses lost. Once others joined, the owner's Delete asks "Delete for everyone?
-  Members keep their own copy."; it stops sharing, then deletes the owner's copy. Confirms and
-  their failure toasts: `member-actions.ts`.
+  Members keep their own copy."; one `delete_collection` call dissolves the group and deletes
+  the owner's copy, atomically. Confirms: `member-actions.ts`.
 - **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
   toasts once: "You were removed from <name>." or "<name> is now your own copy." (dissolved).
   Not for groups you left or own.

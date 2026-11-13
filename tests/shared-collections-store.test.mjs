@@ -44,6 +44,8 @@ test('joining and leaving a shared collection', async (t) => {
   let leaveGate = null;
   let leaveFails = false;
   let syncFails = false;
+  let deleteFails = null;
+  let groupDeletes = 0;
   const rpcs = [];
   const reads = [];
   const writes = [];
@@ -68,6 +70,13 @@ test('joining and leaving a shared collection', async (t) => {
         copyRow = null;
         return new Response(null, { status: 204 });
       }
+      if (name === 'delete_collection') {
+        if (deleteFails) return json(deleteFails, 400);
+        // The owner's delete dissolves the group and deletes the copy in one transaction.
+        joined = false;
+        copyRow = null;
+        return new Response(null, { status: 204 });
+      }
       if (name === 'get_shared_members') {
         return json([{ user_id: 'C', display_name: 'Cara', role: 'owner', joined_at: '2026-11-01T00:00:00Z' },
           { user_id: 'D', display_name: 'Dana', role: 'member', joined_at: '2026-11-05T00:00:00Z' }]);
@@ -83,6 +92,7 @@ test('joining and leaving a shared collection', async (t) => {
     }
     if (method === 'DELETE' && url.pathname === '/rest/v1/shared_collections') {
       // Dissolve: the FK sets the copy's shared_collection_id to NULL.
+      groupDeletes++;
       joined = false;
       copyRow = { ...copy, shared_collection_id: null };
       return json([{ id: group }]);
@@ -306,6 +316,42 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 1);
     await state().refresh();
     assert.deepEqual(toasts, []);
+    role = 'member';
+    copyRow = copy;
+    await state().joinSharedCollection('BREAD828');
+  });
+
+  await t.test("the owner's Delete for everyone is one delete_collection call; a failure toasts the server's reason and keeps everything", async () => {
+    const { Alert } = await import('react-native');
+    const { confirmRemoveCollection } = await import('../components/shared/member-actions.ts');
+    const alerts = [];
+    t.mock.method(Alert, 'alert', (...args) => alerts.push(args));
+    role = 'owner';
+    await state().refresh();
+    rpcs.length = 0;
+    toasts.length = 0;
+    groupDeletes = 0;
+
+    deleteFails = { code: '22023', message: 'Collection not found' };
+    confirmRemoveCollection(copy.client_id);
+    const [title, , buttons] = alerts[0];
+    assert.equal(title, 'Delete for everyone?');
+    buttons.find((b) => b.text === 'Delete').onPress();
+    while (toasts.length === 0) await new Promise((r) => setTimeout(r, 1));
+    deleteFails = null;
+    assert.deepEqual(toasts, ['Collection not found']);
+    assert.equal(state().collections.find((c) => c.id === copy.client_id)?.sharedId, group, 'the card is still shared');
+    assert.ok(state().sharedCollections[group]);
+
+    await state().deleteCollection(copy.client_id);
+    assert.deepEqual(rpcs.filter(([name]) => name === 'delete_collection'),
+      [['delete_collection', { collection_client_id: copy.client_id }], ['delete_collection', { collection_client_id: copy.client_id }]]);
+    assert.equal(groupDeletes, 0, 'no separate stop-sharing call');
+    assert.equal(state().collections.some((c) => c.id === copy.client_id), false);
+    assert.equal(state().verses.some((v) => v.collectionId === copy.client_id), false);
+    assert.equal(state().sharedCollections[group], undefined);
+    assert.equal(state().sharedProgress[group], undefined);
+    Alert.alert.mock.restore();
     role = 'member';
     copyRow = copy;
     await state().joinSharedCollection('BREAD828');
