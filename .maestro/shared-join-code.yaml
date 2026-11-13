@@ -1,7 +1,7 @@
 # Start from npm run db:reset. reader-a types the seeded code BREAD828 from the Library and joins
 # Romans 8 (their own Romans 8:28 is reused); reader-c makes a new code, so BREAD828 stops
 # working for reader-b; a link opened signed out shows the join modal over the Library after
-# sign-in, and joins from there.
+# sign-in, and joins from there. The collection's people line names the members (lib/shared/display-name.ts).
 appId: com.caelanliu.biblemem
 name: shared-join-code
 ---
@@ -34,7 +34,7 @@ name: shared-join-code
     env:
       FIRST: Reader
 - extendedWaitUntil:
-    visible: "Cara · 3 members.*"
+    visible: "Cara, Dana and Reader · 3 verses.*"
     timeout: 20000
 - assertVisible: ".*Romans 8:28 · ESV.*"
 - takeScreenshot: join-code-2-joined
@@ -114,7 +114,7 @@ name: shared-join-code
     timeout: 20000
 - tapOn: "Maybe later"
 - extendedWaitUntil:
-    visible: "Cara · 4 members.*"
+    visible: "Cara, .* and 2 others · 3 verses.*"
     timeout: 15000
 - takeScreenshot: join-code-5-joined-after-sign-in
 - tapOn: Back

@@ -11,7 +11,10 @@ appId: com.caelanliu.biblemem
 - inputText: reader-b@example.test
 - tapOn: "Password"
 - inputText: password123 # local seed users only, see supabase/seed.sql
-- hideKeyboard
+# Here the simulator sometimes shows no software keyboard (the fields still fill), and Maestro's
+# hideKeyboard then fails; Sign In is reachable either way.
+- hideKeyboard:
+    optional: true
 - tapOn: "Sign In"
 - extendedWaitUntil:
     visible: ".* INVITED YOU"

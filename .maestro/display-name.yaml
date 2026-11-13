@@ -10,6 +10,11 @@ name: display-name
     visible:
       id: settings-display-name
     timeout: 20000
+# The Name row starts under the tab bar; a tap there would land on the Library tab.
+- scrollUntilVisible:
+    element:
+      id: settings-display-name
+    centerElement: true
 - assertVisible: ".*Name.*Add.*"
 - takeScreenshot: display-name-1-empty
 - tapOn:
