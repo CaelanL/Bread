@@ -30,9 +30,10 @@ import {
   type RecordingState,
 } from '@/lib/transcription/recording-controls';
 import {
-  useAudioRecorder,
   AudioStudioModule,
-  type AudioDataEvent,
+  type AudioRecording,
+  type RecordingConfig,
+  type StartRecordingResult,
 } from '@siteed/audio-studio';
 import { LegacyEventEmitter, type PermissionResponse } from 'expo-modules-core';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -63,7 +64,32 @@ interface MicTiming {
   call?: number;
   resolved?: number;
   firstAudio?: number;
+  renders: number;
 }
+
+// Recording calls the native module directly, not through the library's
+// recorder hook, which re-renders this whole screen as recording starts and
+// stops and once a second while it runs. PCM arrives through the screen's
+// AudioData listener, so the options carry no callbacks.
+const RECORDING_OPTIONS: RecordingConfig = {
+  sampleRate: 16000,
+  channels: 1,
+  encoding: 'pcm_16bit',
+  interval: 100,
+  // m4a for the batch-fallback upload (frozen contract); no WAV.
+  // 64 kbps, not lower: a rejected encoder setting leaves no m4a at all.
+  output: {
+    primary: { enabled: false },
+    compressed: { enabled: true, format: 'aac', bitrate: 64000 },
+  },
+  ios: {
+    audioSession: {
+      category: 'PlayAndRecord',
+      mode: 'Default',
+      categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth'],
+    },
+  },
+};
 
 export default function StudySessionScreen() {
   const { id, difficulty, chunkSize: chunkSizeParam } = useLocalSearchParams<{
@@ -92,29 +118,35 @@ export default function StudySessionScreen() {
   // Cosmetic only; scoring always uses chunk.text. Absence = mode default.
   const [hideModes, setHideModes] = useState<Map<number, HideMode>>(new Map());
 
-  const { startRecording, stopRecording } = useAudioRecorder();
   // Bar levels live in a shared value so the waveform animates on the
   // UI thread without re-rendering this screen (10x/sec while recording)
   const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
   // Meter ballistics state: fast attack, slow release (kills ripple)
   const smoothedLevelRef = useRef(0);
   // Dev-only tap-to-capture timing, in ms from touch-down (or from the native
-  // call when there was no touch-down, as with VoiceOver)
-  const micTimingRef = useRef<MicTiming>({});
-  const stampMic = useCallback((mark: keyof MicTiming) => {
+  // call when there was no touch-down, as with VoiceOver), and the screen's
+  // renders from touch-down to stop. One line per attempt, logged at stop.
+  const micTimingRef = useRef<MicTiming>({ renders: 0 });
+  const stampMic = useCallback((mark: 'down' | 'call' | 'resolved' | 'firstAudio') => {
     if (!__DEV__) return;
     // A new touch or native call starts a fresh attempt's record
-    if (mark === 'down') micTimingRef.current = {};
-    if (mark === 'call') micTimingRef.current = { down: micTimingRef.current.down };
+    if (mark === 'down') micTimingRef.current = { renders: 0 };
+    if (mark === 'call' && micTimingRef.current.call !== undefined) micTimingRef.current = { renders: 0 };
     micTimingRef.current[mark] = performance.now();
-    const { down, call, resolved, firstAudio } = micTimingRef.current;
-    if (call === undefined || resolved === undefined || firstAudio === undefined) return;
-    const from = down ?? call;
-    const ms = (t: number) => `${Math.round(t - from)}ms`;
-    // eslint-disable-next-line no-console -- dev-only measurement
-    console.log(`[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)}`);
-    micTimingRef.current = {};
   }, []);
+  const logMic = useCallback(() => {
+    if (!__DEV__) return;
+    const { down, call, resolved, firstAudio, renders } = micTimingRef.current;
+    if (call === undefined) return;
+    const from = down ?? call;
+    const ms = (t?: number) => (t === undefined ? '?' : `${Math.round(t - from)}ms`);
+    // eslint-disable-next-line no-console -- dev-only measurement
+    console.log(`[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)} · ${renders} renders`);
+    micTimingRef.current = { renders: 0 };
+  }, []);
+  useEffect(() => {
+    if (__DEV__) micTimingRef.current.renders++;
+  });
 
   // Mint the Soniox key on open, so a tap usually finds one ready
   const [liveKeys] = useState(() => new LiveKeyCache());
@@ -170,9 +202,8 @@ export default function StudySessionScreen() {
   }, [recorder, recordingState]);
 
   // Waveform level computed from the PCM chunks directly (RMS → dBFS),
-  // instead of the library's analysis events — enableProcessing would
-  // make the hook dispatch a state update per 50ms event, re-rendering
-  // this whole screen twice a tick. Four bars per 100ms chunk (25ms
+  // instead of the library's analysis events, which would re-render this
+  // screen on every event. Four bars per 100ms chunk (25ms
   // windows) go straight into the shared value; no React render at all.
   const computeBarLevel = useCallback((pcm: Uint8Array, start: number, end: number) => {
     let sumSquares = 0;
@@ -191,14 +222,13 @@ export default function StudySessionScreen() {
     return Math.max(0, Math.min(1, (dB - minDb) / (maxDb - minDb)));
   }, []);
 
-  // Live feed subscribes to the native stream directly rather than via
-  // the hook's onAudioStream: the hook nulls its callback when
-  // stopRecording resolves, and the recorder's trailing PCM chunk
-  // (emitted inside native stop) can be processed after that resolve —
-  // on iOS the resolve is an Immediate-priority task and the chunk is
-  // Normal; on Android the chunk hops through the main thread first.
-  // This listener outlives the stop, and the session's 50ms flush
-  // grace covers that lag.
+  // One screen-lifetime listener decodes each PCM chunk once for the
+  // waveform and the live feed. It outlives native stop because the
+  // recorder's trailing chunk (emitted inside native stop) can be processed
+  // after stopRecording resolves — on iOS the resolve is an
+  // Immediate-priority task and the chunk is Normal; on Android the chunk
+  // hops through the main thread first. The session's 50ms flush grace
+  // covers that lag.
   useEffect(() => {
     // Same emitter + event the library's own hook listens on (its
     // addAudioEventListener isn't exported from the package root)
@@ -208,36 +238,32 @@ export default function StudySessionScreen() {
       if (__DEV__ && micTimingRef.current.call !== undefined && micTimingRef.current.firstAudio === undefined) {
         stampMic('firstAudio');
       }
-      recorder.feedAudio(base64ToUint8Array(event.encoded));
-    });
-    return () => subscription.remove();
-  }, [recorder, stampMic]);
-
-  const handleAudioStream = useCallback(async (event: AudioDataEvent) => {
-    if (typeof event.data !== 'string') return;
-    const pcm = base64ToUint8Array(event.data);
-    if (recorder.isRecording()) {
-      const quarter = (pcm.length >> 3) << 1; // even byte boundary
-      const bars: number[] = [];
-      for (let q = 0; q < 4; q++) {
-        const start = q * quarter;
-        const end = q === 3 ? pcm.length : (q + 1) * quarter;
-        const level = computeBarLevel(pcm, start, end);
-        if (level !== null) {
-          // Fast attack / slow release: peaks land instantly, but the
-          // level decays smoothly instead of flickering bar-to-bar
-          const prev = smoothedLevelRef.current;
-          const alpha = level > prev ? 0.75 : 0.25;
-          const smoothed = prev + alpha * (level - prev);
-          smoothedLevelRef.current = smoothed;
-          bars.push(smoothed);
+      const pcm = base64ToUint8Array(event.encoded);
+      if (recorder.isRecording()) {
+        const quarter = (pcm.length >> 3) << 1; // even byte boundary
+        const bars: number[] = [];
+        for (let q = 0; q < 4; q++) {
+          const start = q * quarter;
+          const end = q === 3 ? pcm.length : (q + 1) * quarter;
+          const level = computeBarLevel(pcm, start, end);
+          if (level !== null) {
+            // Fast attack / slow release: peaks land instantly, but the
+            // level decays smoothly instead of flickering bar-to-bar
+            const prev = smoothedLevelRef.current;
+            const alpha = level > prev ? 0.75 : 0.25;
+            const smoothed = prev + alpha * (level - prev);
+            smoothedLevelRef.current = smoothed;
+            bars.push(smoothed);
+          }
+        }
+        if (bars.length > 0) {
+          waveformLevels.value = [...waveformLevels.value.slice(bars.length), ...bars];
         }
       }
-      if (bars.length > 0) {
-        waveformLevels.value = [...waveformLevels.value.slice(bars.length), ...bars];
-      }
-    }
-  }, [computeBarLevel, recorder, waveformLevels]);
+      recorder.feedAudio(pcm);
+    });
+    return () => subscription.remove();
+  }, [computeBarLevel, recorder, stampMic, waveformLevels]);
 
   const handleMicPress = useCallback(async (index: number, isRetry: boolean, source: PressSource) => {
     if (source === 'pressIn') stampMic('down');
@@ -258,30 +284,14 @@ export default function StudySessionScreen() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
           stampMic('call');
-          const started = startRecording({
-            sampleRate: 16000,
-            channels: 1,
-            encoding: 'pcm_16bit',
-            interval: 100,
-            // m4a for the batch-fallback upload (frozen contract); no WAV.
-            // 64 kbps, not lower: a rejected encoder setting leaves no m4a at all.
-            output: {
-              primary: { enabled: false },
-              compressed: { enabled: true, format: 'aac', bitrate: 64000 },
-            },
-            ios: {
-              audioSession: {
-                category: 'PlayAndRecord',
-                mode: 'Default',
-                categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth'],
-              },
-            },
-            onAudioStream: handleAudioStream,
-          });
+          const started: Promise<StartRecordingResult> = AudioStudioModule.startRecording(RECORDING_OPTIONS);
           if (__DEV__) started.then(() => stampMic('resolved'), () => {});
           return started;
         },
-        stop: stopRecording,
+        stop(): Promise<AudioRecording> {
+          logMic();
+          return AudioStudioModule.stopRecording();
+        },
         remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
       }, source);
       // After the native call has left, and only when this tap began an attempt
@@ -297,7 +307,7 @@ export default function StudySessionScreen() {
       // The usual cause is the mic held by a call or another app; the error doesn't say which.
       Alert.alert("Couldn't start recording", "If you're on a call or another app is using the microphone, close it and try again.");
     }
-  }, [handleAudioStream, liveKeys, recorder, session.chunks, session.currentIndex, stampMic, startRecording, stopRecording, waveformLevels]);
+  }, [liveKeys, logMic, recorder, session.chunks, session.currentIndex, stampMic, waveformLevels]);
 
   const handleCancel = useCallback(() => {
     if (!recorder.canDiscard()) return;
