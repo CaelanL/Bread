@@ -237,6 +237,7 @@ type VerseRow = Database['public']['Tables']['user_verses']['Row'];
 // The shared client isn't typed with Database; this view of it is, for the shared-collection calls.
 const db: SupabaseClient<Database> = supabase;
 type VerseMembershipRow = { user_verses: VerseRow; added_at: string };
+type ProgressGuardRow = Database['public']['Functions']['save_verse_progress']['Returns'][number];
 
 function parseVerseMembership(row: VerseRow, collectionId: string, addedAt: string): SavedVerse {
   return {
@@ -1592,48 +1593,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateVerseProgress: async (id, difficulty, accuracy, fullSession = false) => {
-    // Multi-device note: writes to Supabase are last-write-wins. Two
-    // devices reviewing the same verse against their own stale local
-    // `nextDueAt` can each treat the review as on-time and double-bump
-    // passCount, OR clobber each other and lose an increment. Spec
-    // accepts this as drift-by-1 for personal use (review-system.md
-    // "Concurrent updates from two devices"). If realtime sync is added
-    // later, reconcile passCount via lastReviewedAt comparison.
     // A soft-deleted-but-mastered verse is in `masteredVerses` only, and
     // the setup screen and study session reach it through findVerse too.
     const verse = findVerse(get(), id);
     if (!verse) return;
-
-    const currentBest = verse.progress[difficulty]?.bestAccuracy;
-    const isNewBest = currentBest === null || accuracy > currentBest;
     const isQualifyingReview = difficulty === 'hard' && accuracy >= 90 && fullSession;
     const nowIso = new Date().toISOString();
 
-    // Build the UPDATE shape. `last_practiced_at` always present so any
-    // session completion (full or partial, new-best or not) floats this
-    // verse to the top of the "Recent" sort. `progress` only included
-    // when something actually changed.
-    const updateShape: { last_practiced_at: string; progress?: VerseProgress } = {
-      last_practiced_at: nowIso,
-    };
-
-    let newProgress: VerseProgress = verse.progress;
-    let justBecameMastered = false;
-
-    if (isNewBest || isQualifyingReview) {
-      newProgress = { ...verse.progress };
-
+    // The session's result on top of `base`. Null when nothing but the practice time changes.
+    const next = (base: VerseProgress): VerseProgress | null => {
+      const currentBest = base[difficulty]?.bestAccuracy;
+      const isNewBest = currentBest === null || accuracy > currentBest;
+      if (!isNewBest && !isQualifyingReview) return null;
+      const progress = { ...base };
       if (isNewBest) {
-        newProgress[difficulty] = {
-          bestAccuracy: accuracy,
-          completed: accuracy >= 90,
-        };
+        progress[difficulty] = { bestAccuracy: accuracy, completed: accuracy >= 90 };
       }
-
       if (isQualifyingReview) {
-        const prevEngraved = newProgress.engraved ?? DEFAULT_PROGRESS.engraved!;
-        newProgress.engraved = computeNextSrState(
-          prevEngraved,
+        progress.engraved = computeNextSrState(
+          progress.engraved ?? DEFAULT_PROGRESS.engraved!,
           accuracy,
           difficulty,
           fullSession,
@@ -1641,52 +1619,52 @@ export const useAppStore = create<AppState>((set, get) => ({
           get().reviewMaxIntervalDays,
         );
       }
+      return progress;
+    };
 
-      updateShape.progress = newProgress;
-      justBecameMastered = !!(newProgress.hard?.completed && !verse.progress.hard?.completed);
-    }
-
-    // Update on server
-    const { error } = await supabase
-      .from('user_verses')
-      .update(updateShape)
-      .eq('client_id', id);
-
-    if (error) {
-      console.error('[STORE] Failed to update progress:', error);
-      throw new Error('Failed to save progress');
-    }
-
-    // Optimistic Zustand update mirrors both progress and timestamp on
-    // every entry for this verse (junction-row shape: a verse in N
-    // collections has N entries in `verses[]`, all sharing one client_id).
-    set((state) => {
-      const updatedVerses = state.verses.map((v) =>
-        v.id === id ? { ...v, progress: newProgress, lastPracticedAt: nowIso } : v,
-      );
-
-      let updatedMastered = state.masteredVerses;
-      if (justBecameMastered) {
-        const masteredVerse: SavedVerse = {
-          ...verse,
-          progress: newProgress,
-          lastPracticedAt: nowIso,
-          collectionId: MASTERED_COLLECTION_ID,
-        };
-        updatedMastered = [masteredVerse, ...state.masteredVerses];
-      } else {
-        updatedMastered = state.masteredVerses.map((v) =>
-          v.id === id ? { ...v, progress: newProgress, lastPracticedAt: nowIso } : v,
-        );
+    // The save lands only on the row it was computed from (save_verse_progress): another device's
+    // newer progress, or a snapshot's stale copy, is refused, and the result is recomputed once
+    // from the row the server hands back. An unknown base is refused the same way.
+    let base: { progress: VerseProgress; updatedAt?: string } = verse;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const progress = next(base.progress);
+      // Untyped client: the generated types make the nullable arguments required strings.
+      const { data, error } = await supabase.rpc('save_verse_progress', {
+        p_client_id: id,
+        p_expected_updated_at: base.updatedAt ?? null,
+        p_progress: progress,
+        p_last_practiced_at: nowIso,
+      });
+      const row: ProgressGuardRow | undefined = data?.[0];
+      if (error || !row) {
+        console.error('[STORE] Failed to update progress:', error ?? 'verse not found');
+        throw new Error('Failed to save progress');
+      }
+      if (!row.applied) {
+        base = { progress: parseProgress(row.progress), updatedAt: row.updated_at };
+        continue;
       }
 
-      return { verses: updatedVerses, masteredVerses: updatedMastered };
-    });
+      const newProgress = progress ?? base.progress;
+      const saved = { progress: newProgress, lastPracticedAt: nowIso, updatedAt: row.updated_at };
+      const mastered = newProgress.hard?.completed === true;
+      // Every entry for this verse (junction-row shape: a verse in N collections has N entries).
+      set((state) => ({
+        verses: state.verses.map((v) => v.id === id ? { ...v, ...saved } : v),
+        masteredVerses: mastered && !state.masteredVerses.some((v) => v.id === id)
+          ? [{ ...verse, ...saved, collectionId: MASTERED_COLLECTION_ID }, ...state.masteredVerses]
+          : state.masteredVerses.map((v) => v.id === id ? { ...v, ...saved } : v),
+      }));
 
-    // A shared card's emblem reads `get_shared_status`, so a square that just turned mastered or
-    // engraved refetches it.
-    const engravedNow = newProgress.engraved?.completed === true && verse.progress.engraved?.completed !== true;
-    if ((justBecameMastered || engravedNow) && inSharedCollection(get(), id)) await get().fetchSharedCollections();
+      // A shared card's emblem reads `get_shared_status`, so a square that just turned mastered or
+      // engraved refetches it.
+      const justBecameMastered = mastered && !base.progress.hard?.completed;
+      const engravedNow = newProgress.engraved?.completed === true && base.progress.engraved?.completed !== true;
+      if ((justBecameMastered || engravedNow) && inSharedCollection(get(), id)) await get().fetchSharedCollections();
+      return;
+    }
+    console.error('[STORE] Progress changed again during the save:', id);
+    throw new Error('Failed to save progress');
   },
 
   resetVerseProgress: async (id: string) => {

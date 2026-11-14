@@ -87,6 +87,10 @@ test('joining and leaving a shared collection', async (t) => {
         if (progressFails) return json({ code: '57014', message: 'canceling statement due to statement timeout' }, 500);
         return json([{ user_id: 'C', book: 'Romans', chapter: 8, verse_start: 28, verse_end: 28, practiced: true, mastered: true, engraved: false }]);
       }
+      if (name === 'save_verse_progress') {
+        const body = JSON.parse(init.body);
+        return json([{ applied: true, progress: body.p_progress ?? {}, last_practiced_at: body.p_last_practiced_at, updated_at: '2026-11-14T00:00:00.000001+00:00' }]);
+      }
       if (name === 'get_shared_status') {
         return json(joined ? [{ shared_id: group, member_count: 2, verse_count: 1, mastered_squares: masteredSquares, engraved_squares: 0 }] : []);
       }
@@ -207,9 +211,9 @@ test('joining and leaving a shared collection', async (t) => {
   await t.test("mastering a shared verse refetches the group's status for the Library card; practice that masters nothing doesn't", async () => {
     rpcs.length = 0;
     await state().updateVerseProgress('verse-1', 'easy', 60);
-    assert.deepEqual(rpcs, []);
+    assert.deepEqual(rpcs.map(([name]) => name), ['save_verse_progress']);
     await state().updateVerseProgress('verse-1', 'hard', 95, true);
-    assert.deepEqual(rpcs.map(([name]) => name), ['get_shared_status', 'get_shared_members']);
+    assert.deepEqual(rpcs.map(([name]) => name), ['save_verse_progress', 'save_verse_progress', 'get_shared_status', 'get_shared_members']);
   });
 
   await t.test("a member's Library delete confirms Leave, and a failed leave toasts leave and keeps the card", async () => {
