@@ -18,7 +18,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { perfMark } from '@/lib/api/dev-timing';
-import { useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
 import {
@@ -26,7 +25,6 @@ import {
   registerDeepLinkHandler,
   replayColdStartTap,
   syncForegroundState,
-  usePrefsStore,
   useUxFlagsStore,
 } from '@/lib/notifications';
 
@@ -135,48 +133,6 @@ function RootLayoutNav() {
       flags.setInviteOpen(false);
     };
   }, [userId, navigationState?.key, inTabs, sessionRestored]);
-
-  // Hydrate store and run migration when authenticated. Sequenced as
-  // an inline async so a fast sign-out → sign-in cycle can't race the
-  // clear against the next hydrate (would briefly surface the previous
-  // user's prefs to Settings UI).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (isAuthenticated) {
-        useAppStore.getState().hydrate().catch((e) => {
-          console.error('[App] Store hydration error:', e);
-        });
-
-        // Hydrate UX flags (Q1 dismissed, settings visited) so the
-        // explainer card and badge resolve their initial state without
-        // a flicker.
-        useUxFlagsStore.getState().hydrate().catch(() => { /* best-effort */ });
-
-        // Hydrate notification prefs (cache → server), then foreground
-        // sync once (registers token if granted, resyncs TZ, fires
-        // last-foregrounded heartbeat).
-        try {
-          await usePrefsStore.getState().hydrate();
-          if (cancelled) return;
-          await syncForegroundState();
-        } catch (e) {
-          console.error('[App] Notification hydration', e);
-        }
-      } else {
-        useAppStore.getState().clear();
-
-        // Clear local notification cache. signOut deletes this device's
-        // token row; otherwise the next sign-in here takes it over.
-        try {
-          await usePrefsStore.getState().clear();
-        } catch {
-          // best-effort
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isAuthenticated]);
 
   // Run foreground-sync each time the app comes back to active.
   // Idempotent + best-effort.

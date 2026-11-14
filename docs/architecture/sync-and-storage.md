@@ -27,7 +27,7 @@ AsyncStorage holds device settings and small local caches.
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
 | Virtual collection sorts | — | ✓ | ✓ (`library_sort_mastered`, `library_sort_in_progress`) |
 | Other collections' sort | ✓ (`sort_preference`) | ✓ | — |
-| Notification prefs | ✓ | ✓ (`usePrefsStore`) | ✓ cache (`notifications_prefs_cache`) |
+| Notification prefs | ✓ | ✓ (`usePrefsStore`) | ✓ cache (`notifications_prefs_cache:<userId>`) |
 | Notification flags, push token | — | ✓ (`useUxFlagsStore`, flags) | ✓ (`notifications_q1_dismissed`, `notifications_settings_visited`, `notifications_cached_expo_token`) |
 | Auth session | — | (via Supabase) | ✓ (Supabase-managed) |
 
@@ -140,7 +140,7 @@ The convention is `useX(...)` selectors, not direct
 
 ### `clear()`
 
-Wipes user data on sign-out. Device-level prefs (`colorMode`,
+Wipes user data on sign-out and before another account starts. Device-level prefs (`colorMode`,
 `reviewMaxIntervalDays`, `masteredSort`, `inProgressSort`) and the
 cached translation (`bibleVersion`, replaced from the next account's
 profile on hydrate) are **preserved by omission** — `clear()` calls
@@ -154,8 +154,9 @@ Library fetches and hydration stop publishing results from that generation.
 
 ## Hydration
 
-Called by an effect in `app/_layout.tsx` when `isAuthenticated` goes
-true.
+Called by `setAccount` (`lib/auth/account.ts`) as soon as `AuthProvider` reads the
+session, before the tree mounts, and when another account signs in. See
+[auth.md](auth.md#accounts-start-from-the-session).
 
 ```
 hydrate()

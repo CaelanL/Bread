@@ -1,0 +1,20 @@
+# A dev-sign-in link to another account with no sign-out first (the same shape as a deep link
+# with another account's tokens): reader-a's Library, then reader-c's. reader-a's "Psalms" must
+# never show under reader-c (docs/architecture/auth.md).
+appId: com.caelanliu.biblemem
+name: account-switch-link
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Psalms.*"
+    timeout: 60000
+- takeScreenshot: account-switch-link-1-reader-a
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- takeScreenshot: account-switch-link-2-just-switched
+- assertNotVisible: ".*Psalms.*"
+- extendedWaitUntil:
+    visible: ".*Romans 8.*"
+    timeout: 30000
+- assertNotVisible: ".*Psalms.*"
+- takeScreenshot: account-switch-link-3-reader-c

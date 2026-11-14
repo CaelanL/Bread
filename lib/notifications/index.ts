@@ -27,11 +27,11 @@ export type {
 import { usePrefsStore } from './preferences';
 import type { NotificationPreferences } from './types';
 
-export { useNotificationPreferences, usePrefsStore } from './preferences';
+export { clearPrefsCache, useNotificationPreferences, usePrefsStore } from './preferences';
 
-export const hydratePreferences = (): Promise<void> =>
-  usePrefsStore.getState().hydrate();
-export const clearPreferences = (): Promise<void> =>
+export const hydratePreferences = (userId: string): Promise<void> =>
+  usePrefsStore.getState().hydrate(userId);
+export const clearPreferences = (): void =>
   usePrefsStore.getState().clear();
 export const initializeDefaults = (timezone: string): Promise<NotificationPreferences | null> =>
   usePrefsStore.getState().initializeDefaults(timezone);

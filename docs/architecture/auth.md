@@ -100,10 +100,10 @@ signOut() → unregisterDeviceToken() — this device's push token row
   → supabase.auth.signOut()
   → AsyncStorage tokens removed
   → AuthProvider session cleared, isAuthenticated goes false
-  → effect in app/_layout.tsx:
+  → SIGNED_OUT → setAccount(null) (lib/auth/account.ts):
       useAppStore.getState().clear() — Zustand user data wiped
       (device prefs survive, see docs/architecture/sync-and-storage.md)
-      usePrefsStore.getState().clear() — local notification cache wiped
+      usePrefsStore.getState().clear() and that account's prefs cache removed
   → Auth gating redirects to /(auth)/sign-in
 ```
 
@@ -118,6 +118,20 @@ without taps:
 and `EXPO_PUBLIC_SUPABASE_URL` must point at `127.0.0.1` or
 `localhost`. Otherwise the route just goes home. The auth gate lets
 this route through without a session, like `reset-password`.
+
+## Accounts start from the session
+
+`AuthProvider` calls `setAccount(userId | null)` (`lib/auth/account.ts`) with the
+`getSession()` result before it stops loading, and again on every `onAuthStateChange`.
+So the library load starts when the stored session is read, before the tree mounts.
+
+- Same id as now: nothing (`INITIAL_SESSION`, `TOKEN_REFRESHED`).
+- A new id: if another account was active (a deep link or dev sign-in with no sign-out),
+  clear the store and the prefs store first; their generation check drops the old
+  account's late replies. Then `hydrate(userId)`, the UX flags, and the prefs
+  (`hydrate(userId)`, then one `syncForegroundState`).
+- `null`: clear both stores and remove the previous account's prefs cache. A launch with
+  no session was never anyone, so it clears nothing.
 
 ## Auth gating
 
@@ -187,9 +201,9 @@ check, the database refuses the write.
    `docs/architecture/edge-functions.md`.
 3. **`reset-password` route must remain accessible without auth.**
    Don't add it to the auth gate's "redirect if not authed" list.
-4. **`useAppStore.clear()` must run on sign-out.** Otherwise
-   the next user signing in inherits the previous user's
-   collections/verses in memory until hydration completes.
+4. **`useAppStore.clear()` must run on sign-out and on any switch to
+   another account.** `setAccount` does both. Otherwise the next user
+   inherits the previous user's collections and verses.
 5. **Device prefs survive sign-out by design.** `colorMode`, for
    one, is a device preference, not a user preference. Don't include
    them in `clear()`.

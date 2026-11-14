@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { supabase } from '@/lib/api/client';
 import { perfMark } from '@/lib/api/dev-timing';
 import { unregisterDeviceToken } from '@/lib/notifications/tokens';
+import { setAccount } from './account';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -66,6 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       perfMark('session');
       if (session) setRestoredUserId(session.user.id);
+      // Before the tree mounts, so the library load starts now.
+      setAccount(session?.user.id ?? null);
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
@@ -76,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (event, session) => {
         if (event === 'INITIAL_SESSION' && session) setRestoredUserId(session.user.id);
         if (event === 'SIGNED_OUT') setRestoredUserId(null);
+        setAccount(session?.user.id ?? null);
         setSession(session);
         setUser(session?.user ?? null);
         setIsLoading(false);

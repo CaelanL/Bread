@@ -9,7 +9,7 @@ authenticated tabs, and modals are organized into route groups.
 
 ```
 app/
-├── _layout.tsx                ← Root Stack, providers (network, keyboard, auth), notification handlers, hydration, auth gating
+├── _layout.tsx                ← Root Stack, providers (network, keyboard, auth), notification handlers, auth gating
 ├── (auth)/                    ← Stack group: dark-mode-only auth screens
 │   ├── _layout.tsx
 │   ├── sign-in.tsx

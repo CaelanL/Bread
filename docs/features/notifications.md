@@ -118,9 +118,9 @@ are in `docs/architecture/edge-functions.md`.
 | `uxFlags.ts`, `useSettingsBadge.ts` | Card and badge flags, device-local and kept across sign-out |
 | `debug.ts` | `installDevTools`. No "fire now" helper, since it would bundle the cron secret |
 
-Prefs are per account. `app/_layout.tsx` hydrates them and runs `syncForegroundState` on
-sign-in, runs the sync again on each background-to-active change, and clears the cache on
-sign-out. Its `setNotificationHandler` turns everything off, so a push arriving while the
+Prefs are cached per account (`notifications_prefs_cache:<userId>`). `setAccount`
+(`lib/auth/account.ts`) hydrates them, then runs `syncForegroundState`; sign-out removes
+the cache. `app/_layout.tsx` syncs again on each return to active. Its `setNotificationHandler` turns everything off, so a push arriving while the
 app is open shows nothing.
 
 `signOut` in `lib/auth/context.tsx` calls `unregisterDeviceToken` first, while RLS still lets

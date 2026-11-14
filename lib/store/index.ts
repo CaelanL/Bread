@@ -118,7 +118,8 @@ interface AppState {
   fetchMasteredVerses: () => Promise<boolean>;
   fetchCuratedSaverCounts: (signal?: AbortSignal) => Promise<boolean>;
   fetchSharedCollections: () => Promise<boolean>;
-  hydrate: () => Promise<void>;
+  /** Starts an account: settings, then the account's library. Called by lib/auth/account.ts. */
+  hydrate: (userId: string) => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
 
@@ -188,6 +189,8 @@ async function getCurrentUserId(): Promise<string> {
 }
 
 let accountGeneration = 0;
+// The account `hydrate` started, for reads that need its id. Null after `clear()`.
+let accountUserId: string | null = null;
 
 function inSharedCollection(state: Pick<AppState, 'verses' | 'collections'>, verseId: string): boolean {
   return state.verses.some((v) => v.id === verseId && state.collections.some((c) => c.id === v.collectionId && c.sharedId));
@@ -697,7 +700,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchSharedCollections: async () => {
     const generation = accountGeneration;
     try {
-      const userId = await getCurrentUserId();
+      const userId = accountUserId ?? await getCurrentUserId();
       const [groups, mine, status] = await Promise.all([
         db.from('shared_collections').select('id, name'),
         db.from('shared_collection_members').select('shared_collection_id, role').eq('user_id', userId),
@@ -745,9 +748,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  hydrate: async () => {
+  hydrate: async (userId) => {
     perfMark('hydrate');
     const generation = accountGeneration;
+    accountUserId = userId;
     // Load settings from AsyncStorage (doesn't require auth)
     try {
       const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText] = await Promise.all([
@@ -1647,6 +1651,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clear: () => {
     accountGeneration++;
+    accountUserId = null;
     requestedTranslation = null;
     set({
       collections: [],
