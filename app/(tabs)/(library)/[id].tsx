@@ -23,7 +23,7 @@ import { referenceKey } from '@/lib/store/translation';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
+import { useAppStore, useCollection, useCollectionSort, useHydrated, useSynced, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
@@ -62,6 +62,8 @@ export default function CollectionScreen() {
   const inProgressVerses = useInProgressVerses();
   const allVerses = useVerses();
   const hydrated = useHydrated();
+  // An id the saved library doesn't know (made on another device) waits for the server's.
+  const known = useSynced() || !!collection;
   const deleteVerse = useAppStore((s) => s.deleteVerse);
   const refresh = useAppStore((s) => s.refresh);
   const shared = useSharedCollection(id || '');
@@ -320,7 +322,7 @@ export default function CollectionScreen() {
   } : undefined;
   const progress = grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null;
   const symbol = (collection?.icon as SymbolViewProps['name']) || (collection?.isDefault ? 'heart.fill' : collectionIcon.symbol);
-  const name = collection?.name ?? (hydrated ? 'Collection' : '');
+  const name = collection?.name ?? (known ? 'Collection' : '');
 
   const menuItems = [
     ...(withOthers ? [{ label: 'Details', icon: 'info.circle', onPress: showGrid }] : []),
@@ -396,7 +398,7 @@ export default function CollectionScreen() {
         ItemSeparatorComponent={divider}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
-        ListEmptyComponent={hydrated ? renderEmptyState : <VerseCardSkeleton count={3} />}
+        ListEmptyComponent={hydrated && known ? renderEmptyState : <VerseCardSkeleton count={3} />}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }

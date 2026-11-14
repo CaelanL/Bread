@@ -3,7 +3,7 @@ import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import type { SharedMember } from '@/lib/shared/invites';
 import { collectionRemoval, hasOtherMembers } from '@/lib/shared/progress';
 import type { SharedRole } from '@/lib/storage';
-import { useAppStore, versesLostWith } from '@/lib/store';
+import { librarySynced, useAppStore, versesLostWith } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { Alert } from 'react-native';
 
@@ -64,9 +64,11 @@ function lostVerses(count: number): string {
 /**
  * Confirms, then removes a collection from the Library with the store's `deleteCollection`: Leave
  * for a member; for the owner, Delete for everyone once others joined (members keep their copy);
- * otherwise a plain Delete. Nothing while a shared collection's role hasn't loaded.
+ * otherwise a plain Delete. Nothing while a shared collection's role hasn't loaded. The counts and
+ * the choice wait for the server's library (a saved one may be out of date).
  */
-export function confirmRemoveCollection(collectionId: string, hooks: Hooks = {}) {
+export async function confirmRemoveCollection(collectionId: string, hooks: Hooks = {}) {
+  if (!(await librarySynced())) return hooks.onKept?.();
   const { collections, sharedCollections, verses } = useAppStore.getState();
   const collection = collections.find((c) => c.id === collectionId);
   const shared = collection?.sharedId ? sharedCollections[collection.sharedId] : undefined;
@@ -90,9 +92,9 @@ export function confirmRemoveCollection(collectionId: string, hooks: Hooks = {})
 /**
  * Confirms, then stops sharing with the store's `stopSharing`: the group dissolves, the others keep
  * their own copy and the code dies. The confirm names the others once `members` is loaded, else
- * counts them from `memberCount`.
+ * counts them from `memberCount`. Waits for the server's library first.
  */
-export function confirmStopSharing(
+export async function confirmStopSharing(
   sharedId: string,
   name: string,
   members: Pick<SharedMember, 'userId' | 'displayName'>[] | null,
@@ -100,6 +102,7 @@ export function confirmStopSharing(
   youId: string | undefined,
   hooks: Hooks = {},
 ) {
+  if (!(await librarySynced())) return hooks.onKept?.();
   const others = members?.filter((m) => m.userId !== youId).map((m) => m.displayName);
   const count = others ? others.length : Math.max(memberCount - 1, 0);
   const who = others ? listNames(others) : `The other ${count === 1 ? 'member' : `${count} members`}`;
@@ -126,9 +129,11 @@ function confirmRemove(sharedId: string, member: SharedMember, run: Run, onChang
 
 /**
  * The owner's choices for one member, from the members sheet and Who's where: Make editor or
- * Make member, and Remove. `onChange` gets the new role, or null once they're removed.
+ * Make member, and Remove. `onChange` gets the new role, or null once they're removed. Waits for
+ * the server's library first.
  */
-export function manageMember(sharedId: string, member: SharedMember, run: Run, onChange?: (role: SharedRole | null) => void) {
+export async function manageMember(sharedId: string, member: SharedMember, run: Run, onChange?: (role: SharedRole | null) => void) {
+  if (!(await librarySynced())) return;
   const role = member.role === 'editor' ? 'member' : 'editor';
   Alert.alert(member.displayName, member.role === 'editor'
     ? 'Editors add and remove verses for everyone.'

@@ -1587,6 +1587,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addVerse: async (verse, collectionId) => {
     const generation = accountGeneration;
+    // The translation it's added in comes from the server's profile, not a saved library's paint.
+    if (!(await get().whenSynced())) throw new Error("Couldn't load your library. Check your connection and try again.");
     const sharedId = sharedIdOf(collectionId);
     if (sharedId) {
       const added = await addSharedVerse(sharedId, collectionId, verse);
@@ -1870,6 +1872,16 @@ export const useCollections = () => useAppStore((state) => state.collections);
 export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
 export const useSynced = () => useAppStore((state) => state.synced);
+
+/**
+ * For a decision a saved library could get wrong (what a delete loses, whether to ask for a name):
+ * waits for the server's library, and says so when it can't be read.
+ */
+export async function librarySynced(): Promise<boolean> {
+  if (await useAppStore.getState().whenSynced()) return true;
+  showErrorToast("Couldn't load your library. Check your connection and try again.");
+  return false;
+}
 export const useCuratedSaverCount = (catalogId: string) => useAppStore((state) => state.curatedSaverCounts[catalogId]);
 
 /**

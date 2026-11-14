@@ -1,4 +1,4 @@
-import { useAppStore } from '@/lib/store';
+import { librarySynced, useAppStore } from '@/lib/store';
 import * as Haptics from 'expo-haptics';
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
@@ -11,7 +11,7 @@ import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { getVerseText, peekVerseText } from '@/lib/api/bible';
 import type { MemberState } from '@/lib/shared/progress';
 import { formatVerseReference, type Difficulty, type SavedVerse } from '@/lib/storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -112,7 +112,13 @@ export function SwipeableVerseCard({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const handleDelete = () => {
+  // The alert is chosen after the server's library is in, from the props as they are then.
+  const latest = useRef({ verse, collectionCount, sharedMemberCount });
+  latest.current = { verse, collectionCount, sharedMemberCount };
+
+  const handleDelete = async () => {
+    if (!(await librarySynced())) return closeSwipe();
+    const { verse, collectionCount, sharedMemberCount } = latest.current;
     const isMastered = verse.progress?.hard?.completed === true;
     const inOtherCollections = collectionCount > 1;
 

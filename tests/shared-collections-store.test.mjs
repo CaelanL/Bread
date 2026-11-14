@@ -225,11 +225,11 @@ test('joining and leaving a shared collection', async (t) => {
 
     const loaded = state().sharedCollections;
     useAppStore.setState({ sharedCollections: {} });
-    confirmRemoveCollection(copy.client_id, { onKept: () => kept++ });
+    await confirmRemoveCollection(copy.client_id, { onKept: () => kept++ });
     assert.deepEqual(alerts, [], 'nothing is offered while the role is unknown');
     useAppStore.setState({ sharedCollections: loaded });
 
-    confirmRemoveCollection(copy.client_id, { onKept: () => kept++ });
+    await confirmRemoveCollection(copy.client_id, { onKept: () => kept++ });
     const [title, , buttons] = alerts[0];
     assert.equal(title, 'Leave "Romans 8"?');
     toasts.length = 0;
@@ -354,7 +354,7 @@ test('joining and leaving a shared collection', async (t) => {
     groupDeletes = 0;
 
     deleteFails = { code: '22023', message: 'Collection not found' };
-    confirmRemoveCollection(copy.client_id);
+    await confirmRemoveCollection(copy.client_id);
     const [title, , buttons] = alerts[0];
     assert.equal(title, 'Delete for everyone?');
     buttons.find((b) => b.text === 'Delete').onPress();

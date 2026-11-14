@@ -81,7 +81,8 @@ test('the saved library: synced, snapshot read and write', async (t) => {
       return Response.json(object ? row : [row]);
     }
     if (url.pathname === '/rest/v1/user_collections') {
-      return Response.json([{ client_id: 'my-verses', name: 'My Verses', is_default: true, created_at: '2026-11-01T00:00:00Z' }]);
+      return Response.json([{ client_id: 'my-verses', name: 'My Verses', is_default: true, created_at: '2026-11-01T00:00:00Z' },
+        { client_id: 'psalms', name: 'Psalms', is_default: false, created_at: '2026-11-02T00:00:00Z' }]);
     }
     if (url.pathname === '/rest/v1/verse_collections') return Response.json(verseRows[account]);
     return Response.json([]);
@@ -237,5 +238,32 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.equal(store().synced, false);
     assert.deepEqual(store().verses.map((v) => v.id), ['A-verse'], 'the saved library stays on screen');
     assert.equal(storage.get('library_snapshot:A'), before);
+  });
+
+  await t.test('a delete confirm waits for the server\'s library and counts from it', async () => {
+    const { Alert } = await import('react-native');
+    const { confirmRemoveCollection } = await import('../components/shared/member-actions.ts');
+    const alerts = [];
+    t.mock.method(Alert, 'alert', (...args) => alerts.push(args));
+    // Saved: Psalms is empty. On the server, another device has since added a verse to it.
+    verseRows.A = [membership('A'), { ...membership('A', 'A-psalm'), user_collections: { client_id: 'psalms' } }];
+    setAccount(null);
+    storage.set('library_snapshot:A', serializeSnapshot({
+      collections: [{ id: 'my-verses', name: 'My Verses', isDefault: true, createdAt: 0 }, { id: 'psalms', name: 'Psalms', isDefault: false, createdAt: 1 }],
+      verses: [membershipVerse('A-verse')], masteredVerses: [], sharedCollections: {},
+      displayName: 'A L.', firstName: 'A', lastName: 'L',
+    }, Date.now()));
+    const wave = hold('/rest/v1/verse_collections');
+    setAccount('A');
+    await wave.sent;
+    await until(() => store().hydratedFrom === 'snapshot');
+    const confirming = confirmRemoveCollection('psalms');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepEqual(alerts, [], 'no dialog from the saved library');
+    wave.reply(Response.json(verseRows.A));
+    await confirming;
+    assert.equal(alerts.length, 1);
+    assert.match(alerts[0][1], /will be deleted and lose progress/);
+    Alert.alert.mock.restore();
   });
 });

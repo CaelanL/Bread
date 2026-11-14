@@ -4,13 +4,21 @@ import { ModalCard, modalStyles } from '@/components/ui/ModalCard';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { sharedErrorMessage } from '@/lib/shared/invite-code';
-import { useAppStore } from '@/lib/store';
+import { librarySynced, useAppStore } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput } from 'react-native';
 
-type Step = 'name' | 'collection' | 'sharing' | 'panel';
+type Step = 'waiting' | 'name' | 'collection' | 'sharing' | 'panel';
+
+// From the server's library: a saved one may not know the name, or that the collection is shared.
+function firstStep(id: string): Step {
+  const { collections, displayName } = useAppStore.getState();
+  if (id !== 'new' && collections.some((c) => c.id === id && c.sharedId)) return 'panel';
+  if (displayName === null) return 'name';
+  return id === 'new' ? 'collection' : 'sharing';
+}
 
 /**
  * The share modal, for `com.biblemem://share/<collection id>` or `/share/new`: the one-time
@@ -23,13 +31,19 @@ export default function ShareScreen() {
   const { id = '', view } = useLocalSearchParams<{ id: string; view?: string }>();
   const colors = Colors[useColorScheme() ?? 'light'];
   const isNew = id === 'new';
-  const alreadyShared = useAppStore((s) => !isNew && s.collections.some((c) => c.id === id && c.sharedId));
   const [target, setTarget] = useState(isNew ? null : id);
-  const [step, setStep] = useState<Step>(() => {
-    if (alreadyShared) return 'panel';
-    if (useAppStore.getState().displayName === null) return 'name';
-    return isNew ? 'collection' : 'sharing';
-  });
+  const [step, setStep] = useState<Step>(() => (useAppStore.getState().synced ? firstStep(id) : 'waiting'));
+
+  useEffect(() => {
+    if (step !== 'waiting') return;
+    let current = true;
+    librarySynced().then((synced) => {
+      if (!current) return;
+      if (synced) setStep(firstStep(id));
+      else close();
+    });
+    return () => { current = false; };
+  }, [step, id]);
 
   useEffect(() => {
     if (step !== 'sharing' || !target) return;
@@ -58,7 +72,7 @@ export default function ShareScreen() {
   let body;
   if (step === 'name') body = <DisplayNameForm onDone={() => setStep(isNew ? 'collection' : 'sharing')} />;
   else if (step === 'collection') body = <CollectionNameForm onSubmit={create} />;
-  else if (step === 'sharing' || !target) body = <ActivityIndicator style={styles.loading} color={colors.icon} />;
+  else if (step === 'waiting' || step === 'sharing' || !target) body = <ActivityIndicator style={styles.loading} color={colors.icon} />;
   else body = <SharePanel collectionId={target} view={view === 'members' ? 'members' : 'all'}
     onLeft={() => router.dismissTo('/(tabs)/(library)')} onStopped={close} />;
 
