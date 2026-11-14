@@ -55,7 +55,7 @@ memory on their first frame, with no loader.
 
 ### Preloading verse text
 
-The store warms the session cache through `getVerseText`
+The store warms the session cache through `warmVerseText`
 (`preloadVerseText` in `lib/store/index.ts`; picker
 `lib/store/preload.ts`, tested in `preload.test.ts`):
 
@@ -70,6 +70,10 @@ The store warms the session cache through `getVerseText`
 - The queue stops on an account change and on the first 429
   (`DailyLimitError`), so warming never spends the rest of a day's
   limit. `refresh()` and a translation switch don't preload.
+- A read someone waits on goes first: while any `fetchVerse`,
+  `fetchChapter`, `getVerseText` or Home's Verse of the Month load
+  (`foregroundRead` in `hooks/use-votm.ts`) is in flight, the preload
+  starts no read (`whenForegroundIdle`). Its own in-flight reads finish.
 
 Identical reads still in progress share one promise (`inFlight` in
 `lib/api/bible.ts`), keyed by passage or chapter, reference and

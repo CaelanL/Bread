@@ -6,7 +6,7 @@
  * Components subscribe and auto-update when data changes.
  */
 
-import { DailyLimitError, fetchVerse, getVerseText } from '@/lib/api/bible';
+import { DailyLimitError, fetchVerse, warmVerseText, whenForegroundIdle } from '@/lib/api/bible';
 import { sessionUserId, supabase } from '@/lib/api/client';
 import { perfMark } from '@/lib/api/dev-timing';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -506,8 +506,8 @@ type PreloadRun = { generation: number; queue: SavedVerse[]; active: number; sto
 let preloadRun: PreloadRun | null = null;
 
 /**
- * Warms verse text into the session cache through `getVerseText`, a few at a time, so cards and
- * Setup show it at once. `first` puts these ahead of what's queued. One run per account: it stops
+ * Warms verse text into the session cache through `warmVerseText`, a few at a time, so cards and
+ * Setup show it at once. Each read waits while a read someone is waiting on is in flight. `first` puts these ahead of what's queued. One run per account: it stops
  * on an account change, on Hide verses, and on the first daily-limit answer, so warming never
  * spends the rest of the day's reads.
  */
@@ -529,7 +529,9 @@ function preloadVerseText(verses: SavedVerse[], first: boolean) {
 async function drainPreload(run: PreloadRun) {
   for (let verse = run.queue.shift(); verse; verse = run.queue.shift()) {
     try {
-      await getVerseText(verse);
+      await whenForegroundIdle();
+      if (run.generation !== accountGeneration) break;
+      await warmVerseText(verse);
     } catch (e) {
       if (e instanceof DailyLimitError) run.stopped = true;
     }
