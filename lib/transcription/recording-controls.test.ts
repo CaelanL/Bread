@@ -26,6 +26,7 @@ function audio() {
   return {
     counts,
     capture: {
+      hasPermission: () => false,
       requestPermission: async () => { counts.permission++; return true; },
       start: async () => { counts.starts++; },
       stop: async () => { counts.stops++; return file; },
@@ -71,6 +72,103 @@ test('two mic taps during permission and native start produce one recording', as
   assert.equal(recorder.isRecording(), true);
   await recorder.cancel();
   assert.equal(counts.stops, 1);
+});
+
+test('with permission already granted, native start runs before the first state change', async () => {
+  const order: string[] = [];
+  const recorder = createRecordingControls((state) => order.push(state.phase));
+  const { capture, counts } = audio();
+  await recorder.start(0, false, {
+    ...capture,
+    hasPermission: () => true,
+    async start() {
+      order.push('native start');
+      await capture.start();
+    },
+    openLive() {
+      order.push('live');
+      return capture.openLive();
+    },
+  });
+  assert.deepEqual(order, ['native start', 'live', 'starting', 'recording']);
+  assert.equal(counts.permission, 0);
+  await recorder.cancel();
+});
+
+test('without permission, the prompt runs before native start', async () => {
+  const order: string[] = [];
+  const recorder = createRecordingControls((state) => order.push(state.phase));
+  const { capture } = audio();
+  await recorder.start(0, false, {
+    ...capture,
+    async requestPermission() {
+      order.push('prompt');
+      return true;
+    },
+    async start() {
+      order.push('native start');
+    },
+  });
+  assert.deepEqual(order, ['starting', 'prompt', 'native start', 'recording']);
+  await recorder.cancel();
+});
+
+test('a take discarded during a granted-permission start is stopped and removed once start resolves', async () => {
+  const { recorder, states } = controls();
+  const { capture, counts } = audio();
+  const nativeStart = deferred<void>();
+  const start = recorder.start(0, false, {
+    ...capture,
+    hasPermission: () => true,
+    start: () => nativeStart.promise,
+  });
+  await recorder.cancel();
+  assert.equal(counts.stops, 0);
+  nativeStart.resolve();
+  await start;
+  assert.equal(counts.stops, 1);
+  assert.deepEqual(counts.removed, [file.fileUri]);
+  assert.deepEqual(states.map((state) => state.phase), ['starting', 'stopping', 'idle']);
+});
+
+test('a denial on press-in alerts once, and the same touch\'s press starts nothing', async () => {
+  const { recorder } = controls();
+  const { capture, counts } = audio();
+  const denied = { ...capture, requestPermission: async () => { counts.permission++; return false; } };
+  assert.equal(await recorder.start(0, false, denied, 'pressIn'), 'denied');
+  assert.equal(await recorder.start(0, false, denied, 'press'), undefined);
+  assert.equal(counts.permission, 1);
+  assert.equal(counts.starts, 0);
+});
+
+test('a failed native start on press-in throws once for the touch', async () => {
+  const { recorder } = controls();
+  const { capture } = audio();
+  let attempts = 0;
+  const failing = {
+    ...capture,
+    hasPermission: () => true,
+    async start() {
+      attempts++;
+      throw new Error('mic busy');
+    },
+  };
+  await assert.rejects(recorder.start(0, false, failing, 'pressIn'), /mic busy/);
+  await recorder.start(0, false, failing, 'press');
+  assert.equal(attempts, 1);
+});
+
+test('a press with no press-in records once, and the next touch starts on press-in', async () => {
+  const { recorder } = controls();
+  const { capture, counts } = audio();
+  await recorder.start(0, false, capture, 'press');
+  assert.equal(recorder.isRecording(), true);
+  await recorder.cancel();
+  await recorder.start(0, false, capture, 'pressIn');
+  assert.equal(recorder.isRecording(), true);
+  await recorder.start(0, false, capture, 'press');
+  assert.equal(counts.starts, 2);
+  await recorder.cancel();
 });
 
 test('leaving before permission resolves prevents a late start', async () => {

@@ -72,8 +72,8 @@ POST /functions/v1/process-recording
    on any client parses unchanged)
 4. Upload audio to Soniox async API (model stt-async-v5)
    - actualVerse passed as context for accuracy
-5. Poll Soniox until transcription completes (every 250ms for the
-   first 3s, then every 1s, up to a 90s deadline)
+5. Poll Soniox until transcription completes (first poll after
+   150ms, every 250ms for 10s, then every 1s, up to a 90s deadline)
 6. Record usage_daily.transcribe_seconds without blocking the
    response (EdgeRuntime.waitUntil). Analytics only — the quota gate
    was removed; nothing returns 429 anymore
@@ -133,11 +133,12 @@ POST /functions/v1/transcription-token
 
 - **Kill switch**: unless the `LIVE_TRANSCRIPTION_ENABLED` secret is
   exactly `"true"`, every request gets 403 and every client silently
-  falls back to the batch path within one recording. Flip with
+  falls back to the batch path from its next mint (an open study
+  screen reuses its key for up to 270s). Flip with
   `supabase secrets set LIVE_TRANSCRIPTION_ENABLED=true|false` — no
   deploy, no store release.
-- Temp keys: 60s TTL (gates connection establishment only, not the
-  session), `max_session_duration_seconds: 315` (client's 300s cap
+- Temp keys: 300s TTL (gates connection establishment only, not the
+  session; a study screen reuses one key for up to 270s), `max_session_duration_seconds: 315` (client's 300s cap
   timer fires first), `client_reference_id: user.id` (per-user
   attribution in the Soniox console).
 - The client treats *any* non-200 as "use batch" — this endpoint can

@@ -182,8 +182,8 @@ or more, and "Keep Practicing" below that. A help icon opens
 
 ### Retry
 
-After a chunk completes, Retry starts another recording for that chunk as the
-result card fades. The recording attempt owns the retry state. A successful
+Retry starts another recording for a completed chunk on finger-down (a swipe
+starting on Retry records) as the result card fades. The attempt owns the retry state. A successful
 retry replaces only that chunk's practice result, so its scored result stands.
 Discarding, leaving the chunk or failing restores the previous result and
 controls. Retry is hidden on single-chunk sessions. The result card shows retry
@@ -240,7 +240,8 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - `npm run sim -- flow practice-session`: reader-a opens Psalm 23:1-3 setup, picks Medium, taps Start session, sees "Verse 1" and the mic, taps the mic and gets the iOS microphone prompt. Don't Allow shows "Permission required" and dismissing it restores the mic.
 - `npm run sim -- flow practice-removed-mastered`: reader-a's mastered John 3:16, removed from My Verses, still starts a session; the flow puts it back.
 - `npm run sim -- shot "/session?id=x" --as reader-a`: Close and "This verse is no longer in your library."
-- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. The mic stays circular with a loading ring during permission, then becomes a slimmer pill with the waveform and actions once capture starts. One recording starts on the double tap. Discard returns the mic to the same chunk.
+- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. A ring shows until capture starts, then the pill with waveform and actions. The double tap records once.
+- `npm run sim -- flow mic-denied-again`: deny the prompt, tap the mic again: one "Permission required".
 - Real device, Medium, multi-verse: tap the eye, re-hide, recite, submit. The card shows the real score and "Revealed — this chunk won't count", and the final score treats those words as missing.
 
 ## Decisions

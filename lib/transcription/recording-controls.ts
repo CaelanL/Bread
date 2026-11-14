@@ -14,6 +14,7 @@ interface RecordingFile {
 }
 
 interface Capture {
+  hasPermission(): boolean;
   requestPermission(): Promise<boolean>;
   start(): Promise<unknown>;
   stop(): Promise<RecordingFile>;
@@ -79,8 +80,12 @@ export async function removeAbandonedRecordings(fs: RecordingFolders) {
   }
 }
 
+// A touch sends press-in, then press on release. VoiceOver activation sends both too.
+export type PressSource = 'pressIn' | 'press';
+
 export function createRecordingControls(onChange: (state: RecordingState) => void) {
   let current: Attempt | undefined;
+  let pressedIn = false;
 
   function transition(attempt: Attempt, phase: ActivePhase) {
     attempt.phase = phase;
@@ -98,21 +103,37 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
   }
 
   return {
-    async start(index: number, isRetry: boolean, capture: Capture) {
+    async start(index: number, isRetry: boolean, capture: Capture, source: PressSource = 'press') {
+      // Press-in already started this touch's attempt. Its press is ignored, so a
+      // fast denial or failed start can't start a second attempt and alert twice.
+      if (source === 'pressIn') pressedIn = true;
+      else if (pressedIn) {
+        pressedIn = false;
+        return;
+      }
       if (current || nativeOwner) return;
       const attempt: Attempt = { index, isRetry, capture, phase: 'starting', cancelled: false };
       current = nativeOwner = attempt;
       unsettled.add(attempt);
-      transition(attempt, 'starting');
       let recording: RecordingFile | undefined;
 
       try {
-        const granted = await capture.requestPermission();
-        if (attempt.cancelled) return;
-        if (!granted) return 'denied';
-
-        attempt.liveSession = capture.openLive();
-        await capture.start();
+        // With permission already granted, the native start leaves in the tap's
+        // own tick, ahead of the 'starting' render.
+        let started: Promise<unknown> | undefined;
+        if (capture.hasPermission()) {
+          started = capture.start();
+          attempt.liveSession = capture.openLive();
+        }
+        transition(attempt, 'starting');
+        if (!started) {
+          const granted = await capture.requestPermission();
+          if (attempt.cancelled) return;
+          if (!granted) return 'denied';
+          attempt.liveSession = capture.openLive();
+          started = capture.start();
+        }
+        await started;
         if (attempt.cancelled) {
           recording = await capture.stop().catch(() => undefined);
           return;
