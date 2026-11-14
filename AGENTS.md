@@ -13,6 +13,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Touching | Read |
 |---|---|
 | Setup screen, chunks, masks, peek, scoring | `docs/features/study-session.md` |
+| Grading accuracy, known grading gaps, the audit harness | `docs/grading-audit.md` |
 | Recording, Soniox, batch and live paths | `docs/features/transcription.md` |
 | Mastery, spaced repetition, engraved | `docs/features/review.md` |
 | Collections, sorting, library list | `docs/features/library.md` |
@@ -39,6 +40,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 - If the DB won't start, or anything else in the local setup breaks, run `npm run doctor`. Never start Docker or another runtime by hand.
 - `npm run sim -- shot <route> [--as <seed user>]` — screenshots of the local app in the simulator, to `.expo/sim-shots/`. Each area doc's "Browser checks" list runs this way, since Bread has no browser flows.
 - `npm run sim -- flow <name|all>` — runs the Maestro flows in `.maestro/` (taps, typing, iOS permission prompts) against the local DB. Prints pass or fail and the screenshots, under `.expo/sim-shots/flows/`. Flows change local data, and `npm run db:reset` restores the seed. Needs Maestro (`curl -fsSL "https://get.maestro.mobile.dev" | bash`).
+- `npm run audit:grading` — replays correct recitations of every bundled KJV verse (and any local licensed sample) through the grader, one pass per way an engine can write a correct recitation. Options and the voice and fetch tools are in `scripts/grading-audit/run.ts`. Regression cases: `lib/__tests__/grading-audit.test.ts`.
 - Local seed users are described at the top of `supabase/seed.sql`. They exist only on local databases. Before giving Caelan a login, sign in with it.
 - Supabase CLI: run `direnv exec . supabase <cmd>` from agent shells, so it gets `SUPABASE_ACCESS_TOKEN` from `.envrc`. Never run `supabase login`. Never print or commit `.envrc`.
 
