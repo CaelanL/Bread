@@ -115,6 +115,12 @@ export default function CollectionScreen() {
       ? inProgressVerses
       : collectionVerses;
 
+  // Opening a collection warms its verses' text ahead of the launch preload, once per visit.
+  useEffect(() => {
+    if (hydrated) useAppStore.getState().preloadVerseText(verses);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, hydrated]);
+
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [iconPickerOpen, setIconPickerOpen] = useState(false);

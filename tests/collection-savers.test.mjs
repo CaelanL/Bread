@@ -10,7 +10,7 @@ test('community saver reads use authoritative totals and stay with their account
   const fixture = mkdtempSync(join(tmpdir(), 'bread-savers-test-'));
   const platform = join(fixture, 'platform.cjs');
   const storage = join(fixture, 'storage.cjs');
-  writeFileSync(platform, 'exports.Platform = { OS: "ios" };');
+  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.InteractionManager = { runAfterInteractions() {} };');
   writeFileSync(storage, `const values = new Map(); module.exports = {
     async getItem(key) { return values.get(key) ?? null; },
     async setItem(key, value) { values.set(key, value); },

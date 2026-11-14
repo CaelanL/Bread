@@ -13,7 +13,7 @@ test('deleting a verse or a collection and re-adding a held verse', async (t) =>
   const fixture = mkdtempSync(join(tmpdir(), 'bread-collection-test-'));
   const platform = join(fixture, 'platform.cjs');
   const storage = join(fixture, 'storage.cjs');
-  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.TurboModuleRegistry = { get() { return null; } };');
+  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.TurboModuleRegistry = { get() { return null; } }; exports.InteractionManager = { runAfterInteractions() {} };');
   writeFileSync(storage, `const values = new Map(); module.exports = {
     async getItem(key) { return values.get(key) ?? null; },
     async setItem(key, value) { values.set(key, value); },

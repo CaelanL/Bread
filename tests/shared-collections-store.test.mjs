@@ -12,7 +12,7 @@ test('joining and leaving a shared collection', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-shared-test-'));
   const platform = join(fixture, 'platform.cjs');
   const storage = join(fixture, 'storage.cjs');
-  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.TurboModuleRegistry = { get() { return null; } };');
+  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.TurboModuleRegistry = { get() { return null; } }; exports.InteractionManager = { runAfterInteractions() {} };');
   writeFileSync(storage, `const values = new Map(); module.exports = {
     async getItem(key) { return values.get(key) ?? null; },
     async setItem(key, value) { values.set(key, value); },

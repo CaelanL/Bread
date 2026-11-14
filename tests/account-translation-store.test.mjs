@@ -11,7 +11,7 @@ test('account translation sync and switch', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-translation-test-'));
   const platform = join(fixture, 'platform.cjs');
   const storage = join(fixture, 'storage.cjs');
-  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} };');
+  writeFileSync(platform, 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.InteractionManager = { runAfterInteractions() {} };');
   writeFileSync(storage, `const values = new Map(); module.exports = {
     async getItem(key) { return values.get(key) ?? null; },
     async setItem(key, value) { values.set(key, value); },

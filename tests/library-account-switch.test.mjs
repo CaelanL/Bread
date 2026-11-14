@@ -31,7 +31,7 @@ test('collection writes stay with the account that started them', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-library-test-'));
   const platformFile = join(fixture, 'platform.cjs');
   const storageFile = join(fixture, 'storage.cjs');
-  writeFileSync(platformFile, 'exports.Platform = { OS: "ios" };');
+  writeFileSync(platformFile, 'exports.Platform = { OS: "ios" }; exports.InteractionManager = { runAfterInteractions() {} };');
   writeFileSync(storageFile, `
       const values = new Map();
       module.exports = {

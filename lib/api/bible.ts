@@ -36,6 +36,13 @@ export interface VerseTextResult {
   verses: Record<string, string>; // Keyed data (for annotated display)
 }
 
+/** The `bible` function's 429: the day's limit is spent. */
+export class DailyLimitError extends Error {
+  constructor(resetsAt?: string) {
+    super(`Daily limit reached. Resets at ${resetsAt || "midnight UTC"}`);
+  }
+}
+
 export interface ChapterResponse {
   reference: string;
   version: BibleVersion;
@@ -170,9 +177,7 @@ async function loadVerse(
     const error = await response.json().catch(() => ({}));
 
     if (response.status === 429) {
-      throw new Error(
-        `Daily limit reached. Resets at ${error.resetsAt || "midnight UTC"}`
-      );
+      throw new DailyLimitError(error.resetsAt);
     }
 
     throw new Error(error.error || "Failed to fetch verse");
@@ -282,9 +287,7 @@ async function loadChapter(
     const error = await response.json().catch(() => ({}));
 
     if (response.status === 429) {
-      throw new Error(
-        `Daily limit reached. Resets at ${error.resetsAt || "midnight UTC"}`
-      );
+      throw new DailyLimitError(error.resetsAt);
     }
 
     throw new Error(error.error || "Failed to fetch chapter");

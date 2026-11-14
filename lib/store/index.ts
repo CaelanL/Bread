@@ -6,7 +6,7 @@
  * Components subscribe and auto-update when data changes.
  */
 
-import { fetchVerse, getVerseText } from '@/lib/api/bible';
+import { DailyLimitError, fetchVerse, getVerseText } from '@/lib/api/bible';
 import { sessionUserId, supabase } from '@/lib/api/client';
 import { perfMark } from '@/lib/api/dev-timing';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -25,8 +25,9 @@ import { DEFAULT_COLLECTION_ID, DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLL
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { Alert, InteractionManager } from 'react-native';
 import { create } from 'zustand';
+import { pickPreload } from './preload';
 
 import {
   getInProgressSort,
@@ -125,6 +126,8 @@ interface AppState {
   /** Starts an account: settings, then the account's library. Called by lib/auth/account.ts. */
   hydrate: (userId: string) => Promise<void>;
   refresh: () => Promise<void>;
+  /** Warms these verses' text ahead of the rest (a collection opening). */
+  preloadVerseText: (verses: SavedVerse[]) => void;
   clearError: () => void;
 
   // Actions - Settings
@@ -488,10 +491,54 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
     await tellKeptVerses(kept, translation);
   }
   if (launch && libraryOk && generation === accountGeneration) {
-    // Warms the Bible session cache so the first verse render is instant (non-blocking).
-    for (const verse of store().verses) getVerseText(verse).catch(() => {});
+    InteractionManager.runAfterInteractions(() => {
+      if (generation === accountGeneration) preloadVerseText(store().verses, false);
+    });
   }
   if (failure) throw failure;
+}
+
+// ============ VERSE TEXT PRELOAD ============
+
+const PRELOAD_CONCURRENCY = 3;
+
+type PreloadRun = { generation: number; queue: SavedVerse[]; active: number; stopped: boolean };
+let preloadRun: PreloadRun | null = null;
+
+/**
+ * Warms verse text into the session cache through `getVerseText`, a few at a time, so cards and
+ * Setup show it at once. `first` puts these ahead of what's queued. One run per account: it stops
+ * on an account change, on Hide verses, and on the first daily-limit answer, so warming never
+ * spends the rest of the day's reads.
+ */
+function preloadVerseText(verses: SavedVerse[], first: boolean) {
+  if (preloadRun?.generation !== accountGeneration) {
+    preloadRun = { generation: accountGeneration, queue: [], active: 0, stopped: false };
+  }
+  const run = preloadRun;
+  const { hideVerseText } = useAppStore.getState();
+  if (run.stopped || hideVerseText) return;
+  const picked = pickPreload(verses, { hideVerseText });
+  run.queue = first ? [...picked, ...run.queue] : [...run.queue, ...picked];
+  while (run.active < PRELOAD_CONCURRENCY && run.queue.length > 0) {
+    run.active++;
+    void drainPreload(run);
+  }
+}
+
+async function drainPreload(run: PreloadRun) {
+  for (let verse = run.queue.shift(); verse; verse = run.queue.shift()) {
+    try {
+      await getVerseText(verse);
+    } catch (e) {
+      if (e instanceof DailyLimitError) run.stopped = true;
+    }
+    if (run.stopped || run.generation !== accountGeneration || useAppStore.getState().hideVerseText) {
+      run.queue = [];
+      break;
+    }
+  }
+  run.active--;
 }
 
 // ============ SHARED COLLECTIONS ============
@@ -867,6 +914,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchCuratedSaverCounts(),
     ]);
   },
+
+  preloadVerseText: (verses) => preloadVerseText(verses, true),
 
   clearError: () => {
     set({ error: null });
