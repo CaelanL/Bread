@@ -80,8 +80,12 @@ export async function removeAbandonedRecordings(fs: RecordingFolders) {
   }
 }
 
+// A touch sends press-in, then press on release. VoiceOver activation sends both too.
+export type PressSource = 'pressIn' | 'press';
+
 export function createRecordingControls(onChange: (state: RecordingState) => void) {
   let current: Attempt | undefined;
+  let pressedIn = false;
 
   function transition(attempt: Attempt, phase: ActivePhase) {
     attempt.phase = phase;
@@ -99,7 +103,14 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
   }
 
   return {
-    async start(index: number, isRetry: boolean, capture: Capture) {
+    async start(index: number, isRetry: boolean, capture: Capture, source: PressSource = 'press') {
+      // Press-in already started this touch's attempt. Its press is ignored, so a
+      // fast denial or failed start can't start a second attempt and alert twice.
+      if (source === 'pressIn') pressedIn = true;
+      else if (pressedIn) {
+        pressedIn = false;
+        return;
+      }
       if (current || nativeOwner) return;
       const attempt: Attempt = { index, isRetry, capture, phase: 'starting', cancelled: false };
       current = nativeOwner = attempt;

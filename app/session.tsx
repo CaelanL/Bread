@@ -26,6 +26,7 @@ import {
 import {
   createRecordingControls,
   removeAbandonedRecordings,
+  type PressSource,
   type RecordingState,
 } from '@/lib/transcription/recording-controls';
 import {
@@ -238,7 +239,8 @@ export default function StudySessionScreen() {
     }
   }, [computeBarLevel, recorder, waveformLevels]);
 
-  const handleMicPress = useCallback(async (index: number, isRetry: boolean) => {
+  const handleMicPress = useCallback(async (index: number, isRetry: boolean, source: PressSource) => {
+    if (source === 'pressIn') stampMic('down');
     const chunk = session.chunks[index];
     if (!chunk || index !== session.currentIndex || closingRef.current) return;
 
@@ -280,7 +282,7 @@ export default function StudySessionScreen() {
         },
         stop: stopRecording,
         remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
-      });
+      }, source);
       // After the native call has left, and only when this tap began an attempt
       if (process.env.EXPO_OS === 'ios' && !wasActive && recorder.canDiscard()) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -495,7 +497,8 @@ export default function StudySessionScreen() {
               {canRetry && (
                 <Pressable
                   style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
-                  onPress={() => handleMicPress(index, true)}
+                  onPressIn={() => handleMicPress(index, true, 'pressIn')}
+                  onPress={() => handleMicPress(index, true, 'press')}
                   accessibilityLabel="Retry"
                   testID="retry-button"
                 >
@@ -576,8 +579,7 @@ export default function StudySessionScreen() {
         phase={recordingState.phase}
         showMic={currentIndex < session.chunks.length && !session.completedChunks.has(currentIndex)}
         waveformLevels={waveformLevels}
-        onStart={() => handleMicPress(currentIndex, false)}
-        onPressIn={() => stampMic('down')}
+        onStart={(source) => handleMicPress(currentIndex, false, source)}
         onCancel={handleCancel}
         onSubmit={handleSubmit}
       />
