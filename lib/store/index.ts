@@ -777,7 +777,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const roles = new Map(mine.data.map((m) => [m.shared_collection_id, m.role]));
       const counts = new Map(status.data.map((row) => [row.shared_id, row]));
       // Library cards name the owner. `profiles` is private to each user, so a joined group's owner
-      // comes from its member list, one read per joined group (20 at most); a failed read leaves no name.
+      // comes from its member list, one read per joined group (20 at most); a failed read keeps the
+      // name already shown, so a refetch never blanks it.
       const ownerNames = new Map(await Promise.all(groups.data
         .filter((group) => roles.get(group.id) !== 'owner' && counts.has(group.id))
         .map(async (group) => [group.id, await getSharedMembers(group.id)
@@ -790,7 +791,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (!isSharedRole(role) || !count) continue;
         sharedCollections[group.id] = {
           id: group.id,
-          ownerName: ownerNames.get(group.id) ?? null,
+          ownerName: ownerNames.get(group.id) ?? get().sharedCollections[group.id]?.ownerName ?? null,
           name: group.name,
           role,
           memberCount: count.member_count,
@@ -801,7 +802,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       set({ sharedCollections });
       const current = Object.values(sharedCollections).map((g) => ({ id: g.id, name: g.name, owned: g.role === 'owner' }));
-      await noticeDepartedGroups(userId, current, generation)
+      void noticeDepartedGroups(userId, current, generation)
         .catch((e) => console.error('[STORE] Failed to check for removed shared collections:', e));
       return true;
     } catch (e) {

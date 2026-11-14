@@ -31,7 +31,9 @@ shared collection looks like a personal one, and a personal collection looks as 
   shows you were removed, the sync's error is dropped: the "You were removed" notice is the one
   message, and the screen goes back to the Library (a dissolved copy stays open, now personal). An add or remove by you, and the owner's role or member changes,
   refetch the grid if it's loaded. The Library list reads `get_shared_status`, plus `get_shared_members`
-  once per group you joined, for the owner's name (`profiles` is private to each user).
+  once per group you joined, for the owner's name (`profiles` is private to each user). It waits
+  for those names, so none pops in; a name read that fails keeps the name already shown, so a
+  refetch never blanks a card's subtitle. The removal notice runs after the fetch returns.
 - **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
   group's `shared_collection_verses`, turned into squares by `lib/shared/progress.ts` (pure,
   `progress.test.ts`). Your own squares come from your verses in this collection, so they move the

@@ -46,6 +46,7 @@ test('joining and leaving a shared collection', async (t) => {
   let syncFails = false;
   let deleteFails = null;
   let groupDeletes = 0;
+  let membersFail = false;
   const rpcs = [];
   const reads = [];
   const writes = [];
@@ -78,6 +79,7 @@ test('joining and leaving a shared collection', async (t) => {
         return new Response(null, { status: 204 });
       }
       if (name === 'get_shared_members') {
+        if (membersFail) return json({ message: 'unavailable' }, 503);
         return json([{ user_id: 'C', display_name: 'Cara', role: 'owner', joined_at: '2026-11-01T00:00:00Z' },
           { user_id: 'D', display_name: 'Dana', role: 'member', joined_at: '2026-11-05T00:00:00Z' }]);
       }
@@ -123,6 +125,8 @@ test('joining and leaving a shared collection', async (t) => {
   const { subscribeToToast } = await import('../lib/toast.ts');
   const toasts = [];
   t.after(subscribeToToast((message) => toasts.push(message)));
+  // The removal notice runs after the fetch returns.
+  const noticed = () => new Promise((resolve) => setTimeout(resolve, 20));
   const state = useAppStore.getState;
   t.after(() => supabase.auth.stopAutoRefresh());
   assert.ifError((await supabase.auth.signInWithPassword({ email: 'D@example.test', password: 'test' })).error);
@@ -143,6 +147,14 @@ test('joining and leaving a shared collection', async (t) => {
     assert.equal(state().sharedCollections[group]?.role, 'member');
     assert.equal(state().sharedCollections[group]?.ownerName, 'Cara');
     assert.equal(state().verses.filter((v) => v.collectionId === copy.client_id).length, 1);
+  });
+
+  await t.test("a refetch whose owner-name read fails keeps the owner's name", async () => {
+    assert.equal(state().sharedCollections[group]?.ownerName, 'Cara');
+    membersFail = true;
+    assert.equal(await state().fetchSharedCollections(), true);
+    membersFail = false;
+    assert.equal(state().sharedCollections[group]?.ownerName, 'Cara');
   });
 
   await t.test('opening syncs once, then reads members, progress, the reference list and the group row', async () => {
@@ -241,6 +253,7 @@ test('joining and leaving a shared collection', async (t) => {
   await t.test('leaving yourself brings no notice on the next refresh', async () => {
     toasts.length = 0;
     await state().refresh();
+    await noticed();
     assert.deepEqual(toasts, []);
   });
 
@@ -250,8 +263,10 @@ test('joining and leaving a shared collection', async (t) => {
     joined = false;
     copyRow = null;
     await state().refresh();
+    await noticed();
     assert.deepEqual(toasts, ['You were removed from Romans 8.']);
     await state().refresh();
+    await noticed();
     assert.equal(toasts.length, 1);
   });
 
@@ -261,6 +276,7 @@ test('joining and leaving a shared collection', async (t) => {
     joined = false;
     copyRow = { ...copy, shared_collection_id: null };
     await state().refresh();
+    await noticed();
     assert.deepEqual(toasts, ['Romans 8 is now your own copy.']);
     assert.equal(state().collections.find((c) => c.id === copy.client_id)?.sharedId, undefined);
   });
@@ -287,6 +303,7 @@ test('joining and leaving a shared collection', async (t) => {
     copyRow = null;
     toasts.length = 0;
     assert.equal(await state().openSharedCollection(group), false);
+    await noticed();
     assert.deepEqual(toasts, ['You were removed from Romans 8.']);
     assert.equal(state().collections.some((c) => c.id === copy.client_id), false);
     assert.equal(state().sharedCollections[group], undefined);
