@@ -241,11 +241,14 @@ export function useStudySession({
 
       // Fire-and-forget: the Supabase round-trip must not block dismissal
       // (awaiting it here froze the X button for the full network latency).
-      // Errors were already non-blocking, so visibility is unchanged.
+      // A failure toasts; the toast is mounted at the root, so it shows after dismissal.
       useAppStore
         .getState()
         .updateVerseProgress(verseId, difficulty as StorageDifficulty, partialScore)
-        .catch((e) => console.error('[STUDY] Failed to update progress:', e));
+        .catch((e) => {
+          console.error('[STUDY] Failed to update progress:', e);
+          showErrorToast('Failed to save your progress.');
+        });
 
       // Log session attempt (fire-and-forget)
       const wordCount = verse.text ? verse.text.split(/\s+/).filter(Boolean).length : undefined;
