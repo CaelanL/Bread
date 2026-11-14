@@ -35,12 +35,13 @@ interface RecordingBarProps {
   showMic: boolean;
   waveformLevels: SharedValue<number[]>;
   onStart: () => void;
+  onPressIn: () => void;
   onCancel: () => void;
   onSubmit: () => void;
 }
 
 export function RecordingBar({
-  phase, showMic, waveformLevels, onStart, onCancel, onSubmit,
+  phase, showMic, waveformLevels, onStart, onPressIn, onCancel, onSubmit,
 }: RecordingBarProps) {
   const { width } = useWindowDimensions();
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -218,6 +219,7 @@ export function RecordingBar({
               accessibilityLabel="Start recording"
               testID="mic-button"
               onPress={onStart}
+              onPressIn={onPressIn}
               disabled={!canStart}
               style={({ pressed }) => [styles.mic, pressed && styles.pressed]}
             >

@@ -57,6 +57,13 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // the user tapped done, so they still see how far they got.
 const MAX_RECORDING_MS = 300_000;
 
+interface MicTiming {
+  down?: number;
+  call?: number;
+  resolved?: number;
+  firstAudio?: number;
+}
+
 export default function StudySessionScreen() {
   const { id, difficulty, chunkSize: chunkSizeParam } = useLocalSearchParams<{
     id: string;
@@ -90,6 +97,23 @@ export default function StudySessionScreen() {
   const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
   // Meter ballistics state: fast attack, slow release (kills ripple)
   const smoothedLevelRef = useRef(0);
+  // Dev-only tap-to-capture timing, in ms from touch-down (or from the native
+  // call when there was no touch-down, as with VoiceOver)
+  const micTimingRef = useRef<MicTiming>({});
+  const stampMic = useCallback((mark: keyof MicTiming) => {
+    if (!__DEV__) return;
+    // A new touch or native call starts a fresh attempt's record
+    if (mark === 'down') micTimingRef.current = {};
+    if (mark === 'call') micTimingRef.current = { down: micTimingRef.current.down };
+    micTimingRef.current[mark] = performance.now();
+    const { down, call, resolved, firstAudio } = micTimingRef.current;
+    if (call === undefined || resolved === undefined || firstAudio === undefined) return;
+    const from = down ?? call;
+    const ms = (t: number) => `${Math.round(t - from)}ms`;
+    // eslint-disable-next-line no-console -- dev-only measurement
+    console.log(`[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)}`);
+    micTimingRef.current = {};
+  }, []);
 
   // Warm the auth session so the first mic press doesn't pay a lazy
   // token refresh serially in front of the Soniox key mint
@@ -171,10 +195,13 @@ export default function StudySessionScreen() {
     const emitter = new LegacyEventEmitter(AudioStudioModule);
     const subscription = emitter.addListener<{ encoded?: string }>('AudioData', (event) => {
       if (!event.encoded) return;
+      if (__DEV__ && micTimingRef.current.call !== undefined && micTimingRef.current.firstAudio === undefined) {
+        stampMic('firstAudio');
+      }
       recorder.feedAudio(base64ToUint8Array(event.encoded));
     });
     return () => subscription.remove();
-  }, [recorder]);
+  }, [recorder, stampMic]);
 
   const handleAudioStream = useCallback(async (event: AudioDataEvent) => {
     if (typeof event.data !== 'string') return;
@@ -218,7 +245,8 @@ export default function StudySessionScreen() {
         start() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
-          return startRecording({
+          stampMic('call');
+          const started = startRecording({
             sampleRate: 16000,
             channels: 1,
             encoding: 'pcm_16bit',
@@ -237,6 +265,8 @@ export default function StudySessionScreen() {
             },
             onAudioStream: handleAudioStream,
           });
+          if (__DEV__) started.then(() => stampMic('resolved'), () => {});
+          return started;
         },
         stop: stopRecording,
         remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
@@ -249,7 +279,7 @@ export default function StudySessionScreen() {
       // The usual cause is the mic held by a call or another app; the error doesn't say which.
       Alert.alert("Couldn't start recording", "If you're on a call or another app is using the microphone, close it and try again.");
     }
-  }, [handleAudioStream, recorder, session.chunks, session.currentIndex, startRecording, stopRecording, waveformLevels]);
+  }, [handleAudioStream, recorder, session.chunks, session.currentIndex, stampMic, startRecording, stopRecording, waveformLevels]);
 
   const handleCancel = useCallback(() => {
     if (!recorder.canDiscard()) return;
@@ -532,6 +562,7 @@ export default function StudySessionScreen() {
         showMic={currentIndex < session.chunks.length && !session.completedChunks.has(currentIndex)}
         waveformLevels={waveformLevels}
         onStart={() => handleMicPress(currentIndex, false)}
+        onPressIn={() => stampMic('down')}
         onCancel={handleCancel}
         onSubmit={handleSubmit}
       />
