@@ -211,8 +211,8 @@ the score is already saved, and leaves without the results page.
 
 **Early exit.** The X in the header calls `saveAndExit`. With some chunks complete
 but not all, it calls `updateVerseProgress` with `calculatePartialScore` and no
-`fullSession` flag, logs an attempt, and leaves at once. A failed save toasts
-"Failed to save your progress." after it leaves. Otherwise it just leaves. Exiting discards an in-flight recording or
+`fullSession` flag, logs an attempt, and leaves at once. A failed save
+shows the save-error toast after it leaves. Otherwise it just leaves. Exiting discards an in-flight recording or
 analysis. A late transcript cannot update the session or save a second attempt.
 
 **Session attempts.** A session writes at most one `session_attempts` row, from
