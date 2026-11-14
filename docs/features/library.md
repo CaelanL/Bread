@@ -45,11 +45,8 @@ follow saved positions, then creation time and client ID. New collections append
 
 Long-press a custom collection for Rename, Reorder and Delete, plus Share… on one you own. Shared collections change the menu, swipe, add and delete; see
 [shared collections](shared-collections.md#in-the-app). On iOS, one light
-haptic confirms it. The menu opens under the press, and `PopoverMenu` moves it up to stay
-inside the safe area. Rename prefills
-`AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
-actions to move up or down. Each drop saves the order, rolling back on failure.
-Done ends editing.
+haptic confirms it. `PopoverMenu` opens under the press, kept inside the safe area. Rename prefills
+`AddCollectionModal`. Reorder or Edit shows drag handles, with accessibility actions to move. Each drop saves the order (rolled back on failure); Done ends editing.
 
 Collections are flat rows split by `separator` hairlines, like verse rows inside a
 collection, with no cards. Each row: the icon square, name, a subtitle (verse count; "<owner's first name> · M members" once someone else
@@ -59,8 +56,9 @@ mastered or engraved (engraved also fills the square and washes the row gold; se
 
 **Hide verses.** Settings → Appearance → Hide verses (`hideVerseText`, a device pref in the store,
 kept across sign-out like Theme, default off) drops the text line from a collection's verse rows
-(`SwipeableVerseCard`, which then skips the text fetch) and from Study setup's preview card, where
-the expand button still shows the full text.
+(`SwipeableVerseCard`, skipping the fetch) and from Study setup's preview card, where
+the expand button still shows the full text. Off, a collection warms its text on open
+([preload](../architecture/bible-api-and-caching.md#preloading-verse-text)).
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
@@ -260,7 +258,7 @@ way a verse leaves Mastered.
 - 2026-04-27 · Sort is per collection, not one global setting · The user preferred it that way, and the database cost is small.
 - 2026-04-27 · Real collections save sort in the database, virtual ones in AsyncStorage · Virtual collections have no row to hold it.
 - 2026-04-28 · Recent means last practiced, stored on `user_verses.last_practiced_at` · Joining `session_attempts` on every render is too slow, and `engraved.lastReviewedAt` doesn't cover unmastered verses.
-- 2026-04-28 · `last_practiced_at` is per verse, not per collection, with no backfill · Per collection would thread `collectionId` through the study loop and needs a special case for virtual collections. Verses float as they're practiced.
+- 2026-04-28 · `last_practiced_at` is per verse, not per collection, with no backfill · Per collection would thread `collectionId` through the study loop and special-case virtual collections.
 - 2026-04-28 · Never-practiced verses sort after practiced ones · Recently practiced work floats to the top, and new verses queue below.
 - 2026-04-28 · Mastered defaults to Due first, and every other collection to Recent · Due first is the useful view for reviewing.
 - 2026-11-12 · One `delete_verse` call, not four requests · A failure partway left a verse in no collection.

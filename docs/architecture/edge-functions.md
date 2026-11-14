@@ -20,6 +20,7 @@ supabase/functions/
 ├── bible/
 │   ├── index.ts         ← HTTP entry point
 │   ├── cache.ts         ← verse_cache reads/writes + LRU eviction
+│   ├── usage.ts         ← Daily Bible limit: read once, count a miss
 │   ├── normalize.ts     ← Reference normalization
 │   ├── verse-counts.ts  ← Hardcoded chapter verse counts (validation)
 │   └── adapters/
@@ -47,8 +48,12 @@ adapter contract, cache layers, and rate limiting. Quick summary
 here:
 
 - `GET /functions/v1/bible?ref=<ref>&version=<v>[&chapter=true]`
-- Auth → rate limit → DB cache → adapter → cache write → respond
-- Returns `{ reference, version, text?, verses?, cached }`
+- `verifyJwt` (local) → validate → DB cache read and usage read in
+  parallel → hit: respond, no usage write. Miss: limit check, count
+  alongside the adapter fetch, respond, then write the cache in
+  `EdgeRuntime.waitUntil`
+- Returns `{ reference, version, text?, verses?, cached }`, always with
+  `Cache-Control: no-store`
 - Errors: 401 (auth), 400 (bad ref/version), 429 (rate limit), 500
   (upstream)
 
@@ -159,23 +164,23 @@ the gateway doesn't check tokens and each function checks its own.
 
 - `verifyJwt(req)` verifies an ES256 token locally against the
   project's JWKS (keys cached per worker) and returns the user, or
-  `null`. Used by `process-recording` and `transcription-token`.
+  `null`. Used by `bible`, `process-recording`, `transcription-token`
+  and `invite-handoff`'s claim. An unexpired token of a
+  deleted account still passes, for up to an hour.
 - `getAuthUser(req)` asks Supabase Auth with the user's token, a
-  network call. Used by `bible`.
+  network call. No caller left.
 - `getAdminClient()` is the service-role client that bypasses RLS.
 - `getUserTier(userId)` reads `subscriptions`. No row or an expired
   one means `free`.
 
 ## `_shared/usage.ts`
 
-`checkAndIncrementBibleUsage(userId)`:
-
-1. Look up user's tier via `getUserTier(userId)`.
-2. Look up today's usage in `usage_daily` (one row per
-   `user_id × date`).
-3. If under limit → increment and allow.
-4. If over → `{ allowed: false, used, limit }`, and the function
-   answers with `rateLimitResponse`, which adds `resetsAt`.
+Metering in `usage_daily` (one row per `user_id × date`) and
+`rateLimitResponse`, which adds `resetsAt`. The Bible limit is checked
+by `bible/usage.ts`, on cache misses only
+([bible-api-and-caching.md](bible-api-and-caching.md#rate-limiting)),
+with its own copy of the Bible numbers below so a change there
+redeploys only `bible`. `checkAndIncrementBibleUsage` has no caller left.
 
 Tier limits:
 
@@ -204,7 +209,7 @@ Edge functions need:
 - `OPENAI_API_KEY` — only if GPT cleaning is re-enabled
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — to read/write
   `verse_cache`, `usage_daily`, `subscriptions` past RLS
-- `SUPABASE_ANON_KEY` — for `getAuthUser`'s user-token client
+- `SUPABASE_ANON_KEY` — for `getUserClient` (`getAuthUser`)
 - `HANDOFF_SALT` — HMAC key for `invite-handoff`'s network hash; unset falls back to a
   plain hash (and logs a warning). Not set in prod yet: needs Caelan's yes
   ([release.md](release.md)). After each deploy, check once that the last
@@ -250,7 +255,8 @@ Also:
    tables inside an edge function — it would re-trigger RLS where you
    don't want it to.
 3. **Rate-limit before doing real work.** The check is cheap, the
-   work (external API call) is expensive. Order matters.
+   work (external API call) is expensive. In `bible`, the work is the
+   external fetch on a miss.
 4. **`process-recording` does not score.** It transcribes. Scoring
    is on the device. If you find yourself adding accuracy logic
    here, stop and reconsider — moving it server-side is a real
@@ -274,8 +280,9 @@ Also:
 - **Soniox polling can take up to ~90 seconds.** The response
   heartbeat keeps clients alive through it, but the Supabase
   runtime wall-clock (~150s) still bounds the whole request.
-- **`usage_daily` increments aren't atomic.** `incrementUsage` reads
-  then writes, so concurrent requests can undercount.
+- **`usage_daily` increments aren't atomic.** `incrementUsage` and
+  `countBibleFetch` read then write, so concurrent requests can
+  undercount.
 - **`transcription_locks` table is orphaned.** The table and its
   cleanup function exist in the schema, but no code ever acquires
   a lock. The only double-submit guard is the client UI disabling the
@@ -289,8 +296,11 @@ Also:
   the parsed count doesn't match VERSE_COUNTS, but don't fail or
   fall back. See `docs/architecture/bible-versions.md`.
 - **`_shared/usage.ts` has unused helpers.** `getTierAndUsage` calls
-  an RPC no migration defines, and the transcription and evaluation
+  an RPC no migration defines; the transcription, evaluation and Bible
   checks have no callers.
+- **The local stack answers 503 to several `bible` calls at once**
+  (old and new code alike), so flows see some "Failed to load verse
+  text" rows. Prod has no such limit.
 
 ## Decisions
 

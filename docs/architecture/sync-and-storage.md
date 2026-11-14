@@ -178,7 +178,7 @@ hydrate(userId)
         │     → launch only: toast if a fetch still failed
         ├── alignVerses with the wave's rows; if it moved anything or the
         │     translation changed, fetchVerses + fetchMasteredVerses again
-        └── launch only, all fetches ok: prefetch verse text (background)
+        └── launch only, all fetches ok: after interactions, preload verse text
 ```
 
 Hydration for the current account always sets `hydrated: true`. This prevents an
@@ -273,9 +273,10 @@ action, and every verse read goes through the store.
 Verse text is **not** in Zustand. Where it lives is in
 `docs/architecture/bible-api-and-caching.md`.
 
-`hydrate()` triggers a background prefetch of verse text for all of
-the user's verses, populating the session cache so that initial
-renders don't need to wait on the network.
+After the first paint, the store preloads verse text into the session
+cache, a few at a time, and a collection opening goes first; nothing
+with Hide verses on. The rules are in
+[bible-api-and-caching.md](bible-api-and-caching.md#preloading-verse-text).
 
 ## Invariants
 
@@ -312,9 +313,8 @@ Invariants 1 and 10 are above. Also:
 - **Duplicate write paths**: `lib/storage/` and `lib/store/index.ts`
   both implement verse and collection CRUD. Only the store's runs in
   the app.
-- **Background prefetch at hydration is uncancelled**. If the user
-  signs out mid-prefetch, the in-flight requests still complete
-  and the responses are dropped. Wasteful, not dangerous.
+- **The preload stops between requests, not during one.** On sign-out
+  up to 3 in-flight reads still complete into the session cache.
 
 ## Browser checks
 
