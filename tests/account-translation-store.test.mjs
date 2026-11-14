@@ -194,8 +194,9 @@ test('account translation sync and switch', async (t) => {
     identityRows = [];
     requests.length = 0;
     let first = null;
+    // The server's update, not the saved library's paint from the hydrate before.
     const unsubscribe = useAppStore.subscribe((s) => {
-      if (s.hydrated && !first) first = { bibleVersion: s.bibleVersion, displayName: s.displayName, profileLoaded: s.profileLoaded };
+      if (s.hydratedFrom === 'server' && !first) first = { bibleVersion: s.bibleVersion, displayName: s.displayName, profileLoaded: s.profileLoaded };
     });
     await state().hydrate('A');
     unsubscribe();

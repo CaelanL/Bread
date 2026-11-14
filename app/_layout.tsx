@@ -52,12 +52,13 @@ if (__DEV__) {
 }
 
 // The launch's profile read says whether the walkthrough was already seen, so a seen account
-// makes no claim. With no profile read (offline), no claim this launch.
+// makes no claim. With no profile read (offline), no claim this launch. A saved library's paint
+// comes before the profile read, so this waits for the server's.
 function claimAfterLoad(userId: string): Promise<boolean> {
   return new Promise<void>((resolve) => {
-    if (useAppStore.getState().hydrated) return resolve();
-    const unsubscribe = useAppStore.subscribe(({ hydrated }) => {
-      if (!hydrated) return;
+    if (useAppStore.getState().hydratedFrom === 'server') return resolve();
+    const unsubscribe = useAppStore.subscribe(({ hydratedFrom }) => {
+      if (hydratedFrom !== 'server') return;
       unsubscribe();
       resolve();
     });

@@ -63,13 +63,17 @@ test('the saved library: synced, snapshot read and write', async (t) => {
       return Response.json({ access_token: tokens[id], refresh_token: 'r-' + id, token_type: 'bearer', expires_in: 3600, user: { id } });
     }
     if (url.pathname === '/auth/v1/logout') return new Response(null, { status: 204 });
-    const index = held.findIndex((entry) => entry.path === url.pathname && method === 'GET');
+    const index = held.findIndex((entry) => entry.path === url.pathname && (method === 'GET' || url.pathname.startsWith('/rest/v1/rpc/')));
     if (index >= 0) {
       const [entry] = held.splice(index, 1);
       entry.request.resolve(account);
       return entry.response.promise;
     }
     if (offline) throw new TypeError('Network request failed');
+    if (url.pathname === '/rest/v1/rpc/save_verse_progress') {
+      const body = JSON.parse(init.body);
+      return Response.json([{ applied: true, progress: body.p_progress, last_practiced_at: body.p_last_practiced_at, updated_at: '2026-11-14T00:00:00.000001+00:00' }]);
+    }
     if (url.pathname.startsWith('/rest/v1/rpc/')) return Response.json([]);
     if (method !== 'GET') return new Response(null, { status: 204 });
     if (url.pathname === '/rest/v1/profiles') {
@@ -86,6 +90,8 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:1';
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'test-key';
   const { useAppStore } = await import('../lib/store/index.ts');
+  const { setAccount } = await import('../lib/auth/account.ts');
+  const { serializeSnapshot } = await import('../lib/store/snapshot.ts');
   const { supabase } = await import('../lib/api/client.ts');
   t.after(() => supabase.auth.stopAutoRefresh());
   const store = useAppStore.getState;
@@ -134,5 +140,102 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.equal(await store().whenSynced(), false);
     offline = false;
     assert.equal(await store().whenSynced(), true, 'once the network is back, the retry syncs');
+  });
+
+  const painted = (account, id, savedAt = Date.now()) => serializeSnapshot({
+    collections: [{ id: 'my-verses', name: 'My Verses', isDefault: true, createdAt: 0 }],
+    verses: [{ ...membershipVerse(id), text: 'never on disk' }],
+    masteredVerses: [],
+    sharedCollections: {},
+    displayName: account + ' L.', firstName: account, lastName: 'L',
+  }, savedAt);
+  const membershipVerse = (id) => ({
+    id, collectionId: 'my-verses', book: 'John', chapter: 3, verseStart: 16, verseEnd: 16, version: 'ESV', createdAt: 0,
+    progress: { easy: { bestAccuracy: null, completed: false }, medium: { bestAccuracy: null, completed: false }, hard: { bestAccuracy: null, completed: false } },
+    updatedAt: '2026-11-01T00:00:00.000001+00:00',
+  });
+  const saved = (account) => JSON.parse(storage.get('library_snapshot:' + account) ?? 'null');
+
+  await t.test('a launch paints the saved library at once, then the server\'s replaces it and is saved', async () => {
+    store().clear();
+    storage.set('library_snapshot:A', painted('A', 'A-snap'));
+    const wave = hold('/rest/v1/verse_collections');
+    setAccount('A');
+    await wave.sent;
+    await until(() => store().hydrated);
+    assert.equal(store().hydratedFrom, 'snapshot');
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-snap']);
+    assert.deepEqual(store().collections.map((c) => c.id), ['my-verses', 'mastered', 'in-progress']);
+    assert.equal(store().displayName, 'A L.');
+    assert.equal(store().synced, false);
+    const before = storage.get('library_snapshot:A');
+    wave.reply(Response.json(verseRows.A));
+    await until(() => store().synced);
+    assert.equal(store().hydratedFrom, 'server');
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-verse']);
+    assert.notEqual(storage.get('library_snapshot:A'), before, 'nothing was written before synced, then the server\'s library was');
+    assert.deepEqual(saved('A').verses.map((v) => v.id), ['A-verse']);
+  });
+
+  await t.test('a progress save is in the snapshot as soon as it returns', async () => {
+    await store().updateVerseProgress('A-verse', 'easy', 70);
+    assert.equal(saved('A').verses[0].progress.easy.bestAccuracy, 70);
+    assert.equal(saved('A').verses[0].updatedAt, '2026-11-14T00:00:00.000001+00:00');
+  });
+
+  await t.test('another account never gets A\'s snapshot, even when A\'s read is still going', async () => {
+    await signIn('B');
+    storage.set('library_snapshot:B', painted('B', 'B-snap'));
+    const seen = new Set();
+    const unsubscribe = useAppStore.subscribe(({ verses }) => verses.forEach((v) => seen.add(v.id)));
+    const wave = hold('/rest/v1/verse_collections');
+    setAccount('B');
+    await wave.sent;
+    await until(() => store().hydrated);
+    wave.reply(Response.json(verseRows.B));
+    await until(() => store().synced);
+    unsubscribe();
+    assert.equal([...seen].some((id) => id.startsWith('A-')), false);
+    assert.deepEqual([...seen].sort(), ['B-snap', 'B-verse']);
+    assert.ok(storage.has('library_snapshot:A'), 'switching accounts keeps A\'s for A\'s next launch');
+  });
+
+  await t.test('a too-old snapshot is removed and not painted', async () => {
+    store().clear();
+    setAccount(null);
+    await signIn('B');
+    storage.set('library_snapshot:B', painted('B', 'B-snap', Date.now() - 8 * 24 * 60 * 60 * 1000));
+    const wave = hold('/rest/v1/verse_collections');
+    setAccount('B');
+    await wave.sent;
+    await until(() => !storage.has('library_snapshot:B'));
+    assert.equal(store().hydrated, false);
+    wave.reply(Response.json(verseRows.B));
+    await until(() => store().synced);
+    assert.equal(store().hydratedFrom, 'server');
+  });
+
+  await t.test('a late progress save after sign-out saves nothing, and sign-out removes the key', async () => {
+    const save = hold('/rest/v1/rpc/save_verse_progress');
+    const saving = store().updateVerseProgress('B-verse', 'easy', 80);
+    await save.sent;
+    setAccount(null);
+    assert.equal(storage.has('library_snapshot:B'), false);
+    save.reply(Response.json([{ applied: true, progress: {}, last_practiced_at: null, updated_at: '2026-11-14T00:00:01.000001+00:00' }]));
+    await saving;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(storage.has('library_snapshot:B'), false);
+  });
+
+  await t.test('a failed launch keeps the old snapshot as it was', async () => {
+    await signIn('A');
+    const before = storage.get('library_snapshot:A');
+    offline = true;
+    setAccount('A');
+    await until(() => store().hydratedFrom === 'server');
+    offline = false;
+    assert.equal(store().synced, false);
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-verse'], 'the saved library stays on screen');
+    assert.equal(storage.get('library_snapshot:A'), before);
   });
 });

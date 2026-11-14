@@ -28,6 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, InteractionManager } from 'react-native';
 import { create } from 'zustand';
 import { pickPreload } from './preload';
+import { parseSnapshot, serializeSnapshot, snapshotKey, type SnapshotData } from './snapshot';
 
 import {
   getInProgressSort,
@@ -74,6 +75,16 @@ const IN_PROGRESS_COLLECTION: Collection = {
   iconColor: '#f59e0b',
   createdAt: 0,
 };
+
+// My Verses (a stand-in until the server makes it), then the virtual collections, then the rest.
+function withPinned(collections: Collection[]): Collection[] {
+  return [
+    collections.find((c) => c.isDefault) ?? DEFAULT_COLLECTION,
+    MASTERED_COLLECTION,
+    IN_PROGRESS_COLLECTION,
+    ...collections.filter((c) => !c.isDefault),
+  ];
+}
 
 // ============ STORE INTERFACE ============
 
@@ -128,8 +139,10 @@ interface AppState {
   fetchMasteredVerses: () => Promise<boolean>;
   fetchCuratedSaverCounts: (signal?: AbortSignal) => Promise<boolean>;
   fetchSharedCollections: () => Promise<boolean>;
-  /** Starts an account: settings, then the account's library. Called by lib/auth/account.ts. */
+  /** Starts an account: settings and its saved library, then the server's. Called by lib/auth/account.ts. */
   hydrate: (userId: string) => Promise<void>;
+  /** Settings and the account's saved library only, nothing on the network (lib/auth/account.ts). */
+  paintSnapshot: (userId: string) => Promise<void>;
   refresh: () => Promise<void>;
   /**
    * True once `synced`. Waits for the running wave, then refreshes once; false if still not synced.
@@ -413,6 +426,36 @@ async function tellKeptVerses(kept: HeldVerse[], translation: BibleVersion) {
   }
 }
 
+// ============ SAVED LIBRARY ============
+
+/**
+ * Saves the library for the next launch's first frame (lib/store/snapshot.ts holds the allowlist).
+ * Only from server-applied state: once synced, after each wave, and after a write the server
+ * confirmed; never from a subscriber, which would save unconfirmed study prefs. The generation is
+ * checked with no await before `setItem`, so a late write for an account that has left saves nothing.
+ */
+function saveSnapshot(generation: number) {
+  const state = useAppStore.getState();
+  if (generation !== accountGeneration || !state.synced || !accountUserId) return;
+  AsyncStorage.setItem(snapshotKey(accountUserId), serializeSnapshot(state, Date.now()))
+    .catch((e) => console.error('[STORE] Failed to save the library snapshot:', e));
+}
+
+function snapshotState(data: SnapshotData): Partial<AppState> {
+  return {
+    collections: withPinned(data.collections),
+    verses: data.verses,
+    masteredVerses: data.masteredVerses,
+    sharedCollections: data.sharedCollections,
+    ...data.names,
+    hydrated: true,
+    hydratedFrom: 'snapshot',
+    collectionsLoading: false,
+    versesLoading: false,
+    masteredLoading: false,
+  };
+}
+
 const PROFILE_COLUMNS = 'translation, display_name, first_name, last_name, welcome_v2_seen_at';
 
 async function readProfile(userId: string) {
@@ -496,6 +539,7 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
   if (translation && requestedTranslation === null) updates.bibleVersion = translation;
   useAppStore.setState(updates);
   perfMark('hydrated');
+  saveSnapshot(generation);
   if (updates.bibleVersion) {
     AsyncStorage.setItem(BIBLE_VERSION_KEY, updates.bibleVersion).catch((e) => {
       console.error('[STORE] Failed to cache bibleVersion:', e);
@@ -511,7 +555,10 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
     if (identity.status === 'rejected') throw identity.reason;
     const { kept, changed } = await alignVerses(userId, translation, identity.value);
     if (generation !== accountGeneration) return;
-    if (changed || translation !== cached) await Promise.all([store().fetchVerses(), store().fetchMasteredVerses()]);
+    if (changed || translation !== cached) {
+      await Promise.all([store().fetchVerses(), store().fetchMasteredVerses()]);
+      saveSnapshot(generation);
+    }
     if (generation !== accountGeneration) return;
     await tellKeptVerses(kept, translation);
   }
@@ -521,6 +568,58 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
     });
   }
   if (failure) throw failure;
+}
+
+// The settings read and snapshot paint for one account start.
+let localRead: { generation: number; userId: string; done: Promise<void> } | null = null;
+
+async function readLocal(generation: number, userId: string) {
+  const set = useAppStore.setState;
+  const get = useAppStore.getState;
+  try {
+    const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText, savedLibrary] = await Promise.all([
+      AsyncStorage.getItem(COLOR_MODE_KEY),
+      AsyncStorage.getItem(BIBLE_VERSION_KEY),
+      AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
+      getMasteredSort(),
+      getInProgressSort(),
+      AsyncStorage.getItem(HIDE_VERSE_TEXT_KEY),
+      AsyncStorage.getItem(snapshotKey(userId)).catch(() => null),
+    ]);
+
+    const updates: Partial<AppState> = {};
+    if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
+      updates.colorMode = savedColorMode as ColorMode;
+    }
+    if (savedHideVerseText === 'true') updates.hideVerseText = true;
+    if (isBibleVersion(savedBibleVersion)) {
+      updates.bibleVersion = savedBibleVersion;
+    }
+    if (savedReviewMax) {
+      const parsed = parseInt(savedReviewMax, 10);
+      if (Number.isFinite(parsed) && parsed >= MIN_USER_MAX_INTERVAL_DAYS && parsed <= MAX_USER_MAX_INTERVAL_DAYS) {
+        updates.reviewMaxIntervalDays = parsed;
+      }
+    }
+    if (savedMasteredSort) {
+      updates.masteredSort = savedMasteredSort;
+    }
+    if (savedInProgressSort) {
+      updates.inProgressSort = savedInProgressSort;
+    }
+    if (generation !== accountGeneration) return;
+    const library = parseSnapshot(savedLibrary, Date.now());
+    if (library && !get().hydrated) Object.assign(updates, snapshotState(library));
+    if (savedLibrary && !library) {
+      AsyncStorage.removeItem(snapshotKey(userId)).catch((e) => console.error('[STORE] Failed to remove an old snapshot:', e));
+    }
+    if (Object.keys(updates).length > 0) {
+      set(updates);
+    }
+    if (library) perfMark('snapshot');
+  } catch (e) {
+    console.error('[STORE] Failed to load settings:', e);
+  }
 }
 
 // ============ VERSE TEXT PRELOAD ============
@@ -722,18 +821,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         return false;
       }
 
-      const collections = data.map(parseCollectionRow);
-
-      const pinned = [
-        collections.find((c) => c.isDefault) ?? DEFAULT_COLLECTION,
-        MASTERED_COLLECTION,
-        IN_PROGRESS_COLLECTION,
-      ];
+      const collections = withPinned(data.map(parseCollectionRow));
       set((state) => {
         // An older refresh must not replace a collection write made during the request.
         if (state.collections !== previousCollections) return { collectionsLoading: false, error: null };
         applied.add('collections');
-        return { collections: [...pinned, ...collections.filter((c) => !c.isDefault)], collectionsLoading: false, error: null };
+        return { collections, collectionsLoading: false, error: null };
       });
       return true;
     } catch (e) {
@@ -892,47 +985,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     perfMark('hydrate');
     const generation = accountGeneration;
     accountUserId = userId;
-    // Load settings from AsyncStorage (doesn't require auth)
-    try {
-      const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText] = await Promise.all([
-        AsyncStorage.getItem(COLOR_MODE_KEY),
-        AsyncStorage.getItem(BIBLE_VERSION_KEY),
-        AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
-        getMasteredSort(),
-        getInProgressSort(),
-        AsyncStorage.getItem(HIDE_VERSE_TEXT_KEY),
-      ]);
-
-      const updates: Partial<AppState> = {};
-      if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
-        updates.colorMode = savedColorMode as ColorMode;
-      }
-      if (savedHideVerseText === 'true') updates.hideVerseText = true;
-      if (isBibleVersion(savedBibleVersion)) {
-        updates.bibleVersion = savedBibleVersion;
-      }
-      if (savedReviewMax) {
-        const parsed = parseInt(savedReviewMax, 10);
-        if (Number.isFinite(parsed) && parsed >= MIN_USER_MAX_INTERVAL_DAYS && parsed <= MAX_USER_MAX_INTERVAL_DAYS) {
-          updates.reviewMaxIntervalDays = parsed;
-        }
-      }
-      if (savedMasteredSort) {
-        updates.masteredSort = savedMasteredSort;
-      }
-      if (savedInProgressSort) {
-        updates.inProgressSort = savedInProgressSort;
-      }
-      if (Object.keys(updates).length > 0) {
-        set(updates);
-      }
-    } catch (e) {
-      console.error('[STORE] Failed to load settings:', e);
-    }
-
+    await get().paintSnapshot(userId);
     if (generation !== accountGeneration) return;
     accountLoad = queueTranslationWork(() => loadAccount(generation, userId, true)).catch(reportSyncFailure(generation));
     await accountLoad;
+  },
+
+  // Settings, then the account's snapshot if nothing is painted yet: one update. A launch that
+  // painted provisionally (lib/auth/account.ts) shares the read with the hydrate after it.
+  paintSnapshot: (userId) => {
+    const generation = accountGeneration;
+    if (localRead?.generation !== generation || localRead.userId !== userId) {
+      localRead = { generation, userId, done: readLocal(generation, userId) };
+    }
+    return localRead.done;
   },
 
   refresh: async () => {
@@ -1036,6 +1102,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         user_id: userId, display_name: next.displayName, first_name: firstName, last_name: lastName,
       });
       if (error) throw error;
+      saveSnapshot(generation);
     } catch (e) {
       console.error('[STORE] Failed to save name:', e);
       if (generation !== accountGeneration) return;
@@ -1060,6 +1127,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ COLLECTION ACTIONS ============
 
   addCollection: async (name, iconKey) => {
+    const generation = accountGeneration;
     const userId = await getCurrentUserId();
     const clientId = `collection-${Date.now()}`;
     const createdAt = new Date();
@@ -1090,6 +1158,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       collections: [...state.collections, newCollection],
     }));
+    saveSnapshot(generation);
 
     return newCollection;
   },
@@ -1124,6 +1193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [...state.collections, collection],
       verses: [...verses, ...state.verses.filter(({ collectionId: id }) => id !== collection.id)],
     }));
+    saveSnapshot(generation);
     return { collectionId, loaded: true };
   },
 
@@ -1159,6 +1229,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       collections: state.collections.map((current) => current.id === id ? { ...current, iconKey } : current),
     }));
+    saveSnapshot(generation);
   },
 
   renameCollection: async (id, name) => {
@@ -1194,6 +1265,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       collections: state.collections.map((c) => c.id === id ? { ...c, name: data.name } : c),
     }));
+    saveSnapshot(generation);
   },
 
   reorderCollections: async (ids) => {
@@ -1227,6 +1299,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
     set({ collectionOrderSaving: false });
+    saveSnapshot(generation);
   },
 
   deleteCollection: async (id: string) => {
@@ -1263,6 +1336,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
       }),
     }));
+    saveSnapshot(generation);
   },
 
   setCollectionSort: async (collectionId: string, sort: SortOption) => {
@@ -1322,6 +1396,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Deletes the group: its codes die, members keep a personal copy, and the owner's copy is a
   // plain collection again.
   stopSharing: async (sharedId) => {
+    const generation = accountGeneration;
     if (sharedRole(sharedId) !== 'owner') throw new Error('Only the owner can stop sharing.');
     const { data: group, error } = await db.from('shared_collections').delete().eq('id', sharedId).select('id');
     if (error) throw error;
@@ -1331,6 +1406,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
       sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
     }));
+    saveSnapshot(generation);
   },
 
   mintInvite: async (sharedId) => {
@@ -1457,6 +1533,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     // The server applied the delete rule; a verse may now be soft-deleted or gone.
     await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
+    saveSnapshot(generation);
   },
 
   removeSharedMember: async (sharedId, userId) => {
@@ -1480,14 +1557,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   copyVerseToCollection: async (verseId, collectionId) => {
     // A shared collection holds the group's references: the copy adds one, and sync links the verse.
+    const generation = accountGeneration;
     const sharedId = sharedIdOf(collectionId);
     if (sharedId) {
       const verse = get().verses.find((v) => v.id === verseId);
       if (!verse) throw new Error('Failed to copy verse');
       await addSharedVerse(sharedId, collectionId, verse);
+      saveSnapshot(generation);
       return;
     }
-    const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
     if (!session || generation !== accountGeneration) return;
     const { data, error } = await supabase.rpc('copy_verse_to_collection', {
@@ -1504,15 +1582,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       ? state
       : { verses: [copy, ...state.verses] }
     );
+    saveSnapshot(generation);
   },
 
   addVerse: async (verse, collectionId) => {
+    const generation = accountGeneration;
     const sharedId = sharedIdOf(collectionId);
-    if (sharedId) return addSharedVerse(sharedId, collectionId, verse);
+    if (sharedId) {
+      const added = await addSharedVerse(sharedId, collectionId, verse);
+      saveSnapshot(generation);
+      return added;
+    }
     // One transaction on the server (supabase/migrations/*_add_verse.sql): My Verses is made on
     // first use, an unknown collection is an error, and the reference's held or best removed row
     // is reused and linked; or nothing changes.
-    const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
     if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
     const { data: row, error } = await db.rpc('add_verse', {
@@ -1538,11 +1621,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => state.verses.some(isThisMembership)
       ? state
       : { verses: [resultVerse, ...state.verses] });
+    saveSnapshot(generation);
 
     return get().verses.find(isThisMembership) ?? resultVerse;
   },
 
   deleteVerse: async (id: string, collectionId: string): Promise<{ wasMastered: boolean }> => {
+    const generation = accountGeneration;
     // Get verse info
     const verse = get().verses.find((v) => v.id === id);
     const isMastered = verse?.progress?.hard?.completed === true;
@@ -1574,6 +1659,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         await Promise.all([
           get().fetchVerses(), get().fetchMasteredVerses(), get().fetchSharedCollections(), refetchLoadedProgress(sharedId),
         ]);
+        saveSnapshot(generation);
         return { wasMastered: isMastered };
       } catch (error) {
         set({ verses: previousVerses });
@@ -1589,6 +1675,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ verses: previousVerses });
       throw new Error('Failed to delete verse');
     }
+    saveSnapshot(generation);
     return { wasMastered: isMastered };
   },
 
@@ -1597,6 +1684,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // the setup screen and study session reach it through findVerse too.
     const verse = findVerse(get(), id);
     if (!verse) return;
+    const generation = accountGeneration;
     const isQualifyingReview = difficulty === 'hard' && accuracy >= 90 && fullSession;
     const nowIso = new Date().toISOString();
 
@@ -1655,6 +1743,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? [{ ...verse, ...saved, collectionId: MASTERED_COLLECTION_ID }, ...state.masteredVerses]
           : state.masteredVerses.map((v) => v.id === id ? { ...v, ...saved } : v),
       }));
+      saveSnapshot(generation);
 
       // A shared card's emblem reads `get_shared_status`, so a square that just turned mastered or
       // engraved refetches it.
@@ -1740,6 +1829,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     accountUserId = null;
     accountLoad = Promise.resolve();
     applied = new Set();
+    localRead = null;
     requestedTranslation = null;
     set({
       collections: [],
