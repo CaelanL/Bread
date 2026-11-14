@@ -120,14 +120,15 @@ are in `docs/architecture/edge-functions.md`.
 
 Prefs are cached per account (`notifications_prefs_cache:<userId>`). `setAccount`
 (`lib/auth/account.ts`) hydrates them, then runs `syncForegroundState`; sign-out removes
-the cache. `app/_layout.tsx` syncs again on each return after 30 s away. Its `setNotificationHandler` turns everything off, so a push arriving while the
+the cache. `app/_layout.tsx` syncs again on every return to the app (`returnTracker`). Its `setNotificationHandler` turns everything off, so a push arriving while the
 app is open shows nothing.
 
 `signOut` in `lib/auth/context.tsx` calls `unregisterDeviceToken` first, while RLS still lets
 it delete the row. If that fails or the app dies first, the next sign-in on the device takes
 the row over.
 
-`syncForegroundState`, in order:
+`syncForegroundState`, in order. A quick return (under 30 s away) stops after reading the
+permission unless it changed since the last sync, and never runs step 4.
 
 1. If `denied`, call `unregisterDeviceToken`.
 2. If granted or provisional, call `registerDeviceToken`. If that returned a token and no

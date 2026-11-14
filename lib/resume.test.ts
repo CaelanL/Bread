@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { homeStale, resumeTracker } from './resume';
+import { homeStale, resumeTracker, returnTracker } from './resume';
 
 function tracker() {
   let clock = 0;
@@ -46,4 +46,18 @@ test('Home reloads when its last load is old, another key or month, or a session
   assert.equal(homeStale(last, { ...last, at: 1, sessionAt: 1 }), true);
   assert.equal(homeStale(last, { ...last, at: 1, key: 'a:NIV' }), true);
   assert.equal(homeStale(last, { ...last, at: 1, month: '2026-12' }), true);
+});
+
+test('every return is reported; only one away 30 s or more is a resume', () => {
+  let clock = 0;
+  const returns: boolean[] = [];
+  const track = returnTracker((resumed) => returns.push(resumed), () => clock);
+  track('inactive');
+  clock += 5_000;
+  track('active');
+  track('active');
+  track('background');
+  clock += 31_000;
+  track('active');
+  assert.deepEqual(returns, [false, true]);
 });

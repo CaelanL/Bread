@@ -34,8 +34,18 @@ function deviceTimezone(): string {
   }
 }
 
-export async function syncForegroundState(): Promise<void> {
+// The status the last sync saw, so a quick return only touches the token row when it changed.
+let lastStatus: string | null = null;
+
+/**
+ * `resumed: false` is a quick return (under RESUME_AWAY_MS): the permission is still read, and the
+ * token registered or removed if it changed (e.g. turned on in iOS Settings), but no heartbeat.
+ */
+export async function syncForegroundState({ resumed = true } = {}): Promise<void> {
   const status = await getPermissionStatus();
+  const changed = status !== lastStatus;
+  lastStatus = status;
+  if (!resumed && !changed) return;
 
   if (status === 'denied') {
     // User revoked externally. Belt-and-suspenders alongside server-
@@ -72,7 +82,7 @@ export async function syncForegroundState(): Promise<void> {
     }
   }
 
-  // Heartbeat: always fire (server filters on user_id; no-row → no-op).
+  // Heartbeat on a real resume (server filters on user_id; no-row → no-op).
   // Tied to the in-progress 24h-active gate.
-  await updateLastForegroundedAt();
+  if (resumed) await updateLastForegroundedAt();
 }

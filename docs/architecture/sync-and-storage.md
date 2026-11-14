@@ -274,7 +274,7 @@ to apply optimistically or wait for the server.
 |---|---|---|
 | Sign-in or app start with a session | Pull (profile, collections, verses, mastered, shared) | `setAccount` → `hydrate()`, one wave |
 | Pull-to-refresh | Pull | `refresh()`: the same wave as hydrate, plus curated save counts; a shared collection's is [one wave](../features/group-progress.md#collection-screen) |
-| Resume: back after `RESUME_AWAY_MS` (30 s) away | Pull | `resumeTracker` (`lib/resume.ts`; Control Center or a quick switch isn't one): `syncForegroundState`, curated save counts. Home: [its rule](../features/home.md#monthly-schedule-and-loading) |
+| Resume: back after `RESUME_AWAY_MS` (30 s) away | Pull | `resumeTracker` (`lib/resume.ts`; Control Center or a quick switch isn't one): `syncForegroundState`'s heartbeat, curated save counts. Every return still reads the notification permission ([notifications.md](../features/notifications.md)). Home: [its rule](../features/home.md#monthly-schedule-and-loading) |
 | Add/delete collection | Push, then local | |
 | Add verse | Push, then local | one `add_verse` call ([adding-verses.md](../features/adding-verses.md#verse-identity)); shared copies use `addSharedVerse` |
 | Delete verse | Local, then push, rollback on failure | |
@@ -377,7 +377,9 @@ Invariants 1 and 10 are above. Also:
 - **The wave's requests go out before the saved library paints.** Painting
   first held them behind the list's render (server data at 731 ms vs 457 ms).
 - **Reloads on return wait for 30 s away (Q26).** Control Center or a
-  quick app switch fired a burst of reads.
+  quick app switch fired a burst of reads. The notification permission is
+  still read on every return, so turning it on in iOS Settings and coming
+  straight back registers the device.
 
 ## Browser checks
 
