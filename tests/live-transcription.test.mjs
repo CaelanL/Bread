@@ -180,4 +180,58 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     assert.equal(uploaded, true);
     assert.equal((await scoring)?.display.score, 100);
   });
+
+  function score(session, upload) {
+    return scoreRecording({
+      text: 'be still',
+      isRetry: false,
+      isPeeked: false,
+      isCurrent: () => true,
+      liveSession: session,
+      transcribeFile: upload,
+    });
+  }
+
+  await t.test('a socket that never opened sends the file to batch at once', async (scenario) => {
+    const { session, socket } = await open(new LiveKeyCache());
+    session.feedAudio(new Uint8Array(320));
+    scenario.mock.timers.enable({ apis: ['setTimeout'] });
+    let uploaded = false;
+    const result = await score(session, async () => {
+      uploaded = true;
+      return 'be still';
+    });
+    assert.equal(uploaded, true);
+    assert.equal(result?.display.score, 100);
+    assert.equal(socket.sent.length, 0);
+  });
+
+  await t.test('a trailing chunk that lands during the grace window still counts', async (scenario) => {
+    const { session, socket } = await open(new LiveKeyCache());
+    stream(socket);
+    scenario.mock.timers.enable({ apis: ['setTimeout'] });
+    const scoring = score(session, async () => assert.fail('live should score this take'));
+    session.feedAudio(new Uint8Array(320));
+    scenario.mock.timers.tick(50);
+    assert.equal(socket.sent.at(-1), '', 'end-of-audio was sent');
+    socket.reply({ tokens: [{ text: 'be still', is_final: true }], finished: true });
+    assert.equal((await scoring)?.display.score, 100);
+  });
+
+  await t.test('no audio by the end of the grace window goes to batch', async (scenario) => {
+    const { session, socket } = await open(new LiveKeyCache());
+    stream(socket);
+    scenario.mock.timers.enable({ apis: ['setTimeout'] });
+    let uploaded = false;
+    const scoring = score(session, async () => {
+      uploaded = true;
+      return 'be still';
+    });
+    scenario.mock.timers.tick(49);
+    await settle();
+    assert.equal(uploaded, false);
+    scenario.mock.timers.tick(1);
+    assert.equal((await scoring)?.display.score, 100);
+    assert.equal(uploaded, true);
+  });
 });

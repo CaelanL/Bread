@@ -106,7 +106,6 @@ class LiveSession implements LiveTranscriptionSession {
   private readonly maxBufferBytes: number;
   private finalTexts: string[] = [];
   private bytesFed = 0;
-  private finishRequested = false;
   private finishResolve: ((transcript: string) => void) | null = null;
   private finishReject: ((error: Error) => void) | null = null;
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -167,9 +166,6 @@ class LiveSession implements LiveTranscriptionSession {
       this.buffer = [];
       this.bufferedBytes = 0;
       this.state = 'streaming';
-      if (this.finishRequested) {
-        ws.send(''); // end-of-audio
-      }
     };
 
     ws.onmessage = (event) => {
@@ -233,20 +229,23 @@ class LiveSession implements LiveTranscriptionSession {
     if (this.state === 'failed' || this.state === 'closed') {
       return Promise.reject(new Error('live session unavailable'));
     }
-    if (this.bytesFed === 0) {
-      // PCM capture never delivered audio — an empty transcript here
-      // would score 0; let the batch path score the file instead
-      this.fail('no audio was fed');
-      return Promise.reject(new Error('no audio was fed'));
+    if (this.state === 'connecting') {
+      // The socket never opened (dead network, slow mint): batch has the
+      // whole file, so don't wait for a connection
+      this.fail('never opened');
+      return Promise.reject(new Error('never opened'));
     }
     return new Promise<string>((resolve, reject) => {
       this.finishResolve = resolve;
       this.finishReject = reject;
       this.graceTimer = setTimeout(() => {
-        this.finishRequested = true;
-        if (this.state === 'streaming') {
-          this.ws?.send(''); // end-of-audio; connecting sends it on flush
+        if (this.bytesFed === 0) {
+          // PCM capture never delivered audio, even the trailing chunk: an
+          // empty transcript would score 0, so batch scores the file instead
+          this.fail('no audio was fed');
+          return;
         }
+        this.ws?.send(''); // end-of-audio
       }, FLUSH_GRACE_MS);
       this.timeoutTimer = setTimeout(() => {
         if (this.finishReject) {
