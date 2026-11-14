@@ -1,0 +1,19 @@
+# Snapshot cold start (docs/architecture/sync-and-storage.md): a relaunch paints the saved library
+# before the server answers. Every Supabase request takes 10s longer (dev latency), so a Library
+# shown within 9s of launch (the dev bundle's download included) came from the saved copy; its
+# first screenshot has every card, with no fade-in. The [PERF] lines time the paint itself.
+appId: com.caelanliu.biblemem
+name: snapshot-cold-start
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&latency=10000&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Psalm 23, 2 verses.*"
+    timeout: 90000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: ".*Romans 8.*"
+    timeout: 9000
+- takeScreenshot: snapshot-cold-start-library
+- assertVisible: ".*Philippians 4.*"

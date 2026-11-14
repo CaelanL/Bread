@@ -134,9 +134,14 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.equal(store().hydratedFrom, null);
   });
 
+  await t.test('with no account started (signed out, or painted while the session restores), whenSynced answers false at once', async () => {
+    store().clear();
+    assert.equal(await store().whenSynced(), false);
+  });
+
   await t.test('a failed wave leaves synced false, and whenSynced answers false after one more try', async () => {
     offline = true;
-    await store().refresh();
+    await store().hydrate('A');
     assert.equal(store().synced, false);
     assert.equal(await store().whenSynced(), false);
     offline = false;

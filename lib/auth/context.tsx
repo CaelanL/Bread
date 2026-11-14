@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
-import { supabase } from '@/lib/api/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AUTH_STORAGE_KEY, supabase } from '@/lib/api/client';
 import { perfMark } from '@/lib/api/dev-timing';
 import { unregisterDeviceToken } from '@/lib/notifications/tokens';
 import { setAccount } from './account';
+import { afterRestore } from './after-restore';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -63,9 +65,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    // The stored session's user, read once without waiting for a token refresh, so that account's
+    // saved library paints at once (RootLayoutNav shows it while the session restores).
+    const stored = AsyncStorage.getItem(AUTH_STORAGE_KEY).then((raw) => {
+      const id: unknown = raw ? JSON.parse(raw)?.user?.id : null;
+      if (typeof id !== 'string') return null;
+      setAccount(id, { provisional: true });
+      return id;
+    }).catch(() => null);
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    Promise.all([supabase.auth.getSession(), stored]).then(([{ data: { session }, error }, storedUserId]) => {
       perfMark('session');
+      // Couldn't reach the server to refresh the token: stay on the saved library, still loading.
+      // supabase-js keeps the session and retries; its TOKEN_REFRESHED below starts the account.
+      if (afterRestore(storedUserId, { session, error }) === 'offline') return;
       if (session) setRestoredUserId(session.user.id);
       // Before the tree mounts, so the library load starts now.
       setAccount(session?.user.id ?? null);
@@ -74,10 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
-    // Listen for auth changes
+    // Listen for auth changes. The launch's own state comes from getSession above.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (event === 'INITIAL_SESSION' && session) setRestoredUserId(session.user.id);
+        if (event === 'INITIAL_SESSION') return;
         if (event === 'SIGNED_OUT') setRestoredUserId(null);
         setAccount(session?.user.id ?? null);
         setSession(session);

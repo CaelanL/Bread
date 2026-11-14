@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
+import { authStorageKey } from "../auth/after-restore";
 import { timedFetch } from "./dev-timing";
 
 // Read from process.env (Expo automatically injects EXPO_PUBLIC_* vars)
@@ -17,9 +18,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Only use AsyncStorage on native platforms, use default (localStorage) on web
 const storage = Platform.OS === "web" ? undefined : AsyncStorage;
 
+/** Where the session is stored: supabase-js's own default, named so a launch can read it early. */
+export const AUTH_STORAGE_KEY = authStorageKey(supabaseUrl);
+
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage,
+    storageKey: AUTH_STORAGE_KEY,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false, // Required for React Native

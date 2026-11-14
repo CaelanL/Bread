@@ -79,6 +79,9 @@ function RootLayoutNav() {
   const segments = useSegments();
   const pathname = usePathname();
   const navigationState = useRootNavigationState();
+  // The stored user's saved library painted while the session restores (offline, or a slow token
+  // refresh): show it rather than the spinner. Writes still wait for the session and fail visibly.
+  const painted = useAppStore((state) => state.hydrated);
 
   // Handle navigation based on auth state
   useEffect(() => {
@@ -187,7 +190,7 @@ function RootLayoutNav() {
   const darkScreen = colorScheme === 'dark' || segments[0] === '(auth)' || segments[0] === 'reset-password';
 
   // Show loading spinner while checking auth
-  if (isLoading) {
+  if (isLoading && !painted) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />

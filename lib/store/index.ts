@@ -1013,6 +1013,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   whenSynced: async () => {
     if (get().synced) return true;
     const generation = accountGeneration;
+    // No account started: signed out, or a saved library painted while the session restores.
+    if (!accountUserId) return false;
     await accountLoad;
     if (generation !== accountGeneration) return false;
     if (get().synced) return true;
