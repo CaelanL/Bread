@@ -443,9 +443,25 @@ async function tellKeptVerses(kept: HeldVerse[], translation: BibleVersion) {
  */
 function saveSnapshot(generation: number) {
   const state = useAppStore.getState();
-  if (generation !== accountGeneration || !state.synced || !accountUserId) return;
+  if (generation !== accountGeneration || !state.synced || !accountUserId || pendingWrites > 0) return;
   AsyncStorage.setItem(snapshotKey(accountUserId), serializeSnapshot(state, Date.now()))
     .catch((e) => console.error('[STORE] Failed to save the library snapshot:', e));
+}
+
+// Optimistic writes in flight this generation. The snapshot waits for them, so it never saves a
+// change the server may still refuse; the last one to settle saves it.
+let pendingWrites = 0;
+
+async function confirming<T>(generation: number, write: () => Promise<T>): Promise<T> {
+  pendingWrites++;
+  try {
+    return await write();
+  } finally {
+    if (generation === accountGeneration) {
+      pendingWrites--;
+      saveSnapshot(generation);
+    }
+  }
 }
 
 function snapshotState(data: SnapshotData): Partial<AppState> {
@@ -511,13 +527,20 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
 
   // A read dropped to keep a change made during it (study prefs on a snapshot paint) reads once more.
   if (collectionsOk && versesOk && masteredOk && sharedOk && !allApplied()) {
-    await Promise.all([applied.has('collections') || store().fetchCollections(), applied.has('verses') || store().fetchVerses()]);
+    await Promise.all([
+      applied.has('collections') || store().fetchCollections(),
+      applied.has('verses') || store().fetchVerses(),
+      applied.has('mastered') || store().fetchMasteredVerses(),
+    ]);
     if (generation !== accountGeneration) return;
   }
 
   let failure: unknown = null;
   let translation: BibleVersion | null = null;
-  const updates: Partial<AppState> = { hydrated: true, hydratedFrom: 'server', synced: store().synced || allApplied() };
+  // Name and translation decisions wait for `synced`, so it needs the profile too.
+  const updates: Partial<AppState> = {
+    hydrated: true, hydratedFrom: 'server', synced: store().synced || (allApplied() && profile.status === 'fulfilled'),
+  };
   if (profile.status === 'rejected') {
     failure = profile.reason;
   } else {
@@ -625,7 +648,7 @@ async function readSettings() {
 let localRead: { generation: number; userId: string; done: Promise<void> } | null = null;
 // The lists a snapshot painted. A server read that lands over them replaces them, as if they were
 // still the lists it started from (the read may start before the paint).
-let painted: { collections?: Collection[]; verses?: SavedVerse[] } | null = null;
+let painted: { collections?: Collection[]; verses?: SavedVerse[]; masteredVerses?: SavedVerse[] } | null = null;
 
 async function readLocal(generation: number, userId: string) {
   const get = useAppStore.getState;
@@ -650,7 +673,11 @@ async function readLocal(generation: number, userId: string) {
     if (applied.has('mastered')) delete paint.masteredVerses;
     if (applied.has('shared')) delete paint.sharedCollections;
     useAppStore.setState(paint);
-    painted = { collections: paint.collections && get().collections, verses: paint.verses && get().verses };
+    painted = {
+      collections: paint.collections && get().collections,
+      verses: paint.verses && get().verses,
+      masteredVerses: paint.masteredVerses && get().masteredVerses,
+    };
     perfMark('snapshot');
   } catch (e) {
     console.error('[STORE] Failed to read the saved library:', e);
@@ -938,6 +965,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchMasteredVerses: async () => {
     const generation = accountGeneration;
+    const previousMastered = get().masteredVerses;
     set({ masteredLoading: true });
     try {
       // Fetch mastered verses directly from DB - NO deleted_at filter
@@ -970,8 +998,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...parseVerseRowExtras(v),
       }));
 
-      set({ masteredVerses, masteredLoading: false });
-      applied.add('mastered');
+      set((state) => {
+        // A mastery saved during the read is newer than it.
+        if (state.masteredVerses !== previousMastered && state.masteredVerses !== painted?.masteredVerses) {
+          return { masteredLoading: false };
+        }
+        applied.add('mastered');
+        return { masteredVerses, masteredLoading: false };
+      });
       return true;
     } catch (e) {
       if (generation !== accountGeneration) return false;
@@ -1138,6 +1172,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       if (generation !== accountGeneration) return;
       await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
+      saveSnapshot(generation);
       await tellKeptVerses(kept, version);
     } catch (e) {
       console.error('[STORE] Failed to change translation:', e);
@@ -1345,26 +1380,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const collections = [...previous.filter((c) => c.isDefault || c.isVirtual), ...ordered];
-    set({ collections, collectionOrderSaving: true });
-    try {
-      const session = await getCollectionWriteSession(generation);
-      if (!session || generation !== accountGeneration) return;
-      const { error } = await supabase.rpc('reorder_collections', { collection_ids: ids })
-        .setHeader('Authorization', `Bearer ${session.access_token}`);
-      if (generation !== accountGeneration) return;
-      if (error) throw error;
-    } catch (error) {
-      if (generation !== accountGeneration) return;
-      set((state) => ({
-        collections: state.collections === collections ? previous : state.collections,
-        collectionOrderSaving: false,
-      }));
-      await get().fetchCollections();
-      if (generation === accountGeneration) throw error;
-      return;
-    }
-    set({ collectionOrderSaving: false });
-    saveSnapshot(generation);
+    return confirming(generation, async () => {
+      set({ collections, collectionOrderSaving: true });
+      try {
+        const session = await getCollectionWriteSession(generation);
+        if (!session || generation !== accountGeneration) return;
+        const { error } = await supabase.rpc('reorder_collections', { collection_ids: ids })
+          .setHeader('Authorization', `Bearer ${session.access_token}`);
+        if (generation !== accountGeneration) return;
+        if (error) throw error;
+      } catch (error) {
+        if (generation !== accountGeneration) return;
+        set((state) => ({
+          collections: state.collections === collections ? previous : state.collections,
+          collectionOrderSaving: false,
+        }));
+        await get().fetchCollections();
+        if (generation === accountGeneration) throw error;
+        return;
+      }
+      set({ collectionOrderSaving: false });
+    });
   },
 
   deleteCollection: async (id: string) => {
@@ -1428,18 +1464,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Real user collection — optimistic Zustand update, then DB write.
     const previous = get().collections;
-    set((state) => ({
-      collections: state.collections.map((c) =>
-        c.id === collectionId ? { ...c, sortPreference: sort } : c,
-      ),
-    }));
-    try {
-      await updateCollectionSort(collectionId, sort);
-    } catch (e) {
-      console.error('[STORE] Failed to persist collection sort:', e);
-      set({ collections: previous });
-      showErrorToast("Couldn't save sort preference.");
-    }
+    await confirming(accountGeneration, async () => {
+      set((state) => ({
+        collections: state.collections.map((c) =>
+          c.id === collectionId ? { ...c, sortPreference: sort } : c,
+        ),
+      }));
+      try {
+        await updateCollectionSort(collectionId, sort);
+      } catch (e) {
+        console.error('[STORE] Failed to persist collection sort:', e);
+        set({ collections: previous });
+        showErrorToast("Couldn't save sort preference.");
+      }
+    });
   },
 
   // ============ SHARED COLLECTION ACTIONS ============
@@ -1692,48 +1730,49 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Save for rollback
     const previousVerses = get().verses;
 
-    // Optimistic update - remove from local state immediately
-    set((state) => ({
-      verses: state.verses.filter((v) => !(v.id === id && v.collectionId === collectionId)),
-      // Don't remove from masteredVerses - mastery is permanent
-    }));
+    return confirming(generation, async () => {
+      // Optimistic update - remove from local state immediately
+      set((state) => ({
+        verses: state.verses.filter((v) => !(v.id === id && v.collectionId === collectionId)),
+        // Don't remove from masteredVerses - mastery is permanent
+      }));
 
-    // Shared: the reference leaves the group, and a trigger applies the same rule to every
-    // member's copy, this one included (docs/features/shared-collections.md#sync).
-    const sharedId = sharedIdOf(collectionId);
-    if (sharedId) {
-      try {
-        if (!verse) throw new Error('Verse not found');
-        const { data, error } = await db.from('shared_collection_verses').delete()
-          .eq('shared_collection_id', sharedId)
-          .eq('book', verse.book)
-          .eq('chapter', verse.chapter)
-          .eq('verse_start', verse.verseStart)
-          .eq('verse_end', verse.verseEnd)
-          .select('book');
-        if (error) throw error;
-        if (data.length === 0) throw new Error('Only the owner and editors can remove verses here.');
-        await Promise.all([
-          get().fetchVerses(), get().fetchMasteredVerses(), get().fetchSharedCollections(), refetchLoadedProgress(sharedId),
-        ]);
-        saveSnapshot(generation);
-        return { wasMastered: isMastered };
-      } catch (error) {
-        set({ verses: previousVerses });
-        throw error;
+      // Shared: the reference leaves the group, and a trigger applies the same rule to every
+      // member's copy, this one included (docs/features/shared-collections.md#sync).
+      const sharedId = sharedIdOf(collectionId);
+      if (sharedId) {
+        try {
+          if (!verse) throw new Error('Verse not found');
+          const { data, error } = await db.from('shared_collection_verses').delete()
+            .eq('shared_collection_id', sharedId)
+            .eq('book', verse.book)
+            .eq('chapter', verse.chapter)
+            .eq('verse_start', verse.verseStart)
+            .eq('verse_end', verse.verseEnd)
+            .select('book');
+          if (error) throw error;
+          if (data.length === 0) throw new Error('Only the owner and editors can remove verses here.');
+          await Promise.all([
+            get().fetchVerses(), get().fetchMasteredVerses(), get().fetchSharedCollections(), refetchLoadedProgress(sharedId),
+          ]);
+          saveSnapshot(generation);
+          return { wasMastered: isMastered };
+        } catch (error) {
+          set({ verses: previousVerses });
+          throw error;
+        }
       }
-    }
 
-    // One transaction on the server: the verse leaves, and if no other collection holds it, it is
-    // soft-deleted when mastered and deleted otherwise (supabase/migrations/*_delete_verse.sql).
-    const { error } = await supabase.rpc('delete_verse', { verse_client_id: id, collection_client_id: collectionId });
-    if (error) {
-      console.error('[STORE] Failed to delete verse:', error);
-      set({ verses: previousVerses });
-      throw new Error('Failed to delete verse');
-    }
-    saveSnapshot(generation);
-    return { wasMastered: isMastered };
+      // One transaction on the server: the verse leaves, and if no other collection holds it, it is
+      // soft-deleted when mastered and deleted otherwise (supabase/migrations/*_delete_verse.sql).
+      const { error } = await supabase.rpc('delete_verse', { verse_client_id: id, collection_client_id: collectionId });
+      if (error) {
+        console.error('[STORE] Failed to delete verse:', error);
+        set({ verses: previousVerses });
+        throw new Error('Failed to delete verse');
+      }
+      return { wasMastered: isMastered };
+    });
   },
 
   updateVerseProgress: async (id, difficulty, accuracy, fullSession = false) => {
@@ -1780,6 +1819,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         p_progress: progress,
         p_last_practiced_at: nowIso,
       });
+      // Another account now: this result, and any retry, belong to the one that left.
+      if (generation !== accountGeneration) return;
       const row: ProgressGuardRow | undefined = data?.[0];
       if (error || !row) {
         console.error('[STORE] Failed to update progress:', error ?? 'verse not found');
@@ -1814,7 +1855,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     throw new Error('Failed to save progress');
   },
 
-  resetVerseProgress: async (id: string) => {
+  resetVerseProgress: async (id: string) => confirming(accountGeneration, async () => {
     // Check if verse was mastered before reset
     const verse = get().verses.find((v) => v.id === id);
     const wasMastered = verse?.progress?.hard?.completed === true;
@@ -1853,7 +1894,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     // A mastered square went back to Open: the shared card's emblem may no longer hold.
     if (wasMastered && inSharedCollection(get(), id)) await get().fetchSharedCollections();
-  },
+  }),
 
   setVerseStudyPrefs: (id, chunkSize, difficulty) => {
     // No-op when unchanged: the setup screen saves on every edit and
@@ -1889,6 +1930,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     applied = new Set();
     localRead = null;
     painted = null;
+    pendingWrites = 0;
     requestedTranslation = null;
     set({
       collections: [],

@@ -62,19 +62,20 @@ otherwise `AuthProvider` awaits the paint before its first render.
 
 **Written** (`saveSnapshot` in `lib/store/index.ts`) only from
 server-applied state: when `synced` turns true, after each later wave,
-and after these succeed: progress saves, add, copy and delete verse,
-add, import, rename, icon, reorder and delete collection, join, leave,
-stop sharing, set name. Never from a store subscriber (it would save
-unconfirmed study prefs), never before `synced`, and the generation
+and after a confirmed write (progress save or reset, translation, verse
+and collection writes, join, leave, stop sharing, name). Not while an
+optimistic write (delete verse, reset, reorder, sort) is pending: the
+last to settle saves (`confirming`). Never from a store subscriber
+(unconfirmed study prefs), never before `synced`, and the generation
 is checked with no `await` before `setItem`.
 
 **Removed** on sign-out and account delete (`setAccount(null)`).
 
 ### `synced`
 
-`hydrated` means something to paint; `synced` means the server's
-collections, verses, mastered rows and shared groups were all
-**applied** this account (a read that lands after a change made during
+`hydrated` means something to paint; `synced` means the profile was
+read and the server's collections, verses, mastered rows and shared
+groups were all **applied** this account (a read that lands after a change made during
 it keeps the change and doesn't count; the wave reads it once more).
 `whenSynced()` waits for the running wave, then refreshes once.
 Anything that decides from data a saved copy could have wrong waits on
@@ -302,9 +303,7 @@ Specifically:
   wave once the network is back ([launch](navigation-and-routing.md#launch-splash)).
 - Failed writes → no queue, no retry. Most store actions throw, and the
   user must retry manually.
-- Bible verse reads can succeed offline if they hit the in-memory
-  session cache (because the cache is populated during the session), or
-  if they're KJV.
+- Bible verse reads work offline from the session cache, or for KJV.
 
 NetInfo is wired up (`lib/network/`) and there's a `NoInternetOverlay`
 component, but the overlay is a UI-only indicator. Underlying writes

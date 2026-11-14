@@ -91,20 +91,23 @@ export async function confirmRemoveCollection(collectionId: string, hooks: Hooks
 
 /**
  * Confirms, then stops sharing with the store's `stopSharing`: the group dissolves, the others keep
- * their own copy and the code dies. The confirm names the others once `members` is loaded, else
- * counts them from `memberCount`. Waits for the server's library first.
+ * their own copy and the code dies. Waits for the server's library first, then names the others
+ * from `members` (a list read from the server), else the group's loaded grid, else counts them from
+ * the group's `memberCount`; read after the wait, since a saved library's can be out of date.
  */
 export async function confirmStopSharing(
   sharedId: string,
   name: string,
   members: Pick<SharedMember, 'userId' | 'displayName'>[] | null,
-  memberCount: number,
   youId: string | undefined,
   hooks: Hooks = {},
 ) {
   if (!(await librarySynced())) return hooks.onKept?.();
-  const others = members?.filter((m) => m.userId !== youId).map((m) => m.displayName);
-  const count = others ? others.length : Math.max(memberCount - 1, 0);
+  const { sharedProgress, sharedCollections } = useAppStore.getState();
+  const grid = sharedProgress[sharedId];
+  const list = members ?? (grid?.fetchedAt ? grid.members : null);
+  const others = list?.filter((m) => m.userId !== youId).map((m) => m.displayName);
+  const count = others ? others.length : Math.max((sharedCollections[sharedId]?.memberCount ?? 1) - 1, 0);
   const who = others ? listNames(others) : `The other ${count === 1 ? 'member' : `${count} members`}`;
   confirmThen(`Stop sharing "${name}"?`, count > 0
     ? `${who} will keep their own copy, but you'll stop seeing each other's progress. The code stops working.`

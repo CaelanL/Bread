@@ -34,7 +34,8 @@ function deviceTimezone(): string {
   }
 }
 
-// The status the last sync saw, so a quick return only touches the token row when it changed.
+// The status the last sync acted on, so a quick return only touches the token row when it
+// changed. Set only once the register or unregister worked, so a failed one is tried again.
 let lastStatus: string | null = null;
 
 /**
@@ -43,14 +44,13 @@ let lastStatus: string | null = null;
  */
 export async function syncForegroundState({ resumed = true } = {}): Promise<void> {
   const status = await getPermissionStatus();
-  const changed = status !== lastStatus;
-  lastStatus = status;
-  if (!resumed && !changed) return;
+  if (!resumed && status === lastStatus) return;
 
   if (status === 'denied') {
     // User revoked externally. Belt-and-suspenders alongside server-
     // side DeviceNotRegistered: delete the row, clear local cache.
     await unregisterDeviceToken();
+    lastStatus = status;
   } else if (status === 'granted' || status === 'provisional') {
     // UPSERT token as the signed-in user, every time.
     const token = await registerDeviceToken();
@@ -61,13 +61,16 @@ export async function syncForegroundState({ resumed = true } = {}): Promise<void
     // the cron can match them. Idempotent — initializeDefaults is only
     // called when prefs is null in the store.
     if (token) {
+      lastStatus = status;
       const prefs = usePrefsStore.getState().prefs;
       if (!prefs) {
         await usePrefsStore.getState().initializeDefaults(deviceTimezone());
       }
     }
+  } else {
+    // 'undetermined' → user hasn't been asked yet; nothing to sync.
+    lastStatus = status;
   }
-  // 'undetermined' → user hasn't been asked yet; nothing to sync.
 
   // TZ resync: only meaningful when we have a prefs row (compares
   // current device TZ against stored).

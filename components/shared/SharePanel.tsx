@@ -113,7 +113,7 @@ export function SharePanel({ collectionId, view = 'all', onLeft, onStopped }: {
 
   const stopSharing = () => {
     if (!sharedId) return;
-    confirmStopSharing(sharedId, name, members, memberCount, user?.id, { run, onDone: onStopped });
+    confirmStopSharing(sharedId, name, members, user?.id, { run, onDone: onStopped });
   };
 
   const plural = `${memberCount} member${memberCount === 1 ? '' : 's'}`;

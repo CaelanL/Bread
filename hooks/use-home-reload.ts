@@ -7,7 +7,8 @@ import { homeStale, type HomeLoad } from '@/lib/resume';
 import { useAppStore } from '@/lib/store';
 
 /**
- * A Home read (Verse of the Month, streak) on focus and on return, only when `homeStale` says so.
+ * A Home read (Verse of the Month, streak) on focus, on return, and when a session save lands while
+ * Home is focused (the save can finish after Home is back), only when `homeStale` says so.
  * `reload` resolves true once it loaded; a failed one is tried again next time. Pull to refresh
  * calls `reload` directly.
  */
@@ -20,6 +21,11 @@ export function useHomeReload(key: string, reload: () => Promise<boolean>) {
       if (loaded) last.current = next;
     });
   }, [key, reload]);
-  useFocusEffect(reloadIfStale);
+  useFocusEffect(useCallback(() => {
+    reloadIfStale();
+    return useAppStore.subscribe((state, previous) => {
+      if (state.lastSessionAt !== previous.lastSessionAt) reloadIfStale();
+    });
+  }, [reloadIfStale]));
   useResume(reloadIfStale);
 }

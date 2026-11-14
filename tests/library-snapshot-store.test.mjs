@@ -44,14 +44,18 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     account, 'e30.' + Buffer.from(JSON.stringify({ sub: account })).toString('base64url') + '.AA',
   ]));
   const held = [];
-  const hold = (path) => {
+  const hold = (path, query) => {
     const request = Promise.withResolvers();
     const response = Promise.withResolvers();
-    held.push({ path, request, response });
+    held.push({ path, query, request, response });
     return { sent: request.promise, reply: response.resolve };
   };
   let offline = false;
+  let profileFails = false;
+  let shared = null;
   const verseRows = { A: [membership('A')], B: [membership('B')] };
+  // The server's mastered rows, kept up to date by progress saves.
+  const masteredRows = { A: [], B: [] };
   const requests = [];
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(input);
@@ -65,7 +69,8 @@ test('the saved library: synced, snapshot read and write', async (t) => {
       return Response.json({ access_token: tokens[id], refresh_token: 'r-' + id, token_type: 'bearer', expires_in: 3600, user: { id } });
     }
     if (url.pathname === '/auth/v1/logout') return new Response(null, { status: 204 });
-    const index = held.findIndex((entry) => entry.path === url.pathname && (method === 'GET' || url.pathname.startsWith('/rest/v1/rpc/')));
+    const index = held.findIndex((entry) => entry.path === url.pathname && (!entry.query || url.search.includes(entry.query))
+      && (method === 'GET' || url.pathname.startsWith('/rest/v1/rpc/')));
     if (index >= 0) {
       const [entry] = held.splice(index, 1);
       entry.request.resolve(account);
@@ -74,11 +79,16 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     if (offline) throw new TypeError('Network request failed');
     if (url.pathname === '/rest/v1/rpc/save_verse_progress') {
       const body = JSON.parse(init.body);
+      if (body.p_progress?.hard?.completed) {
+        masteredRows[account] = [{ ...membership(account, body.p_client_id).user_verses, progress: body.p_progress, created_at: '2026-11-10T00:00:00Z' }];
+      }
       return Response.json([{ applied: true, progress: body.p_progress, last_practiced_at: body.p_last_practiced_at, updated_at: '2026-11-14T00:00:00.000001+00:00' }]);
     }
+    if (url.pathname === '/rest/v1/rpc/get_shared_status') return Response.json(shared ? [shared.status] : []);
     if (url.pathname.startsWith('/rest/v1/rpc/')) return Response.json([]);
     if (method !== 'GET') return new Response(null, { status: 204 });
     if (url.pathname === '/rest/v1/profiles') {
+      if (profileFails) return Response.json({ message: 'unavailable' }, { status: 503 });
       const row = { translation: 'ESV', display_name: account + ' L.', first_name: account, last_name: 'L', welcome_v2_seen_at: null };
       return Response.json(object ? row : [row]);
     }
@@ -87,6 +97,9 @@ test('the saved library: synced, snapshot read and write', async (t) => {
         { client_id: 'psalms', name: 'Psalms', is_default: false, created_at: '2026-11-02T00:00:00Z' }]);
     }
     if (url.pathname === '/rest/v1/verse_collections') return Response.json(verseRows[account]);
+    if (url.pathname === '/rest/v1/user_verses' && url.search.includes('completed=eq.true')) return Response.json(masteredRows[account]);
+    if (url.pathname === '/rest/v1/shared_collections') return Response.json(shared ? [shared.group] : []);
+    if (url.pathname === '/rest/v1/shared_collection_members') return Response.json(shared ? [shared.mine] : []);
     return Response.json([]);
   });
 
@@ -293,5 +306,147 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.equal(alerts.length, 1);
     assert.match(alerts[0][1], /will be deleted and lose progress/);
     Alert.alert.mock.restore();
+  });
+  const startSynced = async (account) => {
+    setAccount(null);
+    await signIn(account);
+    setAccount(account);
+    await until(() => store().synced);
+  };
+  const easy = { bestAccuracy: null, completed: false };
+
+  await t.test('a failed profile read leaves synced false, so name and translation decisions wait for it', async () => {
+    verseRows.A = [membership('A')];
+    setAccount(null);
+    await signIn('A');
+    profileFails = true;
+    setAccount('A');
+    await until(() => store().hydratedFrom === 'server');
+    assert.equal(store().synced, false, 'the library reads worked, the profile read did not');
+    assert.equal(await store().whenSynced(), false);
+    profileFails = false;
+    assert.equal(await store().whenSynced(), true, 'the retry reads the profile');
+    assert.equal(store().firstName, 'A');
+  });
+
+  await t.test("a progress save that lands after a switch to B touches nothing of B's", async () => {
+    await startSynced('A');
+    const done = { bestAccuracy: 95, completed: true };
+    useAppStore.setState((state) => ({
+      verses: state.verses.map((v) => ({ ...v, progress: { easy, medium: easy, hard: done } })),
+      masteredVerses: [],
+    }));
+    const save = hold('/rest/v1/rpc/save_verse_progress');
+    const saving = store().updateVerseProgress('A-verse', 'easy', 100);
+    await save.sent;
+    await startSynced('B');
+    save.reply(Response.json([{ applied: true, progress: { easy: done, medium: easy, hard: done }, last_practiced_at: null, updated_at: '2026-11-14T00:00:02.000001+00:00' }]));
+    await saving;
+    assert.deepEqual(store().masteredVerses.map((v) => v.id), []);
+    assert.equal(store().lastSessionAt, null);
+    masteredRows.A = [];
+  });
+
+  await t.test('a confirmed write during a pending delete saves no snapshot without the verse; the failed delete leaves it in', async () => {
+    await startSynced('A');
+    const remove = hold('/rest/v1/rpc/delete_verse');
+    const deleting = store().deleteVerse('A-verse', 'my-verses');
+    await remove.sent;
+    await store().addCollection('Psalms 2');
+    assert.ok(saved('A').verses.some((v) => v.id === 'A-verse'), 'not saved while the delete is pending');
+    remove.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    await assert.rejects(deleting);
+    assert.ok(saved('A').verses.some((v) => v.id === 'A-verse'));
+    assert.ok(saved('A').collections.some((c) => c.name === 'Psalms 2'), 'the confirmed add is saved once the delete settles');
+  });
+
+  await t.test('an older mastered read never removes a mastery saved during it', async () => {
+    setAccount(null);
+    await signIn('A');
+    storage.set('library_snapshot:A', painted('A', 'A-verse'));
+    const mastered = hold('/rest/v1/user_verses', 'completed=eq.true');
+    setAccount('A');
+    await mastered.sent;
+    await until(() => store().hydratedFrom === 'snapshot' && !store().versesLoading);
+    await store().updateVerseProgress('A-verse', 'hard', 95);
+    assert.deepEqual(store().masteredVerses.map((v) => v.id), ['A-verse']);
+    mastered.reply(Response.json([]));
+    await until(() => store().synced);
+    assert.deepEqual(store().masteredVerses.map((v) => v.id), ['A-verse']);
+    assert.deepEqual(saved('A').masteredVerses.map((v) => v.id), ['A-verse']);
+  });
+
+  await t.test('a progress reset is in the snapshot as soon as it succeeds', async () => {
+    assert.deepEqual(saved('A').masteredVerses.map((v) => v.id), ['A-verse']);
+    masteredRows.A = [];
+    await store().resetVerseProgress('A-verse');
+    assert.deepEqual(saved('A').masteredVerses, []);
+    assert.equal(saved('A').verses.find((v) => v.id === 'A-verse').progress.hard.completed, false);
+  });
+
+  await t.test('a translation change saves the snapshot once its verses are reread', async () => {
+    storage.set('library_snapshot:A', 'before');
+    await store().setBibleVersion('NIV');
+    assert.notEqual(storage.get('library_snapshot:A'), 'before');
+    await store().setBibleVersion('ESV');
+  });
+
+  await t.test("Stop sharing counts the others from the server's library, read after the wait", async () => {
+    const { Alert } = await import('react-native');
+    const { confirmStopSharing } = await import('../components/shared/member-actions.ts');
+    const alerts = [];
+    t.mock.method(Alert, 'alert', (...args) => alerts.push(args));
+    const group = { id: 'g1', ownerName: null, name: 'Psalms', role: 'owner', memberCount: 1, verseCount: 0, masteredSquares: 0, engravedSquares: 0 };
+    // Saved: the owner is alone. On the server, someone has since joined.
+    shared = {
+      group: { id: 'g1', name: 'Psalms' },
+      mine: { shared_collection_id: 'g1', role: 'owner' },
+      status: { shared_id: 'g1', member_count: 2, verse_count: 0, mastered_squares: 0, engraved_squares: 0 },
+    };
+    setAccount(null);
+    storage.set('library_snapshot:A', serializeSnapshot({
+      collections: [{ id: 'my-verses', name: 'My Verses', isDefault: true, createdAt: 0 }],
+      verses: [membershipVerse('A-verse')], masteredVerses: [], sharedCollections: { g1: group },
+      displayName: 'A L.', firstName: 'A', lastName: 'L',
+    }, Date.now()));
+    const wave = hold('/rest/v1/verse_collections');
+    setAccount('A');
+    await wave.sent;
+    await until(() => store().hydratedFrom === 'snapshot');
+    const confirming = confirmStopSharing('g1', 'Psalms', null, 'A');
+    wave.reply(Response.json(verseRows.A));
+    await confirming;
+    assert.equal(alerts.length, 1);
+    assert.match(alerts[0][1], /The other member will keep their own copy/);
+    Alert.alert.mock.restore();
+    shared = null;
+  });
+
+  await t.test('Home reloads when a session save lands while it is focused', async () => {
+    const fixtureHooks = registerHooks({
+      resolve(specifier, context, nextResolve) {
+        const stub = { react: 'react-stub.cjs', '@react-navigation/native': 'navigation-stub.cjs', '@/hooks/use-resume': 'resume-stub.cjs' }[specifier];
+        return stub && context.parentURL?.endsWith('use-home-reload.ts')
+          ? { url: pathToFileURL(join(fixture, stub)).href, shortCircuit: true }
+          : nextResolve(specifier, context);
+      },
+    });
+    file('react-stub.cjs', 'exports.useRef = (current) => ({ current }); exports.useCallback = (f) => f;');
+    // Focused until the cleanup the effect returned is called.
+    file('navigation-stub.cjs', 'exports.useFocusEffect = (effect) => { globalThis.blurHome = effect(); };');
+    file('resume-stub.cjs', 'exports.useResume = () => {};');
+    const { useHomeReload } = await import('../hooks/use-home-reload.ts');
+    fixtureHooks.deregister();
+    await startSynced('A');
+    let reloads = 0;
+    useHomeReload('A', async () => { reloads++; return true; });
+    await until(() => reloads === 1);
+    const save = hold('/rest/v1/rpc/save_verse_progress');
+    const saving = store().updateVerseProgress('A-verse', 'easy', 40);
+    await save.sent;
+    save.reply(Response.json([{ applied: true, progress: { easy: { bestAccuracy: 40, completed: false }, medium: easy, hard: easy }, last_practiced_at: null, updated_at: '2026-11-14T00:00:03.000001+00:00' }]));
+    await saving;
+    await until(() => reloads === 2);
+    globalThis.blurHome();
   });
 });

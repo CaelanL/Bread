@@ -81,7 +81,7 @@ check canonical bounds, continuous coverage and SQL/source parity.
 `useVotm` and the streak (`useStreak`) reload through `useHomeReload` on focus and on a
 resume only when `homeStale`
 (`lib/resume.ts`) says so: no good load yet; another account, translation or month; a
-session saved since (the store's `lastSessionAt`); or `HOME_STALE_MS` (5 min) passed. Pull
+session saved since (`lastSessionAt`, also watched while focused); or `HOME_STALE_MS` passed. Pull
 to refresh always reloads. While focused, a once-a-minute clock check catches a month change.
 Aliases such as Psalm keep their display reference and normalize through the
 Bible helper.

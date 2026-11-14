@@ -36,12 +36,14 @@ test('a quick return registers a permission just granted in iOS Settings, withou
 
   const token = 'e30.' + Buffer.from(JSON.stringify({ sub: 'A' })).toString('base64url') + '.AA';
   const writes = [];
+  let offline = false;
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(input);
     if (url.pathname === '/auth/v1/token') {
       return Response.json({ access_token: token, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, user: { id: 'A' } });
     }
     if ((init.method ?? 'GET') !== 'GET') writes.push(url.pathname);
+    if (offline) throw new TypeError('Network request failed');
     return url.pathname.startsWith('/rest/v1/rpc/') ? Response.json(null) : new Response(null, { status: 204 });
   });
 
@@ -73,6 +75,17 @@ test('a quick return registers a permission just granted in iOS Settings, withou
   assert.deepEqual(writes, [], 'nothing changed: a quick return writes nothing');
 
   globalThis.iosPermission = 2; // turned on in iOS Settings
+  await quickReturn();
+  assert.deepEqual(writes, ['/rest/v1/rpc/register_device_token']);
+
+  // A registration that failed (offline) is tried again on the next quick return, not only on a resume.
+  globalThis.iosPermission = 1;
+  await syncForegroundState();
+  globalThis.iosPermission = 2;
+  offline = true;
+  await quickReturn();
+  offline = false;
+  writes.length = 0;
   await quickReturn();
   assert.deepEqual(writes, ['/rest/v1/rpc/register_device_token']);
 });

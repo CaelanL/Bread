@@ -195,8 +195,7 @@ export default function CollectionScreen() {
 
   const stopSharing = () => {
     if (!collection || !sharedId) return;
-    confirmStopSharing(sharedId, collection.name, sharedProgress?.fetchedAt ? sharedProgress.members : null,
-      shared?.memberCount ?? 1, user?.id);
+    confirmStopSharing(sharedId, collection.name, null, user?.id);
   };
 
   const handleVersePress = (verse: SavedVerse) => {
