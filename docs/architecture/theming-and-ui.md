@@ -121,7 +121,8 @@ export function useColorScheme() {
 - Read before the first frame: the store reads it with the other device settings at module
   load (`settingsRead`), and the splash stays up until that read is done
   ([launch splash](navigation-and-routing.md#launch-splash)), so a dark override never shows a
-  light frame.
+  light frame. `npm run sim -- flow dark-cold-start` relaunches in Dark on a light simulator;
+  record the simulator to see the frames.
 - Persisted across sign-out (it's a device preference, not a user
   preference).
 
