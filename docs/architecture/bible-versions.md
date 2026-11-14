@@ -32,8 +32,9 @@ profiles.translation (one row per user, owner-only RLS)   ← source of truth
             profile can't be read (offline, before hydrate)
 ```
 
-- `hydrate()` and `refresh()` run `syncAccountTranslation`: read the
-  profile into the store and cache. An account with no translation yet
+- `hydrate()` and `refresh()` run `loadAccount`: the profile read, in one
+  wave with the library reads, sets the translation in the same update as
+  `hydrated`, then into the cache. An account with no translation yet
   gets the version most of its active verses use (`seedTranslation`), or
   this device's value if it has none, so the first device to sign in
   doesn't move every verse to its own choice. A value this app
@@ -192,6 +193,14 @@ Server side: the adapter logs a warning when its parsed verse count
 doesn't match `getExpectedVerseCount`, the DB cache treats such a
 chapter as incomplete and re-fetches it on every request (bad for the
 rate limit), and there is no version-aware verse-count override.
+
+## Sharp edges
+
+- `collapseVerse` reads the losers' links, upserts them onto the winner, then deletes the
+  losers. An `add_verse` that links to a loser in between loses that link. It needs two
+  translations of one reference (only old clients make them) and one round trip of overlap.
+  It could already happen during pull to refresh; since the one-wave load, alignment runs
+  after first paint, so it can also happen in the first second after launch.
 
 ## Browser checks
 

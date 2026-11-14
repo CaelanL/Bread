@@ -159,30 +159,24 @@ session, before the tree mounts, and when another account signs in. See
 [auth.md](auth.md#accounts-start-from-the-session).
 
 ```
-hydrate()
+setAccount(userId) — when AuthProvider reads the session, before the tree mounts
+hydrate(userId)
   ├── Promise.all(AsyncStorage reads for colorMode, bibleVersion,
-  │                reviewMaxIntervalDays, masteredSort, inProgressSort)
-  │     → set in store, after validating each value
+  │                reviewMaxIntervalDays, masteredSort, inProgressSort, hideVerseText)
   │
-  ├── syncAccountTranslation (queued with other translation work)
-  │     → profiles.translation into the store and cache, or the device
-  │       value into an empty profile; profiles.display_name into the store
-  │     → alignVerses: collapse two translations of one verse, move
-  │       every row to the account translation
-  │     → on error: logged, the cached translation stands
-  │
-  ├── Promise.all(fetchCollections, fetchVerses, fetchMasteredVerses)
-  │     → each queries Supabase directly from the store
-  │     → on error: 500ms retry once, only the ones that failed
-  │
-  ├── set hydrated: true       ← unconditional, even if some fetches failed
-  │     (so UI always renders; loading states handle partial data)
-  │
-  └── if any fetch still failed: error toast
-      if all succeeded:
-       prefetch verse text (background, non-blocking)
-         → fills the Bible session cache
-         → so the first verse render in the UI is instant
+  └── loadAccount (queued with other translation work; refresh() runs it too)
+        ├── one wave, Promise.all: profiles (translation, names, welcome_v2_seen_at),
+        │     the verse identity rows, fetchCollections, fetchVerses,
+        │     fetchMasteredVerses, fetchSharedCollections
+        │     → a failed profile or identity read doesn't stop the fetches
+        │     → launch only: failed fetches retried once after 500ms
+        ├── no profile: seedTranslation from the rows, profiles.upsert
+        ├── one set: bibleVersion (unless a switch is in flight), names,
+        │     profileLoaded, welcomeSeen, hydrated: true ← unconditional
+        │     → launch only: toast if a fetch still failed
+        ├── alignVerses with the wave's rows; if it moved anything or the
+        │     translation changed, fetchVerses + fetchMasteredVerses again
+        └── launch only, all fetches ok: prefetch verse text (background)
 ```
 
 Hydration for the current account always sets `hydrated: true`. This prevents an
@@ -229,8 +223,8 @@ for the server.
 
 | Trigger | Direction | Notes |
 |---|---|---|
-| Sign-in or app start with a session | Pull (collections, verses, mastered) | via `hydrate()` |
-| Pull-to-refresh | Pull | `refresh()` syncs the translation like hydrate, then re-fetches all three |
+| Sign-in or app start with a session | Pull (profile, collections, verses, mastered, shared) | `setAccount` → `hydrate()`, one wave |
+| Pull-to-refresh | Pull | `refresh()`: the same wave as hydrate, plus curated save counts |
 | Add/delete collection | Push, then local | |
 | Add verse | Push, then local | one `add_verse` call ([adding-verses.md](../features/adding-verses.md#verse-identity)); shared copies use `addSharedVerse` |
 | Delete verse | Local, then push, rollback on failure | |

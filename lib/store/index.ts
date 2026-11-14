@@ -104,6 +104,10 @@ interface AppState {
 
   // Loading states
   hydrated: boolean;
+  /** The account's profile row was read this run (false offline): names and `welcomeSeen` are the server's. */
+  profileLoaded: boolean;
+  /** profiles.welcome_v2_seen_at is set: the 2.0 walkthrough needs no claim (lib/welcome.ts). */
+  welcomeSeen: boolean;
   collectionsLoading: boolean;
   collectionOrderSaving: boolean;
   versesLoading: boolean;
@@ -317,9 +321,10 @@ async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promi
  * Makes every verse follow the account translation: collapses two active translations
  * of one reference into the row with better progress, then moves each reference to
  * `translation` (`planMoves`). A verse the translation leaves out keeps its version.
- * Returns those kept rows. `rows` saves a read when the caller already has them.
+ * Returns those kept rows, and whether anything was collapsed or moved. `rows` saves a read
+ * when the caller already has them.
  */
-async function alignVerses(userId: string, translation: BibleVersion, rows?: VerseIdentityRow[]): Promise<HeldVerse[]> {
+async function alignVerses(userId: string, translation: BibleVersion, rows?: VerseIdentityRow[]): Promise<{ kept: HeldVerse[]; changed: boolean }> {
   let records = rows?.map(toRecord);
   if (!records) {
     const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
@@ -355,7 +360,10 @@ async function alignVerses(userId: string, translation: BibleVersion, rows?: Ver
     const { error } = await supabase.from('user_verses').update({ version: translation }).in('id', movers);
     if (error) throw error;
   }
-  return records.filter(({ id }) => kept.has(id)).filter(isVisible);
+  return {
+    kept: records.filter(({ id }) => kept.has(id)).filter(isVisible),
+    changed: merged.size > 0 || moves.length > 0,
+  };
 }
 
 /** Tells the user, once per verse and translation, which verses stayed in their old translation. */
@@ -383,54 +391,107 @@ async function tellKeptVerses(kept: HeldVerse[], translation: BibleVersion) {
   }
 }
 
-/**
- * Reads the account translation from `profiles` into the store and its local cache.
- * An account with none yet gets this device's translation, which is how devices
- * from before account translations carry their choice over. Then lines the
- * verses up with it.
- */
-async function syncAccountTranslation(generation: number) {
-  const userId = await getCurrentUserId();
-  const { data, error } = await supabase.from('profiles').select('translation, display_name, first_name, last_name').eq('user_id', userId).maybeSingle();
-  if (error) throw error;
-  if (generation !== accountGeneration) return;
-  useAppStore.setState({
-    displayName: data?.display_name ?? null,
-    firstName: data?.first_name ?? null,
-    lastName: data?.last_name ?? null,
-  });
+const PROFILE_COLUMNS = 'translation, display_name, first_name, last_name, welcome_v2_seen_at';
 
-  let translation: BibleVersion;
-  let rows: VerseIdentityRow[] | undefined;
-  if (data?.translation) {
-    // A newer app version may know translations this one doesn't. Leave it alone.
-    if (!isBibleVersion(data.translation)) return;
-    translation = data.translation;
-    if (requestedTranslation === null) {
-      useAppStore.setState({ bibleVersion: translation });
-      await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
-        console.error('[STORE] Failed to cache bibleVersion:', e);
-      });
-    }
-  } else {
-    // No profile yet: keep the verses where most of them already are.
-    const { data: held, error: heldError } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
-    if (heldError) throw heldError;
-    rows = held;
-    translation = seedTranslation(held.map(toRecord), useAppStore.getState().bibleVersion, isBibleVersion);
-    const { error: saveError } = await supabase.from('profiles').upsert({ user_id: userId, translation });
-    if (saveError) throw saveError;
+async function readProfile(userId: string) {
+  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function readVerseIdentities(userId: string): Promise<VerseIdentityRow[]> {
+  const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Loads an account in one wave, queued with other translation work: the profile, the verse
+ * identity rows and the four library reads together. Then one update sets the translation
+ * (unless a switch is in flight), the name and `hydrated`, so nothing can act on a stale
+ * translation or name. An account with no profile gets this device's translation, which is how
+ * devices from before account translations carry their choice over. Last, the verses are lined up
+ * with the translation, and re-read only if that moved something or the translation changed.
+ * The cached translation stands in when the profile can't be read (offline). A failed profile,
+ * identity or alignment step throws at the end, after `hydrated`, for `reportSyncFailure`.
+ * `launch`: retry failed library reads once after 500ms, then toast or warm the verse text.
+ */
+async function loadAccount(generation: number, userId: string, launch: boolean) {
+  const store = useAppStore.getState;
+  const cached = store().bibleVersion;
+  const [[profile, identity], fetched] = await Promise.all([
+    Promise.allSettled([readProfile(userId), readVerseIdentities(userId)]),
+    Promise.all([store().fetchCollections(), store().fetchVerses(), store().fetchMasteredVerses(), store().fetchSharedCollections()]),
+  ]);
+  if (generation !== accountGeneration) return;
+  let [collectionsOk, versesOk, masteredOk, sharedOk] = fetched;
+  if (launch && fetched.includes(false)) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
     if (generation !== accountGeneration) return;
-    if (requestedTranslation === null) {
-      useAppStore.setState({ bibleVersion: translation });
-      await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
-        console.error('[STORE] Failed to cache bibleVersion:', e);
-      });
-    }
+    [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
+      collectionsOk || store().fetchCollections(),
+      versesOk || store().fetchVerses(),
+      masteredOk || store().fetchMasteredVerses(),
+      sharedOk || store().fetchSharedCollections(),
+    ]);
+    if (generation !== accountGeneration) return;
   }
 
-  const kept = await alignVerses(userId, translation, rows);
-  if (generation === accountGeneration) await tellKeptVerses(kept, translation);
+  let failure: unknown = null;
+  let translation: BibleVersion | null = null;
+  const updates: Partial<AppState> = { hydrated: true };
+  if (profile.status === 'rejected') {
+    failure = profile.reason;
+  } else {
+    const data = profile.value;
+    Object.assign(updates, {
+      displayName: data?.display_name ?? null,
+      firstName: data?.first_name ?? null,
+      lastName: data?.last_name ?? null,
+      profileLoaded: true,
+      welcomeSeen: !!data?.welcome_v2_seen_at,
+    });
+    if (data?.translation) {
+      // A newer app version may know translations this one doesn't. Leave it alone.
+      if (isBibleVersion(data.translation)) translation = data.translation;
+    } else if (identity.status === 'rejected') {
+      failure = identity.reason;
+    } else {
+      // No profile yet: keep the verses where most of them already are.
+      const seeded = seedTranslation(identity.value.map(toRecord), cached, isBibleVersion);
+      const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: seeded });
+      if (generation !== accountGeneration) return;
+      if (error) failure = error;
+      else translation = seeded;
+    }
+  }
+  if (translation && requestedTranslation === null) updates.bibleVersion = translation;
+  useAppStore.setState(updates);
+  perfMark('hydrated');
+  if (updates.bibleVersion) {
+    AsyncStorage.setItem(BIBLE_VERSION_KEY, updates.bibleVersion).catch((e) => {
+      console.error('[STORE] Failed to cache bibleVersion:', e);
+    });
+  }
+  const libraryOk = collectionsOk && versesOk && masteredOk && sharedOk;
+  if (launch) {
+    if (libraryOk) useAppStore.setState({ error: null });
+    else showErrorToast('Some data failed to load. Pull to refresh.');
+  }
+
+  if (translation) {
+    if (identity.status === 'rejected') throw identity.reason;
+    const { kept, changed } = await alignVerses(userId, translation, identity.value);
+    if (generation !== accountGeneration) return;
+    if (changed || translation !== cached) await Promise.all([store().fetchVerses(), store().fetchMasteredVerses()]);
+    if (generation !== accountGeneration) return;
+    await tellKeptVerses(kept, translation);
+  }
+  if (launch && libraryOk && generation === accountGeneration) {
+    // Warms the Bible session cache so the first verse render is instant (non-blocking).
+    for (const verse of store().verses) getVerseText(verse).catch(() => {});
+  }
+  if (failure) throw failure;
 }
 
 // ============ SHARED COLLECTIONS ============
@@ -536,6 +597,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   masteredSort: 'due-first',
   inProgressSort: DEFAULT_SORT,
   hydrated: false,
+  profileLoaded: false,
+  welcomeSeen: false,
   collectionsLoading: true,
   collectionOrderSaving: false,
   versesLoading: true,
@@ -791,59 +854,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     if (generation !== accountGeneration) return;
-    // The cached translation stands in when the profile can't be read (offline).
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure(generation));
-    if (generation !== accountGeneration) return;
-    let [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
-      get().fetchCollections(),
-      get().fetchVerses(),
-      get().fetchMasteredVerses(),
-      get().fetchSharedCollections(),
-    ]);
-    if (generation !== accountGeneration) return;
-
-    // Retry once after short delay if any fetch failed (handles auth propagation race)
-    if (!collectionsOk || !versesOk || !masteredOk || !sharedOk) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      if (generation !== accountGeneration) return;
-      [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
-        collectionsOk ? true : get().fetchCollections(),
-        versesOk ? true : get().fetchVerses(),
-        masteredOk ? true : get().fetchMasteredVerses(),
-        sharedOk ? true : get().fetchSharedCollections(),
-      ]);
-      if (generation !== accountGeneration) return;
-    }
-
-    // Always mark as hydrated so UI can render (partial data is better than nothing)
-    set({ hydrated: true });
-    perfMark('hydrated');
-
-    // Show toast only if retry also failed
-    if (!collectionsOk || !versesOk || !masteredOk || !sharedOk) {
-      showErrorToast('Some data failed to load. Pull to refresh.');
-    } else {
-      set({ error: null });
-
-      // Prefetch verse text in background (non-blocking)
-      // This populates the session cache so cards render instantly
-      const verses = get().verses;
-      if (verses.length > 0) {
-        Promise.all(verses.map((v) => getVerseText(v).catch(() => ({ text: '', verses: {} }))));
-      }
-    }
+    await queueTranslationWork(() => loadAccount(generation, userId, true)).catch(reportSyncFailure(generation));
   },
 
   refresh: async () => {
     set({ error: null });
     const generation = accountGeneration;
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure(generation));
     await Promise.all([
-      get().fetchCollections(),
-      get().fetchVerses(),
-      get().fetchMasteredVerses(),
+      queueTranslationWork(async () => loadAccount(generation, accountUserId ?? await getCurrentUserId(), false))
+        .catch(reportSyncFailure(generation)),
       get().fetchCuratedSaverCounts(),
-      get().fetchSharedCollections(),
     ]);
   },
 
@@ -894,7 +914,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         await AsyncStorage.setItem(BIBLE_VERSION_KEY, version).catch((e) => {
           console.error('[STORE] Failed to cache bibleVersion:', e);
         });
-        return alignVerses(userId, version);
+        return (await alignVerses(userId, version)).kept;
       });
       if (generation !== accountGeneration) return;
       await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
@@ -1670,6 +1690,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Zustand keeps unspecified keys. AsyncStorage copies are never touched here.
 
       hydrated: false,
+      profileLoaded: false,
+      welcomeSeen: false,
       collectionsLoading: true,
       collectionOrderSaving: false,
       versesLoading: true,
