@@ -28,6 +28,7 @@ import Animated, { FadeInDown, useSharedValue } from 'react-native-reanimated';
 function CollectionCard({
   collection,
   index,
+  animateIn,
   onPress,
   onRename,
   onReorder,
@@ -37,6 +38,7 @@ function CollectionCard({
 }: {
   collection: Collection;
   index: number;
+  animateIn: boolean;
   onPress: () => void;
   onRename: () => void;
   onReorder: () => void;
@@ -72,6 +74,7 @@ function CollectionCard({
     <SwipeableCollectionCard
       collection={{ ...collection, verseCount }}
       index={index}
+      animateIn={animateIn}
       onPress={onPress}
       onRename={onRename}
       onReorder={onReorder}
@@ -119,6 +122,12 @@ export default function LibraryScreen() {
   // Two quick taps on different cards would push two collections; the first push locks until the
   // Library is focused again.
   const opening = useRef(false);
+  // The cards of the list's first paint, and whether they fade in: not when the saved library
+  // painted them (it should look already there). A card added later appears at once.
+  const firstCards = useRef<{ ids: Set<string>; animate: boolean } | null>(null);
+  if (hydrated && !firstCards.current) {
+    firstCards.current = { ids: new Set(collections.map((c) => c.id)), animate: useAppStore.getState().hydratedFrom !== 'snapshot' };
+  }
   useFocusEffect(useCallback(() => {
     opening.current = false;
     return () => {
@@ -215,6 +224,7 @@ export default function LibraryScreen() {
                     key={collection.id}
                     collection={collection}
                     index={index}
+                    animateIn={!!firstCards.current?.animate && firstCards.current.ids.has(collection.id)}
                     onPress={() => handleCollectionPress(collection)}
                     onRename={() => setNameDialog({ collection })}
                     onReorder={() => setEditing(true)}
