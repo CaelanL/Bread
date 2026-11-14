@@ -137,8 +137,8 @@ POST /functions/v1/transcription-token
   screen reuses its key for up to 270s). Flip with
   `supabase secrets set LIVE_TRANSCRIPTION_ENABLED=true|false` — no
   deploy, no store release.
-- Temp keys: 300s TTL (gates connection establishment only, not the
-  session; a study screen reuses one key for up to 270s), `max_session_duration_seconds: 315` (client's 300s cap
+- Temp keys: 300s TTL (checked when config is sent, not for the rest
+  of the session; a study screen reuses one key for up to 270s), `max_session_duration_seconds: 315` (client's 300s cap
   timer fires first), `client_reference_id: user.id` (per-user
   attribution in the Soniox console).
 - The client treats *any* non-200 as "use batch" — this endpoint can

@@ -159,7 +159,7 @@ the reader records again.
 |---|---|---|---|
 | Recording cap | 300 s | `MAX_RECORDING_MS` in `app/session.tsx` | Auto-submit |
 | Live session cap | 315 s | `MAX_SESSION_SECONDS` in `transcription-token` | Client cap always fires first |
-| Temporary key TTL | 300 s | `KEY_TTL_SECONDS` in `transcription-token` | Gates connecting only; a running stream outlives it |
+| Temporary key TTL | 300 s | `KEY_TTL_SECONDS` in `transcription-token` | Checked when config is sent; a running stream outlives it |
 | Key reuse | 270 s | `KEY_REUSE_MS` in `live-session.ts` | TTL less 30 s |
 | Connect buffer | 15 s of audio | `MAX_BUFFER_SECONDS` | Bounds a stalled connect |
 | Flush grace | 50 ms | `FLUSH_GRACE_MS` | Lets the trailing PCM chunk feed |

@@ -5,7 +5,7 @@ import { badRequest, serverError, unauthorized } from "../_shared/errors.ts";
 
 const SONIOX_API_KEY = Deno.env.get("SONIOX_API_KEY");
 
-// Temp key gates connection establishment only; the session may continue
+// Soniox checks the temp key when config is sent; the session may continue
 // past expiry up to max_session_duration_seconds. A study screen reuses one
 // key for 30s less than this (KEY_REUSE_MS in live-session.ts).
 const KEY_TTL_SECONDS = 300;
