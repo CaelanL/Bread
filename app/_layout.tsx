@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import 'react-native-reanimated';
 import { useEffect, useRef } from 'react';
-import { View, ActivityIndicator, AppState, type AppStateStatus } from 'react-native';
+import { View, ActivityIndicator, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -18,6 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { perfMark } from '@/lib/api/dev-timing';
+import { resumeTracker } from '@/lib/resume';
 import { settingsRead, useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
@@ -160,17 +161,12 @@ function RootLayoutNav() {
     };
   }, [userId, navigationState?.key, inTabs, sessionRestored]);
 
-  // Run foreground-sync each time the app comes back to active.
+  // Foreground sync when the app comes back after RESUME_AWAY_MS away (not Control Center).
   // Idempotent + best-effort.
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (next) => {
-      const prev = appStateRef.current;
-      appStateRef.current = next;
-      if (prev.match(/inactive|background/) && next === 'active' && isAuthenticated) {
-        syncForegroundState().catch(() => { /* best-effort */ });
-      }
-    });
+    const sub = AppState.addEventListener('change', resumeTracker(() => {
+      if (isAuthenticated) syncForegroundState().catch(() => { /* best-effort */ });
+    }));
     return () => sub.remove();
   }, [isAuthenticated]);
 
