@@ -22,6 +22,475 @@ index d9e470a..eb0c907 100644
      const subscription = emitter.addListener('onRecordingInterrupted', // Make sure this matches the native event name
      (event) => {
          console.debug('Recording interruption event received:', event);
+diff --git a/node_modules/@siteed/audio-studio/build/types/AudioStudio.types.d.ts b/node_modules/@siteed/audio-studio/build/types/AudioStudio.types.d.ts
+index 1ffa17f..9ab0827 100644
+--- a/node_modules/@siteed/audio-studio/build/types/AudioStudio.types.d.ts
++++ b/node_modules/@siteed/audio-studio/build/types/AudioStudio.types.d.ts
+@@ -350,6 +350,8 @@ export interface RecordingConfig {
+     intervalAnalysis?: number;
+     /** Keep the device awake while recording (default is false) */
+     keepAwake?: boolean;
++    /** iOS (Bread patch): stop leaves the audio session active until releaseAudioSession (default is false) */
++    keepSessionActive?: boolean;
+     /** Show a notification during recording (default is false) */
+     showNotification?: boolean;
+     /** Show waveform in the notification (Android only, when showNotification is true) */
+diff --git a/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift b/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
+index 4d69b16..0b36b88 100644
+--- a/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
++++ b/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
+@@ -51,6 +51,12 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+     var isRecording = false
+     var isPaused = false
+     var isPrepared = false  // Add this new state flag
++    // Bread: the session is active and configured, so a prepare can skip activating it
++    private var audioSessionActive = false
++    // Bread: an interruption or route change outlived the prepared state; prepare again at start
++    private var preparedStale = false
++    // Bread: one stateful sample-rate converter per recording
++    private var resampler: AVAudioConverter?
+     
+     // Move static variables to class level
+     private var debugBufferCounter = 0
+@@ -214,9 +220,28 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+             name: UIApplication.willEnterForegroundNotification,
+             object: nil
+         )
++        NotificationCenter.default.addObserver(
++            self,
++            selector: #selector(handleAudioStateLost),
++            name: AVAudioSession.mediaServicesWereResetNotification,
++            object: nil
++        )
++        NotificationCenter.default.addObserver(
++            self,
++            selector: #selector(handleAudioStateLost),
++            name: .AVAudioEngineConfigurationChange,
++            object: audioEngine
++        )
+ 
+     }
+     
++    /// Bread: after a media reset or an engine configuration change, the next
++    /// prepare configures the session again, and a prepared state is redone at start.
++    @objc private func handleAudioStateLost(_ notification: Notification) {
++        audioSessionActive = false
++        if isPrepared && !isRecording { preparedStale = true }
++    }
++    
+     deinit {
+         // Ensure wake lock is disabled when the manager is deallocated
+         disableWakeLock()
+@@ -252,6 +277,9 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         switch type {
+         case .began:
+             Logger.debug("AudioStreamManager", "Audio session interruption began")
++            // Bread: the system deactivated the session
++            audioSessionActive = false
++            if isPrepared && !isRecording { preparedStale = true }
+             // Store the pause start time if not already paused
+             if !wasSuspended {
+                 currentPauseStart = Date()
+@@ -761,7 +789,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+ 
+             let eventDataSize = compressedSize - lastEmittedCompressedSize
+ 
+-            var info: [String: Any] = [
++            let info: [String: Any] = [
+                 "position": lastEmittedCompressedSize,
+                 "fileUri": compressedURL.absoluteString,
+                 "eventDataSize": eventDataSize,
+@@ -772,14 +800,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+                 "format": compressedFormat
+             ]
+ 
+-            // Read incremental chunk if there is new data
+-            if eventDataSize > 0 {
+-                let fileHandle = try FileHandle(forReadingFrom: compressedURL)
+-                defer { fileHandle.closeFile() }
+-                fileHandle.seek(toFileOffset: UInt64(lastEmittedCompressedSize))
+-                let chunkData = fileHandle.readData(ofLength: Int(eventDataSize))
+-                info["data"] = chunkData.base64EncodedString()
+-            }
++            // Bread: no incremental `data`. Reading and base64-encoding the file
++            // here ran on the audio thread, and Bread never reads it.
+ 
+             lastEmittedCompressedSize = compressedSize
+             cachedCompressedFileSize = compressedSize
+@@ -889,15 +911,15 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+     ///   - settings: The recording settings to use.
+     /// - Returns: A boolean indicating if preparation was successful.
+     func prepareRecording(settings: RecordingSettings) -> Bool {
+-        // Store settings first before doing anything else
+-        recordingSettings = settings
+-        
+         // Skip if already prepared or recording
+         guard !isPrepared && !isRecording else {
+             Logger.debug("AudioStreamManager", "Already prepared or recording in progress.")
+             return isPrepared
+         }
+ 
++        // Bread: stored after the guard, so a stray prepare can't replace a running recording's settings
++        recordingSettings = settings
++
+         // Check for active call using the new method
+         if isPhoneCallActive() {
+             Logger.debug("AudioStreamManager", "Cannot prepare recording during an active phone call")
+@@ -905,15 +927,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+             return false
+         }
+ 
+-        // Deactivate the session for a clean slate before reconfiguring.
+-        // configureAudioSession() below will activate it once — no need for
+-        // the previous deactivate→sleep→activate→reconfigure→activate cycle.
+-        do {
+-            let session = AVAudioSession.sharedInstance()
+-            try session.setActive(false, options: .notifyOthersOnDeactivation)
+-        } catch {
+-            Logger.debug("AudioStreamManager", "Failed to deactivate audio session (non-fatal): \(error)")
+-        }
++        // Bread: no leading setActive(false). setCategory and setActive(true) below reconfigure in place.
+ 
+         // Update auto-resume preference from settings
+         autoResumeAfterInterruption = settings.autoResumeAfterInterruption
+@@ -981,15 +995,19 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+                 newSettings.sampleRate = settings.sampleRate  // Keep original sample rate
+             }
+             
+-            // Configure audio session based on audio focus strategy
+-            try configureAudioSession(for: settings)
+-            // NOTE: We intentionally DO NOT call session.setPreferredSampleRate().
+-            // Trying to force a sample rate different from the hardware's actual rate
+-            // often prevents the input node's tap from receiving any buffers.
+-            // Instead, we let the session negotiate the rate.
+-            // Resampling to the desired settings.sampleRate happens later in processAudioBuffer.
+-            try session.setPreferredIOBufferDuration(1024 / Double(settings.sampleRate)) // Use desired rate for buffer duration hint
+-            try session.setActive(true, options: .notifyOthersOnDeactivation)
++            // Bread: a session kept active since the last recording is already configured
++            if !audioSessionActive {
++                // Configure audio session based on audio focus strategy
++                try configureAudioSession(for: settings)
++                // NOTE: We intentionally DO NOT call session.setPreferredSampleRate().
++                // Trying to force a sample rate different from the hardware's actual rate
++                // often prevents the input node's tap from receiving any buffers.
++                // Instead, we let the session negotiate the rate.
++                // Resampling to the desired settings.sampleRate happens later in processAudioBuffer.
++                try session.setPreferredIOBufferDuration(1024 / Double(settings.sampleRate)) // Use desired rate for buffer duration hint
++                try session.setActive(true, options: .notifyOthersOnDeactivation)
++                audioSessionActive = true
++            }
+ 
+             // Log session config details as single lines for clarity
+             Logger.debug("AudioStreamManager", "Audio session configured:")
+@@ -1057,35 +1075,33 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+                 if let url = compressedFileURL {
+                     Logger.debug("AudioStreamManager", "Using compressed file URL: \(url.path)")
+                     
+-                    // Initialize recorder with proper error handling
+-                    do {
+-                        compressedRecorder = try AVAudioRecorder(url: url, settings: compressedSettings)
+-                        if let recorder = compressedRecorder {
+-                            recorder.delegate = self
+-                            
+-                            if !recorder.prepareToRecord() {
+-                                Logger.debug("AudioStreamManager", "Failed to prepare recorder")
+-                                compressedFileURL = nil
+-                                compressedRecorder = nil
+-                            } else {
+-                                // Note: We don't start the recorder yet, just prepare it
+-                                Logger.debug("AudioStreamManager", "Compressed recording prepared successfully")
+-                                            compressedFormat = settings.output.compressed.format
+-            compressedBitRate = settings.output.compressed.bitrate
+-                            }
+-                        }
+-                    } catch {
+-                        Logger.debug("AudioStreamManager", "Failed to initialize compressed recorder: \(error)")
+-                        compressedFileURL = nil
+-                        compressedRecorder = nil
++                    // Bread: a recorder that can't prepare fails the prepare, since
++                    // a recording with no m4a has no batch fallback.
++                    let recorder = try AVAudioRecorder(url: url, settings: compressedSettings)
++                    compressedRecorder = recorder
++                    recorder.delegate = self
++                    if !recorder.prepareToRecord() {
++                        throw NSError(domain: "AudioStreamManager", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to prepare the compressed recorder"])
+                     }
++                    // Note: We don't start the recorder yet, just prepare it
++                    Logger.debug("AudioStreamManager", "Compressed recording prepared successfully")
++                    compressedFormat = settings.output.compressed.format
++                    compressedBitRate = settings.output.compressed.bitrate
+                 } else {
+-                    Logger.debug("AudioStreamManager", "Failed to create compressed recording file")
++                    throw NSError(domain: "AudioStreamManager", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to create compressed recording file"])
+                 }
+             }
+             
+         } catch {
+-            Logger.debug("AudioStreamManager", "Error: Failed to set up audio session with preferred settings: \(error.localizedDescription)")
++            Logger.debug("AudioStreamManager", "Error: Failed to prepare recording: \(error.localizedDescription)")
++            // Bread: undo the partial prepare, and configure the session again next time
++            audioEngine.inputNode.removeTap(onBus: 0)
++            compressedRecorder?.stop()
++            compressedRecorder = nil
++            if let url = compressedFileURL { try? FileManager.default.removeItem(at: url) }
++            compressedFileURL = nil
++            recordingSettings = nil
++            audioSessionActive = false
+             return false
+         }
+         
+@@ -1117,6 +1133,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         
+         // Mark preparation as complete
+         isPrepared = true
++        preparedStale = false
+         Logger.debug("Recording prepared successfully. Ready to start.")
+         
+         return true
+@@ -1127,6 +1144,10 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+     ///   - settings: The recording settings to use.
+     /// - Returns: A StartRecordingResult object if recording starts successfully, or nil otherwise.
+     func startRecording(settings: RecordingSettings) -> StartRecordingResult? {
++        // Bread: a prepared state that outlived an interruption or route change is prepared again
++        if isPrepared && preparedStale {
++            cleanupPreparation()
++        }
+         // If already prepared, use the prepared state
+         if isPrepared {
+             Logger.debug("Using prepared recording state")
+@@ -1180,12 +1201,15 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+             isPaused = false
+             pausedBySystemInterruption = false
+             
++            // Bread: the m4a starts before live audio flows, and a recorder that
++            // won't record fails the start, since the m4a is the batch fallback.
++            if let recorder = compressedRecorder, !recorder.record() {
++                throw NSError(domain: "AudioStreamManager", code: 4, userInfo: [NSLocalizedDescriptionKey: "The compressed recorder didn't start"])
++            }
++
+             // Start the audio engine
+             try audioEngine.start()
+             
+-            // Start the compressed recorder if prepared
+-            compressedRecorder?.record()
+-            
+             // Show notifications if enabled
+             if settings.showNotification {
+                 notificationManager?.startUpdates(startTime: startTime ?? Date())
+@@ -1220,6 +1244,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         } catch {
+             Logger.debug("Error starting audio engine: \(error.localizedDescription)")
+             isRecording = false
++            disableWakeLock()
+             cleanupPreparation()
+             return nil
+         }
+@@ -1254,6 +1279,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         } catch {
+             Logger.debug("Error deactivating audio session: \(error)")
+         }
++        audioSessionActive = false
++        preparedStale = false
+         
+         // Clear notification setup if it was initialized
+         notificationManager?.stopUpdates()
+@@ -1272,6 +1299,28 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         Logger.debug("Preparation cleanup completed")
+     }
+ 
++    /// Bread: ends a warm or prepared session, deleting any prepared file.
++    /// Does nothing while recording; the recording's stop comes first.
++    func releaseAudioSession() {
++        guard !isRecording, audioSessionActive || isPrepared else { return }
++        if audioEngine.isRunning {
++            audioEngine.stop()
++        }
++        audioEngine.inputNode.removeTap(onBus: 0)
++        audioEngine.reset()
++        if isPrepared {
++            // Deletes the prepared file and deactivates the session
++            cleanupPreparation()
++            return
++        }
++        do {
++            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
++        } catch {
++            Logger.debug("AudioStreamManager", "Error deactivating audio session on release: \(error)")
++        }
++        audioSessionActive = false
++    }
++
+     /// Pauses the current audio recording.
+     func pauseRecording(isSystemInterruption: Bool = false) {
+         guard isRecording, !isPaused else { return }
+@@ -1428,15 +1477,20 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+             return nil
+         }
+         
+-        // Create a converter
+-        guard let converter = AVAudioConverter(from: buffer.format, to: outputFormat) else {
++        // Bread: one converter per recording, made again when the input format
++        // changes. A fresh converter per buffer reset the filter at every edge.
++        if resampler == nil || resampler?.inputFormat != buffer.format || resampler?.outputFormat != outputFormat {
++            resampler = AVAudioConverter(from: buffer.format, to: outputFormat)
++        }
++        guard let converter = resampler else {
+             Logger.debug("Failed to create audio converter")
+             return nil
+         }
+         
+-        // Calculate new buffer size
++        // Calculate new buffer size. A stateful resampler's output varies a
++        // little per call, so leave headroom.
+         let ratio = targetRate / sourceRate
+-        let estimatedFrames = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
++        let estimatedFrames = AVAudioFrameCount((Double(buffer.frameLength) * ratio).rounded(.up)) + 64
+         
+         // Create output buffer
+         guard let outputBuffer = AVAudioPCMBuffer(
+@@ -1447,15 +1501,24 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+             return nil
+         }
+         
+-        // Perform conversion
++        // Perform conversion. The buffer is handed over once; then .noDataNow
++        // keeps the converter's state for the next buffer instead of
++        // reading this one again.
+         var error: NSError?
+-        converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
++        var supplied = false
++        let status = converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
++            if supplied {
++                outStatus.pointee = .noDataNow
++                return nil
++            }
++            supplied = true
+             outStatus.pointee = .haveData
+             return buffer
+         }
+         
+-        if let error = error {
+-            Logger.debug("Error resampling audio: \(error.localizedDescription)")
++        if status == .error || error != nil {
++            Logger.debug("Error resampling audio: \(error?.localizedDescription ?? "unknown")")
++            resampler = nil
+             return nil
+         }
+         
+@@ -1898,14 +1961,16 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         isRecording = false
+         isPaused = false
+         pausedBySystemInterruption = false
+-        isPrepared = false // Reset preparation state
++        resampler = nil
+         
+         // If we were only prepared but never started recording, clean up and return nil
++        // Bread: before isPrepared clears, which cleanupPreparation's guard needs
+         if !wasRecording {
+             cleanupPreparation()
+             stopping = false // Reset stopping flag
+             return nil
+         }
++        isPrepared = false // Reset preparation state
+         
+         // PERFORMANCE OPTIMIZATION: Capture current state for immediate return
+         let capturedFileURL = recordingFileURL
+@@ -1917,6 +1982,11 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         
+         // PERFORMANCE OPTIMIZATION: Move all slow operations to background
+         let capturedShowNotification = recordingSettings?.showNotification == true
++        // Bread: a kept session stays active for the next recording, until releaseAudioSession
++        let keepSession = recordingSettings?.keepSessionActive == true
++        if !keepSession {
++            audioSessionActive = false
++        }
+         
+         // Queue notification and audio session cleanup for background
+         DispatchQueue.global(qos: .utility).async { [weak self] in
+@@ -1940,6 +2010,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+                 }
+             }
+             
++            if keepSession { return }
++
+             // Reset audio session in background
+             do {
+                 try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+@@ -2113,6 +2185,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+     }
+ 
+     private func handleDeviceDisconnection(disconnectedDeviceId: String) {
++        // Bread: a disconnect while nothing records must never start the mic
++        guard isRecording else { return }
+         Logger.debug("handleDeviceDisconnection entered. isRecording: \(isRecording), settingsExist: \(recordingSettings != nil), deviceIdExists: \(recordingSettings?.deviceId != nil), currentDeviceId: \(recordingSettings?.deviceId ?? "nil")")
+ 
+         // --- Modify Guard: Only require settings object, handle nil deviceId later ---
+diff --git a/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift b/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
+index 3627274..af464f7 100644
+--- a/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
++++ b/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
+@@ -43,6 +43,9 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+     public func definition() -> ModuleDefinition {
+         Name("AudioStudio")
+         
++        // Bread: marks a binary with Bread's patch (warm session, releaseAudioSession)
++        Constant("breadPatch") { 1 }
++        
+         // Defines event names that the module can send to JavaScript.
+         Events([
+             audioDataEvent,
+@@ -405,6 +408,16 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+             }
+         }
+         
++        /// Bread: ends a warm or prepared session. A no-op while recording.
++        AsyncFunction("releaseAudioSession") { (promise: Promise) in
++            self.audioLifecycleQueue.async {
++                self.streamManager.releaseAudioSession()
++                DispatchQueue.main.async {
++                    promise.resolve()
++                }
++            }
++        }
++
+         /// Asynchronously lists all audio files stored in the document directory.
+         ///
+         /// - Parameters:
+diff --git a/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift b/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift
+index 3a8235f..1316e4f 100644
+--- a/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift
++++ b/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift
+@@ -101,6 +101,8 @@ struct RecordingSettings {
+     
+     // Feature flags
+     var keepAwake: Bool = true
++    // Bread: stop leaves the audio session active, until releaseAudioSession
++    var keepSessionActive: Bool = false
+     var showNotification: Bool = false
+     var enableProcessing: Bool = false
+     
+@@ -181,6 +183,7 @@ struct RecordingSettings {
+         
+         // Parse feature flags
+         settings.keepAwake = dict["keepAwake"] as? Bool ?? true
++        settings.keepSessionActive = dict["keepSessionActive"] as? Bool ?? false
+         settings.showNotification = dict["showNotification"] as? Bool ?? false
+         settings.enableProcessing = dict["enableProcessing"] as? Bool ?? false
+         
+diff --git a/node_modules/@siteed/audio-studio/src/AudioStudio.types.ts b/node_modules/@siteed/audio-studio/src/AudioStudio.types.ts
+index 0fa8d70..ce45b18 100644
+--- a/node_modules/@siteed/audio-studio/src/AudioStudio.types.ts
++++ b/node_modules/@siteed/audio-studio/src/AudioStudio.types.ts
+@@ -423,6 +423,9 @@ export interface RecordingConfig {
+     /** Keep the device awake while recording (default is false) */
+     keepAwake?: boolean
+ 
++    /** iOS (Bread patch): stop leaves the audio session active until releaseAudioSession (default is false) */
++    keepSessionActive?: boolean
++
+     /** Show a notification during recording (default is false) */
+     showNotification?: boolean
+ 
 diff --git a/node_modules/@siteed/audio-studio/src/events.ts b/node_modules/@siteed/audio-studio/src/events.ts
 index bb2554b..fa9bb36 100644
 --- a/node_modules/@siteed/audio-studio/src/events.ts
