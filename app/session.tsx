@@ -75,7 +75,8 @@ const RECORDING_OPTIONS: RecordingConfig = {
   sampleRate: 16000,
   channels: 1,
   encoding: 'pcm_16bit',
-  interval: 100,
+  // 50ms pieces reach Soniox sooner; the waveform takes two 25ms bars from each
+  interval: 50,
   // m4a for the batch-fallback upload (frozen contract); no WAV.
   // 64 kbps, not lower: a rejected encoder setting leaves no m4a at all.
   output: {
@@ -119,7 +120,7 @@ export default function StudySessionScreen() {
   const [hideModes, setHideModes] = useState<Map<number, HideMode>>(new Map());
 
   // Bar levels live in a shared value so the waveform animates on the
-  // UI thread without re-rendering this screen (10x/sec while recording)
+  // UI thread without re-rendering this screen (20x/sec while recording)
   const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
   // Meter ballistics state: fast attack, slow release (kills ripple)
   const smoothedLevelRef = useRef(0);
@@ -203,8 +204,8 @@ export default function StudySessionScreen() {
 
   // Waveform level computed from the PCM chunks directly (RMS → dBFS),
   // instead of the library's analysis events, which would re-render this
-  // screen on every event. Four bars per 100ms chunk (25ms
-  // windows) go straight into the shared value; no React render at all.
+  // screen on every event. Two bars per 50ms chunk (25ms windows) go
+  // straight into the shared value; no React render at all.
   const computeBarLevel = useCallback((pcm: Uint8Array, start: number, end: number) => {
     let sumSquares = 0;
     let count = 0;
@@ -240,11 +241,11 @@ export default function StudySessionScreen() {
       }
       const pcm = base64ToUint8Array(event.encoded);
       if (recorder.isRecording()) {
-        const quarter = (pcm.length >> 3) << 1; // even byte boundary
+        const half = (pcm.length >> 2) << 1; // even byte boundary
         const bars: number[] = [];
-        for (let q = 0; q < 4; q++) {
-          const start = q * quarter;
-          const end = q === 3 ? pcm.length : (q + 1) * quarter;
+        for (let q = 0; q < 2; q++) {
+          const start = q * half;
+          const end = q === 1 ? pcm.length : half;
           const level = computeBarLevel(pcm, start, end);
           if (level !== null) {
             // Fast attack / slow release: peaks land instantly, but the
