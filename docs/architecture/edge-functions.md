@@ -72,8 +72,8 @@ POST /functions/v1/process-recording
    on any client parses unchanged)
 4. Upload audio to Soniox async API (model stt-async-v5)
    - actualVerse passed as context for accuracy
-5. Poll Soniox until transcription completes (every 250ms for the
-   first 3s, then every 1s, up to a 90s deadline)
+5. Poll Soniox until transcription completes (first poll after
+   150ms, every 250ms for 10s, then every 1s, up to a 90s deadline)
 6. Record usage_daily.transcribe_seconds without blocking the
    response (EdgeRuntime.waitUntil). Analytics only — the quota gate
    was removed; nothing returns 429 anymore
