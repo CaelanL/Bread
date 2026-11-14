@@ -17,6 +17,7 @@ import { ErrorToast } from '@/components/ui/ErrorToast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
+import { perfMark } from '@/lib/api/dev-timing';
 import { useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
@@ -28,6 +29,8 @@ import {
   usePrefsStore,
   useUxFlagsStore,
 } from '@/lib/notifications';
+
+perfMark('root');
 
 // Foreground notification handler — suppress everything while the app
 // is foregrounded. Per the design doc: "I don't really care for

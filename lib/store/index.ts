@@ -9,6 +9,7 @@
 import { ensureAuth } from '@/lib/api';
 import { fetchVerse, getVerseText } from '@/lib/api/bible';
 import { supabase } from '@/lib/api/client';
+import { perfMark } from '@/lib/api/dev-timing';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 import { importCollection } from '@/lib/collections/import';
@@ -749,6 +750,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   hydrate: async () => {
+    perfMark('hydrate');
     const generation = accountGeneration;
     // Load settings from AsyncStorage (doesn't require auth)
     try {
@@ -815,6 +817,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Always mark as hydrated so UI can render (partial data is better than nothing)
     set({ hydrated: true });
+    perfMark('hydrated');
 
     // Show toast only if retry also failed
     if (!collectionsOk || !versesOk || !masteredOk || !sharedOk) {

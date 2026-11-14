@@ -2,6 +2,8 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
+import { timedFetch } from "./dev-timing";
+
 // Read from process.env (Expo automatically injects EXPO_PUBLIC_* vars)
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -22,6 +24,7 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
     persistSession: true,
     detectSessionInUrl: false, // Required for React Native
   },
+  global: { fetch: timedFetch },
 });
 
 /**

@@ -11,7 +11,8 @@ import { VerseExpandModal } from '@/components/ui/VerseExpandModal';
 import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useVotm } from '@/hooks/use-votm';
-import { useAppStore, useVerses } from '@/lib/store';
+import { perfMark } from '@/lib/api/dev-timing';
+import { useAppStore, useHydrated, useVerses } from '@/lib/store';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Animated,
@@ -90,6 +91,10 @@ export default function HomeScreen() {
   const verses = useVerses();
 
   const { votm, loading: votmLoading, text: verseText, textLoading, masteryCount, userMastered, error: monthlyError, refresh: refreshVotm } = useVotm(defaultVersion);
+  const hydrated = useHydrated();
+  useEffect(() => {
+    if (hydrated && verseText) perfMark('home');
+  }, [hydrated, verseText]);
 
   // Modal states
   const [expanded, setExpanded] = useState(false);

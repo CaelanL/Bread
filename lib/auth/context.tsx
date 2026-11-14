@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/api/client';
+import { perfMark } from '@/lib/api/dev-timing';
 import { unregisterDeviceToken } from '@/lib/notifications/tokens';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      perfMark('session');
       if (session) setRestoredUserId(session.user.id);
       setSession(session);
       setUser(session?.user ?? null);

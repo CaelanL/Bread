@@ -1,4 +1,5 @@
 import { getAuthToken, getSupabaseUrl } from "./client";
+import { timedFetch } from "./dev-timing";
 import {
   getChapterFromSession,
   setChapterInSession,
@@ -157,7 +158,7 @@ async function loadVerse(
     version,
   });
 
-  const response = await fetch(`${baseUrl}/functions/v1/bible?${params}`, {
+  const response = await timedFetch(`${baseUrl}/functions/v1/bible?${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -269,7 +270,7 @@ async function loadChapter(
     chapter: "true", // Signal to API this is a chapter request
   });
 
-  const response = await fetch(`${baseUrl}/functions/v1/bible?${params}`, {
+  const response = await timedFetch(`${baseUrl}/functions/v1/bible?${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,

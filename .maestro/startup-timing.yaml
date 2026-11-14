@@ -1,0 +1,33 @@
+# Startup timing (docs/architecture/sync-and-storage.md): reader-c with 150ms added to every Supabase
+# request and [PERF] lines in the Metro log, then 5 cold launches to Home and 5 to the Library.
+# Asserts only that each launch reached its content; the times are read from .expo/sim-metro.log.
+appId: com.caelanliu.biblemem
+name: startup-timing
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&latency=150&perf=1&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: votm-text
+    timeout: 60000
+- repeat:
+    times: 5
+    commands:
+      - stopApp
+      - launchApp
+      - extendedWaitUntil:
+          visible:
+            id: votm-text
+          timeout: 60000
+      - extendedWaitUntil:
+          visible: ".*day streak.*"
+          timeout: 10000
+- repeat:
+    times: 5
+    commands:
+      - stopApp
+      - openLink: com.biblemem://(tabs)/(library)
+      - extendedWaitUntil:
+          visible: ".*Romans 8.*"
+          timeout: 60000
+- takeScreenshot: startup-timing-library
