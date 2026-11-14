@@ -20,9 +20,10 @@ name: startup-timing
       - launchApp
       - tapOn:
           id: tab-home
+      # The local bible function fails some reads; a failed one shows Retry and that launch has no Home mark.
       - extendedWaitUntil:
           visible:
-            id: votm-text
+            id: "votm-text|votm-retry"
           timeout: 60000
       - extendedWaitUntil:
           visible: ".*day streak.*"
