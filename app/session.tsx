@@ -17,9 +17,9 @@ import {
   isResultsPage,
   maskDisplayWords,
 } from '@/lib/study-chunks';
-import { getAuthToken } from '@/lib/api/client';
 import { showErrorToast } from '@/lib/toast';
 import {
+  LiveKeyCache,
   startLiveTranscription,
   base64ToUint8Array,
 } from '@/lib/transcription/live-session';
@@ -116,11 +116,11 @@ export default function StudySessionScreen() {
     micTimingRef.current = {};
   }, []);
 
-  // Warm the auth session so the first mic press doesn't pay a lazy
-  // token refresh serially in front of the Soniox key mint
+  // Mint the Soniox key on open, so a tap usually finds one ready
+  const [liveKeys] = useState(() => new LiveKeyCache());
   useEffect(() => {
-    getAuthToken().catch(() => {});
-  }, []);
+    liveKeys.warm();
+  }, [liveKeys]);
 
   useEffect(() => () => { void recorder.cancel(); }, [recorder]);
 
@@ -253,7 +253,7 @@ export default function StudySessionScreen() {
           micPermissionRef.current = granted;
           return granted;
         },
-        openLive: () => startLiveTranscription(chunk.text),
+        openLive: () => startLiveTranscription(chunk.text, liveKeys),
         start() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
@@ -296,7 +296,7 @@ export default function StudySessionScreen() {
       // The usual cause is the mic held by a call or another app; the error doesn't say which.
       Alert.alert("Couldn't start recording", "If you're on a call or another app is using the microphone, close it and try again.");
     }
-  }, [handleAudioStream, recorder, session.chunks, session.currentIndex, stampMic, startRecording, stopRecording, waveformLevels]);
+  }, [handleAudioStream, liveKeys, recorder, session.chunks, session.currentIndex, stampMic, startRecording, stopRecording, waveformLevels]);
 
   const handleCancel = useCallback(() => {
     if (!recorder.canDiscard()) return;

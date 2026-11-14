@@ -18,7 +18,7 @@ export interface LiveAudioFormat {
   channels: number;
 }
 
-interface TokenEndpointResponse {
+interface LiveKey {
   apiKey: string;
   websocketUrl: string;
   model: string;
@@ -53,6 +53,50 @@ const MAX_BUFFER_SECONDS = 15;
 // subscription depends on it (app/session.tsx).
 const FLUSH_GRACE_MS = 50;
 
+// KEY_TTL_SECONDS (300) in transcription-token, less 30s. Age counts from when
+// the key reached the device, not from expiresAt, so device clock skew can't
+// make a fresh key look stale or a dead one look fresh.
+const KEY_REUSE_MS = 270_000;
+
+/**
+ * One study screen's Soniox key. The screen creates it on mount and warms it,
+ * so the first tap usually finds a key ready. Only one mint runs at a time, and
+ * a stale key is replaced before a socket opens.
+ */
+export class LiveKeyCache {
+  private key: { value: LiveKey; receivedAt: number } | null = null;
+  private minting: Promise<LiveKey> | null = null;
+
+  warm(): void {
+    this.get().catch(() => {});
+  }
+
+  get(): Promise<LiveKey> {
+    if (this.key && Date.now() - this.key.receivedAt < KEY_REUSE_MS) {
+      return Promise.resolve(this.key.value);
+    }
+    this.minting ??= this.mint().finally(() => { this.minting = null; });
+    return this.minting;
+  }
+
+  drop(key: LiveKey): void {
+    if (this.key?.value === key) this.key = null;
+  }
+
+  private async mint(): Promise<LiveKey> {
+    const token = await getAuthToken();
+    const res = await fetch(`${getSupabaseUrl()}/functions/v1/transcription-token`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    // 403 LIVE_DISABLED (the kill switch) lands here too
+    if (!res.ok) throw new Error(`token endpoint ${res.status}`);
+    const value: LiveKey = await res.json();
+    this.key = { value, receivedAt: Date.now() };
+    return value;
+  }
+}
+
 class LiveSession implements LiveTranscriptionSession {
   state: LiveSessionState = 'connecting';
 
@@ -67,9 +111,13 @@ class LiveSession implements LiveTranscriptionSession {
   private finishReject: ((error: Error) => void) | null = null;
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private key: LiveKey | null = null;
+  // Soniox has answered without an error, so the key works
+  private keyAccepted = false;
 
   constructor(
     private readonly verseText: string,
+    private readonly keys: LiveKeyCache,
     private readonly format: LiveAudioFormat
   ) {
     this.maxBufferBytes =
@@ -78,46 +126,32 @@ class LiveSession implements LiveTranscriptionSession {
   }
 
   private async connect(): Promise<void> {
-    let config: string;
-    let websocketUrl: string;
+    let key: LiveKey;
     try {
-      const token = await getAuthToken();
-      const res = await fetch(
-        `${getSupabaseUrl()}/functions/v1/transcription-token`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      if (!res.ok) {
-        // 403 LIVE_DISABLED (the kill switch) lands here too
-        this.fail(`token endpoint ${res.status}`);
-        return;
-      }
-      const minted: TokenEndpointResponse = await res.json();
-      websocketUrl = minted.websocketUrl;
-      config = JSON.stringify({
-        api_key: minted.apiKey,
-        model: minted.model,
-        audio_format: 'pcm_s16le',
-        sample_rate: this.format.sampleRate,
-        num_channels: this.format.channels,
-        language_hints: ['en'],
-        context: {
-          general: [
-            { key: 'domain', value: 'Bible' },
-            { key: 'topic', value: 'Bible verse memory recitation attempt' },
-          ],
-          text: this.verseText,
-        },
-      });
+      key = await this.keys.get();
     } catch (e) {
-      this.fail(`mint failed: ${e}`);
+      this.fail(`mint failed: ${e instanceof Error ? e.message : e}`);
       return;
     }
     if (this.state !== 'connecting') return; // aborted during mint
+    this.key = key;
+    const config = JSON.stringify({
+      model: key.model,
+      audio_format: 'pcm_s16le',
+      sample_rate: this.format.sampleRate,
+      num_channels: this.format.channels,
+      language_hints: ['en'],
+      context: {
+        general: [
+          { key: 'domain', value: 'Bible' },
+          { key: 'topic', value: 'Bible verse memory recitation attempt' },
+        ],
+        text: this.verseText,
+      },
+    });
 
-    const ws = new WebSocket(websocketUrl);
+    // Soniox refuses a key sent only in the config frame from 15 January 2027
+    const ws = new WebSocket(key.websocketUrl, ['soniox-api-key', key.apiKey]);
     this.ws = ws;
 
     ws.onopen = () => {
@@ -149,6 +183,7 @@ class LiveSession implements LiveTranscriptionSession {
         this.fail(`${msg.error_code}: ${msg.error_message}`);
         return;
       }
+      this.keyAccepted = true;
       for (const t of msg.tokens ?? []) {
         if (t.is_final && t.text !== '<fin>' && t.text !== '<end>') {
           this.finalTexts.push(t.text);
@@ -233,6 +268,8 @@ class LiveSession implements LiveTranscriptionSession {
     if (this.state === 'failed' || this.state === 'closed') return;
     // eslint-disable-next-line no-console -- routine fallback, not a problem; console.warn would raise a LogBox in dev
     console.log(`[LIVE] falling back to batch: ${reason}`);
+    // Never reuse a key Soniox may have refused
+    if (this.key && !this.keyAccepted) this.keys.drop(this.key);
     this.state = 'failed';
     this.teardown();
     this.finishReject?.(new Error(reason));
@@ -275,16 +312,17 @@ class LiveSession implements LiveTranscriptionSession {
  * Start a background live-transcription stream for one recording.
  *
  * Returns synchronously so audio can be fed from the first PCM callback —
- * chunks are buffered while the token mint + WebSocket connect complete,
+ * chunks are buffered while the key + WebSocket connect complete,
  * then flushed. Every failure mode (mint refused, socket drop, finalize
  * timeout, buffer overflow) resolves to state "failed" with no error UI:
  * the caller's batch path scores the recording file instead.
  */
 export function startLiveTranscription(
   verseText: string,
+  keys: LiveKeyCache,
   format: LiveAudioFormat = { sampleRate: 16000, channels: 1 }
 ): LiveTranscriptionSession {
-  return new LiveSession(verseText, format);
+  return new LiveSession(verseText, keys, format);
 }
 
 const B64_LOOKUP = (() => {
