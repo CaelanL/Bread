@@ -1,11 +1,13 @@
 // Fetches a licensed translation through the LOCAL `bible` function into
 // `.expo/grading-audit/<VERSION>.json` (gitignored; never commit licensed text).
+// Single-verse refs take the function's single-verse path, so the sample holds whatever that
+// path returns, psalm titles included (RC5 in docs/grading-audit.md; check with esv-text.ts).
 //
 //   npx tsx scripts/grading-audit/fetch-licensed.ts ESV
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { authHeaders, functionUrl, popularPassages, SEED_USERS, signIn } from './local';
+import { getBible, popularPassages } from './local';
 import { OUT_DIR } from './run';
 
 // Passages chosen for risk: numbers, verses some translations omit, hyphens and possessives.
@@ -22,25 +24,22 @@ async function main() {
   if (!version || version === 'KJV') throw new Error('Usage: fetch-licensed.ts <ESV|NLT|NIV|NKJV>');
   const file = join(OUT_DIR, `${version}.json`);
   const out: Record<string, string> = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
-  let user = 0;
-  let token = await signIn(SEED_USERS[user]);
   const missingVerses: string[] = [];
 
   for (const ref of [...new Set([...popularPassages(), ...RISKY])]) {
     const m = ref.match(/^(.+) (\d+):(\d+)(?:-(\d+))?$/)!;
     const [book, chapter, start, end] = [m[1], m[2], Number(m[3]), Number(m[4] ?? m[3])];
     if (Array.from({ length: end - start + 1 }, (_, i) => `${book} ${chapter}:${start + i}`).every((k) => k in out)) continue;
-    let res = await fetch(`${functionUrl('bible')}?ref=${encodeURIComponent(ref)}&version=${version}`, { headers: authHeaders(token) });
-    while (res.status === 429 && user < SEED_USERS.length - 1) {
-      token = await signIn(SEED_USERS[++user]);
-      res = await fetch(`${functionUrl('bible')}?ref=${encodeURIComponent(ref)}&version=${version}`, { headers: authHeaders(token) });
+    const { status, body } = await getBible(`ref=${encodeURIComponent(ref)}&version=${version}`);
+    if (status === 429) {
+      console.log('Every seed user hit the daily Bible quota; saving what was fetched.');
+      break;
     }
-    const body = await res.json();
-    if (!res.ok) {
-      console.log(`${ref}: ${res.status} ${body.error ?? ''}`);
+    if (status !== 200) {
+      console.log(`${ref}: ${status} ${body.error ?? ''}`);
       continue;
     }
-    const keyed: Record<string, string> = body.verses ?? { [start]: body.text };
+    const keyed: Record<string, string> = body.verses ?? (body.text ? { [start]: body.text } : {});
     for (let v = start; v <= end; v++) {
       if (keyed[String(v)] === undefined) missingVerses.push(`${book} ${chapter}:${v}`);
       else out[`${book} ${chapter}:${v}`] = keyed[String(v)];

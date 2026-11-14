@@ -18,7 +18,7 @@ export interface ChunkRef {
 
 export interface Pass {
   name: string;
-  group: 'baseline' | 'numbers' | 'spelling' | 'homophone' | 'compound' | 'unicode' | 'speech' | 'reference' | 'live';
+  group: 'baseline' | 'numbers' | 'spelling' | 'homophone' | 'compound' | 'contraction' | 'unicode' | 'speech' | 'reference' | 'live';
   make(text: string, ref: ChunkRef): Case | null;
 }
 
@@ -144,6 +144,18 @@ const SPLIT = wordMap([
   ['himself', 'him self'], ['themselves', 'them selves'], ['yourselves', 'your selves'],
 ]);
 
+// Said one way, printed the other: the engine or the reader contracts "do not", or expands a
+// translation's "don't".
+const CONTRACTIONS: [string, string][] = [
+  ['do not', "don't"], ['does not', "doesn't"], ['did not', "didn't"], ['is not', "isn't"],
+  ['are not', "aren't"], ['was not', "wasn't"], ['were not', "weren't"], ['will not', "won't"],
+  ['cannot', "can't"], ['could not', "couldn't"], ['would not', "wouldn't"], ['should not', "shouldn't"],
+  ['have not', "haven't"], ['has not', "hasn't"], ['had not', "hadn't"], ['it is', "it's"],
+  ['that is', "that's"], ['there is', "there's"], ['let us', "let's"], ['i am', "i'm"], ['i will', "i'll"],
+  ['i have', "i've"], ['you are', "you're"], ['we are', "we're"], ['they are', "they're"],
+  ['he is', "he's"], ['she is', "she's"], ['what is', "what's"], ['who is', "who's"],
+];
+
 // Characters a non-KJV source can put in the verse text. The transcript stays plain.
 function unicodePass(name: string, edit: (text: string) => string): Pass {
   return {
@@ -234,6 +246,13 @@ export const PASSES: Pass[] = [
     make: (t) => (/[A-Za-z]-[A-Za-z]/.test(t) ? { expected: t, transcript: plain(t.replace(/([A-Za-z])-(?=[A-Za-z])/g, '$1')) } : null),
   },
 
+  { name: 'contraction:contracted', group: 'contraction', make: (t) => replaceWords(t, wordMap(CONTRACTIONS)) },
+  {
+    name: 'contraction:expanded',
+    group: 'contraction',
+    make: (t) => replaceWords(t, wordMap(CONTRACTIONS.map(([full, short]) => [short, full]))),
+  },
+
   unicodePass('curly-quotes', (t) => t.replace(/'/g, '’').replace(/"([^"]*)"/g, '“$1”')),
   unicodePass('modifier-apostrophe', (t) => t.replace(/['’]/g, 'ʼ')),
   unicodePass('prime-apostrophe', (t) => t.replace(/['’]/g, '′')),
@@ -317,6 +336,7 @@ export const PASSES: Pass[] = [
     }),
   },
   {
+    // Only multi-verse chunks: run with --chunk-size 2 or more, or it checks nothing.
     name: 'reference:verse-numbers-in-chunk',
     group: 'reference',
     make: (_t, r) => (r.verseTexts.length < 2

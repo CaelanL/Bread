@@ -13,6 +13,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Touching | Read |
 |---|---|
 | Setup screen, chunks, masks, peek, scoring | `docs/features/study-session.md` |
+| Grading accuracy, known grading gaps, the audit harness | `docs/grading-audit.md` |
 | Recording, Soniox, batch and live paths | `docs/features/transcription.md` |
 | Mastery, spaced repetition, engraved | `docs/features/review.md` |
 | Collections, sorting, library list | `docs/features/library.md` |

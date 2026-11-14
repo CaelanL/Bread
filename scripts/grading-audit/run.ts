@@ -6,6 +6,12 @@
 //                            [--replay <transcripts.json>]
 //   npm run audit:grading -- --card (--ref "John 3:16" | --expected "<text>") --transcript "<text>" [--aligner <file>]
 //
+// Chunk size 1 (the default) skips `reference:verse-numbers-in-chunk`, which needs multi-verse
+// chunks: run it with --chunk-size 3. Older aligners for --aligner, from git:
+//   mkdir -p .expo/grading-audit
+//   git show 0a63382^:lib/align.ts > .expo/grading-audit/old-align.ts           (1.3.0)
+//   git show 041aa49^:lib/align.ts > .expo/grading-audit/align-pre-041aa49.ts   (1.1.1, 1.2.0)
+//
 // KJV comes from the bundle. Other translations come from `.expo/grading-audit/<VERSION>.json`
 // (written by fetch-licensed.ts, gitignored); their text is never printed, only references
 // and the words that went wrong. Reports land in `.expo/grading-audit/`.
@@ -26,8 +32,10 @@ import { toDigits } from './numbers';
 import { PASSES, type ChunkRef, type Pass } from './variations';
 
 export const OUT_DIR = join(__dirname, '../../.expo/grading-audit');
-// Engine transcripts of KJV computer-voice recitations (voice.ts), committed as a fixture.
+// Engine transcripts of KJV computer-voice recitations (voice.ts), committed as a fixture,
+// and the clips in it that score under 100 today (`clipId` each).
 export const KJV_FIXTURE = join(__dirname, 'fixtures/say-kjv.json');
+export const KJV_FIXTURE_MISSES = join(__dirname, 'fixtures/say-kjv-misses.json');
 type Align = (expected: string, transcript: string) => AlignmentWord[];
 
 // ---------- verse sources ----------
@@ -293,6 +301,8 @@ export interface Clip {
   rate: number;
   transcript: string;
 }
+
+export const clipId = (clip: Clip) => `${clip.ref} ${clip.voice}@${clip.rate}`;
 
 export function replay(file: string, align: Align) {
   const clips: Clip[] = JSON.parse(readFileSync(file, 'utf8'));

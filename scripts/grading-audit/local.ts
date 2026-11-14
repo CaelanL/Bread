@@ -18,7 +18,7 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(API_URL).hostname)) {
 }
 
 // Seed users share the local seed password; each has its own daily Bible quota.
-export const SEED_USERS = 'abcdefghijklm'.split('').map((c) => `reader-${c}@example.test`);
+export const SEED_USERS = 'abcd'.split('').map((c) => `reader-${c}@example.test`);
 
 export async function signIn(email: string): Promise<string> {
   const res = await fetch(`${API_URL}/auth/v1/token?grant_type=password`, {
@@ -29,6 +29,28 @@ export async function signIn(email: string): Promise<string> {
   const body = await res.json();
   if (!res.ok || !body.access_token) throw new Error(`Sign-in failed for ${email}: ${res.status}`);
   return body.access_token;
+}
+
+export interface BibleResponse {
+  text?: string;
+  verses?: Record<string, string>;
+  cached?: boolean;
+  error?: string;
+}
+
+let bibleUser = 0;
+let bibleToken: string | undefined;
+
+// GET the local `bible` function, moving to the next seed user when one hits the daily quota.
+// Status 429 means every seed user has (`npm run db:reset` clears the quota).
+export async function getBible(query: string): Promise<{ status: number; body: BibleResponse }> {
+  bibleToken ??= await signIn(SEED_USERS[bibleUser]);
+  let res = await fetch(`${functionUrl('bible')}?${query}`, { headers: authHeaders(bibleToken) });
+  while (res.status === 429 && bibleUser < SEED_USERS.length - 1) {
+    bibleToken = await signIn(SEED_USERS[++bibleUser]);
+    res = await fetch(`${functionUrl('bible')}?${query}`, { headers: authHeaders(bibleToken) });
+  }
+  return { status: res.status, body: await res.json().catch(() => ({})) };
 }
 
 export function functionUrl(name: string): string {
