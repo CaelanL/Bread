@@ -7,7 +7,7 @@
  */
 
 import { Platform } from 'react-native';
-import { supabase } from '@/lib/api/client';
+import { sessionUserId, supabase } from '@/lib/api/client';
 import type { Cadence, NotificationPreferences } from './types';
 
 const PREFS_TABLE = 'notification_preferences';
@@ -68,12 +68,12 @@ function patchToRow(patch: Partial<NotificationPreferences>): Partial<PrefsRow> 
 
 /** Fetch the current user's prefs row, or null if not yet created. */
 export async function fetchPreferences(): Promise<NotificationPreferences | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const userId = await sessionUserId();
+  if (!userId) return null;
   const { data, error } = await supabase
     .from(PREFS_TABLE)
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .maybeSingle();
   if (error) {
     console.error('[notifications] fetchPreferences', error);
@@ -112,11 +112,11 @@ export function defaultPreferences(timezone: string): NotificationPreferences {
  * permission is freshly granted. Returns the resulting prefs.
  */
 export async function insertDefaultPreferences(timezone: string): Promise<NotificationPreferences | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const userId = await sessionUserId();
+  if (!userId) return null;
   const defaults = defaultPreferences(timezone);
   const row: PrefsRow = {
-    user_id: user.id,
+    user_id: userId,
     master_enabled: defaults.masterEnabled,
     reviews_enabled: defaults.reviewsEnabled,
     reviews_cadence: defaults.reviewsCadence,
@@ -144,14 +144,14 @@ export async function insertDefaultPreferences(timezone: string): Promise<Notifi
 
 /** UPDATE the user's prefs row. Caller does optimistic update upstream. */
 export async function updatePreferences(patch: Partial<NotificationPreferences>): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
+  const userId = await sessionUserId();
+  if (!userId) return false;
   const rowPatch = patchToRow(patch);
   if (Object.keys(rowPatch).length === 0) return true;
   const { error } = await supabase
     .from(PREFS_TABLE)
     .update(rowPatch)
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
   if (error) {
     console.error('[notifications] updatePreferences', error);
     return false;
@@ -196,12 +196,12 @@ export async function deleteDeviceToken(expoToken: string): Promise<boolean> {
  * recent calls. Tied to the in-progress 24h-active gate.
  */
 export async function updateLastForegroundedAt(): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+  const userId = await sessionUserId();
+  if (!userId) return;
   const { error } = await supabase
     .from(PREFS_TABLE)
     .update({ last_foregrounded_at: new Date().toISOString() })
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .lt('last_foregrounded_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
   if (error) {
     console.error('[notifications] updateLastForegroundedAt', error);

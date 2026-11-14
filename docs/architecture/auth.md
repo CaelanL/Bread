@@ -1,15 +1,15 @@
 # Auth
 
 Auth is Supabase Auth. Users sign in with email and password. A
-Google method and an anonymous fallback exist in code, but no screen
-offers them. Sessions persist across app restarts via AsyncStorage
+Google method exists in code, but no screen offers it. Nothing signs
+in anonymously. Sessions persist across app restarts via AsyncStorage
 (Supabase manages this transparently).
 
 ## Files
 
 | File | Role |
 |---|---|
-| `lib/api/client.ts` | Supabase client setup (anon key, AsyncStorage on native), `ensureAuth`, `getAuthToken` |
+| `lib/api/client.ts` | Supabase client setup (anon key, AsyncStorage on native), `sessionUserId`, `getAuthToken` |
 | `lib/auth/context.tsx` | `AuthProvider` + `useAuth()` hook — exposes session state and sign-in/up methods, handles auth deep links |
 | `lib/auth/index.ts` | Re-exports |
 | `lib/auth/dev-sign-in.ts` | `canDevSignIn` guard for the dev route |
@@ -68,17 +68,6 @@ User taps email link
 The link must be opened on a device with the app installed. Signed-in
 users can also change their password from Settings, which calls
 `updatePassword` too.
-
-### Anonymous sign-in
-
-`ensureAuth()` in `lib/api/client.ts` calls
-`supabase.auth.signInAnonymously()` if no session exists. No screen
-offers it. It's a fallback inside store, storage and sync helpers
-that call `ensureAuth()` first, and the auth gate keeps those screens
-behind a session, so a real user shouldn't end up anonymous.
-
-If one did, `AuthProvider` treats any session as authenticated for
-routing. An anonymous session is a real user row in `auth.users`.
 
 ### Account deletion
 
@@ -179,16 +168,13 @@ before first and last names became the first name.
 
 ## Where the user ID is read
 
-Components use `useAuth().user`. Code in `lib/` reads it from
-Supabase:
-
-```ts
-const { data: { user } } = await supabase.auth.getUser();
-```
-
-`lib/store/index.ts` and `lib/storage/index.ts` call
-`ensureAuth()` first (`getCurrentUserId` in each). `lib/api/analytics.ts`
-and `lib/notifications/api.ts` don't. RLS on every user-owned table
+Components use `useAuth().user`. Code in `lib/` calls `sessionUserId()`
+(`lib/api/client.ts`), which reads the stored session: no network round
+trip, and null when signed out, never an anonymous sign-in. The store's
+`getCurrentUserId` throws `Not authenticated` on null; `lib/api/analytics.ts`
+and `lib/notifications/api.ts` return their "not signed in" value. Don't use
+`supabase.auth.getUser()`: it's a round trip to Supabase Auth, and every other
+Supabase request waits behind it. RLS on every user-owned table
 enforces `auth.uid() = user_id`, so even if a mistake bypasses the
 check, the database refuses the write.
 
@@ -212,10 +198,6 @@ check, the database refuses the write.
 
 ## Sharp edges
 
-- **Anonymous sessions can orphan data.** If a user ever got an
-  anonymous session and then signed up with email, the two
-  `auth.users` rows are unrelated — the anon user's data doesn't
-  migrate.
 - **Bible version is not synced to Supabase.** Sign in on a new
   device, you get ESV until you change it. Documented in
   `docs/architecture/bible-versions.md`.

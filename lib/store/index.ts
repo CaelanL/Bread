@@ -6,9 +6,8 @@
  * Components subscribe and auto-update when data changes.
  */
 
-import { ensureAuth } from '@/lib/api';
 import { fetchVerse, getVerseText } from '@/lib/api/bible';
-import { supabase } from '@/lib/api/client';
+import { sessionUserId, supabase } from '@/lib/api/client';
 import { perfMark } from '@/lib/api/dev-timing';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
@@ -182,13 +181,10 @@ export interface SharedProgress {
 
 // ============ HELPERS ============
 
-// The session ensureAuth just read, so no network round trip; its own error is kept.
 async function getCurrentUserId(): Promise<string> {
-  await ensureAuth();
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  if (!data.session) throw new Error('Not authenticated');
-  return data.session.user.id;
+  const userId = await sessionUserId();
+  if (!userId) throw new Error('Not authenticated');
+  return userId;
 }
 
 let accountGeneration = 0;

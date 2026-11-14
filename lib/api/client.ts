@@ -27,23 +27,10 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
   global: { fetch: timedFetch },
 });
 
-/**
- * Ensure user is authenticated (anonymous or signed in)
- * Call this early in app lifecycle
- */
-export async function ensureAuth(): Promise<void> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    // Sign in anonymously - creates a user without email/password
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) {
-      console.error("Anonymous auth failed:", error);
-      throw new Error("Authentication failed");
-    }
-  }
+/** The signed-in user's id from the stored session: no network round trip, and never signs anyone in. */
+export async function sessionUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
 }
 
 /**
