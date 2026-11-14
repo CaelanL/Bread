@@ -79,7 +79,8 @@ export async function syncForegroundState({ resumed = true } = {}): Promise<void
     const tz = deviceTimezone();
     if (tz !== prefs.timezone) {
       const ok = await updateTimezone(tz);
-      if (ok) {
+      // Unless the prefs changed meanwhile (another account, or an edit).
+      if (ok && usePrefsStore.getState().prefs === prefs) {
         await usePrefsStore.getState().setPrefs({ ...prefs, timezone: tz });
       }
     }

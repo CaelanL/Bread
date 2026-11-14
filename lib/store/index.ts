@@ -125,7 +125,7 @@ interface AppState {
   profileLoaded: boolean;
   /** profiles.welcome_v2_seen_at is set: the 2.0 walkthrough needs no claim (lib/welcome.ts). */
   welcomeSeen: boolean;
-  /** When this run last saved a session's progress; Home reloads its streak and monthly verse after it. */
+  /** When this run last saved a session (its progress or its attempt); Home reloads its streak and monthly verse after it. */
   lastSessionAt: number | null;
   collectionsLoading: boolean;
   collectionOrderSaving: boolean;
@@ -159,6 +159,8 @@ interface AppState {
   /** Warms these verses' text ahead of the rest (a collection opening). */
   preloadVerseText: (verses: SavedVerse[]) => void;
   clearError: () => void;
+  /** A session's attempt row is saved (the streak reads those rows). */
+  markSessionSaved: () => void;
 
   // Actions - Settings
   setColorMode: (mode: ColorMode) => Promise<void>;
@@ -537,10 +539,7 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
 
   let failure: unknown = null;
   let translation: BibleVersion | null = null;
-  // Name and translation decisions wait for `synced`, so it needs the profile too.
-  const updates: Partial<AppState> = {
-    hydrated: true, hydratedFrom: 'server', synced: store().synced || (allApplied() && profile.status === 'fulfilled'),
-  };
+  const updates: Partial<AppState> = { hydrated: true, hydratedFrom: 'server' };
   if (profile.status === 'rejected') {
     failure = profile.reason;
   } else {
@@ -565,7 +564,11 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
       if (error) failure = error;
       else translation = seeded;
     }
+    // A missing profile that couldn't be seeded isn't loaded.
+    if (failure) updates.profileLoaded = store().profileLoaded;
   }
+  // Name and translation decisions wait for `synced`, so it needs the profile too.
+  updates.synced = store().synced || (allApplied() && !failure);
   if (translation && requestedTranslation === null) updates.bibleVersion = translation;
   useAppStore.setState(updates);
   perfMark('hydrated');
@@ -1121,6 +1124,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   preloadVerseText: (verses) => preloadVerseText(verses, true),
 
+  markSessionSaved: () => set({ lastSessionAt: Date.now() }),
+
   clearError: () => {
     set({ error: null });
   },
@@ -1463,7 +1468,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     // Real user collection — optimistic Zustand update, then DB write.
-    const previous = get().collections;
+    const previousSort = get().collections.find((c) => c.id === collectionId)?.sortPreference;
     await confirming(accountGeneration, async () => {
       set((state) => ({
         collections: state.collections.map((c) =>
@@ -1474,7 +1479,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         await updateCollectionSort(collectionId, sort);
       } catch (e) {
         console.error('[STORE] Failed to persist collection sort:', e);
-        set({ collections: previous });
+        // Only this collection's sort goes back; anything else changed meanwhile stays.
+        set((state) => ({
+          collections: state.collections.map((c) => c.id === collectionId ? { ...c, sortPreference: previousSort } : c),
+        }));
         showErrorToast("Couldn't save sort preference.");
       }
     });
@@ -1581,6 +1589,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // after the reads, unless they show the membership gone: then the departed-group notice is the
   // message and it returns false. A failed grid read shows on the entry.
   openSharedCollection: async (sharedId, { pull = false } = {}) => {
+    const generation = accountGeneration;
     let failure: unknown = null;
     try {
       await syncSharedCopy(sharedId);
@@ -1595,6 +1604,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections(),
       pull && get().fetchMasteredVerses(),
     ]);
+    saveSnapshot(generation);
     if (!get().collections.some((c) => c.sharedId === sharedId)) {
       set((state) => ({
         sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
@@ -1727,8 +1737,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const verse = get().verses.find((v) => v.id === id);
     const isMastered = verse?.progress?.hard?.completed === true;
 
-    // Save for rollback
-    const previousVerses = get().verses;
+    // Rollback puts back only the removed entries, where they were, so a change landing meanwhile stays.
+    const removing = (v: SavedVerse) => v.id === id && v.collectionId === collectionId;
+    const at = get().verses.findIndex(removing);
+    const removed = get().verses.filter(removing);
+    const restore = () => set((state) => {
+      const verses = state.verses.slice();
+      verses.splice(Math.min(at, verses.length), 0, ...removed);
+      return { verses };
+    });
 
     return confirming(generation, async () => {
       // Optimistic update - remove from local state immediately
@@ -1758,7 +1775,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           saveSnapshot(generation);
           return { wasMastered: isMastered };
         } catch (error) {
-          set({ verses: previousVerses });
+          restore();
           throw error;
         }
       }
@@ -1768,7 +1785,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { error } = await supabase.rpc('delete_verse', { verse_client_id: id, collection_client_id: collectionId });
       if (error) {
         console.error('[STORE] Failed to delete verse:', error);
-        set({ verses: previousVerses });
+        restore();
         throw new Error('Failed to delete verse');
       }
       return { wasMastered: isMastered };

@@ -23,7 +23,7 @@ import { referenceKey } from '@/lib/store/translation';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useCollection, useCollectionSort, useHydrated, useSynced, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
+import { librarySynced, useAppStore, useCollection, useCollectionSort, useHydrated, useSynced, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
@@ -62,8 +62,15 @@ export default function CollectionScreen() {
   const inProgressVerses = useInProgressVerses();
   const allVerses = useVerses();
   const hydrated = useHydrated();
-  // An id the saved library doesn't know (made on another device) waits for the server's.
-  const known = useSynced() || !!collection;
+  // An id the saved library doesn't know (made on another device) waits for the server's, which
+  // retries once and toasts if it can't be read; then the screen shows it as missing.
+  const synced = useSynced();
+  const [syncFailed, setSyncFailed] = useState(false);
+  const known = synced || !!collection || syncFailed;
+  const unknownId = !synced && !collection;
+  useEffect(() => {
+    if (unknownId) void librarySynced().then((ok) => setSyncFailed(!ok));
+  }, [unknownId]);
   const deleteVerse = useAppStore((s) => s.deleteVerse);
   const refresh = useAppStore((s) => s.refresh);
   const shared = useSharedCollection(id || '');

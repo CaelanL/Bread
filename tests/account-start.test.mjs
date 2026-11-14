@@ -52,10 +52,10 @@ test('accounts start from the auth session, keyed by user id', async (t) => {
     account, 'e30.' + Buffer.from(JSON.stringify({ sub: account })).toString('base64url') + '.AA',
   ]));
   const held = [];
-  const hold = (path) => {
+  const hold = (path, method = 'GET') => {
     const request = Promise.withResolvers();
     const response = Promise.withResolvers();
-    held.push({ path, request, response });
+    held.push({ path, method, request, response });
     return { sent: request.promise, reply: response.resolve };
   };
   const profileReads = [];
@@ -69,7 +69,7 @@ test('accounts start from the auth session, keyed by user id', async (t) => {
       const id = JSON.parse(init.body).email[0];
       return Response.json({ access_token: tokens[id], refresh_token: 'r-' + id, token_type: 'bearer', expires_in: 3600, user: { id } });
     }
-    const index = held.findIndex((entry) => entry.path === url.pathname && method === 'GET');
+    const index = held.findIndex((entry) => entry.path === url.pathname && entry.method === method);
     if (index >= 0) {
       const [entry] = held.splice(index, 1);
       entry.request.resolve(account);
@@ -153,5 +153,36 @@ test('accounts start from the auth session, keyed by user id', async (t) => {
     assert.equal(usePrefsStore.getState().prefs, null);
     await until(() => !storage.has('notifications_prefs_cache:B'));
     assert.ok(storage.has('notifications_prefs_cache:A'));
+  });
+  await t.test("A's late default prefs land after a switch to B: dropped, never in B's store or cache", async () => {
+    await signIn('A');
+    setAccount('A');
+    await until(() => usePrefsStore.getState().prefs !== null);
+    const insert = hold('/rest/v1/notification_preferences', 'POST');
+    const initializing = usePrefsStore.getState().initializeDefaults('UTC');
+    assert.equal(await insert.sent, 'A');
+    await signIn('B');
+    setAccount('B');
+    await until(() => storage.has('notifications_prefs_cache:B'));
+    const bCache = storage.get('notifications_prefs_cache:B');
+    insert.reply(Response.json({ ...prefsRow('A'), master_enabled: true, reviews_hour: 6 }));
+    assert.equal(await initializing, null);
+    assert.equal(usePrefsStore.getState().prefs.masterEnabled, false, "B's own prefs stay");
+    assert.equal(storage.get('notifications_prefs_cache:B'), bCache);
+  });
+
+  await t.test("B's failed patch rolls back B's cache only, once A is the account", async () => {
+    const update = hold('/rest/v1/notification_preferences', 'PATCH');
+    const patching = usePrefsStore.getState().patch({ reviewsHour: 7 });
+    assert.equal(await update.sent, 'B');
+    await signIn('A');
+    setAccount('A');
+    await until(() => usePrefsStore.getState().prefs?.masterEnabled === true);
+    const aCache = storage.get('notifications_prefs_cache:A');
+    update.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    assert.equal(await patching, false);
+    assert.equal(usePrefsStore.getState().prefs.masterEnabled, true, "A's prefs stay");
+    assert.equal(storage.get('notifications_prefs_cache:A'), aCache);
+    assert.equal(JSON.parse(storage.get('notifications_prefs_cache:B')).reviewsHour, 9, "B's cache is rolled back to B's own prefs");
   });
 });

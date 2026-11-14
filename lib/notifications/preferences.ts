@@ -21,8 +21,10 @@ const prefsCacheKey = (userId: string) => `notifications_prefs_cache:${userId}`;
 // Before the cache was per account. Removed on the first hydrate.
 const SHARED_CACHE_KEY = 'notifications_prefs_cache';
 
-// The account the store holds; its cache key is where writes go.
+// The account the store holds, and a count of account changes. A write keeps the account it
+// started with: a result that lands after a switch is dropped, never written to the new account.
 let account: string | null = null;
+let accountRun = 0;
 
 interface PrefsState {
   prefs: NotificationPreferences | null;
@@ -70,13 +72,13 @@ async function readCache(userId: string): Promise<NotificationPreferences | null
   }
 }
 
-async function writeCache(prefs: NotificationPreferences | null): Promise<void> {
-  if (!account) return;
+async function writeCache(owner: string | null, prefs: NotificationPreferences | null): Promise<void> {
+  if (!owner) return;
   if (prefs == null) {
-    await AsyncStorage.removeItem(prefsCacheKey(account));
+    await AsyncStorage.removeItem(prefsCacheKey(owner));
     return;
   }
-  await AsyncStorage.setItem(prefsCacheKey(account), JSON.stringify(prefs));
+  await AsyncStorage.setItem(prefsCacheKey(owner), JSON.stringify(prefs));
 }
 
 export const usePrefsStore = create<PrefsState>((set, get) => ({
@@ -85,6 +87,7 @@ export const usePrefsStore = create<PrefsState>((set, get) => ({
 
   hydrate: async (userId) => {
     account = userId;
+    accountRun++;
     set({ loading: true });
     void AsyncStorage.removeItem(SHARED_CACHE_KEY).catch(() => {});
     const cached = await readCache(userId);
@@ -94,7 +97,7 @@ export const usePrefsStore = create<PrefsState>((set, get) => ({
     if (account !== userId) return;
     if (server) {
       set({ prefs: server, loading: false });
-      await writeCache(server);
+      await writeCache(userId, server);
     } else {
       set({ loading: false });
     }
@@ -102,28 +105,31 @@ export const usePrefsStore = create<PrefsState>((set, get) => ({
 
   clear: () => {
     account = null;
+    accountRun++;
     set({ prefs: null, loading: false });
   },
 
   initializeDefaults: async (timezone) => {
+    const [owner, run] = [account, accountRun];
     const server = await insertDefaultPreferences(timezone);
-    if (!server) return null;
+    if (!server || run !== accountRun) return null;
     set({ prefs: server });
-    await writeCache(server);
+    await writeCache(owner, server);
     return server;
   },
 
   patch: async (patch) => {
     const prev = get().prefs;
     if (!prev) return false;
+    const [owner, run] = [account, accountRun];
     const next = { ...prev, ...patch };
     set({ prefs: next });
-    await writeCache(next);
+    await writeCache(owner, next);
     const ok = await apiUpdatePreferences(patch);
     if (!ok) {
-      // Roll back.
-      set({ prefs: prev });
-      await writeCache(prev);
+      // Roll back: the store only if it still holds this account, the account's own cache always.
+      if (run === accountRun) set({ prefs: prev });
+      await writeCache(owner, prev);
       return false;
     }
     return true;
@@ -131,7 +137,7 @@ export const usePrefsStore = create<PrefsState>((set, get) => ({
 
   setPrefs: async (prefs) => {
     set({ prefs });
-    await writeCache(prefs);
+    await writeCache(account, prefs);
   },
 }));
 

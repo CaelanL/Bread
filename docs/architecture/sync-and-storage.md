@@ -118,7 +118,7 @@ interface AppState {
   synced: boolean;              // see Saved library
   profileLoaded: boolean;       // the profile was read this run; welcomeSeen is the server's
   welcomeSeen: boolean;         // profiles.welcome_v2_seen_at is set
-  lastSessionAt: number | null; // last progress save this run (Home's reload rule)
+  lastSessionAt: number | null; // last progress or attempt save (Home's reload)
   collectionsLoading: boolean;
   collectionOrderSaving: boolean;
   versesLoading: boolean;

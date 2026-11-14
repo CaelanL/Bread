@@ -87,6 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     }, SPLASH_FAILSAFE_MS);
 
+    // Auth events since launch. The launch's session is published only if none came in the meantime.
+    let authEvents = 0;
+
     // Get initial session
     Promise.all([supabase.auth.getSession(), stored]).then(async ([{ data: { session }, error }, storedUserId]) => {
       perfMark('session');
@@ -94,11 +97,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // supabase-js keeps the session and retries; its TOKEN_REFRESHED below starts the account.
       if (afterRestore(storedUserId, { session, error }) === 'offline') return;
       clearTimeout(failsafe);
+      const events = authEvents;
       // Before the tree mounts, so the library load starts now.
       setAccount(session?.user.id ?? null);
       // The saved library paints (once the load's requests are out) before the app's first render, so
       // that render already has it.
       if (session) await useAppStore.getState().paintSnapshot(session.user.id);
+      // A sign-in or sign-out during the paint already published its own session.
+      if (authEvents !== events) return;
       if (session) setRestoredUserId(session.user.id);
       setSession(session);
       setUser(session?.user ?? null);
@@ -109,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'INITIAL_SESSION') return;
+        authEvents++;
         clearTimeout(failsafe);
         if (event === 'SIGNED_OUT') setRestoredUserId(null);
         setAccount(session?.user.id ?? null);

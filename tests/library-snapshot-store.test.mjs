@@ -44,14 +44,16 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     account, 'e30.' + Buffer.from(JSON.stringify({ sub: account })).toString('base64url') + '.AA',
   ]));
   const held = [];
-  const hold = (path, query) => {
+  const hold = (path, query, method) => {
     const request = Promise.withResolvers();
     const response = Promise.withResolvers();
-    held.push({ path, query, request, response });
+    held.push({ path, query, method, request, response });
     return { sent: request.promise, reply: response.resolve };
   };
   let offline = false;
   let profileFails = false;
+  let profileMissing = false;
+  let seedFails = false;
   let shared = null;
   const verseRows = { A: [membership('A')], B: [membership('B')] };
   // The server's mastered rows, kept up to date by progress saves.
@@ -70,7 +72,7 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     }
     if (url.pathname === '/auth/v1/logout') return new Response(null, { status: 204 });
     const index = held.findIndex((entry) => entry.path === url.pathname && (!entry.query || url.search.includes(entry.query))
-      && (method === 'GET' || url.pathname.startsWith('/rest/v1/rpc/')));
+      && (entry.method ? method === entry.method : method === 'GET' || url.pathname.startsWith('/rest/v1/rpc/')));
     if (index >= 0) {
       const [entry] = held.splice(index, 1);
       entry.request.resolve(account);
@@ -86,9 +88,11 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     }
     if (url.pathname === '/rest/v1/rpc/get_shared_status') return Response.json(shared ? [shared.status] : []);
     if (url.pathname.startsWith('/rest/v1/rpc/')) return Response.json([]);
+    if (seedFails && url.pathname === '/rest/v1/profiles' && method === 'POST') return Response.json({ message: 'unavailable' }, { status: 503 });
     if (method !== 'GET') return new Response(null, { status: 204 });
     if (url.pathname === '/rest/v1/profiles') {
       if (profileFails) return Response.json({ message: 'unavailable' }, { status: 503 });
+      if (profileMissing) return Response.json([]);
       const row = { translation: 'ESV', display_name: account + ' L.', first_name: account, last_name: 'L', welcome_v2_seen_at: null };
       return Response.json(object ? row : [row]);
     }
@@ -329,6 +333,21 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.equal(store().firstName, 'A');
   });
 
+  await t.test("a missing profile whose seeding fails isn't loaded, and leaves synced false", async () => {
+    setAccount(null);
+    await signIn('A');
+    profileMissing = true;
+    seedFails = true;
+    setAccount('A');
+    await until(() => store().hydratedFrom === 'server');
+    assert.equal(store().synced, false);
+    assert.equal(store().profileLoaded, false);
+    seedFails = false;
+    assert.equal(await store().whenSynced(), true, 'the retry seeds it');
+    assert.equal(store().profileLoaded, true);
+    profileMissing = false;
+  });
+
   await t.test("a progress save that lands after a switch to B touches nothing of B's", async () => {
     await startSynced('A');
     const done = { bestAccuracy: 95, completed: true };
@@ -410,10 +429,14 @@ test('the saved library: synced, snapshot read and write', async (t) => {
       displayName: 'A L.', firstName: 'A', lastName: 'L',
     }, Date.now()));
     const wave = hold('/rest/v1/verse_collections');
+    // The group's count is still the saved 1 when Stop sharing is tapped.
+    const status = hold('/rest/v1/rpc/get_shared_status');
     setAccount('A');
-    await wave.sent;
+    await Promise.all([wave.sent, status.sent]);
     await until(() => store().hydratedFrom === 'snapshot');
+    assert.equal(store().sharedCollections.g1.memberCount, 1);
     const confirming = confirmStopSharing('g1', 'Psalms', null, 'A');
+    status.reply(Response.json([shared.status]));
     wave.reply(Response.json(verseRows.A));
     await confirming;
     assert.equal(alerts.length, 1);
@@ -448,5 +471,53 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     await saving;
     await until(() => reloads === 2);
     globalThis.blurHome();
+  });
+  await t.test('a failed delete puts back only its verse: a progress save on another verse meanwhile stays, in memory and on disk', async () => {
+    verseRows.A = [membership('A'), membership('A', 'A-two')];
+    await startSynced('A');
+    const remove = hold('/rest/v1/rpc/delete_verse');
+    const deleting = store().deleteVerse('A-verse', 'my-verses');
+    await remove.sent;
+    await store().updateVerseProgress('A-two', 'easy', 60);
+    remove.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    await assert.rejects(deleting);
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-verse', 'A-two']);
+    assert.equal(store().verses[1].progress.easy.bestAccuracy, 60);
+    assert.equal(saved('A').verses.find((v) => v.id === 'A-two').progress.easy.bestAccuracy, 60);
+    assert.ok(saved('A').verses.some((v) => v.id === 'A-verse'));
+  });
+
+  await t.test('a failed collection sort puts back only that sort: a collection added meanwhile stays, in memory and on disk', async () => {
+    const update = hold('/rest/v1/user_collections', null, 'PATCH');
+    const sorting = store().setCollectionSort('psalms', 'alphabetical');
+    await update.sent;
+    await store().addCollection('Later');
+    update.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    await sorting;
+    assert.ok(store().collections.some((c) => c.name === 'Later'));
+    assert.equal(store().collections.find((c) => c.id === 'psalms').sortPreference, undefined);
+    assert.ok(saved('A').collections.some((c) => c.name === 'Later'));
+  });
+  await t.test("a session's attempt row landing after its progress save marks a session again, so Home's streak reloads", async () => {
+    const { logSessionAttempt } = await import('../lib/api/analytics.ts');
+    const insert = hold('/rest/v1/session_attempts', null, 'POST');
+    const logging = logSessionAttempt({
+      book: 'John', chapter: 3, verseStart: 16, verseEnd: 16, version: 'ESV', difficulty: 'easy', chunkSize: 1, accuracy: 80,
+    });
+    await insert.sent;
+    await store().updateVerseProgress('A-two', 'easy', 61);
+    const afterSave = store().lastSessionAt;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    insert.reply(new Response(null, { status: 201 }));
+    await logging;
+    assert.ok(store().lastSessionAt > afterSave);
+  });
+  await t.test("opening or pulling a shared collection saves what it read, for the next offline launch", async () => {
+    await startSynced('A');
+    // Another member added a verse; this device's copy gets it on the next open.
+    verseRows.A = [...verseRows.A, membership('A', 'A-from-group')];
+    await store().openSharedCollection('g1', { pull: true });
+    assert.ok(store().verses.some((v) => v.id === 'A-from-group'));
+    assert.ok(saved('A').verses.some((v) => v.id === 'A-from-group'));
   });
 });

@@ -6,6 +6,7 @@
 
 import { sessionUserId, supabase } from './client';
 import type { Difficulty } from '@/lib/storage';
+import { useAppStore } from '@/lib/store';
 
 export interface SessionAttemptData {
   book: string;
@@ -46,7 +47,10 @@ export async function logSessionAttempt(data: SessionAttemptData): Promise<void>
 
   if (error) {
     console.error('[ANALYTICS] Failed to log session attempt:', error);
+    return;
   }
+  // Home's streak counts these rows, so it reloads once this one is in, not only after the progress save.
+  useAppStore.getState().markSessionSaved();
 }
 
 /**
