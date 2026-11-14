@@ -125,8 +125,8 @@ The legacy `months` array is covered in
 row has a `verse_collections` link that no other row of the same user and reference holds. Old
 apps' collection delete could hard-delete a verse still in other collections; they ignore the
 error, so it survives. Current deletes unlink first, `collapseVerse` moves links to the twin first
-([bible-versions.md](bible-versions.md#switching)), and cascades (trigger depth > 1, e.g.
-deleting the auth user) skip the check.
+([bible-versions.md](bible-versions.md#switching)). Cascades (trigger depth > 1) and server
+roles skip it.
 
 ### `verse_collections`
 
