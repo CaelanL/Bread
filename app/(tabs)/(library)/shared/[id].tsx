@@ -67,13 +67,12 @@ export default function WhoIsWhereScreen() {
     void useAppStore.getState().fetchSharedProgress(sharedId);
   }, [sharedId]);
 
-  // The same as pulling on the collection screen: refresh, sync the copy, read the grid.
+  // The same as pulling on the collection screen: sync the copy, then the library and the grid at once.
   const onRefresh = async () => {
     setRefreshing(true);
-    await useAppStore.getState().refresh();
     if (sharedId) {
       try {
-        await useAppStore.getState().openSharedCollection(sharedId);
+        await useAppStore.getState().openSharedCollection(sharedId, { pull: true });
       } catch {
         showErrorToast("Couldn't update this shared collection. Pull to refresh to try again.");
       }

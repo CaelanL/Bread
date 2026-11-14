@@ -137,15 +137,16 @@ test('joining and leaving a shared collection', async (t) => {
   await state().refresh();
   assert.equal(state().bibleVersion, 'NIV');
 
-  await t.test('join sends the normalized code and the account translation, then refreshes', async () => {
+  await t.test('join sends the normalized code and the account translation, then reads what the group needs once, with no full refresh', async () => {
     rpcs.length = 0;
     reads.length = 0;
     const id = await state().joinSharedCollection('bread-828');
     assert.equal(id, copy.client_id);
     assert.deepEqual(rpcs[0], ['join_shared_collection', { p_code: 'BREAD828', p_version: 'NIV' }]);
     for (const table of ['user_collections', 'verse_collections', 'shared_collections']) {
-      assert.ok(reads.includes(`/rest/v1/${table}`), `refetched ${table}`);
+      assert.equal(reads.filter((path) => path === `/rest/v1/${table}`).length, 1, `refetched ${table} once`);
     }
+    assert.ok(!reads.includes('/rest/v1/profiles'), 'no full refresh');
     const collection = state().collections.find((c) => c.id === copy.client_id);
     assert.equal(collection?.sharedId, group);
     assert.equal(state().sharedCollections[group]?.role, 'member');
@@ -175,6 +176,18 @@ test('joining and leaving a shared collection', async (t) => {
     assert.deepEqual(progress.members.map((m) => m.displayName), ['Cara', 'Dana']);
     assert.deepEqual(progress.references, [{ book: 'Romans', chapter: 8, verseStart: 28, verseEnd: 28 }]);
     assert.equal(progress.cells[0].mastered, true);
+  });
+
+  await t.test('a pull syncs, then reads each library list once with the grid alongside', async () => {
+    rpcs.length = 0;
+    reads.length = 0;
+    await state().openSharedCollection(group, { pull: true });
+    assert.equal(rpcs[0][0], 'sync_shared_collection');
+    for (const table of ['user_collections', 'verse_collections', 'shared_collections', 'user_verses']) {
+      assert.equal(reads.filter((path) => path === `/rest/v1/${table}`).length, 1, `read ${table} once`);
+    }
+    assert.ok(reads.includes('/rest/v1/shared_collection_verses'));
+    assert.ok(!reads.includes('/rest/v1/profiles'), 'no full refresh');
   });
 
   await t.test('a promotion to editor shows on the next open, with no refresh in between', async () => {

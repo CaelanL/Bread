@@ -147,9 +147,9 @@ export default function CollectionScreen() {
     if ((navigation.getState()?.index ?? 0) > 0) router.back();
     else router.replace('/(tabs)/(library)');
   }, [navigation]);
-  const syncShared = useCallback(async (target: string) => {
+  const syncShared = useCallback(async (target: string, pull = false) => {
     try {
-      const shared = await useAppStore.getState().openSharedCollection(target);
+      const shared = await useAppStore.getState().openSharedCollection(target, { pull });
       // Removed or left elsewhere: the copy is gone (a dissolved copy stays, now personal).
       if (!shared && !useAppStore.getState().collections.some((c) => c.id === id)) backToLibrary();
     } catch {
@@ -164,8 +164,8 @@ export default function CollectionScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refresh();
-    if (sharedId) await syncShared(sharedId);
+    if (sharedId) await syncShared(sharedId, true);
+    else await refresh();
     setRefreshing(false);
   };
 

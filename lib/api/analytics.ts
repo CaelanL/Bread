@@ -51,10 +51,10 @@ export async function logSessionAttempt(data: SessionAttemptData): Promise<void>
 
 /**
  * Get current practice streak (consecutive days with at least one attempt)
- * Returns 0 if no attempts or streak broken
+ * Returns 0 if no attempts or streak broken, null if it couldn't be read
  * Uses SQL function for scalability - no need to fetch all rows
  */
-export async function getCurrentStreak(): Promise<number> {
+export async function getCurrentStreak(): Promise<number | null> {
   const userId = await sessionUserId();
   if (!userId) return 0;
 
@@ -68,7 +68,7 @@ export async function getCurrentStreak(): Promise<number> {
 
   if (error) {
     console.error('[ANALYTICS] Failed to get current streak:', error);
-    return 0;
+    return null;
   }
 
   return data || 0;
