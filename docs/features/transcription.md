@@ -198,6 +198,9 @@ then `db:stop` and `db:start`.
 - **Live usage isn't metered.** `usage_daily.transcribe_seconds` is batch-only
   (`recordTranscriptionUsage` in `process-recording`). Keys carry
   `client_reference_id: user.id` for Soniox attribution. A future quota must count live.
+- **Idle spares count against Soniox's connection limit.** Each open study screen
+  holds one. Over the limit, takes fall back to batch silently. The knob is a limit
+  increase in the Soniox Console.
 - **A failed upload isn't retried.** That attempt is lost ([Batch path](#batch-path)).
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
   the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
@@ -223,15 +226,15 @@ Recording needs a person and a real device. Local runs use batch unless the secr
 ## Decisions
 
 - 2026-08-16 · Stream from the device to Soniox with temporary keys, not through an edge function · Scoped keys are enough for security. Proxying adds latency, wall-clock risk and bandwidth.
-- 2026-08-16 · No live transcript on screen · Not wanted, and background-only keeps UI and state changes near zero.
-- 2026-08-24 · Dual-path, with no mid-recording handoff between live and batch · The file always exists, and a handoff would add a stitching seam at the switch for no reliability gain.
+- 2026-08-16 · No live transcript on screen · Not wanted; background-only keeps UI and state changes near zero.
+- 2026-08-24 · Dual-path, with no mid-recording handoff between live and batch · The file always exists; a handoff adds a stitching seam for no gain.
 - 2026-08-24 · Flat 300 s cap that auto-submits with a toast; keys capped at 315 s · The reader still sees how far they got, and the client timer fires first. A word-count formula wasn't worth building.
 - 2026-08-24 · Heartbeat stream from `process-recording`, no client timeout · The phone killed silent sockets at about 60 s while the server finished fine. Leading whitespace keeps older clients parsing.
 - 2026-08-24 · `@siteed/audio-studio` pinned to exactly `3.2.0` · It gives file and PCM from one mic session, which `expo-audio` can't on SDK 54. Later versions need SDK 57, so the pin and the SDK move together.
-- 2026-08-24 · m4a-only recorder output · The file exists only for batch, whose contract expects m4a. WAV would just fill the cache.
-- 2026-08-24 · Buffer and flush PCM during the live connection · Native capture can start independently of Soniox while the live path retains audio already captured.
-- 2026-08-24 · No incremental scoring · Alignment is local and fast, so the transcript is the only wait. A second scoring path over provisional tokens would gain nothing.
-- 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off. Revisit if quota returns.
+- 2026-08-24 · m4a-only recorder output · The file is only for batch, which expects m4a; WAV fills the cache.
+- 2026-08-24 · Buffer and flush PCM during the live connection · Capture starts without waiting on Soniox, and no audio is lost.
+- 2026-08-24 · No incremental scoring · Alignment is local and fast; the transcript is the only wait.
+- 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off.
 - 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
 - 2026-11-12 · Delete each file once its attempt settles, sweep exact-name leftovers, no owned folder · Every take was kept forever. A folder adds a step before native start; the sweep covers it.
 - 2026-11-14 · Finger-down start, native start before the ring, one key per screen (300 s TTL, protocol auth), 1.5 s finalize, 64 kbps, 50 ms pieces, no recorder hook · Faster capture, fallback and upload. Soniox refuses `api_key` in the config from 15 January 2027.
