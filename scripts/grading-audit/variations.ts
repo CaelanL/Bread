@@ -207,8 +207,9 @@ export function asPrinted(text: string, ref: ChunkRef): string {
     .replace(/(?<=[A-Za-z])([.,;:!?)\]”"]+)(?=\d)/g, '$1 ')
     .replace(/(?<=[A-Za-z])(?=[“(])/g, ' ')
     .replace(/(’)(?=[A-Z“‘\u05D0-\u05EA])/g, '$1 ')
-    .replace(/\s*[\u05D0-\u05EA]\s*[A-Z][a-z]+\s*$/, '')
+    .replace(/\s*[\u05D0-\u05EA]\s*[A-Z][a-z]+(?: and [A-Z][a-z]+)?\s*$/, '')
     .replace(/\s*\[[^\]]*manuscripts[^\]]*\]?/gi, '');
+  if (ref.book === 'Psalms' && ref.chapter === 119) t = t.replace(/(?<=[.!?”’])\s+(?:Sin and )?(?:Aleph|Beth|Gimel|Daleth|He|Waw|Zayin|Heth|Teth|Yodh|Kaph|Lamedh|Mem|Nun|Samekh|Ayin|Pe|Tsadhe|Qoph|Resh|Sin|Shin|Taw)$/, '');
   if (ref.book === 'Song of Solomon') t = t.replace(/(?<=[.!?”’])\s+(He|She|Others|Friends|Beloved|Lover)$/, '');
   return t.trim();
 }

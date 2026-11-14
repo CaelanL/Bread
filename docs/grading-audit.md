@@ -50,7 +50,7 @@ from the misses file.
 
 ### Where the numbers come from
 
-- **Harness:** synthetic transcripts over every KJV verse, every ESV chapter ({{ESV_TOTAL}}) and a
+- **Harness:** synthetic transcripts over every KJV verse, every ESV chapter (1,189 chapters, 31,090 verses) and a
   270-chapter sample of NIV, NLT and NKJV (about 7,400 verses each: every book's first chapter, the
   suggested passages, chapters with titles, stanzas, omitted verses and numbers, and a spread).
   An upper bound on exposure, not a rate, except `source:as-printed`, which is what a correct
@@ -72,7 +72,7 @@ No real human voice or phone was used anywhere.
 |---|---|---|---|---|
 | 1 | RC7 API.Bible text glued at every tag (NIV, NLT, NKJV) | 41 NIV, 38 NLT, 38 NKJV of 150 voice clips under 100 (about 25-30 of each from the glue) | 2,054 NIV, 1,897 NLT, 1,921 NKJV of ~7,400 sample verses each | `text-scan.ts`, `--source NIV --pass source:`, todo RC7 |
 | 2 | RC1 Spellings compared literally | old spellings changed in 30-60% of verses containing them | 754 + 1,019 + 59 KJV verses | `--pass spelling:`, `--replay`, todos F3 F4 F8 F11 |
-| 3 | RC5 ESV verse text carries titles, stanza letters, neighbours | every recitation of an affected verse fails | {{RANK_RC5}} | `esv-text.ts`, `--source ESV --pass source:` |
+| 3 | RC5 ESV verse text carries titles, stanza letters, neighbours | every recitation of an affected verse fails | by chapter 43 of 31,090 ESV verses (4 under 90); by single verse 5 of 5 titled Psalm 1s tried at 48-69%, 3 omitted verses returning neighbours | `esv-text.ts`, `--source ESV --pass source:` |
 | 4 | RC2 Thin number grammar | 15 of 111 phase B number clips; v6 prints digits more | 496 KJV verses | `--pass digits:`, todos F2 F10 RC2 |
 | 5 | RC3 One-way substitution repair | needs a slip near a compound; not measured on real speech | 3,684 KJV verses | `--pass speech:restart-in-number`, `--pass compound:`, todos F1 F5 F6 RC3 |
 | 6 | RC11 Capture edges on a device | not measured | n/a | none: device only |
@@ -123,18 +123,24 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   neighbouring verses, which are then cached under the omitted number.
 - **One-chapter books:** `fetchChapter` sends `Jude 1`, which Crossway reads as verse 1. Jude
   1:24-25 returns no verses; Philemon 1:1-7 returns verse 1 only (RC6).
-- **The chapter path** appends the next stanza letter, Song of Solomon speaker labels and
-  manuscript notes to the end of the previous verse (90-97%).
+- **The chapter path** appends the next stanza name, Song of Solomon speaker labels and
+  manuscript notes to the end of the previous verse. Over the whole ESV by chapter: 43 verses read
+  as printed score under 100 (21 Psalm 119 stanza names, about 20 speaker labels, 2 notes), 4 of
+  them under 90. Every chapter of a one-chapter book fails; only single-verse fetches return them.
+- **Past the last verse:** a single-verse fetch one past the end of Obadiah, Philemon, 2 John and
+  Jude returns the last verse again. The app doesn't ask for those today.
 - **Cache history decides:** the single-verse path writes into the shared `verse_cache`, and the
   curated catalog and Verse of the Month read Psalm 46:1 and Psalm 119:105 through it, so every ESV
   user is graded against the title until a chapter or range fetch overwrites the row. Run
   `esv-text.ts` twice and the second run scores 100 from the now-clean cache.
-- **Exposure:** about 116 titled Psalm verse 1s, 22 stanza starts, 16 omitted verses, 97 verses in
-  one-chapter books.
+- **Exposure:** about 116 titled Psalm verse 1s and 22 stanza starts on the single path (Psalm 3:1
+  52%, 23:1 69%, 46:1 48%, 51:1 49%, 90:1 56%, 119:1 94%, 119:105 93%, Song of Solomon 1:2 94%);
+  17 omitted verses, of which Matthew 18:11, Mark 9:44 and Acts 8:37 return 50-68 words of
+  neighbours; 97 verses in one-chapter books.
 - **Repro:** `npm run db:reset && npx tsx scripts/grading-audit/esv-text.ts` (needs the local
-  `ESV_API_KEY`; Crossway's key is free). The harness can't see this: its ESV sample includes
-  Psalm 46:1 and Psalm 119:105 as fetched, title and letter included, and every pass builds its
-  transcript from that text.
+  `ESV_API_KEY`; Crossway's key is free). The harness sees only the chapter path
+  (`--source ESV --pass source:as-printed`); `fetch-licensed.ts` also saves the single-verse
+  list to `ESV-single.json`.
 - **Suggested fix (B1, B2):** `fetchVerse` builds a single verse from the numbered parse
   (`include-verse-numbers=true`, the text after `[n]` only, empty when absent and not cached);
   `fetchChapter` asks for `<book> 1:1-<count>` in one-chapter books; `parseChapter` strips stanza
@@ -150,9 +156,9 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
 - **Harness:** `digits:all` 496 KJV verses: "an hundred" 226, "threescore" 218, "N thousand and M
   hundred" 69, a span across a comma 1. Soniox kept score words ("threescore") as words in 21 of
   21 clips, so the 218 are mostly unreal. Licensed text, read as printed: "a hundred" fails in
-  {{ESV_DIGITS}}, 43 NIV, 9 NLT and 12 NKJV sample verses.
+  96 ESV verses (49 under 90), 43 NIV, 9 NLT and 12 NKJV sample verses.
 - **Digits in the verse, said as words:** ESV, NIV and NLT print large numbers as digits ("2,172"),
-  in {{ESV_DIGIT_VERSES}} ESV verses, 300 NIV and 374 NLT sample verses. Said in words, every one
+  in 575 ESV verses, 300 NIV and 374 NLT sample verses. Said in words, every one
   passes once the RC7 glue is undone (`--pass digits:spoken-words`), except NLT's fractions (RC14).
 - **Card** (real form, KJV Numbers 3:34): `...were __six__ __thousand__ __and__ __two__ __hundred.__
   ~~6,200.~~` 79%.
@@ -297,7 +303,7 @@ design. Whether to forgive them is D8 and D18.
   beginning God created the heaven and the earth.` 83%. Repro: `--pass reference:`.
 - **A trailing "amen":** `Jesus wept. ~~amen.~~` 67%.
 - **Contractions:** "I'll" for "I will", "it's" for "it is", "let's" for "let us": 6,799 KJV
-  verses, every one under 100 (4,239 under 90), and {{ESV_CONTRACTED}}. The other direction, a
+  verses, every one under 100 (4,239 under 90), and 9,147 ESV verses (6,340 under 90). The other direction, a
   translation's "don't" said "do not": NLT prints contractions in 597 of its 7,378 sample verses
   (mostly "don't", "won't", "didn't", "can't") and NIV in 85; said in full, every one fails (NLT
   584 of 584 checked, 391 under 90; NIV 85 of 85). ESV and NKJV print none. Repro:
@@ -381,7 +387,7 @@ This becomes the leading explanation if the reviewer's account was on NIV, NLT o
 
 **For KJV and ESV readers, no real transcript of a correct recitation showed it on 1.3.0.** Over
 1,453 real Soniox transcripts before this round, the 1.3.0 aligner showed one look-alike pair (an
-ESV "2,172" against "2172", 67%) and no run of 2+. {{REVIEW_ESV}} Every engine formatting variation
+ESV "2,172" against "2172", 67%) and no run of 2+. The 150 ESV voice clips agree: 9 under 100 today and 10 on 1.3.0, none with a run of 2+. Every engine formatting variation
 (apostrophes, hyphens, dashes, quotes, case, `LORD`) gives 0 look-alike pairs on 1.3.0.
 
 1. **Leading explanation on KJV and ESV: the right words in a different order.** A transposition shows the moved
@@ -458,7 +464,10 @@ Each with the audit's recommended answer.
 - 0 KJV verses under 100 for: plain, engine-style punctuation and capitals, curly quotes either
   side, a dropped possessive apostrophe, hyphen joins and splits, em and en dashes, NBSP, BOM,
   um/uh/hmm, standard digits.
-- {{ESV_CLEAN}}
+- Full ESV by chapter (31,090 verses): plain 3 under 100, all hyphen compounds (RC3 class:
+  Genesis 19:12, Joshua 14:15, 21:11); digits printed in the verse and said as words, 1 (2 Chronicles
+  35:7, 80%); no printed contractions, no fractions, no HTML entities; keyed chunking clean at
+  every size (392,916 chunks).
 - NIV, NLT and NKJV samples, once the RC7 glue is undone (`--source <V>printed`-style check): plain
   and engine-style 0 under 100 in NIV and NKJV, NLT only its fractions (RC14); digits printed in
   the verse and said as words, 0 in NIV; keyed chunking clean at every size. Characters: standard
@@ -482,7 +491,20 @@ or possessive pass touches and half a spread, 9 voices at 120-260 words a minute
 300 ms of silence first. Graded against the served text, then against the printed text
 (`--as-printed`), which takes out the adapter's damage (RC5, RC7) and leaves the engine's:
 
-{{VOICE_TABLE}}
+| Translation | Clips | Under 100, served text (under 90) | Same on 1.3.0 | 2+ struck-and-underlined pairs | Under 100, printed text | Glue echo | Voice artifact: garbled fast voice / first word dropped | Engine mishearings |
+|---|---|---|---|---|---|---|---|---|
+| ESV | 150 | 9 (7) | 10 | 0 | 10 | 0 | 2 / 0 | 7, plus 1 audit artifact (a speaker label read aloud, then removed by `--as-printed`) |
+| NIV | 150 | 41 (33) | 44 | 36 | 16 | 9 | 0 / 0 | 7 |
+| NLT | 150 | 38 (33) | 39 | 33 | 14 | 6 | 2 / 0 | 6 (3 at the same fast voice) |
+| NKJV | 150 | 38 (35) | 44 | 32 | 16 | 9 | 2 / 0 | 5 |
+
+Every garbled clip is one UK voice at 260 words a minute. The silent lead-in stopped `say`
+dropping the first word (18 KJV clips in the first round, 0 here). Glue echo is Soniox writing a
+glued word back as one ("shepherd;I" heard as "shepherdi"), so it goes away with RC7. Engine
+mishearings are single words: a name, a tense, "a hundred" written 100, one spelling
+(worshiping), a sound-alike. No contraction, digit or fraction clip failed for that reason, but the
+NLT round drew no fraction verse. The ESV clips read chapter text; the single-path titles (RC5)
+fail every recitation and needed no clip.
 
 ## Not covered
 
