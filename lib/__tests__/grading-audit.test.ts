@@ -12,10 +12,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { audit, KJV_FIXTURE, replay } from '../../scripts/grading-audit/run';
+import { audit, KJV_FIXTURE, loadSource, refText, replay } from '../../scripts/grading-audit/run';
 import { PASSES } from '../../scripts/grading-audit/variations';
 import { alignTranscription } from '../align';
-import { calculateChunkScore, parseVerseIntoChunks } from '../study-chunks';
+import { calculateChunkScore, calculateFinalScore, parseVerseIntoChunks } from '../study-chunks';
 import type { SavedVerse } from '../storage';
 
 function wrong(expected: string, transcript: string): string[] {
@@ -158,5 +158,36 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     const chunks = parseVerseIntoChunks(verse, 'easy', 1, 0);
     console.warn = warn;
     assert.equal(chunks.map((c) => c.text).join(' '), verse.text);
+  });
+
+  it('RC2: "thousand and N hundred" printed as digits (lane live-tokens)', { todo: 'RC2' }, () => {
+    assertPerfect('were six thousand and two hundred.', 'were 6,200.');
+  });
+
+  it('RC2: a wrong number in digits matches the verse\'s number words (lane antigravity/align-cold)', { todo: 'RC2' }, () => {
+    const correctWords = (expected: string, transcript: string) =>
+      alignTranscription(expected, transcript).filter((w) => w.status === 'correct').map((w) => w.word);
+    assert.ok(!correctWords('were seven thousand and five hundred.', 'were 7,005.').includes('seven'));
+    assert.ok(
+      !correctWords('were six hundred thousand and three thousand five hundred and fifty.', 'were 600,003 and 550.').includes('three'),
+    );
+  });
+
+  it('RC3: one stutter next to "to day" and "for ever" costs the whole stretch (lane near-miss)', { todo: 'RC3' }, () => {
+    const alignment = alignTranscription(
+      'Jesus Christ the same yesterday, and to day, and for ever.',
+      'Jesus Christ the same yesterday and and today and forever',
+    );
+    assert.ok(calculateChunkScore(alignment) >= 90, JSON.stringify(wrong('Jesus Christ the same yesterday, and to day, and for ever.', 'Jesus Christ the same yesterday and and today and forever')));
+  });
+
+  it('RC8: a verse never said (or revealed) still lets the session reach 90 (lane score-to-progress)', { todo: 'RC8' }, () => {
+    const kjv = loadSource('KJV');
+    const alignments = new Map<number, ReturnType<typeof alignTranscription>>();
+    for (let v = 1; v <= 6; v++) {
+      const text = refText(kjv, `Psalms 23:${v}`);
+      alignments.set(v - 1, alignTranscription(text, v === 1 ? '' : text));
+    }
+    assert.ok(calculateFinalScore(alignments) < 90);
   });
 });
