@@ -104,7 +104,12 @@ interface AppState {
   inProgressSort: SortOption;
 
   // Loading states
+  /** Something to paint: the saved snapshot or the server's rows. */
   hydrated: boolean;
+  /** Where the first paint came from; 'server' once the account's first wave has settled. */
+  hydratedFrom: 'snapshot' | 'server' | null;
+  /** The server's collections, verses, mastered rows and shared groups were all applied for this account. */
+  synced: boolean;
   /** The account's profile row was read this run (false offline): names and `welcomeSeen` are the server's. */
   profileLoaded: boolean;
   /** profiles.welcome_v2_seen_at is set: the 2.0 walkthrough needs no claim (lib/welcome.ts). */
@@ -126,6 +131,11 @@ interface AppState {
   /** Starts an account: settings, then the account's library. Called by lib/auth/account.ts. */
   hydrate: (userId: string) => Promise<void>;
   refresh: () => Promise<void>;
+  /**
+   * True once `synced`. Waits for the running wave, then refreshes once; false if still not synced.
+   * Anything that decides from library data a snapshot may have wrong (delete counts, name steps) waits on it.
+   */
+  whenSynced: () => Promise<boolean>;
   /** Warms these verses' text ahead of the rest (a collection opening). */
   preloadVerseText: (verses: SavedVerse[]) => void;
   clearError: () => void;
@@ -198,6 +208,14 @@ async function getCurrentUserId(): Promise<string> {
 let accountGeneration = 0;
 // The account `hydrate` started, for reads that need its id. Null after `clear()`.
 let accountUserId: string | null = null;
+// The running library wave (hydrate's or refresh's), for `whenSynced`. Never rejects.
+let accountLoad: Promise<unknown> = Promise.resolve();
+
+// The library reads that applied server rows this generation (not merely returned: a read that
+// lands after a change made during it keeps the change). All four make the store `synced`.
+type LibraryRead = 'collections' | 'verses' | 'mastered' | 'shared';
+let applied = new Set<LibraryRead>();
+const allApplied = () => applied.size === 4;
 
 function inSharedCollection(state: Pick<AppState, 'verses' | 'collections'>, verseId: string): boolean {
   return state.verses.some((v) => v.id === verseId && state.collections.some((c) => c.id === v.collectionId && c.sharedId));
@@ -440,9 +458,15 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
     if (generation !== accountGeneration) return;
   }
 
+  // A read dropped to keep a change made during it (study prefs on a snapshot paint) reads once more.
+  if (collectionsOk && versesOk && masteredOk && sharedOk && !allApplied()) {
+    await Promise.all([applied.has('collections') || store().fetchCollections(), applied.has('verses') || store().fetchVerses()]);
+    if (generation !== accountGeneration) return;
+  }
+
   let failure: unknown = null;
   let translation: BibleVersion | null = null;
-  const updates: Partial<AppState> = { hydrated: true };
+  const updates: Partial<AppState> = { hydrated: true, hydratedFrom: 'server', synced: store().synced || allApplied() };
   if (profile.status === 'rejected') {
     failure = profile.reason;
   } else {
@@ -646,6 +670,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   masteredSort: 'due-first',
   inProgressSort: DEFAULT_SORT,
   hydrated: false,
+  hydratedFrom: null,
+  synced: false,
   profileLoaded: false,
   welcomeSeen: false,
   collectionsLoading: true,
@@ -702,14 +728,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         MASTERED_COLLECTION,
         IN_PROGRESS_COLLECTION,
       ];
-      set((state) => ({
+      set((state) => {
         // An older refresh must not replace a collection write made during the request.
-        collections: state.collections === previousCollections
-          ? [...pinned, ...collections.filter((c) => !c.isDefault)]
-          : state.collections,
-        collectionsLoading: false,
-        error: null,
-      }));
+        if (state.collections !== previousCollections) return { collectionsLoading: false, error: null };
+        applied.add('collections');
+        return { collections: [...pinned, ...collections.filter((c) => !c.isDefault)], collectionsLoading: false, error: null };
+      });
       return true;
     } catch (e) {
       if (generation !== accountGeneration) return false;
@@ -750,11 +774,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         parseVerseMembership(vc.user_verses, vc.user_collections.client_id, vc.added_at)
       );
 
-      set((state) => ({
-        verses: state.verses === previousVerses ? verses : state.verses,
-        versesLoading: false,
-        error: null,
-      }));
+      set((state) => {
+        if (state.verses !== previousVerses) return { versesLoading: false, error: null };
+        applied.add('verses');
+        return { verses, versesLoading: false, error: null };
+      });
       return true;
     } catch (e) {
       if (generation !== accountGeneration) return false;
@@ -800,6 +824,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
 
       set({ masteredVerses, masteredLoading: false });
+      applied.add('mastered');
       return true;
     } catch (e) {
       if (generation !== accountGeneration) return false;
@@ -850,6 +875,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       }
       set({ sharedCollections });
+      applied.add('shared');
       const current = Object.values(sharedCollections).map((g) => ({ id: g.id, name: g.name, owned: g.role === 'owner' }));
       void noticeDepartedGroups(userId, current, generation)
         .catch((e) => console.error('[STORE] Failed to check for removed shared collections:', e));
@@ -904,17 +930,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     if (generation !== accountGeneration) return;
-    await queueTranslationWork(() => loadAccount(generation, userId, true)).catch(reportSyncFailure(generation));
+    accountLoad = queueTranslationWork(() => loadAccount(generation, userId, true)).catch(reportSyncFailure(generation));
+    await accountLoad;
   },
 
   refresh: async () => {
     set({ error: null });
     const generation = accountGeneration;
-    await Promise.all([
-      queueTranslationWork(async () => loadAccount(generation, accountUserId ?? await getCurrentUserId(), false))
-        .catch(reportSyncFailure(generation)),
-      get().fetchCuratedSaverCounts(),
-    ]);
+    const load = queueTranslationWork(async () => loadAccount(generation, accountUserId ?? await getCurrentUserId(), false))
+      .catch(reportSyncFailure(generation));
+    accountLoad = load;
+    await Promise.all([load, get().fetchCuratedSaverCounts()]);
+  },
+
+  whenSynced: async () => {
+    if (get().synced) return true;
+    const generation = accountGeneration;
+    await accountLoad;
+    if (generation !== accountGeneration) return false;
+    if (get().synced) return true;
+    await get().refresh();
+    return generation === accountGeneration && get().synced;
   },
 
   preloadVerseText: (verses) => preloadVerseText(verses, true),
@@ -1724,6 +1760,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   clear: () => {
     accountGeneration++;
     accountUserId = null;
+    accountLoad = Promise.resolve();
+    applied = new Set();
     requestedTranslation = null;
     set({
       collections: [],
@@ -1742,6 +1780,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Zustand keeps unspecified keys. AsyncStorage copies are never touched here.
 
       hydrated: false,
+      hydratedFrom: null,
+      synced: false,
       profileLoaded: false,
       welcomeSeen: false,
       collectionsLoading: true,
@@ -1761,6 +1801,7 @@ import { useShallow } from 'zustand/shallow';
 export const useCollections = () => useAppStore((state) => state.collections);
 export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
+export const useSynced = () => useAppStore((state) => state.synced);
 export const useCuratedSaverCount = (catalogId: string) => useAppStore((state) => state.curatedSaverCounts[catalogId]);
 
 /**
