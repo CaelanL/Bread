@@ -307,6 +307,15 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     assert.equal(FakeSocket.all.length, before);
   });
 
+  await t.test('a screen re-mounted after leaving (Fast Refresh) opens a spare again', async () => {
+    const standby = new LiveStandby();
+    stream(await spareOf(standby));
+    standby.dispose();
+    const again = await spareOf(standby);
+    assert.ok(!again.closed);
+    standby.dispose();
+  });
+
   await t.test('a dropped spare reopens once with a fresh key, then waits for a tap', async () => {
     const standby = new LiveStandby();
     const first = await spareOf(standby);

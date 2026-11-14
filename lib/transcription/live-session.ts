@@ -92,6 +92,7 @@ export class LiveStandby {
   /** Screen open and app back in the foreground. */
   warm(): void {
     this.asleep = false;
+    this.disposed = false;
     this.reopened = false;
     this.keyless = false;
     void this.openSpare();
