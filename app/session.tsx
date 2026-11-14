@@ -72,6 +72,9 @@ interface MicTiming {
 // recorder hook, which re-renders this whole screen as recording starts and
 // stops and once a second while it runs. PCM arrives through the screen's
 // AudioData listener, so the options carry no callbacks.
+// On web the module is a factory for its recorder, as in the library's hook.
+const recorderModule = () => (process.env.EXPO_OS === 'web' ? AudioStudioModule({}) : AudioStudioModule);
+
 const RECORDING_OPTIONS: RecordingConfig = {
   sampleRate: 16000,
   channels: 1,
@@ -171,6 +174,8 @@ export default function StudySessionScreen() {
   // The first-run prompt still comes from requestPermissionsAsync on the tap.
   const micPermissionRef = useRef(false);
   useEffect(() => {
+    // On web this read can prompt, so web asks on the tap instead
+    if (process.env.EXPO_OS === 'web') return;
     AudioStudioModule.getPermissionsAsync()
       .then(({ granted }: PermissionResponse) => { micPermissionRef.current = granted; })
       .catch(() => {});
@@ -295,13 +300,13 @@ export default function StudySessionScreen() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
           stampMic('call');
-          const started: Promise<StartRecordingResult> = AudioStudioModule.startRecording(RECORDING_OPTIONS);
+          const started: Promise<StartRecordingResult> = recorderModule().startRecording(RECORDING_OPTIONS);
           if (__DEV__) started.then(() => stampMic('resolved'), () => {});
           return started;
         },
         stop(): Promise<AudioRecording> {
           logMic();
-          return AudioStudioModule.stopRecording();
+          return recorderModule().stopRecording();
         },
         remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
       }, source);
