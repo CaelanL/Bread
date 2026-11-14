@@ -5,9 +5,15 @@
 //
 //   npx tsx scripts/grading-audit/voice.ts plan            # list the clips it would make
 //   npx tsx scripts/grading-audit/voice.ts run [--max N] [--via-function]   # make and transcribe them
+//   npx tsx scripts/grading-audit/voice.ts run --version NIV   # licensed round, at most 150 clips
 //
 // KJV transcripts go to scripts/grading-audit/fixtures/say-kjv.json (committed).
-// Licensed transcripts go to .expo/grading-audit/say-<VERSION>.json (gitignored).
+// Licensed transcripts go to .expo/grading-audit/say-<VERSION>.json (first round) and
+// voice-<VERSION>.json (licensed round), both gitignored. A licensed round needs the text from
+// fetch-licensed.ts: half its clips are verses a number, contraction, compound or possessive pass
+// touches, half a spread of the rest.
+// Each clip starts with 300 ms of silence: `say` starting at sample 0 made Soniox drop the first
+// word (RC11 in docs/grading-audit.md). The first round's clips have no lead-in.
 // Replay them with `npm run audit:grading -- --replay <file>`.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -16,6 +22,7 @@ import { join } from 'node:path';
 
 import { authHeaders, functionUrl, popularPassages, signIn } from './local';
 import { KJV_FIXTURE, loadSource, OUT_DIR, refText, type Clip, type VerseMap } from './run';
+import { PASSES } from './variations';
 
 const FIRST_WAVE = 200;
 const CAP = 1000;
@@ -25,7 +32,10 @@ const VOICES = [
   { voice: 'Samantha', rate: 230 },
   { voice: 'Daniel', rate: 140 },
 ];
-const outFile = (version: string) => (version === 'KJV' ? KJV_FIXTURE : join(OUT_DIR, `say-${version}.json`));
+const LICENSED_CAP = 150;
+const licensedVersion = process.argv.includes('--version') ? process.argv[process.argv.indexOf('--version') + 1] : undefined;
+const outFile = (version: string) =>
+  version === 'KJV' ? KJV_FIXTURE : join(OUT_DIR, `${licensedVersion ? 'voice' : 'say'}-${version}.json`);
 
 // KJV verses A flagged as risky, a few per cause, spread across the Bible.
 const RISKY: [string, RegExp, number][] = [
@@ -131,8 +141,26 @@ function secondWave(kjv: VerseMap, popular: string[], used: Set<string>): Planne
   return out;
 }
 
+function licensedPlan(version: string): Planned[] {
+  const text = loadSource(version);
+  const refs = Object.keys(text).filter((ref) => text[ref] && text[ref].split(/\s+/).length <= MAX_WORDS);
+  const risky = PASSES.filter((p) => ['numbers', 'contraction', 'compound'].includes(p.group) || p.name.startsWith('possessive:'));
+  const flagged = refs.filter((ref) => {
+    const m = ref.match(/^(.+) (\d+):(\d+)$/)!;
+    const chunk = { book: m[1], chapter: Number(m[2]), verseStart: Number(m[3]), verseEnd: Number(m[3]), verseTexts: [] };
+    return risky.some((p) => p.make(text[ref], chunk));
+  });
+  const spread = (list: string[], n: number) => list.filter((_, i) => i % Math.max(1, Math.floor(list.length / n)) === 0).slice(0, n);
+  const picked = spread(flagged, LICENSED_CAP / 2);
+  const rest = refs.filter((ref) => !picked.includes(ref));
+  return [
+    ...picked.map((ref) => ({ ref, version, why: 'text pass' })),
+    ...spread(rest, LICENSED_CAP - picked.length).map((ref) => ({ ref, version, why: 'spread' })),
+  ];
+}
+
 function voiceFor(i: number): { voice: string; rate: number } {
-  if (i < FIRST_WAVE) return VOICES[i % VOICES.length];
+  if (i < FIRST_WAVE && !licensedVersion) return VOICES[i % VOICES.length];
   return { voice: WIDE_VOICES[i % WIDE_VOICES.length], rate: WIDE_RATES[(i * 7) % WIDE_RATES.length] };
 }
 
@@ -199,7 +227,7 @@ async function transcribeDirect(audio: Buffer, text: string): Promise<string> {
 
 async function transcribe(token: string, text: string, voice: string, rate: number, dir: string): Promise<string> {
   const file = join(dir, `clip-${Date.now()}-${Math.random().toString(36).slice(2)}.m4a`);
-  execFileSync('say', ['-v', voice, '-r', String(rate), '-o', file, '--file-format=m4af', '--data-format=aac', text]);
+  execFileSync('say', ['-v', voice, '-r', String(rate), '-o', file, '--file-format=m4af', '--data-format=aac', `[[slnc 300]] ${text}`]);
   if (!process.argv.includes('--via-function')) {
     try {
       return await transcribeDirect(readFileSync(file), text);
@@ -221,7 +249,7 @@ async function transcribe(token: string, text: string, voice: string, rate: numb
 }
 
 async function main() {
-  const planned = plan();
+  const planned = licensedVersion ? licensedPlan(licensedVersion) : plan();
   if (process.argv[2] === 'plan') {
     for (const p of planned) console.log(`${p.version} ${p.ref} (${p.why})`);
     console.log(`${planned.length} clips`);
@@ -229,9 +257,10 @@ async function main() {
   }
   if (process.argv[2] !== 'run') throw new Error('Usage: voice.ts plan|run [--max N]');
   const maxIndex = process.argv.indexOf('--max');
-  const max = Math.min(CAP, maxIndex > 0 ? Number(process.argv[maxIndex + 1]) : CAP);
+  const cap = licensedVersion ? LICENSED_CAP : CAP;
+  const max = Math.min(cap, maxIndex > 0 ? Number(process.argv[maxIndex + 1]) : cap);
   const sources = new Map<string, VerseMap>();
-  const done = new Map<string, Clip[]>(['KJV', 'ESV'].map((v) => [v, readClips(v)]));
+  const done = new Map<string, Clip[]>((licensedVersion ? [licensedVersion] : ['KJV', 'ESV']).map((v) => [v, readClips(v)]));
   const total = () => [...done.values()].reduce((n, c) => n + c.length, 0);
   const token = await signIn('reader-a@example.test');
   const dir = mkdtempSync(join(tmpdir(), 'bread-say-'));
@@ -241,9 +270,12 @@ async function main() {
       .map((p, i) => ({ p, i }))
       .filter(({ p }) => !(done.get(p.version) ?? []).some((c) => c.ref === p.ref));
     // Soniox's async rate limit is per organization: at most 3 jobs in flight and 10 a minute,
-    // and the run stops on the first 429 (rerun to resume). Results are written after each batch.
+    // a 429 waits 2 minutes, and the third in a row stops the run (rerun to resume). Results are
+    // written after each batch.
     let limited = false;
-    for (let b = 0; b < todo.length && total() < max && !limited; b += 3) {
+    let backoffs = 0;
+    for (let b = 0; b < todo.length && total() < max && backoffs < 3; b += 3) {
+      limited = false;
       const started = Date.now();
       const batch = todo.slice(b, b + Math.min(3, max - total()));
       const results = await Promise.all(batch.map(async ({ p, i }) => {
@@ -266,8 +298,14 @@ async function main() {
       }
       for (const [version, clips] of done) if (clips.length) writeFileSync(outFile(version), `${JSON.stringify(clips, null, 1)}\n`);
       console.log(`${total()}/${max}`);
-      if (limited) console.log('Soniox rate limit hit; stopped. Wait before rerunning.');
-      else await new Promise((r) => setTimeout(r, Math.max(0, 18_000 - (Date.now() - started))));
+      if (limited) {
+        backoffs++;
+        console.log(backoffs < 3 ? 'Soniox rate limit hit; waiting 2 minutes.' : 'Soniox rate limit hit 3 times; stopped. Rerun later to resume.');
+        if (backoffs < 3) await new Promise((r) => setTimeout(r, 120_000));
+      } else {
+        backoffs = 0;
+        await new Promise((r) => setTimeout(r, Math.max(0, 18_000 - (Date.now() - started))));
+      }
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });

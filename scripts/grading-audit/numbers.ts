@@ -235,3 +235,31 @@ export function toDigits(
   out.push(...words.slice(w));
   return { text: out.join(' '), changed: true };
 }
+
+const ONES = ['', ...Object.keys(UNITS), ...Object.keys(TEENS)];
+const TENS_WORDS = ['', '', ...Object.keys(TENS)];
+function underThousand(n: number): string[] {
+  const out: string[] = [];
+  if (n >= 100) out.push(ONES[Math.floor(n / 100)], 'hundred');
+  const rest = n % 100;
+  if (rest >= 20) out.push(TENS_WORDS[Math.floor(rest / 10)] + (rest % 10 ? `-${ONES[rest % 10]}` : ''));
+  else if (rest > 0) out.push(ONES[rest]);
+  return out;
+}
+
+// Digits in a verse ("2,172", "603,550") as a reader says them: "two thousand one hundred
+// seventy-two". Integers only; ordinals ("2nd") and anything else stay as they are.
+export function digitsToWords(text: string): { text: string; changed: boolean } {
+  let changed = false;
+  const out = text.replace(/(?<!:)(\b\d{1,3}(,\d{3})+\b|\b\d+\b(?![,.:]?\d|st|nd|rd|th))/g, (m) => {
+    const n = Number(m.replace(/,/g, ''));
+    if (!Number.isSafeInteger(n) || n === 0 || n >= 1_000_000_000) return m;
+    changed = true;
+    const parts: string[] = [];
+    if (n >= 1_000_000) parts.push(...underThousand(Math.floor(n / 1_000_000)), 'million');
+    if (Math.floor(n / 1000) % 1000) parts.push(...underThousand(Math.floor(n / 1000) % 1000), 'thousand');
+    parts.push(...underThousand(n % 1000));
+    return parts.join(' ');
+  });
+  return { text: out, changed };
+}

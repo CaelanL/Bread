@@ -1,54 +1,146 @@
-// Fetches a licensed translation through the LOCAL `bible` function into
-// `.expo/grading-audit/<VERSION>.json` (gitignored; never commit licensed text).
-// Single-verse refs take the function's single-verse path, so the sample holds whatever that
-// path returns, psalm titles included (RC5 in docs/grading-audit.md; check with esv-text.ts).
+// Fetches a licensed translation through the LOCAL `bible` function, chapter by chapter, into
+// gitignored `.expo/grading-audit/` (never commit licensed text; delete the folder when done):
+//   <VERSION>.json         verse text from the chapter path, keyed "Book 3:16"
+//   <VERSION>-fetch.json   per chapter: verses expected (KJV numbering) and returned
+//   <VERSION>-single.json  a few verses from the single-verse path, to compare with the chapter path
 //
-//   npx tsx scripts/grading-audit/fetch-licensed.ts ESV
+//   npx tsx scripts/grading-audit/fetch-licensed.ts <ESV|NIV|NLT|NKJV> [--chapters all|sample] [--list]
+//
+// Upstream calls are throttled and capped (Caelan's caps, 2026-11-14): ESV at most 8 a minute
+// (Crossway allows 60/min, 1,000/hour, 5,000/day on a key prod may share); API.Bible at most 900
+// calls in all across NIV, NLT and NKJV (the free plan's 5,000 a month is shared with prod).
+// Every call that isn't a cache hit is counted in `calls-<API>.json`, which a rerun resumes from.
+// Run NIV, NLT and NKJV one after another: they share one count.
+// Run single-verse checks on a fresh cache (`npm run db:reset`): they must reach the API.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { getBible, popularPassages } from './local';
-import { OUT_DIR } from './run';
+import { getBible, popularPassages, resetLocalBibleQuota } from './local';
+import { loadSource, OUT_DIR, verseRuns } from './run';
 
-// Passages chosen for risk: numbers, verses some translations omit, hyphens and possessives.
-const RISKY = [
-  'Genesis 5:3-8', 'Genesis 14:14', 'Numbers 1:20-27', 'Ezra 2:1-15', 'Judges 7:6-7', '1 Kings 4:26',
-  'Matthew 18:21-22', 'John 21:11', 'Acts 2:41', 'John 6:10', 'Luke 15:4-7', 'Revelation 7:4-8',
-  'Revelation 13:18', 'Matthew 17:20-22', 'Matthew 18:10-12', 'Mark 9:43-48', 'Acts 8:36-38',
-  'John 5:3-5', 'Romans 16:23-25', 'Luke 17:35-37', 'Psalms 90:10', 'Daniel 9:25-26', 'Esther 1:1',
-  'Genesis 50:22-26', 'Ruth 1:16-17', 'Psalms 23:1-6',
+const API: Record<string, { name: string; cap: number; perMinute: number }> = {
+  ESV: { name: 'ESV', cap: 1_400, perMinute: 8 },
+  NIV: { name: 'API.Bible', cap: 900, perMinute: 30 },
+  NLT: { name: 'API.Bible', cap: 900, perMinute: 30 },
+  NKJV: { name: 'API.Bible', cap: 900, perMinute: 30 },
+};
+
+// Single-verse path checks: psalm titles, a stanza start, verses some translations omit, poetry.
+const SINGLE = [
+  'Psalms 3:1', 'Psalms 23:1', 'Psalms 46:1', 'Psalms 51:1', 'Psalms 90:1', 'Psalms 119:1', 'Psalms 119:105',
+  'Matthew 18:11', 'Mark 9:44', 'Acts 8:37', 'John 3:16', 'Song of Solomon 1:2', '1 Corinthians 13:4', 'Genesis 1:1',
 ];
+
+// Sample chapters: every book's first, the suggested passages, and chapters at risk.
+const RISKY_CHAPTERS = [
+  'Psalms 3', 'Psalms 18', 'Psalms 23', 'Psalms 46', 'Psalms 51', 'Psalms 90', 'Psalms 119', 'Psalms 150',
+  'Song of Solomon 1', 'Song of Solomon 2', 'Lamentations 3',
+  'Matthew 17', 'Matthew 18', 'Matthew 23', 'Mark 7', 'Mark 9', 'Mark 11', 'Mark 15', 'Mark 16', 'Luke 17',
+  'Luke 23', 'John 5', 'John 7', 'John 8', 'Acts 8', 'Acts 15', 'Acts 24', 'Acts 28', 'Romans 16', '1 John 5',
+  'Numbers 1', 'Numbers 2', 'Numbers 3', 'Numbers 7', 'Numbers 26', 'Numbers 31', 'Ezra 2', 'Ezra 8',
+  'Nehemiah 7', 'Nehemiah 11', '1 Chronicles 5', '1 Chronicles 6', '1 Chronicles 7', '1 Chronicles 12',
+  '1 Chronicles 27', '2 Chronicles 2', 'Genesis 5', 'Genesis 11', 'Revelation 7', 'Revelation 21',
+  'John 21', 'Acts 2', 'Judges 7', '1 Kings 4', 'Daniel 9', 'Esther 1', 'Esther 9', 'Ezekiel 40', 'Ezekiel 48',
+];
+const SAMPLE_SIZE = 270;
+
+const pace = (perMinute: number) => new Promise((r) => setTimeout(r, 60_000 / perMinute));
+const readJson = <T>(file: string, empty: T): T => (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : empty);
+
+function chapterList(mode: string): { chapter: string; expected: number }[] {
+  const counts = new Map<string, number>();
+  for (const run of verseRuns(loadSource('KJV'))) counts.set(`${run.book} ${run.chapter}`, run.verses.at(-1)!.verse);
+  const all = [...counts.keys()];
+  if (mode === 'all') return all.map((chapter) => ({ chapter, expected: counts.get(chapter)! }));
+  const picked = new Set<string>();
+  for (const book of new Set(all.map((c) => c.replace(/ \d+$/, '')))) picked.add(`${book} 1`);
+  for (const p of popularPassages()) picked.add(p.replace(/:.*$/, ''));
+  for (const c of RISKY_CHAPTERS) picked.add(c);
+  const rest = all.filter((c) => !picked.has(c));
+  const step = rest.length / Math.max(1, SAMPLE_SIZE - picked.size);
+  for (let i = 0; picked.size < SAMPLE_SIZE && i < rest.length; i += step) picked.add(rest[Math.floor(i)]);
+  return all.filter((c) => picked.has(c)).map((chapter) => ({ chapter, expected: counts.get(chapter)! }));
+}
 
 async function main() {
   const version = process.argv[2];
-  if (!version || version === 'KJV') throw new Error('Usage: fetch-licensed.ts <ESV|NLT|NIV|NKJV>');
-  const file = join(OUT_DIR, `${version}.json`);
-  const out: Record<string, string> = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
-  const missingVerses: string[] = [];
-
-  for (const ref of [...new Set([...popularPassages(), ...RISKY])]) {
-    const m = ref.match(/^(.+) (\d+):(\d+)(?:-(\d+))?$/)!;
-    const [book, chapter, start, end] = [m[1], m[2], Number(m[3]), Number(m[4] ?? m[3])];
-    if (Array.from({ length: end - start + 1 }, (_, i) => `${book} ${chapter}:${start + i}`).every((k) => k in out)) continue;
-    const { status, body } = await getBible(`ref=${encodeURIComponent(ref)}&version=${version}`);
-    if (status === 429) {
-      console.log('Every seed user hit the daily Bible quota; saving what was fetched.');
-      break;
-    }
-    if (status !== 200) {
-      console.log(`${ref}: ${status} ${body.error ?? ''}`);
-      continue;
-    }
-    const keyed: Record<string, string> = body.verses ?? (body.text ? { [start]: body.text } : {});
-    for (let v = start; v <= end; v++) {
-      if (keyed[String(v)] === undefined) missingVerses.push(`${book} ${chapter}:${v}`);
-      else out[`${book} ${chapter}:${v}`] = keyed[String(v)];
-    }
+  const api = API[version];
+  if (!api) throw new Error('Usage: fetch-licensed.ts <ESV|NIV|NLT|NKJV> [--chapters all|sample]');
+  const mode = process.argv.includes('--chapters') ? process.argv[process.argv.indexOf('--chapters') + 1] : 'sample';
+  if (process.argv.includes('--list')) {
+    const chapters = chapterList(mode);
+    console.log(`${chapters.map((c) => c.chapter).join(', ')}\n${chapters.length} chapters, ${chapters.reduce((n, c) => n + c.expected, 0)} verses`);
+    return;
   }
   mkdirSync(OUT_DIR, { recursive: true });
-  writeFileSync(file, JSON.stringify(out, null, 1));
-  console.log(`${Object.keys(out).length} ${version} verses in ${file}`);
-  if (missingVerses.length) console.log(`No keyed text returned for: ${missingVerses.join(', ')}`);
+  const files = {
+    verses: join(OUT_DIR, `${version}.json`),
+    fetch: join(OUT_DIR, `${version}-fetch.json`),
+    single: join(OUT_DIR, `${version}-single.json`),
+    calls: join(OUT_DIR, `calls-${api.name}.json`),
+  };
+  const verses = readJson<Record<string, string>>(files.verses, {});
+  const fetched = readJson<Record<string, { expected: number; returned: string[]; via: string }>>(files.fetch, {});
+  const single = readJson<Record<string, string | null>>(files.single, {});
+  const calls = readJson<Record<string, number>>(files.calls, {});
+  const save = () => {
+    writeFileSync(files.verses, JSON.stringify(verses, null, 1));
+    writeFileSync(files.fetch, JSON.stringify(fetched, null, 1));
+    writeFileSync(files.single, JSON.stringify(single, null, 1));
+    writeFileSync(files.calls, JSON.stringify(calls, null, 1));
+  };
+
+  // One function call; counts it against the API's cap unless the function served its cache.
+  async function bible(query: string) {
+    if ((calls[api.name] ?? 0) >= api.cap) return undefined;
+    let res = await getBible(`${query}&version=${version}`);
+    if (res.status === 429) {
+      await resetLocalBibleQuota();
+      res = await getBible(`${query}&version=${version}`);
+    }
+    if (res.status === 401 || res.status === 429) throw new Error(`bible function ${res.status}`);
+    if (!res.body.cached) calls[api.name] = (calls[api.name] ?? 0) + 1;
+    await pace(api.perMinute);
+    return res;
+  }
+
+  for (const ref of SINGLE) {
+    if (typeof single[ref] === 'string') continue;
+    const res = await bible(`ref=${encodeURIComponent(ref)}`);
+    if (!res) break;
+    if (res.body.cached) console.log(`${ref}: served from cache, so this isn't the single-verse path. Reset the DB first.`);
+    single[ref] = res.status === 200 ? (res.body.text ?? '') : null;
+    save();
+  }
+
+  const chapters = chapterList(mode);
+  let done = 0;
+  for (const { chapter, expected } of chapters) {
+    done++;
+    if (fetched[chapter] && !fetched[chapter].via.startsWith('error')) continue;
+    const res = await bible(`ref=${encodeURIComponent(chapter)}&chapter=true`);
+    if (!res) {
+      console.log(`${api.name} cap of ${api.cap} calls reached; stopping.`);
+      break;
+    }
+    const keyed = res.status === 200 ? (res.body.verses ?? {}) : {};
+    fetched[chapter] = { expected, returned: Object.keys(keyed), via: res.status === 200 ? 'chapter' : `error ${res.status}` };
+    for (const [v, text] of Object.entries(keyed)) verses[`${chapter}:${v}`] = text;
+    // One-chapter books the chapter path can't serve (ESV reads "Jude 1" as Jude verse 1): fetch
+    // each verse on the single-verse path, as a reader adding one verse would.
+    if (expected > 1 && Object.keys(keyed).length <= 1 && /^(Obadiah|Philemon|2 John|3 John|Jude) 1$/.test(chapter)) {
+      fetched[chapter].via = 'single verses';
+      for (let v = 1; v <= expected + 1; v++) {
+        const one = await bible(`ref=${encodeURIComponent(`${chapter}:${v}`)}`);
+        if (!one) break;
+        if (one.status === 200 && one.body.text) verses[`${chapter}:${v}`] = one.body.text;
+      }
+    }
+    save();
+    if (done % 20 === 0) console.log(`${done}/${chapters.length} chapters, ${calls[api.name]} ${api.name} calls`);
+  }
+  save();
+  console.log(`${version}: ${Object.keys(fetched).length} chapters, ${Object.keys(verses).length} verses; ${calls[api.name] ?? 0} ${api.name} calls in all`);
 }
 
 main().catch((e) => {

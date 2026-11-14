@@ -1,4 +1,5 @@
 // Local Supabase only: sign in as a seed user (supabase/seed.sql) and call a local function.
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -42,7 +43,7 @@ let bibleUser = 0;
 let bibleToken: string | undefined;
 
 // GET the local `bible` function, moving to the next seed user when one hits the daily quota.
-// Status 429 means every seed user has (`npm run db:reset` clears the quota).
+// Status 429 means every seed user has; `resetLocalBibleQuota` clears it.
 export async function getBible(query: string): Promise<{ status: number; body: BibleResponse }> {
   bibleToken ??= await signIn(SEED_USERS[bibleUser]);
   let res = await fetch(`${functionUrl('bible')}?${query}`, { headers: authHeaders(bibleToken) });
@@ -50,7 +51,28 @@ export async function getBible(query: string): Promise<{ status: number; body: B
     bibleToken = await signIn(SEED_USERS[++bibleUser]);
     res = await fetch(`${functionUrl('bible')}?${query}`, { headers: authHeaders(bibleToken) });
   }
+  if (res.status === 429) {
+    bibleUser = 0;
+    bibleToken = undefined;
+  }
   return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
+// Clears today's per-user usage counters in the LOCAL database, so an audit can make more than
+// the free tier's daily Bible fetches. Upstream API calls are capped by the caller, not here.
+export async function resetLocalBibleQuota(): Promise<void> {
+  const status = execFileSync(join(__dirname, '../../node_modules/.bin/supabase'), ['status', '--env', '--output-format', 'text'], {
+    cwd: join(__dirname, '../..'),
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  const key = status.match(/^SERVICE_ROLE_KEY=['"]?([^'"\n]+)['"]?$/m)?.[1];
+  if (!key) throw new Error('No local service role key from `supabase status`.');
+  const res = await fetch(`${API_URL}/rest/v1/usage_daily?date=eq.${new Date().toISOString().slice(0, 10)}`, {
+    method: 'DELETE',
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) throw new Error(`Local quota reset failed: ${res.status}`);
 }
 
 export function functionUrl(name: string): string {

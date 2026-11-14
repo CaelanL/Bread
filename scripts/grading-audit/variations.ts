@@ -1,7 +1,7 @@
 // Ways a speech engine can write down a correct recitation. Each pass returns the verse
 // text the app scores against (`expected`) and the transcript, or null when the pass has
 // nothing to change in this chunk, so its counts cover only chunks it touched.
-import { findNumberSpans, toDigits } from './numbers';
+import { digitsToWords, findNumberSpans, toDigits } from './numbers';
 
 export interface Case {
   expected: string;
@@ -198,16 +198,49 @@ function spokenReference(ref: ChunkRef): string {
   return `${ref.book} ${ref.chapter}:${verses}`;
 }
 
+// What a reader says reading the translation's printed page, from text the adapter mangled:
+// words glued across punctuation spaced again, and Psalm 119 stanza labels, manuscript notes and
+// Song of Solomon speaker labels dropped. Two words glued with no punctuation can't be undone here.
+export function asPrinted(text: string, ref: ChunkRef): string {
+  let t = text
+    .replace(/([.,;:!?)\]”"]+’?)(?=[A-Za-z“‘"(\[\u05D0-\u05EA])/g, '$1 ')
+    .replace(/(?<=[A-Za-z])([.,;:!?)\]”"]+)(?=\d)/g, '$1 ')
+    .replace(/(’)(?=[A-Z“‘\u05D0-\u05EA])/g, '$1 ')
+    .replace(/\s*[\u05D0-\u05EA]\s*[A-Z][a-z]+\s*$/, '')
+    .replace(/\s*\[[^\]]*manuscripts[^\]]*\]?/gi, '');
+  if (ref.book === 'Song of Solomon') t = t.replace(/(?<=[.!?”’])\s+(He|She|Others|Friends|Beloved|Lover)$/, '');
+  return t.trim();
+}
+
 export const FILLER_WORDS = ['um', 'uh', 'hmm', 'uhm', 'erm', 'er', 'ah', 'mm-hmm', 'uh-huh', 'like', 'you know'];
 
 export const PASSES: Pass[] = [
   { name: 'plain', group: 'baseline', make: (t) => ({ expected: t, transcript: plain(t) }) },
   { name: 'engine-style', group: 'baseline', make: (t) => ({ expected: t, transcript: engineStyle(t) }) },
+  {
+    // RC5 and RC7: the served text holds something the printed verse doesn't. Checks only verses
+    // where `asPrinted` changes the text, so its count is the verses the adapter mangled.
+    name: 'source:as-printed',
+    group: 'baseline',
+    make: (t, r) => {
+      const printed = asPrinted(t, r);
+      return printed === t ? null : { expected: t, transcript: engineStyle(printed) };
+    },
+  },
 
   digitsPass('digits:standard', (f) => !f.has('article') && !f.has('archaic')),
   digitsPass('digits:article', (f) => f.has('article') && !f.has('archaic')),
   digitsPass('digits:archaic', (f) => f.has('archaic')),
   digitsPass('digits:all', () => true),
+  {
+    // The other way round: the translation prints digits (ESV, NIV), the reader says words.
+    name: 'digits:spoken-words',
+    group: 'numbers',
+    make: (t) => {
+      const { text, changed } = digitsToWords(t);
+      return changed ? { expected: t, transcript: engineStyle(text) } : null;
+    },
+  },
   // Two numbers separated only by punctuation ("four and twenty, six on each hand").
   digitsPass('digits:next-to-punctuation', (forms, span, all, words) =>
     !forms.has('article') && !forms.has('archaic') &&

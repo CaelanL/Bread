@@ -186,6 +186,13 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assert.ok(calculateChunkScore(alignment) >= 90, JSON.stringify(wrong('Jesus Christ the same yesterday, and to day, and for ever.', 'Jesus Christ the same yesterday and and today and forever')));
   });
 
+  // KJV words in the shape the API.Bible adapter serves NIV, NLT and NKJV: a poetry line or quote
+  // break whose tag was removed without a space.
+  it('RC7: words glued across punctuation in the served text fail a correct recitation', { todo: TODO }, () => {
+    assertPerfect('The LORD is my shepherd;I shall not want.', 'The Lord is my shepherd, I shall not want.');
+    assertPerfect('And God said,“Let there be light:”and there was light.', 'And God said, let there be light, and there was light.');
+  });
+
   it('RC8: a verse never said (or revealed) still lets the session reach 90', { todo: TODO }, () => {
     const kjv = loadSource('KJV');
     const alignments = new Map<number, ReturnType<typeof alignTranscription>>();

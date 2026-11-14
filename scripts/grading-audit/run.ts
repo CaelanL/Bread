@@ -310,7 +310,11 @@ export function replay(file: string, align: Align) {
   return clips.map((clip) => {
     if (!sources.has(clip.version)) sources.set(clip.version, loadSource(clip.version));
     const text = refText(sources.get(clip.version)!, clip.ref);
-    return { clip, verdict: judge(align, text, clip.transcript) };
+    const verdict = judge(align, text, clip.transcript);
+    // Only the opening word or words lost, nothing else wrong: the `say` artifact in RC11.
+    const opening = text.split(/\s+/).slice(0, verdict.missing.length).map(visualKey);
+    const firstWordsDropped = verdict.added.length === 0 && verdict.missing.length > 0 && verdict.missing.map(visualKey).join(' ') === opening.join(' ');
+    return { clip, verdict, firstWordsDropped };
   });
 }
 
@@ -365,11 +369,11 @@ async function main() {
   if (replayFile) {
     const results = replay(replayFile, align);
     const bad = results.filter((r) => r.verdict.score < 100);
-    for (const { clip, verdict } of bad) {
+    for (const { clip, verdict, firstWordsDropped } of bad) {
       const said = clip.version === 'KJV' ? ` said "${clip.transcript}"` : '';
-      console.log(`${verdict.score}% ${clip.ref} ${clip.version} ${clip.voice}@${clip.rate}${said} missing [${verdict.missing.join(' ')}] added [${verdict.added.join(' ')}]${flags(verdict)}`);
+      console.log(`${verdict.score}% ${clip.ref} ${clip.version} ${clip.voice}@${clip.rate}${said} missing [${verdict.missing.join(' ')}] added [${verdict.added.join(' ')}]${flags(verdict)}${firstWordsDropped ? ' FIRST-WORDS-DROPPED' : ''}`);
     }
-    console.log(`\n${bad.length}/${results.length} clips under 100, ${bad.filter((r) => r.verdict.score < 90).length} under 90, ${bad.filter((r) => r.verdict.sameWord).length} same-word, ${bad.filter((r) => r.verdict.lookAlike).length} look-alike, ${bad.filter((r) => r.verdict.sameNumber).length} same-number, ${bad.filter((r) => r.verdict.repeated >= 2).length} with 2+ words both missing and added`);
+    console.log(`\n${bad.length}/${results.length} clips under 100, ${bad.filter((r) => r.verdict.score < 90).length} under 90, ${bad.filter((r) => r.firstWordsDropped).length} only the opening word(s) dropped (voice artifact), ${bad.filter((r) => r.verdict.sameWord).length} same-word, ${bad.filter((r) => r.verdict.lookAlike).length} look-alike, ${bad.filter((r) => r.verdict.sameNumber).length} same-number, ${bad.filter((r) => r.verdict.repeated >= 2).length} with 2+ words both missing and added`);
     writeFileSync(join(OUT_DIR, `replay-${tag}.json`), JSON.stringify(results, null, 2));
     return;
   }
