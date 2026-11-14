@@ -125,7 +125,8 @@ this route through without a session, like `reset-password`.
 ## Accounts start from the session
 
 `AuthProvider` calls `setAccount(userId | null)` (`lib/auth/account.ts`) with the
-`getSession()` result before it stops loading, and again on every `onAuthStateChange`.
+`getSession()` result before it stops loading, and again on every `onAuthStateChange`
+except `INITIAL_SESSION` (the `getSession()` result covers it).
 So the library load starts when the stored session is read, before the tree mounts.
 
 - Same id as now: nothing (`INITIAL_SESSION`, `TOKEN_REFRESHED`).
@@ -133,8 +134,23 @@ So the library load starts when the stored session is read, before the tree moun
   clear the store and the prefs store first; their generation check drops the old
   account's late replies. Then `hydrate(userId)`, the UX flags, and the prefs
   (`hydrate(userId)`, then one `syncForegroundState`).
-- `null`: clear both stores and remove the previous account's prefs cache. A launch with
-  no session was never anyone, so it clears nothing.
+- `null`: clear both stores and remove the previous account's prefs cache and saved
+  library. A launch with no session was never anyone, so it clears nothing.
+
+### Launch
+
+At mount `AuthProvider` reads the stored session's key (`AUTH_STORAGE_KEY`, set
+explicitly to supabase-js's default `sb-<first label of the host>-auth-token`; a different
+key would sign everyone out) for its user id, and calls `setAccount(id, { provisional:
+true })`: that account's saved library paints, nothing starts on the network, and
+`RootLayoutNav` shows it instead of the spinner. When `getSession()` settles,
+`afterRestore` (`lib/auth/after-restore.ts`) decides:
+
+- a session → `setAccount(id)` starts the wave;
+- the token refresh couldn't reach the server (`isAuthRetryableFetchError`) → stay on the
+  saved library, still loading: writes fail visibly, supabase-js keeps the session and
+  retries, and its `TOKEN_REFRESHED` starts the account;
+- anything else (a refused refresh) → signed out: the saved library is removed, Sign In.
 
 ## Auth gating
 
@@ -150,6 +166,7 @@ const storage = Platform.OS === "web" ? undefined : AsyncStorage;
 createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage,                      // undefined means localStorage on web
+    storageKey: AUTH_STORAGE_KEY, // supabase-js's default, named (see Launch)
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,    // we handle deep links ourselves

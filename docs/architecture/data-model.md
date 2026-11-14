@@ -227,21 +227,21 @@ incrementally — the cron is the only writer.
 | `update_user_collections_updated_at` | trigger | fires on UPDATE |
 | `update_user_verses_updated_at` | trigger | fires on UPDATE |
 | `cleanup_stale_transcription_locks()` | fn | deletes locks > 5 min old |
-| `cleanup_expired_verse_cache()` | fn | unused since migration 001, references a dropped column |
+| `cleanup_expired_verse_cache()` | fn | unused, references a dropped column |
 | `get_verse_cache_count(version)` | fn | row count per version |
 | `evict_lru_verses(version, max, needed)` | fn | LRU eviction batch |
 | `upsert_verses(book, chapter, version, jsonb)` | fn | bulk verse upsert |
 | `import_curated_collection()` | authenticated invoker | atomic Library import |
 | `claim_intro_presentation(text)` | authenticated invoker | one account claim |
 | `get_total_time_studied(user_id)` | fn (SECURITY DEFINER) | sums `recording_duration_ms` |
-| `get_current_streak(user_id, tz_offset_min)` | fn (SECURITY DEFINER) | counts consecutive practice days in user's TZ |
+| `get_current_streak(user_id, tz_offset_min)` | fn (SECURITY DEFINER) | consecutive practice days in user's TZ |
 | `update_popular_ranges()` | fn (SECURITY DEFINER) | rebuilds `popular_ranges` |
 | `update_user_stats()` | fn (SECURITY DEFINER) | refreshes `user_stats` |
 | `delete_own_account()` | fn (SECURITY DEFINER) | safely orders account deletion across tables |
-| `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment. See `docs/features/notifications.md` |
+| `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
-| `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction INSERT RLS checks only the verse owner) |
-| `add_verse`, `delete_verse`, `delete_collection` | invoker, signed in | [add](../features/adding-verses.md#verse-identity), [delete](../features/library.md#deleting-a-verse) |
+| `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction RLS checks only the verse's) |
+| `add_verse`, `delete_verse`, `delete_collection`, `save_verse_progress` | invoker, signed in | [add](../features/adding-verses.md#verse-identity), [delete](../features/library.md#deleting-a-verse), [progress](../features/review.md#what-a-session-writes) |
 | shared collection functions | invoker wrappers | [table](../features/shared-collections.md#functions) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |

@@ -3,23 +3,24 @@
 The app's storage strategy is **server-of-record, in-memory state,
 no offline writes**. Supabase is the source of truth for all user
 data. Zustand holds the current view of that data in memory.
-AsyncStorage holds device settings and small local caches.
+AsyncStorage holds device settings, small local caches and the saved
+library (below).
 
 ## What lives where
 
 | Data | Server (Supabase) | Zustand (in-memory) | AsyncStorage |
 |---|:-:|:-:|:-:|
-| Collections | ✓ | ✓ | — |
-| Verses | ✓ | ✓ | — |
-| Mastered verses (incl. soft-deleted) | ✓ | ✓ | — |
+| Collections | ✓ | ✓ | ✓ saved library |
+| Verses (references, progress; never text) | ✓ | ✓ | ✓ saved library |
+| Mastered verses (incl. soft-deleted) | ✓ | ✓ | ✓ saved library |
 | [Curated saver totals](../features/home.md#community-saves) | ✓ (ledger) | ✓ | — |
 | [Intro presentation claims](../features/home.md#encouragement-video) | ✓ | runtime coordinator | — |
 | Session attempts | ✓ (append) | — | — |
 | Verse text | ✓ (`verse_cache`) | session cache (`lib/cache/`) | — |
 | `colorMode` | — | ✓ | ✓ (`app_color_mode`) |
 | Account translation (`bibleVersion`) | ✓ (`profiles.translation`) | ✓ | ✓ cache (`app_bible_version`) |
-| Name (`displayName`, `firstName`, `lastName`) | ✓ (`profiles`) | ✓ | — |
-| [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ last seen ids and names (`shared_known_groups:<user>`) |
+| Name (`displayName`, `firstName`, `lastName`) | ✓ (`profiles`) | ✓ | ✓ saved library |
+| [Shared groups](../features/shared-collections.md#in-the-app) | ✓ | ✓ | ✓ saved library (owner names too); last seen ids and names (`shared_known_groups:<user>`) |
 | [Group progress](../features/group-progress.md#collection-screen) | ✓ (read) | ✓ (`sharedProgress`) | — |
 | Invite from a signed-out link or a claimed handoff | — | — | ✓ (`shared_pending_join`) |
 | Install handoff asked once | — | — | ✓ (`shared_handoff_checked`) |
@@ -31,9 +32,55 @@ AsyncStorage holds device settings and small local caches.
 | Notification flags, push token | — | ✓ (`useUxFlagsStore`, flags) | ✓ (`notifications_q1_dismissed`, `notifications_settings_visited`, `notifications_cached_expo_token`) |
 | Auth session | — | (via Supabase) | ✓ (Supabase-managed) |
 
-**Verses, collections and progress are never persisted to
-AsyncStorage.** The app does not work offline for writes — see the
-offline section below.
+**Library data reaches disk only as the saved library**
+(`library_snapshot:<userId>`, below), never verse text. The app does
+not work offline for writes — see the offline section below.
+
+## Saved library
+
+`lib/store/snapshot.ts` (tested in `snapshot.test.ts`): `{ v: 1,
+savedAt, collections, verses, masteredVerses, sharedCollections, names }`,
+each field copied by an explicit allowlist:
+
+- verses: `id, collectionId, book, chapter, verseStart, verseEnd,
+  version, createdAt, progress, lastPracticedAt, lastChunkSize,
+  lastDifficulty, updatedAt`. Never `text` or `verses` (invariant 2);
+  reading drops them too.
+- collections (not the virtual ones), shared groups with owner names,
+  and the user's own name, so nothing pops in after the paint.
+- `parseSnapshot` refuses another `v`, an age over
+  `SNAPSHOT_MAX_AGE_MS` (7 days) or a malformed value; that key is
+  removed.
+
+**Read** with the settings when an account starts (`paintSnapshot`):
+one update with the data, `hydrated: true`, `hydratedFrom: 'snapshot'`.
+The wave then replaces it. A launch whose session is still restoring
+paints the stored user's copy first (see [auth.md](auth.md#launch)).
+
+**Written** (`saveSnapshot` in `lib/store/index.ts`) only from
+server-applied state: when `synced` turns true, after each later wave,
+and after these succeed: progress saves, add, copy and delete verse,
+add, import, rename, icon, reorder and delete collection, join, leave,
+stop sharing, set name. Never from a store subscriber (it would save
+unconfirmed study prefs), never before `synced`, and the generation
+is checked with no `await` before `setItem`.
+
+**Removed** on sign-out and account delete (`setAccount(null)`).
+
+### `synced`
+
+`hydrated` means something to paint; `synced` means the server's
+collections, verses, mastered rows and shared groups were all
+**applied** this account (a read that lands after a change made during
+it keeps the change and doesn't count; the wave reads it once more).
+`whenSynced()` waits for the running wave, then refreshes once.
+Anything that decides from data a saved copy could have wrong waits on
+it through `librarySynced()`, which toasts "Couldn't load your library"
+on false: delete and leave confirms, stop sharing, member actions,
+verse delete, the Join tap, the share screen's first step, Add/Open on
+a curated collection, adding a verse, and "not found" states.
+Progress saves need no wait: the guard refuses a stale base
+([review.md](../features/review.md#concurrent-updates-from-two-devices)).
 
 ## Zustand store
 
@@ -62,7 +109,9 @@ interface AppState {
   inProgressSort: SortOption;
 
   // Lifecycle flags
-  hydrated: boolean;
+  hydrated: boolean;            // something to paint: the saved library or the server's
+  hydratedFrom: 'snapshot' | 'server' | null;
+  synced: boolean;              // see Saved library
   profileLoaded: boolean;       // the profile was read this run; welcomeSeen is the server's
   welcomeSeen: boolean;         // profiles.welcome_v2_seen_at is set
   collectionsLoading: boolean;
@@ -74,6 +123,8 @@ interface AppState {
   // Actions
   hydrate: (userId) => Promise<void>; // from setAccount only
   refresh: () => Promise<void>;
+  whenSynced: () => Promise<boolean>;
+  paintSnapshot: (userId) => Promise<void>; // settings and the saved library only
   clearError: () => void;
   fetchCollections: () => Promise<boolean>;
   fetchVerses: () => Promise<boolean>;
@@ -137,8 +188,8 @@ The convention is `useX(...)` selectors, not direct
   in their setters (manually, not via `persist` middleware). The
   translation is the exception: it's saved to `profiles`, and AsyncStorage
   only caches it. See `docs/architecture/bible-versions.md`.
-- All other state is in-memory only. On app restart it's empty
-  until `hydrate()` runs.
+- The library is in memory, plus the saved library above. On app
+  restart it's the saved copy (or empty) until the wave lands.
 
 ### `clear()`
 
@@ -163,8 +214,9 @@ session, before the tree mounts, and when another account signs in. See
 ```
 setAccount(userId) — when AuthProvider reads the session, before the tree mounts
 hydrate(userId)
-  ├── Promise.all(AsyncStorage reads for colorMode, bibleVersion,
-  │                reviewMaxIntervalDays, masteredSort, inProgressSort, hideVerseText)
+  ├── paintSnapshot: Promise.all(AsyncStorage reads for colorMode, bibleVersion,
+  │     reviewMaxIntervalDays, masteredSort, inProgressSort, hideVerseText,
+  │     library_snapshot:<userId>) → one set, painting the saved library
   │
   └── loadAccount (queued with other translation work; refresh() runs it too)
         ├── one wave, Promise.all: profiles (translation, names, welcome_v2_seen_at),
@@ -173,8 +225,10 @@ hydrate(userId)
         │     → a failed profile or identity read doesn't stop the fetches
         │     → launch only: failed fetches retried once after 500ms
         ├── no profile: seedTranslation from the rows, profiles.upsert
+        ├── a read dropped for a change made during it reads once more
         ├── one set: bibleVersion (unless a switch is in flight), names,
-        │     profileLoaded, welcomeSeen, hydrated: true ← unconditional
+        │     profileLoaded, welcomeSeen, hydrated: true ← unconditional,
+        │     hydratedFrom: 'server', synced → then the snapshot is saved
         │     → launch only: toast if a fetch still failed
         ├── alignVerses with the wave's rows; if it moved anything or the
         │     translation changed, fetchVerses + fetchMasteredVerses again
@@ -246,7 +300,9 @@ sync queue, write that design down first.
 
 Specifically:
 
-- Failed reads → error state, UI keeps stale in-memory data.
+- Failed reads → error state, UI keeps stale in-memory data. A cold
+  start offline shows the saved library; `synced` stays false, so
+  deletes and name steps toast instead of acting.
 - Failed writes → no queue, no retry. Most store actions throw, and the
   user must retry manually.
 - Bible verse reads can succeed offline if they hit the in-memory
@@ -316,9 +372,19 @@ Invariants 1 and 10 are above. Also:
 - **The preload stops between requests, not during one.** On sign-out
   up to 3 in-flight reads still complete into the session cache.
 
+## Decisions
+
+- **The library is saved to disk (Q16, Q18).** Reverses "never
+  persisted": Caelan wanted the Library to show at once, Spotify-style.
+  The allowlist keeps verse text off the device.
+- **Sign-out removes the saved library (Q21).** Shared devices; a
+  sign-in again loads from the server.
+
 ## Browser checks
 
 - `npm run sim -- flow startup-timing`: reader-c with 150ms added to every Supabase request, 5
   cold launches to Home and 5 to the Library; the `[PERF]` lines in `.expo/sim-metro.log` give
   each launch's marks and requests (`lib/api/dev-timing.ts`, dev builds on a local DB only).
   Start from `npm run db:reset`.
+- `npm run sim -- flow snapshot-cold-start`: a relaunch with 10s added
+  to every request shows reader-c's Library from the saved copy.
