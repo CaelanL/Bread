@@ -1,9 +1,10 @@
-// Computer-voice recitations through the real batch path: macOS `say` makes an AAC m4a of
-// one verse, posted to the LOCAL `process-recording` function exactly as the app posts it
-// (audio, durationMs, actualVerse = chunk text). Soniox usage is real, so clips are capped.
+// Computer-voice recitations through the batch transcription: macOS `say` makes an AAC m4a of
+// one chunk, sent to Soniox with the request `process-recording` makes (default), or posted to
+// the LOCAL `process-recording` exactly as the app posts it (`--via-function`). Soniox usage is
+// real, so clips are capped.
 //
 //   npx tsx scripts/grading-audit/voice.ts plan            # list the clips it would make
-//   npx tsx scripts/grading-audit/voice.ts run [--max N]   # make and transcribe them
+//   npx tsx scripts/grading-audit/voice.ts run [--max N] [--via-function]   # make and transcribe them
 //
 // KJV transcripts go to scripts/grading-audit/fixtures/say-kjv.json (committed).
 // Licensed transcripts go to .expo/grading-audit/say-<VERSION>.json (gitignored).
@@ -16,7 +17,8 @@ import { join } from 'node:path';
 import { authHeaders, functionUrl, popularPassages, signIn } from './local';
 import { KJV_FIXTURE, loadSource, OUT_DIR, refText, type Clip, type VerseMap } from './run';
 
-const CAP = 200;
+const FIRST_WAVE = 200;
+const CAP = 1000;
 const VOICES = [
   { voice: 'Samantha', rate: 175 },
   { voice: 'Daniel', rate: 175 },
@@ -45,6 +47,11 @@ const RISKY: [string, RegExp, number][] = [
   ['vocative O', /\bO (LORD|God|Israel|Jerusalem)/, 4],
 ];
 const MAX_WORDS = 45;
+// Second wave: more voices and speeds, every popular verse, a spread of the whole KJV, all of the
+// ESV sample, and long multi-verse chunks (one chunk = several verses, as at chunk size 2+).
+const WIDE_VOICES = ['Samantha', 'Daniel', 'Karen', 'Moira', 'Rishi', 'Tessa', 'Fred', 'Eddy (English (US))', 'Flo (English (UK))'];
+const WIDE_RATES = [120, 150, 175, 200, 230, 260];
+const MAX_LONG_WORDS = 160;
 
 interface Planned {
   ref: string;
@@ -80,7 +87,53 @@ function plan(): Planned[] {
     const rest = esvRefs.filter((ref) => !numbered.includes(ref) && popular.includes(ref)).filter((_, i) => i % 3 === 1);
     out.push(...[...numbered, ...rest].slice(0, CAP - out.length).map((ref) => ({ ref, version: 'ESV', why: numbered.includes(ref) ? 'ESV numbers' : 'ESV popular' })));
   }
-  return out.slice(0, CAP);
+  return [...out.slice(0, FIRST_WAVE), ...secondWave(kjv, popular, new Set(out.map((p) => p.ref)))].slice(0, CAP);
+}
+
+function rangeRefs(ref: string): string[] {
+  const m = ref.match(/^(.+) (\d+):(\d+)(?:-(\d+))?$/)!;
+  return Array.from({ length: Number(m[4] ?? m[3]) - Number(m[3]) + 1 }, (_, i) => `${m[1]} ${m[2]}:${Number(m[3]) + i}`);
+}
+
+function secondWave(kjv: VerseMap, popular: string[], used: Set<string>): Planned[] {
+  const out: Planned[] = [];
+  const add = (ref: string, version: string, why: string) => {
+    if (used.has(`${version} ${ref}`) || (version === 'KJV' && used.has(ref))) return;
+    used.add(`${version} ${ref}`);
+    out.push({ ref, version, why });
+  };
+  const words = (map: VerseMap, ref: string) => refText(map, ref).split(/\s+/).length;
+  // More of each risky cause.
+  const entries = Object.entries(kjv).filter(([, t]) => t.split(/\s+/).length <= 60);
+  for (const [why, re, n] of RISKY) {
+    const hits = entries.filter(([ref, t]) => re.test(t) && !used.has(ref));
+    const step = Math.max(1, Math.floor(hits.length / (n * 2)));
+    for (let i = 0, k = 0; i < hits.length && k < n * 2; i += step, k++) add(hits[i][0], 'KJV', why);
+  }
+  for (const ref of popular) add(ref, 'KJV', 'popular');
+  // A spread across the whole Bible.
+  const all = Object.keys(kjv).filter((ref) => kjv[ref].split(/\s+/).length <= 60);
+  for (let i = 0; i < all.length; i += Math.floor(all.length / 150)) add(all[i], 'KJV', 'spread');
+  // Long chunks: suggested multi-verse passages, then 3-verse windows across the Bible.
+  const multi = popularPassages().filter((p) => p.includes('-'));
+  for (const ref of multi) if (rangeRefs(ref).every((r) => kjv[r]) && words(kjv, ref) <= MAX_LONG_WORDS) add(ref, 'KJV', 'long chunk');
+  for (let i = 0; i < all.length; i += Math.floor(all.length / 40)) {
+    const m = all[i].match(/^(.+) (\d+):(\d+)$/)!;
+    const ref = `${m[1]} ${m[2]}:${m[3]}-${Number(m[3]) + 2}`;
+    if (rangeRefs(ref).every((r) => kjv[r]) && words(kjv, ref) <= MAX_LONG_WORDS) add(ref, 'KJV', 'long chunk');
+  }
+  const esvFile = join(OUT_DIR, 'ESV.json');
+  if (existsSync(esvFile)) {
+    const esv: VerseMap = JSON.parse(readFileSync(esvFile, 'utf8'));
+    for (const ref of multi) if (rangeRefs(ref).every((r) => esv[r]) && words(esv, ref) <= MAX_LONG_WORDS) add(ref, 'ESV', 'long chunk');
+    for (const ref of Object.keys(esv)) if (esv[ref]) add(ref, 'ESV', 'ESV verse');
+  }
+  return out;
+}
+
+function voiceFor(i: number): { voice: string; rate: number } {
+  if (i < FIRST_WAVE) return VOICES[i % VOICES.length];
+  return { voice: WIDE_VOICES[i % WIDE_VOICES.length], rate: WIDE_RATES[(i * 7) % WIDE_RATES.length] };
 }
 
 function readClips(version: string): Clip[] {
@@ -88,9 +141,70 @@ function readClips(version: string): Clip[] {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : [];
 }
 
+// process-recording never deletes what it creates at Soniox, and the account caps stored files
+// (1,000) and transcriptions (2,000). So volume goes straight to Soniox with the same request
+// the function makes, and each call deletes its own file and transcription. `--via-function`
+// uses the real function path instead (keep that to a handful of clips).
+const SONIOX = 'https://api.soniox.com/v1';
+function sonioxKey(): string {
+  const line = readFileSync(join(__dirname, '../../supabase/functions/.env'), 'utf8').split('\n').find((l) => l.startsWith('SONIOX_API_KEY='));
+  const key = line?.slice('SONIOX_API_KEY='.length).replace(/^["']|["']$/g, '').trim();
+  if (!key) throw new Error('SONIOX_API_KEY missing from supabase/functions/.env');
+  return key;
+}
+
+async function transcribeDirect(audio: Buffer, text: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${sonioxKey()}` };
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(audio)]), 'recording.m4a');
+  const upload = await fetch(`${SONIOX}/files`, { method: 'POST', headers, body: form });
+  if (!upload.ok) throw new Error(`soniox upload ${upload.status}`);
+  const fileId: string = (await upload.json()).id;
+  let txId: string | undefined;
+  try {
+    const job = await fetch(`${SONIOX}/transcriptions`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      // Same body as transcribeWithSoniox in supabase/functions/process-recording/index.ts.
+      body: JSON.stringify({
+        file_id: fileId,
+        model: 'stt-async-v5',
+        language_hints: ['en'],
+        context: {
+          general: [
+            { key: 'domain', value: 'Bible' },
+            { key: 'topic', value: 'Bible verse memory recitation attempt' },
+          ],
+          text,
+        },
+      }),
+    });
+    if (!job.ok) throw new Error(`soniox job ${job.status}`);
+    txId = (await job.json()).id as string;
+    for (let i = 0; ; i++) {
+      const status = await (await fetch(`${SONIOX}/transcriptions/${txId}`, { headers })).json();
+      if (status.status === 'completed') break;
+      if (status.status === 'error' || i > 180) throw new Error(`soniox ${status.status}`);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const { text: transcript } = await (await fetch(`${SONIOX}/transcriptions/${txId}/transcript`, { headers })).json();
+    return transcript ?? '';
+  } finally {
+    if (txId) await fetch(`${SONIOX}/transcriptions/${txId}`, { method: 'DELETE', headers });
+    await fetch(`${SONIOX}/files/${fileId}`, { method: 'DELETE', headers });
+  }
+}
+
 async function transcribe(token: string, text: string, voice: string, rate: number, dir: string): Promise<string> {
   const file = join(dir, `clip-${Date.now()}-${Math.random().toString(36).slice(2)}.m4a`);
   execFileSync('say', ['-v', voice, '-r', String(rate), '-o', file, '--file-format=m4af', '--data-format=aac', text]);
+  if (!process.argv.includes('--via-function')) {
+    try {
+      return await transcribeDirect(readFileSync(file), text);
+    } finally {
+      rmSync(file);
+    }
+  }
   const info = execFileSync('afinfo', [file], { encoding: 'utf8' });
   const seconds = Number(info.match(/estimated duration: ([\d.]+)/)?.[1]);
   const form = new FormData();
@@ -121,22 +235,31 @@ async function main() {
   const dir = mkdtempSync(join(tmpdir(), 'bread-say-'));
   mkdirSync(join(__dirname, 'fixtures'), { recursive: true });
   try {
-    for (const [i, p] of planned.entries()) {
-      if (total() >= max) break;
-      const clips = done.get(p.version) ?? [];
-      if (clips.some((c) => c.ref === p.ref)) continue;
-      if (!sources.has(p.version)) sources.set(p.version, loadSource(p.version));
-      const { voice, rate } = VOICES[i % VOICES.length];
-      const text = refText(sources.get(p.version)!, p.ref);
-      try {
-        const transcript = await transcribe(token, text, voice, rate, dir);
-        clips.push({ ref: p.ref, version: p.version, voice, rate, transcript });
-        done.set(p.version, clips);
-        writeFileSync(outFile(p.version), `${JSON.stringify(clips, null, 1)}\n`);
-        console.log(`${total()}/${max} ${p.version} ${p.ref} ${voice}@${rate}`);
-      } catch (e) {
-        console.log(`skip ${p.version} ${p.ref}: ${e instanceof Error ? e.message : e}`);
+    const todo = planned
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => !(done.get(p.version) ?? []).some((c) => c.ref === p.ref));
+    // Four clips at a time; results are written after each batch.
+    for (let b = 0; b < todo.length && total() < max; b += 4) {
+      const batch = todo.slice(b, b + Math.min(4, max - total()));
+      const results = await Promise.all(batch.map(async ({ p, i }) => {
+        if (!sources.has(p.version)) sources.set(p.version, loadSource(p.version));
+        const { voice, rate } = voiceFor(i);
+        try {
+          const transcript = await transcribe(token, refText(sources.get(p.version)!, p.ref), voice, rate, dir);
+          return { ref: p.ref, version: p.version, voice, rate, transcript };
+        } catch (e) {
+          console.log(`skip ${p.version} ${p.ref}: ${e instanceof Error ? e.message : e}`);
+          return null;
+        }
+      }));
+      for (const clip of results) {
+        if (!clip) continue;
+        const clips = done.get(clip.version) ?? [];
+        clips.push(clip);
+        done.set(clip.version, clips);
       }
+      for (const [version, clips] of done) if (clips.length) writeFileSync(outFile(version), `${JSON.stringify(clips, null, 1)}\n`);
+      console.log(`${total()}/${max}`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
