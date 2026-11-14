@@ -1,6 +1,7 @@
 # Startup timing (docs/architecture/sync-and-storage.md): reader-c with 150ms added to every Supabase
 # request and [PERF] lines in the Metro log, then 5 cold launches to Home and 5 to the Library.
 # Asserts only that each launch reached its content; the times are read from .expo/sim-metro.log.
+# Start from npm run db:reset: each launch spends Bible reads against reader-c's daily limit.
 appId: com.caelanliu.biblemem
 name: startup-timing
 ---
@@ -10,11 +11,12 @@ name: startup-timing
     visible:
       id: votm-text
     timeout: 60000
+# A plain launch opens on the Library; a link opens Home.
 - repeat:
     times: 5
     commands:
       - stopApp
-      - launchApp
+      - openLink: com.biblemem://home
       - extendedWaitUntil:
           visible:
             id: votm-text
@@ -26,7 +28,7 @@ name: startup-timing
     times: 5
     commands:
       - stopApp
-      - openLink: com.biblemem://(tabs)/(library)
+      - launchApp
       - extendedWaitUntil:
           visible: ".*Romans 8.*"
           timeout: 60000
