@@ -63,6 +63,8 @@ interface AppState {
 
   // Lifecycle flags
   hydrated: boolean;
+  profileLoaded: boolean;       // the profile was read this run; welcomeSeen is the server's
+  welcomeSeen: boolean;         // profiles.welcome_v2_seen_at is set
   collectionsLoading: boolean;
   collectionOrderSaving: boolean;
   versesLoading: boolean;
@@ -70,7 +72,7 @@ interface AppState {
   error: string | null;
 
   // Actions
-  hydrate: () => Promise<void>;
+  hydrate: (userId) => Promise<void>; // from setAccount only
   refresh: () => Promise<void>;
   clearError: () => void;
   fetchCollections: () => Promise<boolean>;
@@ -313,3 +315,10 @@ Invariants 1 and 10 are above. Also:
 - **Background prefetch at hydration is uncancelled**. If the user
   signs out mid-prefetch, the in-flight requests still complete
   and the responses are dropped. Wasteful, not dangerous.
+
+## Browser checks
+
+- `npm run sim -- flow startup-timing`: reader-c with 150ms added to every Supabase request, 5
+  cold launches to Home and 5 to the Library; the `[PERF]` lines in `.expo/sim-metro.log` give
+  each launch's marks and requests (`lib/api/dev-timing.ts`, dev builds on a local DB only).
+  Start from `npm run db:reset`.

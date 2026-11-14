@@ -114,6 +114,9 @@ then opens a route, so `npm run sim` can reach signed-in screens
 without taps:
 `com.biblemem://dev-sign-in?next=/settings&as=reader-b`.
 
+`latency=<ms>` and `perf=1` turn on the timing harness for this and later launches
+(`lib/api/dev-timing.ts`, see sync-and-storage.md); every dev sign-in resets them.
+
 `canDevSignIn` guards it: the build must be a dev build (`__DEV__`)
 and `EXPO_PUBLIC_SUPABASE_URL` must point at `127.0.0.1` or
 `localhost`. Otherwise the route just goes home. The auth gate lets
@@ -226,6 +229,8 @@ check, the database refuses the write.
   Bea L.", and the name is back after a relaunch and fresh sign-in. Needs a fresh seed.
 - `npm run sim -- flow sign-in-out`: reader-b signs in through the form, Settings shows
   `reader-b@example.test`, Sign Out returns to the Sign In screen.
+- `npm run sim -- flow account-switch-link`: dev sign-in as reader-a, then reader-c with no
+  sign-out; reader-c's "Romans 8" shows and reader-a's "Psalms" never does.
 
 ## Decisions
 
