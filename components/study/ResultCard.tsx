@@ -4,7 +4,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AlignmentWord } from '@/lib/study-chunks';
 import React, { useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, FadeOut, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated';
 import { AlignmentHelpModal } from './AlignmentHelpModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -74,8 +74,7 @@ function getStatusColors(status: ResultStatus, isDark: boolean) {
  */
 const customEntering = () => {
   'worklet';
-  // eslint-disable-next-line no-restricted-syntax -- existing value, predates the tokens
-  const animConfig = { duration: 400, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) };
+  const animConfig = { duration: Motion.expandMs, easing: Easing.bezier(...Motion.easing) };
   return {
     initialValues: {
       opacity: 0,
@@ -83,10 +82,10 @@ const customEntering = () => {
       transform: [{ translateY: 30 }, { scale: 0.95 }],
     },
     animations: {
-      opacity: withDelay(100, withTiming(1, animConfig)),
+      opacity: withTiming(1, animConfig),
       transform: [
-        { translateY: withDelay(100, withTiming(0, animConfig)) },
-        { scale: withDelay(100, withTiming(1, animConfig)) },
+        { translateY: withTiming(0, animConfig) },
+        { scale: withTiming(1, animConfig) },
       ],
     },
   };
