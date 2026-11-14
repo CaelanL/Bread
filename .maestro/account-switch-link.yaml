@@ -11,10 +11,10 @@ name: account-switch-link
     timeout: 60000
 - takeScreenshot: account-switch-link-1-reader-a
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
-- takeScreenshot: account-switch-link-2-just-switched
 - assertNotVisible: ".*Psalms.*"
+# The first frame with reader-c's own content ("Romans 8" is reader-c's only).
 - extendedWaitUntil:
     visible: ".*Romans 8.*"
     timeout: 30000
+- takeScreenshot: account-switch-link-2-just-switched
 - assertNotVisible: ".*Psalms.*"
-- takeScreenshot: account-switch-link-3-reader-c
