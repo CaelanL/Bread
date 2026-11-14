@@ -25,7 +25,7 @@ import {
 } from '@/lib/transcription/live-session';
 import {
   createRecordingControls,
-  removeAbandonedRecordings,
+  warmSession,
   type PressSource,
   type RecordingState,
 } from '@/lib/transcription/recording-controls';
@@ -87,6 +87,10 @@ const RECORDING_OPTIONS: RecordingConfig = {
     primary: { enabled: false },
     compressed: { enabled: true, format: 'aac', bitrate: 64000 },
   },
+  // With Bread's native patch, stop leaves the session active for the next chunk
+  keepSessionActive: true,
+  // An AirPods disconnect pauses capture, and the attempt ends as interrupted
+  deviceDisconnectionBehavior: 'pause',
   ios: {
     audioSession: {
       category: 'PlayAndRecord',
@@ -116,7 +120,13 @@ export default function StudySessionScreen() {
   const { currentIndex, setCurrentIndex } = session;
 
   const [recordingState, setRecordingState] = useState<RecordingState>({ phase: 'idle' });
-  const [recorder] = useState(() => createRecordingControls(setRecordingState));
+  // Read at open so a tap with permission granted goes straight to native start.
+  // The first-run prompt still comes from requestPermissionsAsync on the tap.
+  const micPermissionRef = useRef(false);
+  const [recorder] = useState(() => createRecordingControls(
+    setRecordingState,
+    warmSession(AudioStudioModule, RECORDING_OPTIONS, () => micPermissionRef.current),
+  ));
   const transcribing = recordingState.phase === 'submitting';
   const closingRef = useRef(false);
   // Per-chunk visibility override driven by the header reveal/hide button.
@@ -168,22 +178,36 @@ export default function StudySessionScreen() {
     };
   }, [live]);
 
-  useEffect(() => () => { void recorder.cancel(); }, [recorder]);
-
-  // Read once so a tap with permission granted goes straight to native start.
-  // The first-run prompt still comes from requestPermissionsAsync on the tap.
-  const micPermissionRef = useRef(false);
+  // Sweeps leftover recordings, then warms the recorder up (patched binaries,
+  // permission granted). Released in the background and on leaving.
   useEffect(() => {
     // On web this read can prompt, so web asks on the tap instead
-    if (process.env.EXPO_OS === 'web') return;
-    AudioStudioModule.getPermissionsAsync()
-      .then(({ granted }: PermissionResponse) => { micPermissionRef.current = granted; })
-      .catch(() => {});
-  }, []);
+    const permissionRead = process.env.EXPO_OS === 'web'
+      ? Promise.resolve()
+      : AudioStudioModule.getPermissionsAsync()
+        .then(({ granted }: PermissionResponse) => { micPermissionRef.current = granted; })
+        .catch(() => {});
+    void recorder.open(FileSystem, permissionRead);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'background') recorder.sleep();
+      else if (state === 'active') recorder.wake();
+    });
+    return () => {
+      appState.remove();
+      void recorder.cancel();
+      recorder.sleep();
+    };
+  }, [recorder]);
 
+  // A call, Siri or an AirPods disconnect mid-recording discards the attempt.
+  // Native also reports these while idle; interrupt() ignores those.
   useEffect(() => {
-    void removeAbandonedRecordings(FileSystem);
-  }, []);
+    const emitter = new LegacyEventEmitter(AudioStudioModule);
+    const subscription = emitter.addListener<{ isPaused?: boolean }>('onRecordingInterrupted', (event) => {
+      if (event.isPaused && recorder.interrupt()) showErrorToast('Recording interrupted');
+    });
+    return () => subscription.remove();
+  }, [recorder]);
 
   const handleSubmit = useCallback(async () => {
     if (!recorder.isRecording()) return;

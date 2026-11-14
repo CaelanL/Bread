@@ -4,7 +4,7 @@ import test from 'node:test';
 import { calculateFinalScore } from '@/lib/study-chunks';
 import { getChunkReview, saveChunkResult, scoredAlignments, type ChunkResults } from './chunk-results';
 import type { LiveTranscriptionSession } from './live-session';
-import { createRecordingControls, removeAbandonedRecordings, type RecordingState } from './recording-controls';
+import { createRecordingControls, removeAbandonedRecordings, warmSession, type RecordingState } from './recording-controls';
 import { scoreRecording } from './score-recording';
 
 function deferred<T>() {
@@ -531,4 +531,157 @@ test('abandoned-recording cleanup never runs while an attempt may still need its
   await sweep;
   assert.equal(idle.deleted.length, 20);
   await recorder.cancel();
+});
+
+const settle = () => new Promise((done) => setImmediate(done));
+const noLeftovers = () => folders({ 'file:///Documents/': [], 'file:///Caches/AV/': [] }).fs;
+
+// The native module as the warm session sees it: Bread's patch adds the constant
+function recorderModule(patched = true) {
+  const calls: string[] = [];
+  let prepared: Promise<void> = Promise.resolve();
+  return {
+    calls,
+    holdPrepare(until: Promise<void>) { prepared = until; },
+    module: {
+      ...(patched ? { breadPatch: 1 } : {}),
+      prepareRecording: () => { calls.push('prepare'); return prepared; },
+      releaseAudioSession: async () => { calls.push('release'); },
+    },
+  };
+}
+
+test('the recorder warms up only after the leftover sweep and once permission is granted', async () => {
+  const { calls, module } = recorderModule();
+  let granted = false;
+  const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => granted));
+  const listing = deferred<string[]>();
+  const permissionRead = deferred<void>();
+  const open = recorder.open({ ...noLeftovers(), readDirectoryAsync: () => listing.promise }, permissionRead.promise);
+  permissionRead.resolve();
+  granted = true;
+  recorder.sleep();
+  recorder.wake();
+  await settle();
+  assert.deepEqual(calls, ['release']);
+  listing.resolve([]);
+  await open;
+  assert.deepEqual(calls, ['release', 'prepare']);
+  await settle();
+  recorder.sleep();
+
+  const denied = recorderModule();
+  const unprompted = createRecordingControls(() => {}, warmSession(denied.module, {}, () => false));
+  await unprompted.open(noLeftovers(), Promise.resolve());
+  assert.deepEqual(denied.calls, []);
+  unprompted.sleep();
+});
+
+test('no warm-up while an attempt owns the recorder or a prepare is in flight', async () => {
+  const { calls, module, holdPrepare } = recorderModule();
+  const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  const { capture } = audio();
+  await recorder.start(0, false, capture);
+  await recorder.open(noLeftovers(), Promise.resolve());
+  assert.deepEqual(calls, []);
+  await recorder.cancel();
+
+  const prepare = deferred<void>();
+  holdPrepare(prepare.promise);
+  const first = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  const second = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  await first.open(noLeftovers(), Promise.resolve());
+  await second.open(noLeftovers(), Promise.resolve());
+  assert.deepEqual(calls, ['prepare']);
+  prepare.resolve();
+  await settle();
+  first.sleep();
+  second.sleep();
+  recorder.sleep();
+});
+
+test('leaving during native start releases the session only after the late stop', async () => {
+  const { calls, module } = recorderModule();
+  const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  const { capture } = audio();
+  const nativeStart = deferred<void>();
+  const start = recorder.start(0, false, {
+    ...capture,
+    hasPermission: () => true,
+    start: () => nativeStart.promise,
+    async stop() {
+      calls.push('stop');
+      return file;
+    },
+  });
+  void recorder.cancel();
+  recorder.sleep();
+  assert.deepEqual(calls, []);
+  nativeStart.resolve();
+  await start;
+  await settle();
+  assert.deepEqual(calls, ['stop', 'release']);
+});
+
+test('backgrounding releases the session and coming back warms it up again', async () => {
+  const { calls, module } = recorderModule();
+  const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  await recorder.open(noLeftovers(), Promise.resolve());
+  await settle();
+  recorder.sleep();
+  recorder.wake();
+  await settle();
+  recorder.wake();
+  assert.deepEqual(calls, ['prepare', 'release', 'prepare']);
+  recorder.sleep();
+});
+
+test('without the native patch nothing is prepared or released', async () => {
+  const { calls, module } = recorderModule(false);
+  const session = warmSession(module, {}, () => true);
+  assert.equal(session, undefined);
+  const recorder = createRecordingControls(() => {}, session);
+  const { capture } = audio();
+  await recorder.open(noLeftovers(), Promise.resolve());
+  await recorder.start(0, false, capture);
+  recorder.sleep();
+  recorder.wake();
+  await recorder.cancel();
+  recorder.sleep();
+  assert.deepEqual(calls, []);
+});
+
+test('an interruption while recording discards the take once, with nothing scored', async () => {
+  const { recorder, states } = controls();
+  const { capture, counts } = audio();
+  await recorder.start(0, false, capture);
+  assert.equal(recorder.interrupt(), true);
+  assert.equal(recorder.interrupt(), false);
+  await settle();
+  let scored = false;
+  await recorder.submit(async () => { scored = true; });
+  assert.equal(scored, false);
+  assert.equal(counts.stops, 1);
+  assert.deepEqual(counts.removed, [file.fileUri]);
+  assert.deepEqual(states.map((state) => state.phase), ['starting', 'recording', 'stopping', 'idle']);
+});
+
+test('an interruption while idle changes nothing', () => {
+  const { recorder, states } = controls();
+  assert.equal(recorder.interrupt(), false);
+  assert.deepEqual(states, []);
+});
+
+test('an interruption during native start stops the take once start resolves', async () => {
+  const { recorder, states } = controls();
+  const { capture, counts } = audio();
+  const nativeStart = deferred<void>();
+  const start = recorder.start(0, false, { ...capture, hasPermission: () => true, start: () => nativeStart.promise });
+  assert.equal(recorder.interrupt(), true);
+  assert.equal(counts.stops, 0);
+  nativeStart.resolve();
+  await start;
+  assert.equal(counts.stops, 1);
+  assert.deepEqual(counts.removed, [file.fileUri]);
+  assert.deepEqual(states.map((state) => state.phase), ['starting', 'stopping', 'idle']);
 });

@@ -44,6 +44,44 @@ let nativeOwner: Attempt | undefined;
 // Attempts whose file may still be recorded or read; the sweep waits for none.
 const unsettled = new Set<Attempt>();
 
+// The audio session kept warm by Bread's native patch: prepared when the study
+// screen opens, kept active between chunks, released on leaving and backgrounding.
+export interface WarmSession {
+  hasPermission(): boolean;
+  prepare(): Promise<unknown>;
+  release(): Promise<unknown>;
+}
+
+interface RecorderModule {
+  breadPatch?: unknown;
+  prepareRecording(options: object): Promise<unknown>;
+  releaseAudioSession(): Promise<unknown>;
+}
+
+// Only binaries with the patch keep the session warm. Elsewhere (old binaries,
+// Android, web) there is nothing to prepare or release, and stop deactivates as before.
+export function warmSession(module: RecorderModule, options: object, hasPermission: () => boolean): WarmSession | undefined {
+  if (typeof module.breadPatch !== 'number') return undefined;
+  return {
+    hasPermission,
+    prepare: () => module.prepareRecording(options),
+    release: () => module.releaseAudioSession(),
+  };
+}
+
+let preparing = false;
+// A release asked for while an attempt owns native runs after that attempt's
+// stop: sent earlier, it would reach native first and leave the session active.
+let pendingRelease: WarmSession | undefined;
+
+function releaseNative(attempt: Attempt) {
+  if (nativeOwner !== attempt) return;
+  nativeOwner = undefined;
+  const session = pendingRelease;
+  pendingRelease = undefined;
+  void session?.release().catch(() => {});
+}
+
 async function removeRecording(attempt: Attempt, recording: RecordingFile | undefined) {
   unsettled.delete(attempt);
   const uris = new Set([recording?.fileUri, recording?.compression?.compressedFileUri]);
@@ -83,17 +121,16 @@ export async function removeAbandonedRecordings(fs: RecordingFolders) {
 // A touch sends press-in, then press on release. VoiceOver activation sends both too.
 export type PressSource = 'pressIn' | 'press';
 
-export function createRecordingControls(onChange: (state: RecordingState) => void) {
+export function createRecordingControls(onChange: (state: RecordingState) => void, warm?: WarmSession) {
   let current: Attempt | undefined;
   let pressedIn = false;
+  // The abandoned-recordings sweep has run, so a prepared file can't be swept
+  let opened = false;
+  let away = false;
 
   function transition(attempt: Attempt, phase: ActivePhase) {
     attempt.phase = phase;
     onChange({ phase, index: attempt.index, isRetry: attempt.isRetry });
-  }
-
-  function releaseNative(attempt: Attempt) {
-    if (nativeOwner === attempt) nativeOwner = undefined;
   }
 
   function reset(attempt: Attempt) {
@@ -102,7 +139,66 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
     onChange({ phase: 'idle' });
   }
 
+  // Native prepare would show the permission prompt, so only with permission granted.
+  // A tap during the prepare queues behind it natively and uses the prepared state.
+  function warmUp() {
+    if (!warm || !opened || away || !warm.hasPermission()) return;
+    pendingRelease = undefined;
+    if (nativeOwner || preparing) return;
+    preparing = true;
+    void warm.prepare().catch(() => {}).finally(() => { preparing = false; });
+  }
+
+  async function cancel() {
+    const attempt = current;
+    if (!attempt || attempt.cancelled) return;
+    const wasRecording = attempt.phase === 'recording';
+    attempt.cancelled = true;
+    attempt.liveSession?.abort();
+    if (nativeOwner !== attempt) {
+      reset(attempt);
+      return;
+    }
+    transition(attempt, 'stopping');
+    if (wasRecording) {
+      const recording = await attempt.capture.stop().catch(() => undefined);
+      releaseNative(attempt);
+      reset(attempt);
+      await removeRecording(attempt, recording);
+    }
+  }
+
   return {
+    // Screen open: sweep leftovers first, then warm up once permission is known.
+    async open(fs: RecordingFolders, permissionRead: Promise<unknown>) {
+      away = false;
+      await Promise.all([removeAbandonedRecordings(fs), permissionRead]);
+      opened = true;
+      warmUp();
+    },
+
+    // Backgrounding and leaving. A recording keeps the session until its stop.
+    sleep() {
+      away = true;
+      if (!warm) return;
+      if (nativeOwner) pendingRelease = warm;
+      else void warm.release().catch(() => {});
+    },
+
+    wake() {
+      if (!away) return;
+      away = false;
+      warmUp();
+    },
+
+    // A call, Siri or an AirPods disconnect paused native capture. Ends the
+    // attempt with nothing scored; true only when this ended one.
+    interrupt() {
+      if (current?.cancelled || (current?.phase !== 'starting' && current?.phase !== 'recording')) return false;
+      void cancel();
+      return true;
+    },
+
     async start(index: number, isRetry: boolean, capture: Capture, source: PressSource = 'press') {
       // Press-in already started this touch's attempt. Its press is ignored, so a
       // fast denial or failed start can't start a second attempt and alert twice.
@@ -174,24 +270,7 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
       }
     },
 
-    async cancel() {
-      const attempt = current;
-      if (!attempt || attempt.cancelled) return;
-      const wasRecording = attempt.phase === 'recording';
-      attempt.cancelled = true;
-      attempt.liveSession?.abort();
-      if (nativeOwner !== attempt) {
-        reset(attempt);
-        return;
-      }
-      transition(attempt, 'stopping');
-      if (wasRecording) {
-        const recording = await attempt.capture.stop().catch(() => undefined);
-        releaseNative(attempt);
-        reset(attempt);
-        await removeRecording(attempt, recording);
-      }
-    },
+    cancel,
 
     canDiscard: () => current?.phase === 'starting' || current?.phase === 'recording',
     isRecording: () => current?.phase === 'recording',
