@@ -34,7 +34,8 @@ reaches the reader, and the m4a is always written, so no recording is lost. The 
 `app/session.tsx` calls `AudioStudioModule` from `@siteed/audio-studio` (pinned
 to `3.2.0`) directly, not its recorder hook, which re-renders the screen on start,
 stop and every second. One mic session gives a 64 kbps AAC m4a
-(`output.compressed`, no WAV) and 16 kHz mono 16-bit PCM in 50 ms pieces.
+(`output.compressed`, no WAV) and 16 kHz mono 16-bit PCM in 50 ms pieces. The warm
+audio session and interruptions: `docs/architecture/native-recorder.md`.
 
 The mic and Retry start on finger-down (`onPressIn`), with no slide-off cancel.
 `onPress` covers activations without a press-in; the press ending a touch that
@@ -85,7 +86,7 @@ leftovers from crashes and old builds: Documents children named exactly
 In `useStudySession`, `processRecording` uses `scoreRecording` in order:
 
 1. `liveSession.finish(FINALIZE_TIMEOUT_MS)`. Any rejection becomes `null`.
-2. `liveSession.abort()`, always. It's idempotent and guarantees the socket closes.
+2. `liveSession.abort()`, always (idempotent).
 3. If there's no transcript and the attempt is still current, call
    `processRecording` from `lib/api/recording.ts` with the compressed file URI
    (or `fileUri`), duration and `chunk.text`.
@@ -93,8 +94,8 @@ In `useStudySession`, `processRecording` uses `scoreRecording` in order:
    only if the attempt still owns the submission.
 
 Both paths give raw Soniox text with the verse as recognition context. The models
-differ (`stt-rt-v5` live, `stt-async-v5` batch), so a word can occasionally differ
-between them. There is no second scoring path and no live transcript on screen.
+differ (`stt-rt-v5` live, `stt-async-v5` batch), so a word can occasionally differ.
+There's no second scoring path and no live transcript on screen.
 
 ## Live path
 
@@ -120,7 +121,7 @@ synchronously, so audio can be fed from the first callback. Its `state` runs
    end-of-audio frame, and resolves when Soniox says `finished`.
 
 Every failure goes through `fail()`: it logs `[LIVE] falling back to batch:
-<reason>` (`console.log`, since `console.warn` raises a LogBox), tears down the
+<reason>` (`console.log`: `console.warn` raises a LogBox), tears down the
 socket and rejects any pending `finish`.
 
 | Failure | Why it falls back |
@@ -135,13 +136,13 @@ socket and rejects any pending `finish`.
 | Transcript is empty or whitespace | Bad input route or near silence; the batch model tries the file |
 | `FINALIZE_TIMEOUT_MS` passes | The file is more reliable than waiting |
 
-After `failed` or `closed`, `feedAudio` is a no-op. `abort` is always safe.
+After `failed` or `closed`, `feedAudio` is a no-op.
 
 ## Batch path
 
 `processRecording` in `lib/api/recording.ts` POSTs multipart form data to
-`process-recording`: `audio` (the m4a), `durationMs`, `actualVerse`. It reads from
-the URI, so the file is never loaded into JS memory.
+`process-recording`: `audio` (the m4a), `durationMs`, `actualVerse`, streamed from
+the URI, never loaded into JS.
 
 The function streams heartbeat spaces before its JSON, and failures after its 200
 arrive as `{ error }` (`docs/architecture/edge-functions.md`), so the client checks
@@ -149,9 +150,8 @@ that `transcription` is a string rather than trusting `response.ok`. Cleaning is
 off, so `cleanedTranscription` is the raw text.
 
 Silent audio gives an empty transcript and a score of 0. Unlike live failures, batch
-failures are shown: the error throws out of the seam, and `handleSubmit` shows the
-"Recording failed" alert. The chunk stays incomplete, time studied doesn't grow, and
-the reader records again.
+failures are shown: the error throws out of the seam, and `handleSubmit` shows
+"Recording failed". The chunk stays incomplete and time studied doesn't grow.
 
 ## Timeouts and limits
 
@@ -201,7 +201,7 @@ then `db:stop` and `db:start`.
 - **Idle spares count against Soniox's connection limit.** Each open study screen
   holds one. Over the limit, takes fall back to batch silently. The knob is a limit
   increase in the Soniox Console.
-- **A failed upload isn't retried.** That attempt is lost ([Batch path](#batch-path)).
+- **A failed upload isn't retried.** That attempt is lost.
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
   the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
   any of them can clip the last word, which raises `missing` with no error.
@@ -210,12 +210,12 @@ then `db:stop` and `db:start`.
 
 ## Browser checks
 
-Recording needs a person and a real device. Local runs use batch unless the secret is set.
+Recording needs a person and a real device (more in native-recorder.md). Local runs use batch unless the secret is set.
 
 - With live on: Start session, mic, speak as the pill appears, submit, then Retry. The first word scores, and Metro has no `[LIVE] falling back` line for either take (a silent take's `empty transcript` still means Soniox accepted the key).
 - With the secret unset: the log says `mint failed: token endpoint 403`, and the score still appears with no error.
 - Dev builds log `[MIC] down→call →resolve →first audio · N renders` at stop. VoiceOver double-tap records once.
-- Hold a recording past 5:00: the toast "5 minute limit reached — scoring what you recited." appears and a score follows, with no second submit.
+- Hold a recording past 5:00: the cap toast appears and one score follows.
 - Mic, then the X beside the mic or on the pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
 - In Xcode's app container, `Documents` has no `<UUID>.m4a` after a live or batch score, a discard, or exit mid-analysis. Old ones go once a session opens.
 - Reduce Motion on, relaunch Bread: the startup ring stays still and the control fades in place as capture starts.
@@ -239,3 +239,4 @@ Recording needs a person and a real device. Local runs use batch unless the secr
 - 2026-11-12 · Delete each file once its attempt settles, sweep exact-name leftovers, no owned folder · Every take was kept forever. A folder adds a step before native start; the sweep covers it.
 - 2026-11-14 · Finger-down start, native start before the ring, one key per screen (300 s TTL, protocol auth), 1.5 s finalize, 64 kbps, 50 ms pieces, no recorder hook · Faster capture, fallback and upload. Soniox refuses `api_key` in the config from 15 January 2027.
 - 2026-11-14 · Spare socket from screen open, config only at the tap · Tested: Soniox bills and caps sessions from config; a pause after config is billed.
+- 2026-11-14 · Warm audio session, interrupted attempts discarded · Activation was most of tap-to-capture (native-recorder.md).

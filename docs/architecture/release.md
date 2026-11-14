@@ -42,6 +42,7 @@ To pause shipping for a release, remove the three jobs after `get_ios_build` on 
 - `runtimeVersion` uses the `fingerprint` policy (`app.config.js`), so an update only reaches binaries with the same native hash.
 - OTA can carry JS fixes, copy, styling, layouts and JS-layer assets such as the bundled KJV JSON.
 - OTA can't carry native code or dependency changes, permission changes, or Expo SDK upgrades. Those need a new binary.
+- The fingerprint hashes `patches/`, so a patch-package change routes the merge to a store build ([native-recorder.md](native-recorder.md#shipping)).
 - Store policy still applies. Changes to the app's behavior need review, and the next native build bakes in all merged JS.
 - `checkAutomatically` stays at its default, `ON_LOAD`, so users typically get an update on the second cold start.
 - Roll back with `eas update:rollback`, to the previous update or to the build's embedded bundle.
