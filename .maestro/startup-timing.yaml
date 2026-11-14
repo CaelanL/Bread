@@ -11,12 +11,15 @@ name: startup-timing
     visible:
       id: votm-text
     timeout: 60000
-# A plain launch opens on the Library; a link opens Home.
+# A launch opens on the Library (a link to a stopped dev build opens its launcher), so Home is
+# a tap away and its times include that tap.
 - repeat:
     times: 5
     commands:
       - stopApp
-      - openLink: com.biblemem://home
+      - launchApp
+      - tapOn:
+          id: tab-home
       - extendedWaitUntil:
           visible:
             id: votm-text
