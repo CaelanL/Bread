@@ -8,8 +8,7 @@ name: startup-timing
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&latency=150&perf=1&next=%2Fhome
 - extendedWaitUntil:
-    visible:
-      id: votm-text
+    visible: ".*day streak.*"
     timeout: 60000
 # A launch opens on the Library (a link to a stopped dev build opens its launcher), so Home is
 # a tap away and its times include that tap.
