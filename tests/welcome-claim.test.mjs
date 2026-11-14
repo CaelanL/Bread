@@ -42,7 +42,7 @@ test('welcome claim and peek', async (t) => {
 
   await t.test('a claim won while an invite took the screen is still there to peek at', async () => {
     gate = Promise.withResolvers();
-    claimWelcome('A'); // the invite lands: nobody awaits this claim
+    claimWelcome('A', false); // the invite lands: nobody awaits this claim
     gate.resolve();
     assert.equal(await peekWelcome('A'), true);
     assert.deepEqual(claims, ['A']);
@@ -52,12 +52,19 @@ test('welcome claim and peek', async (t) => {
   await t.test('once the walkthrough opens, peek and claim answer false without a request', async () => {
     markWelcomeShown('A');
     assert.equal(await peekWelcome('A'), false);
-    assert.equal(await claimWelcome('A'), false);
+    assert.equal(await claimWelcome('A', false), false);
     assert.deepEqual(claims, ['A']);
   });
 
   await t.test('a claim the server refuses (already seen) peeks false', async () => {
-    assert.equal(await claimWelcome('C'), false);
+    assert.equal(await claimWelcome('C', false), false);
     assert.equal(await peekWelcome('C'), false);
+  });
+
+  await t.test('an account the profile read shows as seen is never claimed', async () => {
+    claims.length = 0;
+    assert.equal(await claimWelcome('B', true), false);
+    assert.deepEqual(claims, []);
+    assert.ok(unseen.has('B'));
   });
 });

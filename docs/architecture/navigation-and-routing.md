@@ -217,8 +217,10 @@ Flow: `npm run sim -- flow invite-handoff`.
 together, sharing) for accounts from before 2.0, once per account. `profiles.welcome_v2_seen_at` is null until it's
 claimed: migration `20261113030000_welcome_v2` gave every account then a profile row with it null,
 and rows made later default to now, so new accounts never see it. The pending-invite effect above,
-when there's no invite and none opened this launch, calls `claimWelcome` (`lib/welcome.ts`): one
-update that sets the column only while it's null. The walkthrough opens only if that returns the
+when there's no invite and none opened this launch, waits for the launch's profile read (it reads
+`welcome_v2_seen_at`, see sync-and-storage.md), then calls `claimWelcome` (`lib/welcome.ts`). A seen
+account makes no request; with no profile read (offline) there's no claim this launch. Otherwise one
+update sets the column only while it's null. The walkthrough opens only if that returns the
 row, so it shows on one device, once, even across relaunches or two phones; a failed update shows
 nothing and the next launch tries again. An invite that lands while the update is in flight takes
 the screen; back on the tabs, `peekWelcome` picks up a won claim without making a new one, so the

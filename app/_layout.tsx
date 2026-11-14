@@ -18,6 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { perfMark } from '@/lib/api/dev-timing';
+import { useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
 import {
@@ -48,6 +49,22 @@ if (__DEV__) {
   (global as any).clearCache = clearSessionCache;
   (global as any).cacheStats = getSessionCacheStats;
   installNotifDevTools();
+}
+
+// The launch's profile read says whether the walkthrough was already seen, so a seen account
+// makes no claim. With no profile read (offline), no claim this launch.
+function claimAfterLoad(userId: string): Promise<boolean> {
+  return new Promise<void>((resolve) => {
+    if (useAppStore.getState().hydrated) return resolve();
+    const unsubscribe = useAppStore.subscribe(({ hydrated }) => {
+      if (!hydrated) return;
+      unsubscribe();
+      resolve();
+    });
+  }).then(() => {
+    const { profileLoaded, welcomeSeen } = useAppStore.getState();
+    return profileLoaded && claimWelcome(userId, welcomeSeen);
+  });
 }
 
 export const unstable_settings = {
@@ -109,7 +126,7 @@ function RootLayoutNav() {
       .then(async (invite) => {
         if (settled) return;
         if (!invite) {
-          const welcome = sawInvite.current ? await peekWelcome(userId) : await claimWelcome(userId);
+          const welcome = sawInvite.current ? await peekWelcome(userId) : await claimAfterLoad(userId);
           if (settled) return;
           settled = true;
           if (welcome) {

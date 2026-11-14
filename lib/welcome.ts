@@ -7,9 +7,11 @@ const claims = new Map<string, Promise<boolean>>();
  * Whether this account should see the walkthrough now. The first call for an account marks it seen
  * on the server, only while it's unseen, and answers true only if the row came back. So it shows on
  * one device, once: a second device, a relaunch or a new account gets false, and a failed write
- * shows nothing until a later launch. Calls in the same run share the first answer.
+ * shows nothing until a later launch. Calls in the same run share the first answer. `seen` (the
+ * profile read at launch says it was marked seen) answers false with no request.
  */
-export function claimWelcome(userId: string): Promise<boolean> {
+export function claimWelcome(userId: string, seen: boolean): Promise<boolean> {
+  if (seen) return Promise.resolve(false);
   let claim = claims.get(userId);
   if (!claim) {
     claim = Promise.resolve(
