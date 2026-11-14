@@ -52,8 +52,10 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   };
   let offline = false;
   const verseRows = { A: [membership('A')], B: [membership('B')] };
+  const requests = [];
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(input);
+    requests.push(url.pathname);
     const method = init.method ?? 'GET';
     const bearer = new Headers(init.headers).get('Authorization');
     const account = Object.keys(tokens).find((key) => bearer === 'Bearer ' + tokens[key]);
@@ -165,9 +167,12 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   await t.test('a launch paints the saved library at once, then the server\'s replaces it and is saved', async () => {
     store().clear();
     storage.set('library_snapshot:A', painted('A', 'A-snap'));
+    // The library reads go out first, and the saved library paints while they're in flight.
+    requests.length = 0;
     const wave = hold('/rest/v1/verse_collections');
+    const collections = hold('/rest/v1/user_collections');
     setAccount('A');
-    await wave.sent;
+    await Promise.all([wave.sent, collections.sent]);
     await until(() => store().hydrated);
     assert.equal(store().hydratedFrom, 'snapshot');
     assert.deepEqual(store().verses.map((v) => v.id), ['A-snap']);
@@ -175,10 +180,12 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.equal(store().displayName, 'A L.');
     assert.equal(store().synced, false);
     const before = storage.get('library_snapshot:A');
+    collections.reply(Response.json([{ client_id: 'my-verses', name: 'My Verses', is_default: true, created_at: '2026-11-01T00:00:00Z' }]));
     wave.reply(Response.json(verseRows.A));
     await until(() => store().synced);
     assert.equal(store().hydratedFrom, 'server');
     assert.deepEqual(store().verses.map((v) => v.id), ['A-verse']);
+    assert.equal(requests.filter((path) => path === '/rest/v1/verse_collections').length, 1, 'a read started before the paint still applies');
     assert.notEqual(storage.get('library_snapshot:A'), before, 'nothing was written before synced, then the server\'s library was');
     assert.deepEqual(saved('A').verses.map((v) => v.id), ['A-verse']);
   });
@@ -243,6 +250,22 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.equal(store().synced, false);
     assert.deepEqual(store().verses.map((v) => v.id), ['A-verse'], 'the saved library stays on screen');
     assert.equal(storage.get('library_snapshot:A'), before);
+  });
+
+  await t.test('a launch still restoring with nothing saved shows the library empty with the load error, and starts when the session is back', async () => {
+    const { subscribeToToast } = await import('../lib/toast.ts');
+    const toasts = [];
+    const unsubscribe = subscribeToToast((message) => toasts.push(message));
+    setAccount(null);
+    setAccount('A', { provisional: true });
+    await store().showOffline('A');
+    unsubscribe();
+    assert.equal(store().hydrated, true);
+    assert.deepEqual(store().verses, []);
+    assert.deepEqual(toasts, ['Some data failed to load. Pull to refresh.']);
+    setAccount('A');
+    await until(() => store().synced);
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-verse']);
   });
 
   await t.test('a delete confirm waits for the server\'s library and counts from it', async () => {

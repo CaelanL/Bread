@@ -125,6 +125,8 @@ interface AppState {
   profileLoaded: boolean;
   /** profiles.welcome_v2_seen_at is set: the 2.0 walkthrough needs no claim (lib/welcome.ts). */
   welcomeSeen: boolean;
+  /** When this run last saved a session's progress; Home reloads its streak and monthly verse after it. */
+  lastSessionAt: number | null;
   collectionsLoading: boolean;
   collectionOrderSaving: boolean;
   versesLoading: boolean;
@@ -139,10 +141,15 @@ interface AppState {
   fetchMasteredVerses: () => Promise<boolean>;
   fetchCuratedSaverCounts: (signal?: AbortSignal) => Promise<boolean>;
   fetchSharedCollections: () => Promise<boolean>;
-  /** Starts an account: settings and its saved library, then the server's. Called by lib/auth/account.ts. */
+  /** Starts an account: the server's library, with its saved library painted meanwhile. Called by lib/auth/account.ts. */
   hydrate: (userId: string) => Promise<void>;
-  /** Settings and the account's saved library only, nothing on the network (lib/auth/account.ts). */
+  /** The account's saved library only, nothing on the network (lib/auth/account.ts). */
   paintSnapshot: (userId: string) => Promise<void>;
+  /**
+   * The stored user's session still isn't restored after the splash failsafe and nothing was
+   * painted: show the library empty with the load error, still signed in (lib/auth/context.tsx).
+   */
+  showOffline: (userId: string) => Promise<void>;
   refresh: () => Promise<void>;
   /**
    * True once `synced`. Waits for the running wave, then refreshes once; false if still not synced.
@@ -174,9 +181,9 @@ interface AppState {
   stopSharing: (sharedId: string) => Promise<void>;
   mintInvite: (sharedId: string) => Promise<{ code: string; expiresAt: string }>;
   joinSharedCollection: (code: string) => Promise<string>;
-  syncSharedCollection: (sharedId: string) => Promise<boolean>;
   fetchSharedProgress: (sharedId: string) => Promise<boolean>;
-  openSharedCollection: (sharedId: string) => Promise<boolean>;
+  /** Syncs the copy, then reads the grid and the library alongside; `pull` (pull to refresh) also reads the mastered list. */
+  openSharedCollection: (sharedId: string, options?: { pull?: boolean }) => Promise<boolean>;
   leaveSharedCollection: (sharedId: string) => Promise<void>;
   removeSharedMember: (sharedId: string, userId: string) => Promise<void>;
   setSharedMemberRole: (sharedId: string, userId: string, role: Exclude<SharedRole, 'owner'>) => Promise<void>;
@@ -570,21 +577,20 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
   if (failure) throw failure;
 }
 
-// The settings read and snapshot paint for one account start.
-let localRead: { generation: number; userId: string; done: Promise<void> } | null = null;
-
-async function readLocal(generation: number, userId: string) {
-  const set = useAppStore.setState;
-  const get = useAppStore.getState;
+/**
+ * Device settings (color mode, cached translation, Hide verses, review interval, sorts), read once
+ * at module load so the first frame has them; app/_layout.tsx holds the splash until it's done.
+ * Account starts wait for it instead of reading again.
+ */
+async function readSettings() {
   try {
-    const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText, savedLibrary] = await Promise.all([
+    const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText] = await Promise.all([
       AsyncStorage.getItem(COLOR_MODE_KEY),
       AsyncStorage.getItem(BIBLE_VERSION_KEY),
       AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
       getMasteredSort(),
       getInProgressSort(),
       AsyncStorage.getItem(HIDE_VERSE_TEXT_KEY),
-      AsyncStorage.getItem(snapshotKey(userId)).catch(() => null),
     ]);
 
     const updates: Partial<AppState> = {};
@@ -607,18 +613,47 @@ async function readLocal(generation: number, userId: string) {
     if (savedInProgressSort) {
       updates.inProgressSort = savedInProgressSort;
     }
+    if (Object.keys(updates).length > 0) {
+      useAppStore.setState(updates);
+    }
+  } catch (e) {
+    console.error('[STORE] Failed to load settings:', e);
+  }
+}
+
+// The snapshot paint for one account start.
+let localRead: { generation: number; userId: string; done: Promise<void> } | null = null;
+// The lists a snapshot painted. A server read that lands over them replaces them, as if they were
+// still the lists it started from (the read may start before the paint).
+let painted: { collections?: Collection[]; verses?: SavedVerse[] } | null = null;
+
+async function readLocal(generation: number, userId: string) {
+  const get = useAppStore.getState;
+  try {
+    const [, savedLibrary] = await Promise.all([
+      settingsRead,
+      AsyncStorage.getItem(snapshotKey(userId)).catch(() => null),
+    ]);
     if (generation !== accountGeneration) return;
     const library = parseSnapshot(savedLibrary, Date.now());
-    if (library && !get().hydrated) Object.assign(updates, snapshotState(library));
     if (savedLibrary && !library) {
       AsyncStorage.removeItem(snapshotKey(userId)).catch((e) => console.error('[STORE] Failed to remove an old snapshot:', e));
     }
-    if (Object.keys(updates).length > 0) {
-      set(updates);
-    }
-    if (library) perfMark('snapshot');
+    if (!library) return;
+    // A frame later, so a library load started alongside has its requests out before the list renders.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (generation !== accountGeneration || get().hydrated) return;
+    // A list the server's reads already applied stays.
+    const paint = snapshotState(library);
+    if (applied.has('collections')) delete paint.collections;
+    if (applied.has('verses')) delete paint.verses;
+    if (applied.has('mastered')) delete paint.masteredVerses;
+    if (applied.has('shared')) delete paint.sharedCollections;
+    useAppStore.setState(paint);
+    painted = { collections: paint.collections && get().collections, verses: paint.verses && get().verses };
+    perfMark('snapshot');
   } catch (e) {
-    console.error('[STORE] Failed to load settings:', e);
+    console.error('[STORE] Failed to read the saved library:', e);
   }
 }
 
@@ -677,6 +712,16 @@ function sharedRole(sharedId: string): SharedRole {
   const role = useAppStore.getState().sharedCollections[sharedId]?.role;
   if (!role) throw new Error("This shared collection hasn't loaded. Pull to refresh.");
   return role;
+}
+
+// Makes the user's copy match the group; true when the server changed something.
+async function syncSharedCopy(sharedId: string): Promise<boolean> {
+  const { data, error } = await db.rpc('sync_shared_collection', {
+    p_shared: sharedId,
+    p_version: useAppStore.getState().bibleVersion,
+  });
+  if (error) throw error;
+  return data[0]?.changed ?? false;
 }
 
 // After a change to the group's verses or members, the grid follows if this device has it open.
@@ -738,10 +783,15 @@ async function addSharedVerse(
   });
   // Already a reference (another editor added it): sync still links the copy.
   if (error && error.code !== '23505') throw error;
-  await useAppStore.getState().syncSharedCollection(sharedId);
-  await refetchLoadedProgress(sharedId);
-  const find = () => useAppStore.getState().verses.find((v) => v.collectionId === collectionId && sameReference(v, verse));
-  if (!find()) await useAppStore.getState().fetchVerses();
+  const store = useAppStore.getState;
+  const changed = await syncSharedCopy(sharedId);
+  await Promise.all([
+    changed && Promise.all([store().fetchCollections(), store().fetchVerses(), store().fetchSharedCollections()]),
+    refetchLoadedProgress(sharedId),
+  ]);
+  const find = () => store().verses.find((v) => v.collectionId === collectionId && sameReference(v, verse));
+  // Sync linked nothing new (the copy already held it): the verse may still be missing here.
+  if (!changed && !find()) await store().fetchVerses();
   const added = find();
   if (!added) throw new Error('Failed to add verse to collection');
   return added;
@@ -774,6 +824,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   synced: false,
   profileLoaded: false,
   welcomeSeen: false,
+  lastSessionAt: null,
   collectionsLoading: true,
   collectionOrderSaving: false,
   versesLoading: true,
@@ -824,7 +875,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const collections = withPinned(data.map(parseCollectionRow));
       set((state) => {
         // An older refresh must not replace a collection write made during the request.
-        if (state.collections !== previousCollections) return { collectionsLoading: false, error: null };
+        if (state.collections !== previousCollections && state.collections !== painted?.collections) {
+          return { collectionsLoading: false, error: null };
+        }
         applied.add('collections');
         return { collections, collectionsLoading: false, error: null };
       });
@@ -869,7 +922,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
 
       set((state) => {
-        if (state.verses !== previousVerses) return { versesLoading: false, error: null };
+        if (state.verses !== previousVerses && state.verses !== painted?.verses) return { versesLoading: false, error: null };
         applied.add('verses');
         return { verses, versesLoading: false, error: null };
       });
@@ -985,20 +1038,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     perfMark('hydrate');
     const generation = accountGeneration;
     accountUserId = userId;
-    await get().paintSnapshot(userId);
+    await settingsRead;
     if (generation !== accountGeneration) return;
+    // The library requests go out first; the saved library paints while they're in flight.
     accountLoad = queueTranslationWork(() => loadAccount(generation, userId, true)).catch(reportSyncFailure(generation));
+    void get().paintSnapshot(userId);
     await accountLoad;
   },
 
-  // Settings, then the account's snapshot if nothing is painted yet: one update. A launch that
-  // painted provisionally (lib/auth/account.ts) shares the read with the hydrate after it.
+  // The account's snapshot, if nothing is painted yet. A launch that painted provisionally
+  // (lib/auth/account.ts) shares the read with the hydrate after it.
   paintSnapshot: (userId) => {
     const generation = accountGeneration;
     if (localRead?.generation !== generation || localRead.userId !== userId) {
       localRead = { generation, userId, done: readLocal(generation, userId) };
     }
     return localRead.done;
+  },
+
+  showOffline: async (userId) => {
+    const generation = accountGeneration;
+    await get().paintSnapshot(userId);
+    if (generation !== accountGeneration || accountUserId || get().hydrated) return;
+    set({ hydrated: true, collectionsLoading: false, versesLoading: false, masteredLoading: false });
+    showErrorToast('Some data failed to load. Pull to refresh.');
   },
 
   refresh: async () => {
@@ -1420,27 +1483,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Returns the joined collection's client_id. Joining twice only syncs.
   joinSharedCollection: async (code) => {
+    const generation = accountGeneration;
     const { data, error } = await db.rpc('join_shared_collection', {
       p_code: normalizeInviteCode(code),
       p_version: get().bibleVersion,
     });
     if (error) throw error;
-    await get().refresh();
+    // What the group's screen needs, in one wave; mastered verses load behind.
+    await Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]);
+    saveSnapshot(generation);
+    void get().fetchMasteredVerses().then(() => saveSnapshot(generation));
     return data;
-  },
-
-  // Makes the user's copy match the group; refetches only when the server changed something.
-  syncSharedCollection: async (sharedId) => {
-    const { data, error } = await db.rpc('sync_shared_collection', {
-      p_shared: sharedId,
-      p_version: get().bibleVersion,
-    });
-    if (error) throw error;
-    const changed = data[0]?.changed ?? false;
-    if (changed) {
-      await Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]);
-    }
-    return changed;
   },
 
   // Never throws: a failure is kept on the entry for the screen's retry.
@@ -1489,20 +1542,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   // role the owner changed since the last refresh) and the user's own copies. A failed sync throws
   // after the reads, unless they show the membership gone: then the departed-group notice is the
   // message and it returns false. A failed grid read shows on the entry.
-  openSharedCollection: async (sharedId) => {
-    let changed = false;
+  openSharedCollection: async (sharedId, { pull = false } = {}) => {
     let failure: unknown = null;
     try {
-      changed = await get().syncSharedCollection(sharedId);
+      await syncSharedCopy(sharedId);
     } catch (e) {
       failure = e;
     }
-    // A sync that changed something has already refetched. One that didn't still reloads: the
-    // server applies a removed reference, a removal or a dissolve to this copy without the sync.
-    // After a failed sync the membership may be gone, so the grid waits for the reload to say.
+    // One wave after the sync, changed or not: the server applies a removed reference, a removal or
+    // a dissolve to this copy without the sync. A pull reads the mastered list too. After a failed
+    // sync the membership may be gone, so the grid waits for the reload to say.
     await Promise.all([
       failure ? null : get().fetchSharedProgress(sharedId),
-      changed || Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]),
+      get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections(),
+      pull && get().fetchMasteredVerses(),
     ]);
     if (!get().collections.some((c) => c.sharedId === sharedId)) {
       set((state) => ({
@@ -1742,6 +1795,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const mastered = newProgress.hard?.completed === true;
       // Every entry for this verse (junction-row shape: a verse in N collections has N entries).
       set((state) => ({
+        lastSessionAt: Date.now(),
         verses: state.verses.map((v) => v.id === id ? { ...v, ...saved } : v),
         masteredVerses: mastered && !state.masteredVerses.some((v) => v.id === id)
           ? [{ ...verse, ...saved, collectionId: MASTERED_COLLECTION_ID }, ...state.masteredVerses]
@@ -1834,6 +1888,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     accountLoad = Promise.resolve();
     applied = new Set();
     localRead = null;
+    painted = null;
     requestedTranslation = null;
     set({
       collections: [],
@@ -1856,6 +1911,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       synced: false,
       profileLoaded: false,
       welcomeSeen: false,
+      lastSessionAt: null,
       collectionsLoading: true,
       collectionOrderSaving: false,
       versesLoading: true,
@@ -1864,6 +1920,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 }));
+
+/** Settled once the device settings are applied; never rejects. */
+export const settingsRead = readSettings();
 
 // ============ SELECTORS ============
 

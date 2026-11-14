@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, router, usePathname, useSegments, useRootNavigationState } from 'expo-router';
+import { SplashScreen, Stack, router, usePathname, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -10,7 +10,7 @@ import * as Notifications from 'expo-notifications';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import { AuthProvider, useAuth } from '@/lib/auth';
+import { AuthProvider, SPLASH_FAILSAFE_MS, useAuth } from '@/lib/auth';
 import { NetworkProvider } from '@/lib/network';
 import { NoInternetOverlay } from '@/components/ui/NoInternetOverlay';
 import { ErrorToast } from '@/components/ui/ErrorToast';
@@ -18,7 +18,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
 import { perfMark } from '@/lib/api/dev-timing';
-import { useAppStore } from '@/lib/store';
+import { settingsRead, useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
 import {
@@ -30,6 +30,11 @@ import {
 } from '@/lib/notifications';
 
 perfMark('root');
+
+// The splash stays up until the first frame has the color mode and either the session or a saved
+// library to show (RootLayoutNav), so nothing flashes light or empty. Hidden regardless after the failsafe.
+SplashScreen.preventAutoHideAsync().catch(() => { /* no splash module (web) */ });
+setTimeout(() => SplashScreen.hide(), SPLASH_FAILSAFE_MS);
 
 // Foreground notification handler — suppress everything while the app
 // is foregrounded. Per the design doc: "I don't really care for
@@ -185,6 +190,11 @@ function RootLayoutNav() {
       replayColdStartTap();
     }
   }, [isAuthenticated, navigationState?.key]);
+
+  const ready = !isLoading || painted;
+  useEffect(() => {
+    if (ready) settingsRead.then(() => SplashScreen.hide());
+  }, [ready]);
 
   const colors = Colors[colorScheme ?? 'light'];
   const darkScreen = colorScheme === 'dark' || segments[0] === '(auth)' || segments[0] === 'reset-password';

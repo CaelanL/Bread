@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AUTH_STORAGE_KEY, supabase } from '@/lib/api/client';
 import { perfMark } from '@/lib/api/dev-timing';
 import { unregisterDeviceToken } from '@/lib/notifications/tokens';
+import { useAppStore } from '@/lib/store';
 import { setAccount } from './account';
 import { afterRestore } from './after-restore';
 import type { User, Session } from '@supabase/supabase-js';
@@ -24,6 +25,9 @@ interface AuthContextType {
   updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
   deleteAccount: () => Promise<{ error: string | null }>;
 }
+
+/** How long launch waits on a session restore before showing the app anyway (also the splash's failsafe). */
+export const SPLASH_FAILSAFE_MS = 3000;
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -74,15 +78,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return id;
     }).catch(() => null);
 
+    // Still restoring with nothing painted (offline, no saved library): show the app empty with the
+    // load error rather than a spinner, still signed in. The session's TOKEN_REFRESHED below starts
+    // the account when the network returns.
+    const failsafe = setTimeout(() => {
+      stored.then((id) => {
+        if (id) void useAppStore.getState().showOffline(id);
+      });
+    }, SPLASH_FAILSAFE_MS);
+
     // Get initial session
-    Promise.all([supabase.auth.getSession(), stored]).then(([{ data: { session }, error }, storedUserId]) => {
+    Promise.all([supabase.auth.getSession(), stored]).then(async ([{ data: { session }, error }, storedUserId]) => {
       perfMark('session');
       // Couldn't reach the server to refresh the token: stay on the saved library, still loading.
       // supabase-js keeps the session and retries; its TOKEN_REFRESHED below starts the account.
       if (afterRestore(storedUserId, { session, error }) === 'offline') return;
-      if (session) setRestoredUserId(session.user.id);
+      clearTimeout(failsafe);
       // Before the tree mounts, so the library load starts now.
       setAccount(session?.user.id ?? null);
+      // The saved library paints (once the load's requests are out) before the app's first render, so
+      // that render already has it.
+      if (session) await useAppStore.getState().paintSnapshot(session.user.id);
+      if (session) setRestoredUserId(session.user.id);
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
@@ -92,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'INITIAL_SESSION') return;
+        clearTimeout(failsafe);
         if (event === 'SIGNED_OUT') setRestoredUserId(null);
         setAccount(session?.user.id ?? null);
         setSession(session);
@@ -112,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      clearTimeout(failsafe);
       subscription.unsubscribe();
       linkingSubscription.remove();
     };
