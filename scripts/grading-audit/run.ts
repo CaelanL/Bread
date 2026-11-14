@@ -3,7 +3,7 @@
 //
 //   npm run audit:grading -- [--source KJV|ESV|...] [--pass <prefix>] [--chunk-size 1|3|all]
 //                            [--examples N] [--limit N] [--aligner <file>] [--check-chunks]
-//                            [--replay <transcripts.json>]
+//                            [--replay <transcripts.json> [--as-printed]]
 //   npm run audit:grading -- --card (--ref "John 3:16" | --expected "<text>") --transcript "<text>" [--aligner <file>]
 //
 // Chunk size 1 (the default) skips `reference:verse-numbers-in-chunk`, which needs multi-verse
@@ -29,7 +29,7 @@ import {
 } from '../../lib/study-chunks';
 import type { SavedVerse } from '../../lib/storage';
 import { toDigits } from './numbers';
-import { PASSES, type ChunkRef, type Pass } from './variations';
+import { asPrinted, PASSES, type ChunkRef, type Pass } from './variations';
 
 export const OUT_DIR = join(__dirname, '../../.expo/grading-audit');
 // Engine transcripts of KJV computer-voice recitations (voice.ts), committed as a fixture,
@@ -115,14 +115,20 @@ export interface Verdict {
   repeated: number; // how many on-screen words are both missing and added (2+ = a run of the reader's own words)
 }
 
+// A missing word glued across punctuation ("shepherd;I") shows the same two words the reader
+// said, struck beside it ("shepherd" "I"): counted as two.
 function repeatedWords(missing: string[], added: string[]): number {
   const left = added.map(visualKey);
   let n = 0;
   for (const m of missing.map(visualKey)) {
     const i = left.indexOf(m);
+    const pair = left.findIndex((a, j) => j > 0 && left[j - 1] !== '' && a !== '' && left[j - 1] + a === m);
     if (m !== '' && i >= 0) {
       left.splice(i, 1);
       n++;
+    } else if (pair > 0) {
+      left.splice(pair - 1, 2);
+      n += 2;
     }
   }
   return n;
@@ -304,12 +310,18 @@ export interface Clip {
 
 export const clipId = (clip: Clip) => `${clip.ref} ${clip.voice}@${clip.rate}`;
 
-export function replay(file: string, align: Align) {
+// `printed`: grade against the text as the translation prints it (asPrinted), to split adapter
+// damage (RC5, RC7) from engine mishearings.
+export function replay(file: string, align: Align, printed = false) {
   const clips: Clip[] = JSON.parse(readFileSync(file, 'utf8'));
   const sources = new Map<string, VerseMap>();
   return clips.map((clip) => {
     if (!sources.has(clip.version)) sources.set(clip.version, loadSource(clip.version));
-    const text = refText(sources.get(clip.version)!, clip.ref);
+    const m = clip.ref.match(/^(.+) (\d+):(\d+)(?:-(\d+))?$/)!;
+    const served = refText(sources.get(clip.version)!, clip.ref);
+    const text = printed
+      ? asPrinted(served, { book: m[1], chapter: Number(m[2]), verseStart: Number(m[3]), verseEnd: Number(m[4] ?? m[3]), verseTexts: [] })
+      : served;
     const verdict = judge(align, text, clip.transcript);
     // Only the opening word or words lost, nothing else wrong: the `say` artifact in RC11.
     const opening = text.split(/\s+/).slice(0, verdict.missing.length).map(visualKey);
@@ -367,7 +379,7 @@ async function main() {
 
   const replayFile = arg('replay');
   if (replayFile) {
-    const results = replay(replayFile, align);
+    const results = replay(replayFile, align, process.argv.includes('--as-printed'));
     const bad = results.filter((r) => r.verdict.score < 100);
     for (const { clip, verdict, firstWordsDropped } of bad) {
       const said = clip.version === 'KJV' ? ` said "${clip.transcript}"` : '';

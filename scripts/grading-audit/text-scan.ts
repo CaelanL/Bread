@@ -59,7 +59,8 @@ const gluedPlain = (w: string) => {
 
 // ---------- per verse ----------
 const TITLE = /^(A Psalm|A Song|A Maskil|A Miktam|A Prayer|A Shiggaion|To the choirmaster|For the director of music|To the Chief Musician|For the choir director|Of David|Of Asaph|Of the Sons of Korah|A psalm|A song|A maskil|A prayer|A David)/;
-const HEBREW_LETTERS = /^(Aleph|Alef|Beth|Bet|Gimel|Daleth|Dalet|He|Waw|Vav|Zayin|Heth|Het|Teth|Tet|Yodh|Yod|Kaph|Kaf|Lamedh|Lamed|Mem|Nun|Samekh|Ayin|Pe|Tsadhe|Tsadde|Qoph|Qof|Resh|Sin|Shin|Taw|Tav)$/;
+// Stanza letter names that aren't also English words (He, Pe, Sin, Mem, Nun are left out).
+const HEBREW_LETTERS = /^(Aleph|Alef|Beth|Gimel|Daleth|Dalet|Waw|Vav|Zayin|Heth|Teth|Yodh|Kaph|Lamedh|Lamed|Samekh|Ayin|Tsadhe|Tsadde|Qoph|Resh|Shin|Taw|Tav)$/;
 const CONTRACTION = /\b[A-Za-z]+n['’]t\b|\b[A-Za-z]+['’](ll|re|ve|m|d)\b|\b(it|that|there|here|he|she|what|who|where|let|how|when)['’]s\b/gi;
 const chars: Record<string, number> = {};
 const contractions: Record<string, number> = {};
@@ -85,16 +86,13 @@ for (const [ref, text] of Object.entries(verses)) {
   if (/[⁰¹²³⁴⁵⁶⁷⁸⁹]/.test(text)) note('superscript digit in text', ref);
   if (/:1$/.test(ref) && ref.startsWith('Psalms') && TITLE.test(text)) note('psalm title inside verse 1', ref);
   const w = words(text);
-  if (w.some((x) => HEBREW_LETTERS.test(x.replace(/[^A-Za-z]/g, ''))) && /^(Psalms 119|Lamentations)/.test(ref)) {
-    note('Hebrew letter name in a Psalm 119 or Lamentations verse (stanza label?)', ref);
+  if (/[\u05D0-\u05EA]/.test(text) || (w.some((x) => HEBREW_LETTERS.test(x.replace(/[^A-Za-z]/g, ''))) && /^(Psalms 119|Lamentations)/.test(ref))) {
+    note('Hebrew letter or letter name in the text (stanza label)', ref);
   }
   // A capitalised word after the sentence has ended: a label, stanza letter or note.
   const last = w.at(-1) ?? '';
-  if (w.length > 2 && /[.!?”’"']$/.test(w.at(-2)!) && /^[A-Z]/.test(last) && !/[.!?,;:”’"')]$/.test(last) && !/^Selah/.test(last)) {
+  if (w.length > 2 && /[.!?”’"']$/.test(w.at(-2)!) && /^[A-Z]/.test(last) && !/[.!?,;:”’"')]$/.test(last) && !/^(Selah|Interlude)/.test(last)) {
     note('word after the closing punctuation (label, stanza letter or note?)', ref);
-  }
-  if (/^[A-Z][a-z]+$/.test(w[0] ?? '') && /^(He|She|Friends|Others|Lover|Beloved|Bride|Man|Woman|Young)$/.test(w[0]) && ref.startsWith('Song of Solomon')) {
-    note('Song of Solomon verse opens with a speaker label?', ref);
   }
   if (/\d/.test(text)) withDigits++;
   if (findNumberSpans(w).length) withNumberWords++;

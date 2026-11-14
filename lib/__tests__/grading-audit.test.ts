@@ -193,6 +193,12 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assertPerfect('And God said,“Let there be light:”and there was light.', 'And God said, let there be light, and there was light.');
   });
 
+  // Made-up text in the shape NLT prints measures: a mixed number with a hyphen and a slash.
+  it('RC14: a fraction printed in the verse never matches the spoken words', { todo: TODO }, () => {
+    assertPerfect('it weighed 3-1/4 pounds.', 'it weighed three and one fourth pounds.');
+    assertPerfect('it weighed 3-1/4 pounds.', 'it weighed 3 1/4 pounds.');
+  });
+
   it('RC8: a verse never said (or revealed) still lets the session reach 90', { todo: TODO }, () => {
     const kjv = loadSource('KJV');
     const alignments = new Map<number, ReturnType<typeof alignTranscription>>();

@@ -18,11 +18,12 @@ import { join } from 'node:path';
 import { getBible, popularPassages, resetLocalBibleQuota } from './local';
 import { loadSource, OUT_DIR, verseRuns } from './run';
 
-const API: Record<string, { name: string; cap: number; perMinute: number }> = {
-  ESV: { name: 'ESV', cap: 1_400, perMinute: 8 },
-  NIV: { name: 'API.Bible', cap: 900, perMinute: 30 },
-  NLT: { name: 'API.Bible', cap: 900, perMinute: 30 },
-  NKJV: { name: 'API.Bible', cap: 900, perMinute: 30 },
+// `parallel`: chapters in flight at once; the per-minute pace holds across them.
+const API: Record<string, { name: string; cap: number; perMinute: number; parallel: number }> = {
+  ESV: { name: 'ESV', cap: 1_400, perMinute: 8, parallel: 2 },
+  NIV: { name: 'API.Bible', cap: 900, perMinute: 30, parallel: 1 },
+  NLT: { name: 'API.Bible', cap: 900, perMinute: 30, parallel: 1 },
+  NKJV: { name: 'API.Bible', cap: 900, perMinute: 30, parallel: 1 },
 };
 
 // Single-verse path checks: psalm titles, a stanza start, verses some translations omit, poetry.
@@ -44,7 +45,17 @@ const RISKY_CHAPTERS = [
 ];
 const SAMPLE_SIZE = 270;
 
-const pace = (perMinute: number) => new Promise((r) => setTimeout(r, 60_000 / perMinute));
+// Calls start at most `perMinute` a minute, however long each takes and however many are in flight.
+let lastStart = 0;
+let turn = Promise.resolve();
+function pace(perMinute: number): Promise<void> {
+  turn = turn
+    .then(() => new Promise((r) => setTimeout(r, Math.max(0, lastStart + 60_000 / perMinute - Date.now()))))
+    .then(() => {
+      lastStart = Date.now();
+    });
+  return turn;
+}
 const readJson = <T>(file: string, empty: T): T => (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : empty);
 
 function chapterList(mode: string): { chapter: string; expected: number }[] {
@@ -91,17 +102,24 @@ async function main() {
   };
 
   // One function call; counts it against the API's cap unless the function served its cache.
+  // Calls in flight count against the cap until they come back as a cache hit.
+  let inFlight = 0;
   async function bible(query: string) {
-    if ((calls[api.name] ?? 0) >= api.cap) return undefined;
-    let res = await getBible(`${query}&version=${version}`);
-    if (res.status === 429) {
-      await resetLocalBibleQuota();
-      res = await getBible(`${query}&version=${version}`);
-    }
-    if (res.status === 401 || res.status === 429) throw new Error(`bible function ${res.status}`);
-    if (!res.body.cached) calls[api.name] = (calls[api.name] ?? 0) + 1;
     await pace(api.perMinute);
-    return res;
+    if ((calls[api.name] ?? 0) + inFlight >= api.cap) return undefined;
+    inFlight++;
+    try {
+      let res = await getBible(`${query}&version=${version}`);
+      if (res.status === 429) {
+        await resetLocalBibleQuota();
+        res = await getBible(`${query}&version=${version}`);
+      }
+      if (res.status === 401 || res.status === 429) throw new Error(`bible function ${res.status}`);
+      if (!res.body.cached) calls[api.name] = (calls[api.name] ?? 0) + 1;
+      return res;
+    } finally {
+      inFlight--;
+    }
   }
 
   for (const ref of SINGLE) {
@@ -114,31 +132,37 @@ async function main() {
   }
 
   const chapters = chapterList(mode);
-  let done = 0;
-  for (const { chapter, expected } of chapters) {
-    done++;
-    if (fetched[chapter] && !fetched[chapter].via.startsWith('error')) continue;
-    const res = await bible(`ref=${encodeURIComponent(chapter)}&chapter=true`);
-    if (!res) {
-      console.log(`${api.name} cap of ${api.cap} calls reached; stopping.`);
-      break;
-    }
-    const keyed = res.status === 200 ? (res.body.verses ?? {}) : {};
-    fetched[chapter] = { expected, returned: Object.keys(keyed), via: res.status === 200 ? 'chapter' : `error ${res.status}` };
-    for (const [v, text] of Object.entries(keyed)) verses[`${chapter}:${v}`] = text;
-    // One-chapter books the chapter path can't serve (ESV reads "Jude 1" as Jude verse 1): fetch
-    // each verse on the single-verse path, as a reader adding one verse would.
-    if (expected > 1 && Object.keys(keyed).length <= 1 && /^(Obadiah|Philemon|2 John|3 John|Jude) 1$/.test(chapter)) {
-      fetched[chapter].via = 'single verses';
-      for (let v = 1; v <= expected + 1; v++) {
-        const one = await bible(`ref=${encodeURIComponent(`${chapter}:${v}`)}`);
-        if (!one) break;
-        if (one.status === 200 && one.body.text) verses[`${chapter}:${v}`] = one.body.text;
+  const queue = chapters.filter(({ chapter }) => !fetched[chapter] || fetched[chapter].via.startsWith('error'));
+  let done = chapters.length - queue.length;
+  let capped = false;
+  const fetchChapters = async () => {
+    while (queue.length && !capped) {
+      const { chapter, expected } = queue.shift()!;
+      done++;
+      const res = await bible(`ref=${encodeURIComponent(chapter)}&chapter=true`);
+      if (!res) {
+        capped = true;
+        console.log(`${api.name} cap of ${api.cap} calls reached; stopping.`);
+        break;
       }
+      const keyed = res.status === 200 ? (res.body.verses ?? {}) : {};
+      fetched[chapter] = { expected, returned: Object.keys(keyed), via: res.status === 200 ? 'chapter' : `error ${res.status}` };
+      for (const [v, text] of Object.entries(keyed)) verses[`${chapter}:${v}`] = text;
+      // One-chapter books the chapter path can't serve (ESV reads "Jude 1" as Jude verse 1): fetch
+      // each verse on the single-verse path, as a reader adding one verse would.
+      if (expected > 1 && Object.keys(keyed).length <= 1 && /^(Obadiah|Philemon|2 John|3 John|Jude) 1$/.test(chapter)) {
+        fetched[chapter].via = 'single verses';
+        for (let v = 1; v <= expected + 1; v++) {
+          const one = await bible(`ref=${encodeURIComponent(`${chapter}:${v}`)}`);
+          if (!one) break;
+          if (one.status === 200 && one.body.text) verses[`${chapter}:${v}`] = one.body.text;
+        }
+      }
+      save();
+      if (done % 20 === 0) console.log(`${done}/${chapters.length} chapters, ${calls[api.name]} ${api.name} calls`);
     }
-    save();
-    if (done % 20 === 0) console.log(`${done}/${chapters.length} chapters, ${calls[api.name]} ${api.name} calls`);
-  }
+  };
+  await Promise.all(Array.from({ length: api.parallel }, fetchChapters));
   save();
   console.log(`${version}: ${Object.keys(fetched).length} chapters, ${Object.keys(verses).length} verses; ${calls[api.name] ?? 0} ${api.name} calls in all`);
 }

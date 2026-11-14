@@ -205,6 +205,7 @@ export function asPrinted(text: string, ref: ChunkRef): string {
   let t = text
     .replace(/([.,;:!?)\]”"]+’?)(?=[A-Za-z“‘"(\[\u05D0-\u05EA])/g, '$1 ')
     .replace(/(?<=[A-Za-z])([.,;:!?)\]”"]+)(?=\d)/g, '$1 ')
+    .replace(/(?<=[A-Za-z])(?=[“(])/g, ' ')
     .replace(/(’)(?=[A-Z“‘\u05D0-\u05EA])/g, '$1 ')
     .replace(/\s*[\u05D0-\u05EA]\s*[A-Z][a-z]+\s*$/, '')
     .replace(/\s*\[[^\]]*manuscripts[^\]]*\]?/gi, '');
