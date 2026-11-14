@@ -215,9 +215,13 @@ export function findNumberSpans(rawWords: string[]): NumberSpan[] {
 }
 
 // Rewrite the spans selected by `pick` as digits, keeping the last word's trailing punctuation.
-export function toDigits(text: string, pick: (forms: Set<NumberForm>) => boolean): { text: string; changed: boolean } {
+export function toDigits(
+  text: string,
+  pick: (forms: Set<NumberForm>, span: NumberSpan, all: NumberSpan[], words: string[]) => boolean,
+): { text: string; changed: boolean } {
   const words = text.split(/\s+/).filter(Boolean);
-  const spans = findNumberSpans(words).filter((s) => pick(s.forms));
+  const found = findNumberSpans(words);
+  const spans = found.filter((s) => pick(s.forms, s, found, words));
   if (spans.length === 0) return { text, changed: false };
   const out: string[] = [];
   let w = 0;

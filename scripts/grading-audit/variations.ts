@@ -1,7 +1,7 @@
 // Ways a speech engine can write down a correct recitation. Each pass returns the verse
 // text the app scores against (`expected`) and the transcript, or null when the pass has
 // nothing to change in this chunk, so its counts cover only chunks it touched.
-import { toDigits, type NumberForm } from './numbers';
+import { findNumberSpans, toDigits } from './numbers';
 
 export interface Case {
   expected: string;
@@ -28,9 +28,11 @@ export function clean(text: string): string {
     .toLowerCase()
     .replace(/[’‘ʼ]/g, "'")
     .replace(/[—–―‐‑‒−-]/g, ' ')
-    .replace(/(\d)([,:])(?=\d)/g, '$1\u0000$2')
-    .replace(/[^a-z0-9'\s\u0000]/g, ' ')
-    .replace(/\u0000/g, '')
+    .replace(/(\d),(?=\d)/g, '$1\u0001')
+    .replace(/(\d):(?=\d)/g, '$1\u0002')
+    .replace(/[^a-z0-9'\s\u0001\u0002]/g, ' ')
+    .replace(/\u0001/g, ',')
+    .replace(/\u0002/g, ':')
     .replace(/(^|\s)'+|'+(?=\s|$)/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
@@ -157,7 +159,7 @@ function unicodePass(name: string, edit: (text: string) => string): Pass {
 const longWords = (text: string, insert: string) =>
   text.replace(/\b([A-Za-z]{3})([A-Za-z]{4,})\b/g, `$1${insert}$2`);
 
-function digitsPass(name: string, pick: (forms: Set<NumberForm>) => boolean): Pass {
+function digitsPass(name: string, pick: Parameters<typeof toDigits>[1]): Pass {
   return {
     name,
     group: 'numbers',
@@ -194,6 +196,12 @@ export const PASSES: Pass[] = [
   digitsPass('digits:article', (f) => f.has('article') && !f.has('archaic')),
   digitsPass('digits:archaic', (f) => f.has('archaic')),
   digitsPass('digits:all', () => true),
+  // Two numbers separated only by punctuation ("four and twenty, six on each hand").
+  digitsPass('digits:next-to-punctuation', (forms, span, all, words) =>
+    !forms.has('article') && !forms.has('archaic') &&
+    all.some((other) =>
+      (other.end === span.start && /[,;:.]$/.test(words[other.end - 1])) ||
+      (other.start === span.end && /[,;:.]$/.test(words[span.end - 1])))),
 
   { name: 'spelling:american', group: 'spelling', make: (t) => replaceWords(t, AMERICAN) },
   { name: 'spelling:modern', group: 'spelling', make: (t) => replaceWords(t, MODERN) },
@@ -271,6 +279,17 @@ export const PASSES: Pass[] = [
       if (w.length < 6) return null;
       const mid = Math.floor(w.length / 2);
       return { expected: t, transcript: [...w.slice(0, mid), ...w.slice(mid - 2, mid), ...w.slice(mid)].join(' ') };
+    },
+  },
+  {
+    // A restart inside a spoken number: "seven hundred, seven hundred eighty and two".
+    name: 'speech:restart-in-number',
+    group: 'speech',
+    make: (t) => {
+      const w = words(t);
+      const span = findNumberSpans(w).find((s) => s.end - s.start >= 2);
+      if (!span) return null;
+      return { expected: t, transcript: [...w.slice(0, span.end - 1), ...w.slice(span.start)].join(' ') };
     },
   },
   {

@@ -4,6 +4,7 @@
 //   npm run audit:grading -- [--source KJV|ESV|...] [--pass <prefix>] [--chunk-size 1|3|all]
 //                            [--examples N] [--limit N] [--aligner <file>] [--check-chunks]
 //                            [--replay <transcripts.json>]
+//   npm run audit:grading -- --card (--ref "John 3:16" | --expected "<text>") --transcript "<text>" [--aligner <file>]
 //
 // KJV comes from the bundle. Other translations come from `.expo/grading-audit/<VERSION>.json`
 // (written by fetch-licensed.ts, gitignored); their text is never printed, only references
@@ -25,6 +26,8 @@ import { toDigits } from './numbers';
 import { PASSES, type ChunkRef, type Pass } from './variations';
 
 export const OUT_DIR = join(__dirname, '../../.expo/grading-audit');
+// Engine transcripts of KJV computer-voice recitations (voice.ts), committed as a fixture.
+export const KJV_FIXTURE = join(__dirname, 'fixtures/say-kjv.json');
 type Align = (expected: string, transcript: string) => AlignmentWord[];
 
 // ---------- verse sources ----------
@@ -101,6 +104,20 @@ export interface Verdict {
   sameWord: boolean; // a missing and an added word the current app matcher calls equal
   lookAlike: boolean; // a missing and an added word that look the same on screen
   sameNumber: boolean; // the missing words and the added words say the same number
+  repeated: number; // how many on-screen words are both missing and added (2+ = a run of the reader's own words)
+}
+
+function repeatedWords(missing: string[], added: string[]): number {
+  const left = added.map(visualKey);
+  let n = 0;
+  for (const m of missing.map(visualKey)) {
+    const i = left.indexOf(m);
+    if (m !== '' && i >= 0) {
+      left.splice(i, 1);
+      n++;
+    }
+  }
+  return n;
 }
 
 const numberKey = (words: string[]) => visualKey(toDigits(words.join(' '), () => true).text.replace(/\s+/g, ''));
@@ -119,7 +136,7 @@ export function judge(align: Align, expected: string, transcript: string): Verdi
     }
   }
   const sameNumber = /\d/.test(added.join('') + missing.join('')) && missing.length > 0 && numberKey(missing) === numberKey(added);
-  return { score: calculateChunkScore(alignment), missing, added, sameWord, lookAlike, sameNumber };
+  return { score: calculateChunkScore(alignment), missing, added, sameWord, lookAlike, sameNumber, repeated: repeatedWords(missing, added) };
 }
 
 // ---------- the audit ----------
@@ -141,12 +158,13 @@ interface PassStats {
   sameWord: number;
   lookAlike: number;
   sameNumber: number;
+  repeatedRun: number;
   signatures: Record<string, { count: number; example: Example }>;
 }
 
 const show = (s: string) => JSON.stringify(s).slice(1, -1);
 const flags = (v: Verdict) =>
-  `${v.sameWord ? ' SAME-WORD' : ''}${v.lookAlike ? ' LOOK-ALIKE' : ''}${v.sameNumber ? ' SAME-NUMBER' : ''}`;
+  `${v.sameWord ? ' SAME-WORD' : ''}${v.lookAlike ? ' LOOK-ALIKE' : ''}${v.sameNumber ? ' SAME-NUMBER' : ''}${v.repeated >= 2 ? ` RUN-OF-${v.repeated}` : ''}`;
 const signature = (v: Verdict) =>
   `missing [${v.missing.map((w) => show(w.toLowerCase())).join(' ')}] added [${v.added.map(show).join(' ')}]${flags(v)}`;
 
@@ -166,7 +184,7 @@ export function audit(opts: {
   const licensed = opts.source !== 'KJV';
   const runs = verseRuns(map);
   const stats = new Map<string, PassStats>(
-    opts.passes.map((p) => [p.name, { pass: p.name, group: p.group, checked: 0, under100: 0, under90: 0, sameWord: 0, lookAlike: 0, sameNumber: 0, signatures: {} }]),
+    opts.passes.map((p) => [p.name, { pass: p.name, group: p.group, checked: 0, under100: 0, under90: 0, sameWord: 0, lookAlike: 0, sameNumber: 0, repeatedRun: 0, signatures: {} }]),
   );
   let seen = 0;
   for (const run of runs) {
@@ -185,6 +203,7 @@ export function audit(opts: {
         if (v.sameWord) s.sameWord++;
         if (v.lookAlike) s.lookAlike++;
         if (v.sameNumber) s.sameNumber++;
+        if (v.repeated >= 2) s.repeatedRun++;
         const key = signature(v);
         const sig = (s.signatures[key] ??= {
           count: 0,
@@ -312,6 +331,19 @@ async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const tag = `${source}${alignerPath ? '-old-aligner' : ''}`;
 
+  // One recitation as the result card shows it: ~~struck~~ = added, __underlined__ = missing
+  // (the colours were the other way round before 2026-08-25).
+  if (process.argv.includes('--card')) {
+    const ref = arg('ref');
+    const expected = arg('expected') ?? (ref ? refText(loadSource(source), ref) : undefined);
+    const transcript = arg('transcript');
+    if (expected === undefined || transcript === undefined) throw new Error('--card needs --ref or --expected, and --transcript');
+    const alignment = align(expected, transcript);
+    const card = alignment.map((w) => (w.status === 'added' ? `~~${w.word}~~` : w.status === 'missing' ? `__${w.word}__` : w.word));
+    console.log(`${calculateChunkScore(alignment)}%  ${card.join(' ')}`);
+    return;
+  }
+
   if (process.argv.includes('--check-chunks')) {
     const checks = checkChunks(source, limit);
     for (const c of checks) console.log(`${c.failed ? 'FAIL' : 'ok  '} ${c.name}: ${c.failed}/${c.checked} failed${c.example ? ` (e.g. ${c.example})` : ''}`);
@@ -327,7 +359,7 @@ async function main() {
       const said = clip.version === 'KJV' ? ` said "${clip.transcript}"` : '';
       console.log(`${verdict.score}% ${clip.ref} ${clip.version} ${clip.voice}@${clip.rate}${said} missing [${verdict.missing.join(' ')}] added [${verdict.added.join(' ')}]${flags(verdict)}`);
     }
-    console.log(`\n${bad.length}/${results.length} clips under 100, ${bad.filter((r) => r.verdict.score < 90).length} under 90, ${bad.filter((r) => r.verdict.sameWord).length} same-word, ${bad.filter((r) => r.verdict.lookAlike).length} look-alike, ${bad.filter((r) => r.verdict.sameNumber).length} same-number`);
+    console.log(`\n${bad.length}/${results.length} clips under 100, ${bad.filter((r) => r.verdict.score < 90).length} under 90, ${bad.filter((r) => r.verdict.sameWord).length} same-word, ${bad.filter((r) => r.verdict.lookAlike).length} look-alike, ${bad.filter((r) => r.verdict.sameNumber).length} same-number, ${bad.filter((r) => r.verdict.repeated >= 2).length} with 2+ words both missing and added`);
     writeFileSync(join(OUT_DIR, `replay-${tag}.json`), JSON.stringify(results, null, 2));
     return;
   }
@@ -338,9 +370,9 @@ async function main() {
   const stats = audit({ source, passes, chunkSize, limit, align });
 
   console.log(`source ${source}, chunk size ${chunkSize}${alignerPath ? `, aligner ${alignerPath}` : ''}\n`);
-  console.log('pass'.padEnd(40) + 'checked'.padStart(8) + ' <100'.padStart(8) + ' <90'.padStart(8) + ' same'.padStart(7) + ' looks'.padStart(7) + ' num'.padStart(7));
+  console.log('pass'.padEnd(40) + 'checked'.padStart(8) + ' <100'.padStart(8) + ' <90'.padStart(8) + ' same'.padStart(7) + ' looks'.padStart(7) + ' num'.padStart(7) + ' run2+'.padStart(7));
   for (const s of stats) {
-    console.log(s.pass.padEnd(40) + String(s.checked).padStart(8) + String(s.under100).padStart(8) + String(s.under90).padStart(8) + String(s.sameWord).padStart(7) + String(s.lookAlike).padStart(7) + String(s.sameNumber).padStart(7));
+    console.log(s.pass.padEnd(40) + String(s.checked).padStart(8) + String(s.under100).padStart(8) + String(s.under90).padStart(8) + String(s.sameWord).padStart(7) + String(s.lookAlike).padStart(7) + String(s.sameNumber).padStart(7) + String(s.repeatedRun).padStart(7));
   }
   if (examples > 0) {
     for (const s of stats.filter((x) => x.under100 > 0)) {
@@ -352,7 +384,10 @@ async function main() {
       }
     }
   }
-  writeFileSync(join(OUT_DIR, `report-${tag}-chunk${chunkSize}.json`), JSON.stringify(stats, null, 2));
+  for (const s of stats) {
+    s.signatures = Object.fromEntries(Object.entries(s.signatures).sort((a, b) => b[1].count - a[1].count).slice(0, 100));
+  }
+  writeFileSync(join(OUT_DIR, `report-${tag}-chunk${chunkSize}${prefix ? `-${prefix.replace(/[^a-z0-9-]/gi, '_')}` : ''}.json`), JSON.stringify(stats, null, 2));
 }
 
 if (require.main === module) {
