@@ -182,10 +182,12 @@ async function transcribeDirect(audio: Buffer, text: string): Promise<string> {
     if (!job.ok) throw new Error(`soniox job ${job.status}`);
     txId = (await job.json()).id as string;
     for (let i = 0; ; i++) {
-      const status = await (await fetch(`${SONIOX}/transcriptions/${txId}`, { headers })).json();
+      const poll = await fetch(`${SONIOX}/transcriptions/${txId}`, { headers });
+      if (!poll.ok) throw new Error(`soniox poll ${poll.status}`);
+      const status = await poll.json();
       if (status.status === 'completed') break;
       if (status.status === 'error' || i > 180) throw new Error(`soniox ${status.status}`);
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 1000));
     }
     const { text: transcript } = await (await fetch(`${SONIOX}/transcriptions/${txId}/transcript`, { headers })).json();
     return transcript ?? '';
@@ -238,9 +240,12 @@ async function main() {
     const todo = planned
       .map((p, i) => ({ p, i }))
       .filter(({ p }) => !(done.get(p.version) ?? []).some((c) => c.ref === p.ref));
-    // Four clips at a time; results are written after each batch.
-    for (let b = 0; b < todo.length && total() < max; b += 4) {
-      const batch = todo.slice(b, b + Math.min(4, max - total()));
+    // Soniox's async rate limit is per organization: at most 3 jobs in flight and 10 a minute,
+    // and the run stops on the first 429 (rerun to resume). Results are written after each batch.
+    let limited = false;
+    for (let b = 0; b < todo.length && total() < max && !limited; b += 3) {
+      const started = Date.now();
+      const batch = todo.slice(b, b + Math.min(3, max - total()));
       const results = await Promise.all(batch.map(async ({ p, i }) => {
         if (!sources.has(p.version)) sources.set(p.version, loadSource(p.version));
         const { voice, rate } = voiceFor(i);
@@ -249,6 +254,7 @@ async function main() {
           return { ref: p.ref, version: p.version, voice, rate, transcript };
         } catch (e) {
           console.log(`skip ${p.version} ${p.ref}: ${e instanceof Error ? e.message : e}`);
+          if (String(e).includes('429')) limited = true;
           return null;
         }
       }));
@@ -260,6 +266,8 @@ async function main() {
       }
       for (const [version, clips] of done) if (clips.length) writeFileSync(outFile(version), `${JSON.stringify(clips, null, 1)}\n`);
       console.log(`${total()}/${max}`);
+      if (limited) console.log('Soniox rate limit hit; stopped. Wait before rerunning.');
+      else await new Promise((r) => setTimeout(r, Math.max(0, 18_000 - (Date.now() - started))));
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
