@@ -419,6 +419,25 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
 }
 
 /**
+ * The verse's text if this session already holds it, read synchronously (no KJV bundle, no
+ * network), so a screen can show it on its first frame. Null means call `getVerseText`.
+ */
+export function peekVerseText(verse: SavedVerse): VerseTextResult | null {
+  const { book, chapter, verseStart, verseEnd, version } = verse;
+  const text = getSavedVerseFromSession(book, chapter, verseStart, verseEnd, version);
+  const keyed = getSavedVerseKeyedFromSession(book, chapter, verseStart, verseEnd, version);
+  if (text && keyed) return { text, verses: keyed };
+  // Read some other way this session (a chapter, another range): assembled per verse, as fetchVerse does.
+  const verses: Record<string, string> = {};
+  for (let v = verseStart; v <= verseEnd; v++) {
+    const verseText = getVerseFromSession(book, chapter, v, version);
+    if (!verseText) return null;
+    verses[v.toString()] = verseText;
+  }
+  return { text: Object.values(verses).join(" "), verses };
+}
+
+/**
  * Format a verse reference string from SavedVerse
  */
 export function formatReference(verse: SavedVerse): string {
