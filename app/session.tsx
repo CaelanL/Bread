@@ -33,7 +33,7 @@ import {
   AudioStudioModule,
   type AudioDataEvent,
 } from '@siteed/audio-studio';
-import { LegacyEventEmitter } from 'expo-modules-core';
+import { LegacyEventEmitter, type PermissionResponse } from 'expo-modules-core';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
@@ -122,6 +122,15 @@ export default function StudySessionScreen() {
   }, []);
 
   useEffect(() => () => { void recorder.cancel(); }, [recorder]);
+
+  // Read once so a tap with permission granted goes straight to native start.
+  // The first-run prompt still comes from requestPermissionsAsync on the tap.
+  const micPermissionRef = useRef(false);
+  useEffect(() => {
+    AudioStudioModule.getPermissionsAsync()
+      .then(({ granted }: PermissionResponse) => { micPermissionRef.current = granted; })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     void removeAbandonedRecordings(FileSystem);
@@ -233,13 +242,14 @@ export default function StudySessionScreen() {
     const chunk = session.chunks[index];
     if (!chunk || index !== session.currentIndex || closingRef.current) return;
 
+    const wasActive = recorder.canDiscard();
     try {
-      const result = await recorder.start(index, isRetry, {
+      const starting = recorder.start(index, isRetry, {
+        hasPermission: () => micPermissionRef.current,
         async requestPermission() {
-          if (process.env.EXPO_OS === 'ios') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          }
-          return (await AudioStudioModule.requestPermissionsAsync()).granted;
+          const { granted }: PermissionResponse = await AudioStudioModule.requestPermissionsAsync();
+          micPermissionRef.current = granted;
+          return granted;
         },
         openLive: () => startLiveTranscription(chunk.text),
         start() {
@@ -271,6 +281,11 @@ export default function StudySessionScreen() {
         stop: stopRecording,
         remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
       });
+      // After the native call has left, and only when this tap began an attempt
+      if (process.env.EXPO_OS === 'ios' && !wasActive && recorder.canDiscard()) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      const result = await starting;
       if (result === 'denied') {
         Alert.alert('Permission required', 'Please allow microphone access to record.');
       }
