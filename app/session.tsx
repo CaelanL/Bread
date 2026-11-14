@@ -263,10 +263,11 @@ export default function StudySessionScreen() {
             channels: 1,
             encoding: 'pcm_16bit',
             interval: 100,
-            // m4a for the batch-fallback upload (frozen contract); no WAV
+            // m4a for the batch-fallback upload (frozen contract); no WAV.
+            // 64 kbps, not lower: a rejected encoder setting leaves no m4a at all.
             output: {
               primary: { enabled: false },
-              compressed: { enabled: true, format: 'aac' },
+              compressed: { enabled: true, format: 'aac', bitrate: 64000 },
             },
             ios: {
               audioSession: {
