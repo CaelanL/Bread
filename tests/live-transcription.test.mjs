@@ -59,6 +59,7 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
   });
   const { supabase } = await import('../lib/api/client.ts');
   const { LiveKeyCache, startLiveTranscription } = await import('../lib/transcription/live-session.ts');
+  const { scoreRecording } = await import('../lib/transcription/score-recording.ts');
   t.after(() => supabase.auth.stopAutoRefresh());
   assert.ifError((await supabase.auth.signInWithPassword({ email: 'a@example.test', password: 'test' })).error);
 
@@ -151,5 +152,32 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     assert.equal(mints, 2);
     assert.equal(next.socket.protocols[1], 'key-2');
     next.session.abort();
+  });
+
+  await t.test('a live finish that stalls hands the file to batch after 1.5s', async (scenario) => {
+    const { session, socket } = await open(new LiveKeyCache());
+    stream(socket);
+    session.feedAudio(new Uint8Array(320));
+    scenario.mock.timers.enable({ apis: ['setTimeout'] });
+    let uploaded = false;
+    const scoring = scoreRecording({
+      text: 'be still',
+      isRetry: false,
+      isPeeked: false,
+      isCurrent: () => true,
+      liveSession: session,
+      async transcribeFile() {
+        uploaded = true;
+        return 'be still';
+      },
+    });
+    scenario.mock.timers.tick(1499);
+    await settle();
+    assert.equal(uploaded, false);
+    assert.equal(socket.sent.at(-1), '', 'end-of-audio was sent');
+    scenario.mock.timers.tick(1);
+    await settle();
+    assert.equal(uploaded, true);
+    assert.equal((await scoring)?.display.score, 100);
   });
 });
