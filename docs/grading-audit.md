@@ -17,14 +17,16 @@ chunk where the same word is both missing and added.
 | Command | What it does |
 |---|---|
 | `npm run audit:grading` | Every variation pass over all 31,102 bundled KJV verses, one verse per chunk |
-| `npm run audit:grading -- --pass <prefix>` | Passes whose name starts with the prefix (`digits:`, `spelling:`, `compound:`, `homophone:`, `contraction:`, `unicode:`, `speech:`, `reference:`, `live:`) |
+| `npm run audit:grading -- --pass <prefix>` | Passes whose name starts with the prefix (`source:`, `digits:`, `spelling:`, `compound:`, `homophone:`, `contraction:`, `unicode:`, `speech:`, `reference:`, `live:`) |
 | `npm run audit:grading -- --chunk-size 3` | Multi-verse chunks. `reference:verse-numbers-in-chunk` checks nothing at the default size 1 |
 | `npm run audit:grading -- --check-chunks` | Chunk building at sizes 1, 2, 3, 5 and all, three difficulties, keyed and fallback |
 | `npm run audit:grading -- --replay scripts/grading-audit/fixtures/say-kjv.json` | Replays 457 real Soniox transcripts of computer-voice KJV recitations |
+| `npm run audit:grading -- --replay .expo/grading-audit/voice-NIV.json [--as-printed]` | Replays a licensed voice round, graded against the served text or, with `--as-printed`, the printed text |
 | `npm run audit:grading -- --card --ref "<ref>" --transcript "<text>"` | One result card: `__word__` missing (underlined amber), `~~word~~` added (struck red) |
 | `npm run db:reset && npx tsx scripts/grading-audit/esv-text.ts` | ESV verse text from the local `bible` function, checked against the chapter path (RC5) |
-| `npx tsx scripts/grading-audit/fetch-licensed.ts ESV` | Fetches a licensed sample into gitignored `.expo/grading-audit/ESV.json` for `--source ESV` |
-| `npx tsx scripts/grading-audit/voice.ts` | Records computer-voice clips and sends them to Soniox (costs Soniox usage; see the file header) |
+| `npx tsx scripts/grading-audit/fetch-licensed.ts ESV --chapters all` | Fetches every ESV chapter (or `NIV`, `NLT`, `NKJV` with the default 270-chapter sample) into gitignored `.expo/grading-audit/` for `--source`. Spends API calls under hard caps; see the file header |
+| `npx tsx scripts/grading-audit/text-scan.ts NIV` | What the fetched text holds that grading trips on: missing and merged verses, glue, labels, notes, characters, contractions, digits |
+| `npx tsx scripts/grading-audit/voice.ts` | Records computer-voice clips and sends them to Soniox (costs Soniox usage; see the file header). `run --version NIV` is the 150-clip licensed round |
 
 Add `--aligner <file>` to `--card`, `--replay` or a pass run to use an older aligner. Set them up
 from git:
@@ -48,11 +50,15 @@ from the misses file.
 
 ### Where the numbers come from
 
-- **Harness:** synthetic transcripts over every KJV verse and a 263-verse ESV sample. An upper
-  bound on exposure, not a rate.
+- **Harness:** synthetic transcripts over every KJV verse, every ESV chapter ({{ESV_TOTAL}}) and a
+  270-chapter sample of NIV, NLT and NKJV (about 7,400 verses each: every book's first chapter, the
+  suggested passages, chapters with titles, stanzas, omitted verses and numbers, and a spread).
+  An upper bound on exposure, not a rate, except `source:as-printed`, which is what a correct
+  reader of that translation scores.
 - **Phase B:** 523 computer-voice clips (macOS `say`, 9 voices, 120-260 words a minute) through
-  Soniox `stt-async-v5` with the app's own request. The 457 KJV transcripts are the committed
-  fixture.
+  Soniox `stt-async-v5` with the app's own request, plus a licensed round of up to 150 clips per
+  translation (ESV, NIV, NLT, NKJV), each with 300 ms of silence first. The 457 KJV transcripts are
+  the committed fixture; licensed transcripts stay in gitignored `.expo/grading-audit/`.
 - **One-off Soniox runs:** a real-time run (507 correct KJV recitations), a noisy and fast audio
   run, and a context comparison (batch and real-time, v5 and v6, with and without the verse as
   context). Their scripts and raw transcripts were not kept, so those rates are reported here
@@ -64,15 +70,16 @@ No real human voice or phone was used anywhere.
 
 | Rank | Root cause | Real rate (Soniox) | Harness upper bound | Repro |
 |---|---|---|---|---|
-| 1 | RC1 Spellings compared literally | old spellings changed in 30-60% of verses containing them | 754 + 1,019 + 59 KJV verses | `--pass spelling:`, `--replay`, todos F3 F4 F8 F11 |
-| 2 | RC5 ESV verse text carries titles, stanza letters, neighbours | every recitation of an affected verse fails | ~250 ESV verses | `esv-text.ts` |
-| 3 | RC2 Thin number grammar | 15 of 111 phase B number clips; v6 prints digits more | 496 KJV verses | `--pass digits:`, todos F2 F10 RC2 |
-| 4 | RC3 One-way substitution repair | needs a slip near a compound; not measured on real speech | 3,684 KJV verses | `--pass speech:restart-in-number`, `--pass compound:`, todos F1 F5 F6 RC3 |
-| 5 | RC11 Capture edges on a device | not measured | n/a | none: device only |
-| 6 | RC4 No sound-alike equivalence | rare with the verse as context | 48,632 harness cases | `--pass homophone:` |
-| 7 | RC6 Empty chunk, legacy splitter | every session on an affected passage | 16 ESV omitted verses, 97 one-chapter-book verses | `--check-chunks`, `esv-text.ts`, todos F7 F12 |
-| 8 | RC7 API.Bible adapter (NLT, NIV, NKJV) | unknown | n/a | none: no `API_BIBLE_KEY` locally |
-| — | RC13 Reader habits: verse numbers, reference, "amen", contractions | not measured | 10,364 multi-verse chunks; 6,799 KJV verses | `--chunk-size 3 --pass reference:verse-numbers`, `--pass reference:`, `--pass contraction:` |
+| 1 | RC7 API.Bible text glued at every tag (NIV, NLT, NKJV) | 41 NIV, 38 NLT, 38 NKJV of 150 voice clips under 100 (about 25-30 of each from the glue) | 2,054 NIV, 1,897 NLT, 1,921 NKJV of ~7,400 sample verses each | `text-scan.ts`, `--source NIV --pass source:`, todo RC7 |
+| 2 | RC1 Spellings compared literally | old spellings changed in 30-60% of verses containing them | 754 + 1,019 + 59 KJV verses | `--pass spelling:`, `--replay`, todos F3 F4 F8 F11 |
+| 3 | RC5 ESV verse text carries titles, stanza letters, neighbours | every recitation of an affected verse fails | {{RANK_RC5}} | `esv-text.ts`, `--source ESV --pass source:` |
+| 4 | RC2 Thin number grammar | 15 of 111 phase B number clips; v6 prints digits more | 496 KJV verses | `--pass digits:`, todos F2 F10 RC2 |
+| 5 | RC3 One-way substitution repair | needs a slip near a compound; not measured on real speech | 3,684 KJV verses | `--pass speech:restart-in-number`, `--pass compound:`, todos F1 F5 F6 RC3 |
+| 6 | RC11 Capture edges on a device | not measured | n/a | none: device only |
+| 7 | RC4 No sound-alike equivalence | rare with the verse as context | 48,632 harness cases | `--pass homophone:` |
+| 8 | RC6 Empty chunk, legacy splitter | every session on an affected passage | 16 omitted verses (ESV, NIV, NLT), 97 one-chapter-book verses (ESV) | `--check-chunks`, `esv-text.ts`, todos F7 F12 |
+| 9 | RC14 Fractions printed in the verse (NLT) | not measured (no fraction verse in the voice round) | 42 NLT sample verses | `--source NLT --pass digits:spoken-words`, todo RC14 |
+| — | RC13 Reader habits: verse numbers, reference, "amen", contractions | not measured | 10,364 multi-verse chunks; 6,799 KJV verses; 584 NLT verses said without contractions | `--chunk-size 3 --pass reference:verse-numbers`, `--pass reference:`, `--pass contraction:` |
 | — | RC10 Soniox lifecycle | 27 audit clips got 429 | n/a | none without Soniox calls |
 | — | RC9 Card wording | n/a | 18 of 184 suggested verses | `--card` (John 3:16 below) |
 | — | RC8 Pooled score lets wrong sessions pass | n/a | 1,165 of 1,189 chapters | todo RC8 |
@@ -141,8 +148,12 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   (Numbers 1:46 40%, Revelation 7:4 74%, John 21:11 79%, the same on every retry). Soniox routes v5
   to v6 from 2026-12-15 with no deploy, so this class grows then.
 - **Harness:** `digits:all` 496 KJV verses: "an hundred" 226, "threescore" 218, "N thousand and M
-  hundred" 69, a span across a comma 1. ESV sample: "a hundred" 2. Soniox kept score words
-  ("threescore") as words in 21 of 21 clips, so the 218 are mostly unreal.
+  hundred" 69, a span across a comma 1. Soniox kept score words ("threescore") as words in 21 of
+  21 clips, so the 218 are mostly unreal. Licensed text, read as printed: "a hundred" fails in
+  {{ESV_DIGITS}}, 43 NIV, 9 NLT and 12 NKJV sample verses.
+- **Digits in the verse, said as words:** ESV, NIV and NLT print large numbers as digits ("2,172"),
+  in {{ESV_DIGIT_VERSES}} ESV verses, 300 NIV and 374 NLT sample verses. Said in words, every one
+  passes once the RC7 glue is undone (`--pass digits:spoken-words`), except NLT's fractions (RC14).
 - **Card** (real form, KJV Numbers 3:34): `...were __six__ __thousand__ __and__ __two__ __hundred.__
   ~~6,200.~~` 79%.
 - **Also false passes:** the greedy parse reads "7,005" as matching "seven thousand and five
@@ -154,6 +165,18 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   article forms ("an hundred"), "N thousand and M hundred", an exact-value check so a greedy "and"
   can't make a wrong number match, digit plus scale word ("600 thousand"), stop a span at a comma.
   Move to v6 deliberately in a release after replaying the fixture on v6 (D11).
+
+## RC14. Fractions printed in the verse (NLT)
+
+- **Harness:** NLT prints measures as mixed numbers ("3-1/4", "1-1/2"), in 42 of its 7,378 sample
+  verses (Exodus, Numbers 7, Ezekiel 40-48). A reader saying them in words fails every one: made-up
+  text `it weighed __3-1/4__ ~~three~~ ~~and~~ ~~one~~ ~~fourth~~ pounds.` 38%; an engine printing
+  "3 1/4" gets 50%. NIV, NKJV and ESV write fractions in words. Real: not measured; the NLT voice round drew no fraction verse.
+- **Cause:** the number grammar in `lib/align.ts` has no fractions, and `tokenize` keeps "3-1/4" as
+  one word.
+- **Repro:** `npm run audit:grading -- --source NLT --pass digits:spoken-words`; todo RC14.
+- **Suggested fix (with A2):** read "N-a/b" as a number in `parseLongestNumber`, matched by "N and
+  a b-ths" (one fourth, a quarter, a half, three quarters) and by "N a/b".
 
 ## RC3. One-way substitution repair (F1, F5, F6)
 
@@ -219,18 +242,47 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   `verse.verses`; adding a single omitted verse in a translation that lacks it is refused;
   `getVerseText` treats `verses: {}` on a range as a failed fetch, so the splitter never runs.
 
-## RC7. API.Bible adapter (NLT, NIV, NKJV)
+## RC7. API.Bible chapter text glued at every tag (NIV, NLT, NKJV)
 
-- **By reading, unconfirmed, no repro:** `cleanText` in `supabase/functions/bible/adapters/apibible.ts`
-  deletes tags without leaving a space, so poetry lines glue ("shepherd;I"); entities aren't
-  decoded (`&#8217;`); the `data-number="(\d+)"` pattern misses merged verse numbers like "3-4".
-  Running the adapter against stubbed HTML shaped like API.Bible's shows each, but the real output
-  was never fetched.
-- **Why no repro:** there's no `API_BIBLE_KEY` locally. `supabase/.env.example` names
-  `NLT_API_KEY`, while the adapter reads `API_BIBLE_KEY`. A free key would let
-  `fetch-licensed.ts NLT` and the harness run on real text.
-- **Suggested fix (B3):** replace each tag with a space, decode entities, accept
-  `\d+(-\d+)?` and key both numbers, fix `.env.example`.
+- **Real:** a 270-chapter sample of each translation through the local `bible` function (7,425
+  NIV, 7,378 NLT and 7,441 NKJV verses). A reader saying each verse exactly as the printed Bible
+  has it scores under 100 on 2,054 NIV verses (28%), 1,897 NLT (26%) and 1,921 NKJV (26%), and
+  under 90 on 1,929, 1,807 and 1,859. Whole-chapter sessions read perfectly fail 199 of 286 NIV,
+  189 of 291 NLT and 167 of 270 NKJV chapter runs. Computer-voice clips through Soniox with the
+  app's request: 41 of 150 NIV, 38 of 150 NLT and 38 of 150 NKJV clips score under
+  100 against the served text; against the printed text, 16, 14 and 16, and most of those are the
+  glue again (below).
+- **Glue:** `cleanText` in `supabase/functions/bible/adapters/apibible.ts` deletes HTML tags
+  without leaving a space, so every poetry line, paragraph and quotation break glues two words
+  (`shepherd;I`, `said,“Let`). 1,914 NIV, 1,772 NLT and 1,812 NKJV sample verses hold one; a
+  further 70-130 per translation glue two words with no punctuation between (a heuristic count),
+  which no pass can repair.
+- **Card** (KJV words, glued the way the adapter serves NIV, NLT and NKJV, on 1.3.0 and today):
+  `The LORD is my __shepherd;I__ ~~shepherd,~~ ~~i~~ shall not want.` 70%. The reader's own two
+  words show struck beside the glued pair, on every retry, at any pace (see the review's story).
+- **Stanza labels:** NIV and NKJV append the next Psalm 119 stanza letter and its name to the last
+  verse of each stanza (21 of 21).
+- **Merged verse numbers:** NLT prints Numbers 1:20-46 and 2:3-31 as rows numbered "20-21". The
+  `data-number="(\d+)"` pattern misses them, so 48 verses are absent and their text, labels glued
+  in, lands in the verse before: Numbers 1:19 holds the text of 1:20-46, and those verses can't
+  be added.
+- **Dropped verse:** NIV Habakkuk 3:1 is formatted as a heading and is absent from the chapter.
+- **Notes:** NIV and NLT append the bracketed manuscript note to Mark 16:8 and John 7:52.
+- **Single-verse path** (`fetchVerse`, plain text, no glue): NIV puts "Psalm N" before every psalm's
+  verse 1 (Psalm 3:1 86%, 23:1 80%, 46:1 85%, 51:1 91%, 90:1 83%), and all three put the stanza
+  letter before Psalm 119:1 (NIV 84%, NLT 92%, NKJV 94%). NIV and NLT answer 404 for an omitted
+  verse, so adding one alone shows an error.
+- **Context:** the glued text is also the Soniox context, and Soniox copied the glue into
+  9 NIV, 6 NLT and 9 NKJV of those transcripts, which then match by accident.
+- **Repro:** `npx tsx scripts/grading-audit/fetch-licensed.ts NIV` (spends API.Bible calls), then
+  `npx tsx scripts/grading-audit/text-scan.ts NIV` and `npm run audit:grading -- --source NIV --pass
+  source:as-printed`; todo RC7 with KJV words.
+- **Suggested fix (B3):** in `cleanText` and `parseChapterContent`, turn block tags into a space,
+  drop stanza-label and note elements, accept `\d+(-\d+)?` and key both numbers, keep a verse that
+  sits in a heading element, and strip the "Psalm N" heading on the single-verse path. Ride along
+  (A1): `tokenize` in `lib/align.ts` splits a word on punctuation between two letters, because prod's
+  `verse_cache` keeps the glued rows until they are purged (D19). Fix `.env.example` (it names
+  `NLT_API_KEY`; the adapter reads `API_BIBLE_KEY`).
 
 ## RC13. Reader habits graded as mistakes
 
@@ -245,10 +297,11 @@ design. Whether to forgive them is D8 and D18.
   beginning God created the heaven and the earth.` 83%. Repro: `--pass reference:`.
 - **A trailing "amen":** `Jesus wept. ~~amen.~~` 67%.
 - **Contractions:** "I'll" for "I will", "it's" for "it is", "let's" for "let us": 6,799 KJV
-  verses, every one under 100 (4,239 under 90); 85 of the ESV sample. The other direction (a
-  translation's "don't" said "do not") checked 0 verses: neither KJV nor the ESV sample has
-  contractions, and NLT, which uses them, couldn't be fetched (RC7). Repro:
-  `npm run audit:grading -- --pass contraction:`.
+  verses, every one under 100 (4,239 under 90), and {{ESV_CONTRACTED}}. The other direction, a
+  translation's "don't" said "do not": NLT prints contractions in 597 of its 7,378 sample verses
+  (mostly "don't", "won't", "didn't", "can't") and NIV in 85; said in full, every one fails (NLT
+  584 of 584 checked, 391 under 90; NIV 85 of 85). ESV and NKJV print none. Repro:
+  `npm run audit:grading -- --pass contraction:` (add `--source NLT` for the second).
 - **Suggested fix (A6, decision-gated):** strip a leading or trailing spoken reference equal to the
   chunk's own, verse numbers matching the chunk's verses, and a trailing "amen" when the verse
   lacks one. Contractions: an equivalence list in `normalize`, if D18 says yes.
@@ -315,12 +368,23 @@ different paces. Phones at the time ran 1.3.0, whose aligner is the one before 0
 card colours match the reviewer's reading (struck = said, underlined = missing); 1.2.0's are the
 other way round.
 
-**On 1.3.0, no real transcript of a correct recitation showed identical words struck and
-underlined.** Over 1,453 real Soniox transcripts, the 1.3.0 aligner showed one look-alike pair (an
-ESV "2,172" against "2172", 67%) and no run of 2+. Every engine formatting variation (apostrophes,
-hyphens, dashes, quotes, case, `LORD`) gives 0 look-alike pairs on 1.3.0.
+**For NIV, NLT and NKJV readers, reproduced on 1.3.0 with real transcripts.** The RC7 glue shows
+exactly this: a correct recitation, the reader's words struck, the same words underlined as one
+glued word, identically on every retry at any pace, on every build (the glue is server-side).
+Computer-voice clips through Soniox, graded by the 1.3.0 aligner: 36 of 150 NIV, 33 of 150
+NLT and 32 of 150 NKJV correct recitations show 2 or more of the reader's words both struck and
+underlined (the current aligner: the same counts). About a quarter of all verses in those translations carry a glue point, and
+poetry (Psalms, Proverbs) far more. Card on 1.3.0 (KJV words, glued as served):
+`The LORD is my __shepherd;I__ ~~shepherd,~~ ~~i~~ shall not want.` 70%
+(`npm run audit:grading -- --card --expected "The LORD is my shepherd;I shall not want." --transcript "The Lord is my shepherd, I shall not want." --aligner .expo/grading-audit/old-align.ts`).
+This becomes the leading explanation if the reviewer's account was on NIV, NLT or NKJV.
 
-1. **Leading explanation: the right words in a different order.** A transposition shows the moved
+**For KJV and ESV readers, no real transcript of a correct recitation showed it on 1.3.0.** Over
+1,453 real Soniox transcripts before this round, the 1.3.0 aligner showed one look-alike pair (an
+ESV "2,172" against "2172", 67%) and no run of 2+. {{REVIEW_ESV}} Every engine formatting variation
+(apostrophes, hyphens, dashes, quotes, case, `LORD`) gives 0 look-alike pairs on 1.3.0.
+
+1. **Leading explanation on KJV and ESV: the right words in a different order.** A transposition shows the moved
    phrase struck where the reader said it and underlined where the verse has it, on every build,
    identically on every retry at any pace. The likeliest source is a translation that shares the
    ESV's words but orders clauses differently (ESV is the account default), or the reader's own
@@ -377,6 +441,15 @@ Each with the audit's recommended answer.
   score change.
 - **D18** Treat a contraction and its full form as equal? Yes both ways: same words, blurred in fast
   speech, and NLT prints contractions. The cost is that "I'll" passes for "I will".
+- **D19** Purge the API.Bible rows (NIV, NLT, NKJV) of `verse_cache` in the B3 release, as D13
+  does for ESV? Yes, all of them: every glued row stays wrong until something overwrites it.
+- **D20** Also split a word on punctuation between letters in the aligner (A1), so text already
+  cached or served by an old function still grades right? Yes; cheap, and it guards the next
+  adapter bug of this kind.
+- **D21** Accept fractions in words ("three and a quarter", "three and one fourth") for NLT's
+  "3-1/4" (RC14)? Yes.
+- **D22** Ask the reviewer which translation they use? Yes: if NIV, NLT or NKJV, RC7 explains the
+  review completely.
 
 ## Checked and clean
 
@@ -385,11 +458,12 @@ Each with the audit's recommended answer.
 - 0 KJV verses under 100 for: plain, engine-style punctuation and capitals, curly quotes either
   side, a dropped possessive apostrophe, hyphen joins and splits, em and en dashes, NBSP, BOM,
   um/uh/hmm, standard digits.
-- ESV sample (263 verses from `fetch-licensed.ts`): plain, engine style, spelling, compound and
-  possessive passes clean, digits fail only on "a hundred" (2, RC2). Two of the 263, Psalm 46:1 and
-  Psalm 119:105, came from the single-verse path with the title or stanza letter in the text (RC5),
-  so the harness graded them against the wrong text and called them clean; `esv-text.ts` shows
-  them at 48% and 93%. Characters: only standard ones plus ’ ‘ “ ” —.
+- {{ESV_CLEAN}}
+- NIV, NLT and NKJV samples, once the RC7 glue is undone (`--source <V>printed`-style check): plain
+  and engine-style 0 under 100 in NIV and NKJV, NLT only its fractions (RC14); digits printed in
+  the verse and said as words, 0 in NIV; keyed chunking clean at every size. Characters: standard
+  punctuation, ’ ‘ “ ” — –, and in NIV and NKJV the 22 Hebrew stanza letters (RC7). No HTML entities
+  or leftover tags reach the text.
 - KJV bundle: all 31,102 verses present, pure ASCII, no titles or stanza letters.
 - Real-time finishing: the last word never went missing on a fast finish in the Soniox run.
 
@@ -403,15 +477,22 @@ aligner: 88 of 457 KJV under 100 (spelling and archaic forms 30, digits 15, firs
 clips: current 2, 1.3.0 10, 1.2.0 11. A merged prototype of A1-A4 takes the 88 to 52, with no
 clip lower.
 
+Licensed round: up to 150 clips per translation, half on verses a number, contraction, compound
+or possessive pass touches and half a spread, 9 voices at 120-260 words a minute, each clip with
+300 ms of silence first. Graded against the served text, then against the printed text
+(`--as-printed`), which takes out the adapter's damage (RC5, RC7) and leaves the engine's:
+
+{{VOICE_TABLE}}
+
 ## Not covered
 
 - Real human voices, accents, children, noise on real microphones; no phone was used.
-- NIV, NLT and NKJV text (no `API_BIBLE_KEY`); ESV is a 263-verse sample plus the `esv-text.ts`
-  cases.
-- Contractions in a translation that prints them (NLT), said in full.
-- Prod `verse_cache`: how many poisoned ESV rows are live.
+- NIV, NLT and NKJV beyond the 270-chapter sample (about 919 chapters each); the classes found are
+  structural, so the rate should hold, but rarer layouts (lists, letters, other merged rows) may
+  hide more.
+- Prod `verse_cache`: how many poisoned ESV rows and glued API.Bible rows are live.
 - Whether the local Soniox key shares prod's organization.
-- Long multi-verse chunks through Soniox.
+- Long multi-verse chunks through Soniox, and the licensed translations through the real-time path.
 - The 9 phase B clips with an empty transcript: `say` writing an empty file, or Soniox returning
   nothing. If Soniox, RC8 grades it as a real 0%.
 - A v6 replay of the 457-clip fixture before 2026-12-15.

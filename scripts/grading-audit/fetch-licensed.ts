@@ -20,7 +20,7 @@ import { loadSource, OUT_DIR, verseRuns } from './run';
 
 // `parallel`: chapters in flight at once; the per-minute pace holds across them.
 const API: Record<string, { name: string; cap: number; perMinute: number; parallel: number }> = {
-  ESV: { name: 'ESV', cap: 1_400, perMinute: 8, parallel: 2 },
+  ESV: { name: 'ESV', cap: 1_400, perMinute: 8, parallel: 3 },
   NIV: { name: 'API.Bible', cap: 900, perMinute: 30, parallel: 1 },
   NLT: { name: 'API.Bible', cap: 900, perMinute: 30, parallel: 1 },
   NKJV: { name: 'API.Bible', cap: 900, perMinute: 30, parallel: 1 },
