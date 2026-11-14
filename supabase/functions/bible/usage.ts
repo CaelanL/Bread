@@ -1,7 +1,6 @@
 import { getAdminClient, getUserTier } from "../_shared/auth.ts";
 
-// The same numbers as `bible_fetch_count` in LIMITS (_shared/usage.ts). Kept here so a change to
-// this function redeploys only `bible`.
+// The daily Bible read limits, only here: a change redeploys only `bible`.
 const DAILY_LIMIT = { free: 100, supporter: 10_000 };
 
 export interface BibleUsage {
