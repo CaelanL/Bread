@@ -50,10 +50,9 @@ so the members table's own policy doesn't recurse.
 Column grants back the policies: nobody can move a membership to another account or
 another group or change `owner_id`. `anon` has nothing.
 
-Members never read each other's `user_verses`. Cross-user reads go through definer
-functions in `private` behind invoker wrappers in `public` (PostgREST exposes only
-`public`). They return per-member booleans
-per reference, never a member's progress itself, study prefs or timestamps. A removed
+Members never read each other's `user_verses`. Cross-user reads (the wrappers below)
+return per-member booleans per reference, never a member's progress itself, study prefs or
+timestamps. A removed
 member reads nothing again.
 
 ## Functions
@@ -80,8 +79,8 @@ Codes are normalized on input (upper case, no spaces or dashes): 8 characters fr
 The last two count squares through `private.member_squares`
 ([group-progress.md](group-progress.md#squares)).
 
-Every wrapper calls a `SECURITY DEFINER` body in `private` that checks the caller and
-passes `auth.uid()` on. The `private` helpers that write take the user they act for, so
+Every wrapper in `public` (PostgREST exposes only `public`) calls a `SECURITY DEFINER` body
+in `private` that checks the caller and passes `auth.uid()` on. The `private` helpers that write take the user they act for, so
 clients can't execute them; only the definer bodies and the triggers call them.
 
 ## Caps
@@ -161,7 +160,8 @@ confirms wait for the server's library ([`synced`](../architecture/sync-and-stor
   codes die, every copy is personal again.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed) show `JoinInvite`:
   inviter, name, counts, the privacy line with the account translation, and Join (a name if
-  needed, `joinSharedCollection`, then the copy, one `dismissTo`). A member sees Open; a bad
+  needed; `joinSharedCollection`: the RPC, one wave of collections, verses and groups,
+  mastered behind; the copy, one `dismissTo`). A member sees Open; a bad
   code, its message. A signed-out link's code is kept through
   sign-in, email confirmation or an app kill, then opens over the Library; so does an install
   [handoff](../architecture/navigation-and-routing.md#invite-handoff).
@@ -187,12 +187,11 @@ code `BREAD828`, and the groups in [group-progress.md](group-progress.md#browser
 ## Sharp edges
 
 - Leaving on another device reads as "You were removed" on this one.
-- A shared reference a member's translation leaves out still gets a copy in their
-  translation with no text, the same as `addVerse`.
+- A reference a member's translation leaves out still gets a copy in it, with no
+  text, as `addVerse` does.
 - A member who removed a mastered copy through an old client still shows Mastered,
   since squares read soft-deleted rows.
 - Dissolve restores a member's copy an old client soft-deleted (it runs a full sync).
-- New `user_collections` columns need adding to the insert and update column grants.
 
 ## Browser checks
 
@@ -218,3 +217,4 @@ card personal, Stop sharing alone and with members, the old code dead).
 - 2026-11-12 · Stop sharing deletes the group, members or not · The dissolve keeps copies and kills codes; no migration.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.
 - 2026-11-12 · No Leave or Delete until the role loads · A guess shows the wrong confirm; the store refuses it anyway.
+- 2026-11-14 · Join waits for one wave, not a full `refresh()` (Q25) · Join opens at once.

@@ -120,7 +120,7 @@ are in `docs/architecture/edge-functions.md`.
 
 Prefs are cached per account (`notifications_prefs_cache:<userId>`). `setAccount`
 (`lib/auth/account.ts`) hydrates them, then runs `syncForegroundState`; sign-out removes
-the cache. `app/_layout.tsx` syncs again on each return to active. Its `setNotificationHandler` turns everything off, so a push arriving while the
+the cache. `app/_layout.tsx` syncs again on each return after 30 s away. Its `setNotificationHandler` turns everything off, so a push arriving while the
 app is open shows nothing.
 
 `signOut` in `lib/auth/context.tsx` calls `unregisterDeviceToken` first, while RLS still lets

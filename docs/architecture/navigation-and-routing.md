@@ -169,6 +169,21 @@ modal route, or as it closes, never shows and leaves an invisible layer that tak
 email link before they have a session. `dev-sign-in` is whitelisted
 because it creates the session.
 
+### Launch splash
+
+`app/_layout.tsx` calls `SplashScreen.preventAutoHideAsync()` (expo-router's) at module scope, so
+the native splash stays up until the first frame is right. `RootLayoutNav` hides it once the
+device settings are read (`settingsRead` in `lib/store/index.ts`, the color mode among them, see
+[theming](theming-and-ui.md#color-scheme-detection)) and either the session restore settled
+(`isLoading` false) or a saved library painted (`hydrated`). Two backstops hide it regardless: a
+module-scope timer at `SPLASH_FAILSAFE_MS` (3 s, `lib/auth/context.tsx`), and
+`ErrorBoundary.componentDidCatch`, so a crash shows the error screen, not a stuck splash.
+
+Offline with a stored session and no saved library, the restore doesn't settle. At the same
+`SPLASH_FAILSAFE_MS`, `AuthProvider` calls the store's `showOffline`: the tabs show empty with the
+load-error toast, still signed in ([offline](sync-and-storage.md#offline-behavior)). The gate above
+returns early while `isLoading`, so it never sends that user to Sign In.
+
 ## Deep links
 
 Configured via Expo's URL scheme `com.biblemem://` (in
@@ -290,3 +305,4 @@ Verses): exactly one opens its `/share/<id>` over the Library, several open the 
 - 2026-11-12 · The 2.0 walkthrough is claimed on the server before it shows, not marked seen on close · Marking on close shows it twice when two phones open at once, the app is killed before the write lands, or the write fails. At most once is the safe side for a one-time walkthrough.
 - 2026-11-12 · Swipe back from anywhere on pushed screens, and swipe-to-delete rows claim only leftward drags while closed · Swiping back from a collection often took two tries (Caelan's pass 4, C23): a verse row's pan activated at 10 pt in either direction, so a back swipe starting on a row raced the edge recognizer, and react-native-screens only makes scroll views wait for the edge, not gesture-handler pans. Swiping from anywhere is how Slack, Spotify and iOS 26's own apps go back; react-native-screens turns off iOS 26's content swipe and offers this instead.
 - 2026-11-12 · The shared-collection modals (share, join, typed code, display name) are native modal routes rendering `ModalCard`, not RN `Modal`s in screen state · An invite opened over the RN-modal share sheet left the Library unable to present its next modal; native modal routes unwind together.
+- 2026-11-14 · The splash holds for the settings read and the session or a saved library, with a 3 s failsafe (R10) · Otherwise a dark-mode user saw a light frame, then an empty Library, after the splash. The failsafe and the error boundary keep a stuck restore or a crash from leaving the splash up; offline with nothing saved, the app opens empty and signed in rather than on a spinner that looks frozen.

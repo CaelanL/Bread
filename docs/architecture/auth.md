@@ -146,10 +146,12 @@ true })`: that account's saved library paints, nothing starts on the network, an
 `RootLayoutNav` shows it instead of the spinner. When `getSession()` settles,
 `afterRestore` (`lib/auth/after-restore.ts`) decides:
 
-- a session → `setAccount(id)` starts the wave;
+- a session → `setAccount(id)` starts the wave, and the saved library paints before loading
+  ends;
 - the token refresh couldn't reach the server (`isAuthRetryableFetchError`) → stay on the
   saved library, still loading: writes fail visibly, supabase-js keeps the session and
-  retries, and its `TOKEN_REFRESHED` starts the account;
+  retries, and its `TOKEN_REFRESHED` starts the account. With nothing saved, the app opens
+  empty after `SPLASH_FAILSAFE_MS` ([launch splash](navigation-and-routing.md#launch-splash));
 - anything else (a refused refresh) → signed out: the saved library is removed, Sign In.
 
 ## Auth gating

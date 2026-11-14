@@ -118,6 +118,10 @@ export function useColorScheme() {
 - Default `colorMode` is `'system'` → follows the device.
 - User can override to `'light'` or `'dark'` from Settings.
 - Stored in Zustand + AsyncStorage (`app_color_mode`).
+- Read before the first frame: the store reads it with the other device settings at module
+  load (`settingsRead`), and the splash stays up until that read is done
+  ([launch splash](navigation-and-routing.md#launch-splash)), so a dark override never shows a
+  light frame.
 - Persisted across sign-out (it's a device preference, not a user
   preference).
 
@@ -319,6 +323,9 @@ Invariant 8 is above. Also:
 - **`SwipeableVerseCard.tsx` has hardcoded bronze RGBA values**
   (e.g. `rgba(176,141,87,0.25)`) that should ideally come from a
   derived theme token. Not a bug, but a candidate for cleanup.
+- **The native splash follows the system appearance, not `colorMode`.** It shows before any
+  JavaScript runs, so `app.config.js` (`expo-splash-screen`: white, black in dark) can't know the
+  override; a dark override on a light phone gets a white splash, then a dark first frame.
 - **No design-system documentation beyond this file** —
   `components/ui/` is the de facto catalog. If a new primitive is
   added, list it here.

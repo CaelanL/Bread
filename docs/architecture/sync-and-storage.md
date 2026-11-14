@@ -52,10 +52,13 @@ each field copied by an explicit allowlist:
   `SNAPSHOT_MAX_AGE_MS` (7 days) or a malformed value; that key is
   removed.
 
-**Read** with the settings when an account starts (`paintSnapshot`):
-one update with the data, `hydrated: true`, `hydratedFrom: 'snapshot'`.
-The wave then replaces it. A launch whose session is still restoring
-paints the stored user's copy first (see [auth.md](auth.md#launch)).
+**Read** when an account starts (`paintSnapshot`), a frame after the
+wave's requests go out: one update with the data, `hydrated: true`,
+`hydratedFrom: 'snapshot'`, minus any list the wave already applied.
+The wave then replaces it (`painted` lets a read started before the
+paint replace the painted lists). A launch whose session is still
+restoring paints the stored user's copy first (see [auth.md](auth.md#launch));
+otherwise `AuthProvider` awaits the paint before its first render.
 
 **Written** (`saveSnapshot` in `lib/store/index.ts`) only from
 server-applied state: when `synced` turns true, after each later wave,
@@ -114,6 +117,7 @@ interface AppState {
   synced: boolean;              // see Saved library
   profileLoaded: boolean;       // the profile was read this run; welcomeSeen is the server's
   welcomeSeen: boolean;         // profiles.welcome_v2_seen_at is set
+  lastSessionAt: number | null; // last progress save this run (Home's reload rule)
   collectionsLoading: boolean;
   collectionOrderSaving: boolean;
   versesLoading: boolean;
@@ -124,7 +128,8 @@ interface AppState {
   hydrate: (userId) => Promise<void>; // from setAccount only
   refresh: () => Promise<void>;
   whenSynced: () => Promise<boolean>;
-  paintSnapshot: (userId) => Promise<void>; // settings and the saved library only
+  paintSnapshot: (userId) => Promise<void>; // the saved library only
+  showOffline: (userId) => Promise<void>;   // offline launch, nothing saved
   clearError: () => void;
   fetchCollections: () => Promise<boolean>;
   fetchVerses: () => Promise<boolean>;
@@ -144,9 +149,8 @@ interface AppState {
   shareCollection: (collectionId) => Promise<{ sharedId: string; code: string }>;
   mintInvite: (sharedId) => Promise<{ code: string; expiresAt: string }>;
   joinSharedCollection: (code) => Promise<string>;   // the copy's client_id
-  syncSharedCollection: (sharedId) => Promise<boolean>; // true when something changed
   fetchSharedProgress: (sharedId) => Promise<boolean>;  // never throws; a failure sets `failed` on the entry
-  openSharedCollection: (sharedId) => Promise<boolean>; // sync, then reloads; false once no longer shared
+  openSharedCollection: (sharedId, { pull? }) => Promise<boolean>; // sync, then one wave; false once no longer shared
   leaveSharedCollection: (sharedId) => Promise<void>;
   removeSharedMember: (sharedId, userId) => Promise<void>;
   setSharedMemberRole: (sharedId, userId, role) => Promise<void>;
@@ -185,7 +189,8 @@ The convention is `useX(...)` selectors, not direct
 ### Persistence
 
 - Settings and virtual-collection sorts are written to AsyncStorage
-  in their setters (manually, not via `persist` middleware). The
+  in their setters (manually, not via `persist` middleware), and read
+  once at module load (`settingsRead`, before the first frame). The
   translation is the exception: it's saved to `profiles`, and AsyncStorage
   only caches it. See `docs/architecture/bible-versions.md`.
 - The library is in memory, plus the saved library above. On app
@@ -214,11 +219,11 @@ session, before the tree mounts, and when another account signs in. See
 ```
 setAccount(userId) — when AuthProvider reads the session, before the tree mounts
 hydrate(userId)
-  ├── paintSnapshot: Promise.all(AsyncStorage reads for colorMode, bibleVersion,
-  │     reviewMaxIntervalDays, masteredSort, inProgressSort, hideVerseText,
-  │     library_snapshot:<userId>) → one set, painting the saved library
+  ├── await settingsRead (module load: colorMode, bibleVersion,
+  │     reviewMaxIntervalDays, masteredSort, inProgressSort, hideVerseText)
+  ├── meanwhile paintSnapshot, a frame later: library_snapshot:<userId> → one set
   │
-  └── loadAccount (queued with other translation work; refresh() runs it too)
+  └── loadAccount, started first (queued with other translation work; refresh() runs it too)
         ├── one wave, Promise.all: profiles (translation, names, welcome_v2_seen_at),
         │     the verse identity rows, fetchCollections, fetchVerses,
         │     fetchMasteredVerses, fetchSharedCollections
@@ -235,10 +240,7 @@ hydrate(userId)
         └── launch only, all fetches ok: after interactions, preload verse text
 ```
 
-Hydration for the current account always sets `hydrated: true`. This prevents an
-infinite loading spinner if any fetch fails. Components should
-check `useHydrated()` before reading and gracefully handle empty
-arrays.
+`hydrated: true` is unconditional (invariant 3 below).
 
 ## Sync model — write-through
 
@@ -251,36 +253,28 @@ collection mutations), `lib/storage/`, `lib/api/` and
 `lib/auth/context.tsx`. This is what keeps optimistic updates, RLS, and
 rollback consistent.
 
-Every write goes to Supabase first (or in parallel) and then
-updates Zustand. There is no offline queue.
+Every write goes to Supabase first (or in parallel), then to Zustand.
 
 ```
-Component dispatches Zustand action
-  e.g. useAppStore.getState().addVerse(verse, collectionId, version)
-        │
-        ▼
-Action writes to Supabase
-  directly with the supabase client, or through lib/storage/
-  (RLS enforces user_id = auth.uid())
-        │
-        ├── success → Zustand state updated
-        │
-        └── failure → Zustand NOT updated; error thrown back to caller
-                      (some callers surface a toast via lib/toast.ts)
+Component → Zustand action (e.g. addVerse) → Supabase write, directly
+  or through lib/storage/ (RLS enforces user_id = auth.uid())
+    ├── success → Zustand state updated
+    └── failure → Zustand NOT updated; error thrown back to the caller
+                  (some callers toast via lib/toast.ts)
 ```
 
 Some actions update Zustand optimistically *before* the write and
 roll back on failure (`deleteVerse`, `resetVerseProgress`,
-`setCollectionSort`). The pattern isn't perfectly uniform — when adding
-new actions, decide explicitly whether to apply optimistically or wait
-for the server.
+`setCollectionSort`); others don't. For a new action, decide whether
+to apply optimistically or wait for the server.
 
 ## When sync happens
 
 | Trigger | Direction | Notes |
 |---|---|---|
 | Sign-in or app start with a session | Pull (profile, collections, verses, mastered, shared) | `setAccount` → `hydrate()`, one wave |
-| Pull-to-refresh | Pull | `refresh()`: the same wave as hydrate, plus curated save counts |
+| Pull-to-refresh | Pull | `refresh()`: the same wave as hydrate, plus curated save counts; a shared collection's is [one wave](../features/group-progress.md#collection-screen) |
+| Resume: back after `RESUME_AWAY_MS` (30 s) away | Pull | `resumeTracker` (`lib/resume.ts`; Control Center or a quick switch isn't one): `syncForegroundState`, curated save counts. Home: [its rule](../features/home.md#monthly-schedule-and-loading) |
 | Add/delete collection | Push, then local | |
 | Add verse | Push, then local | one `add_verse` call ([adding-verses.md](../features/adding-verses.md#verse-identity)); shared copies use `addSharedVerse` |
 | Delete verse | Local, then push, rollback on failure | |
@@ -302,7 +296,10 @@ Specifically:
 
 - Failed reads → error state, UI keeps stale in-memory data. A cold
   start offline shows the saved library; `synced` stays false, so
-  deletes and name steps toast instead of acting.
+  deletes and name steps toast instead of acting. With nothing saved,
+  after `SPLASH_FAILSAFE_MS` (3 s) `showOffline` shows it empty with
+  the load-error toast, still signed in; `TOKEN_REFRESHED` starts the
+  wave once the network is back ([launch](navigation-and-routing.md#launch-splash)).
 - Failed writes → no queue, no retry. Most store actions throw, and the
   user must retry manually.
 - Bible verse reads can succeed offline if they hit the in-memory
@@ -360,8 +357,6 @@ Invariants 1 and 10 are above. Also:
 - **Hydration race**: components subscribed to Zustand before
   `hydrate()` finishes read empty arrays. Mitigation: check
   `useHydrated()` before rendering data.
-- **Optimistic-update inconsistency**: some actions roll back on
-  failure (`deleteVerse`), some don't. Audit when adding new ones.
 - **Soft-delete filter inconsistency**: most queries filter
   `deleted_at IS NULL`, but the Mastered list intentionally does
   not. Removing the filter from a query you didn't write may
@@ -379,6 +374,10 @@ Invariants 1 and 10 are above. Also:
   The allowlist keeps verse text off the device.
 - **Sign-out removes the saved library (Q21).** Shared devices; a
   sign-in again loads from the server.
+- **The wave's requests go out before the saved library paints.** Painting
+  first held them behind the list's render (server data at 731 ms vs 457 ms).
+- **Reloads on return wait for 30 s away (Q26).** Control Center or a
+  quick app switch fired a burst of reads.
 
 ## Browser checks
 

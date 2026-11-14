@@ -1,3 +1,4 @@
+// lib-ok: tests for the resume and Home reload rules next to them
 import assert from 'node:assert/strict';
 import test from 'node:test';
 

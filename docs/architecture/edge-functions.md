@@ -13,7 +13,7 @@ There are four functions: `bible`, `process-recording`,
 ```
 supabase/functions/
 ├── _shared/
-│   ├── auth.ts          ← User auth (verifyJwt, getAuthUser), admin client, tier lookup
+│   ├── auth.ts          ← User auth (verifyJwt), admin client, tier lookup
 │   ├── cors.ts          ← CORS headers and preflight
 │   ├── errors.ts        ← Standard error responses
 │   └── usage.ts         ← Usage metering (usage_daily)
@@ -167,8 +167,6 @@ the gateway doesn't check tokens and each function checks its own.
   `null`. Used by `bible`, `process-recording`, `transcription-token`
   and `invite-handoff`'s claim. An unexpired token of a
   deleted account still passes, for up to an hour.
-- `getAuthUser(req)` asks Supabase Auth with the user's token, a
-  network call. No caller left.
 - `getAdminClient()` is the service-role client that bypasses RLS.
 - `getUserTier(userId)` reads `subscriptions`. No row or an expired
   one means `free`.
@@ -178,9 +176,9 @@ the gateway doesn't check tokens and each function checks its own.
 Metering in `usage_daily` (one row per `user_id × date`) and
 `rateLimitResponse`, which adds `resetsAt`. The Bible limit is checked
 by `bible/usage.ts`, on cache misses only
-([bible-api-and-caching.md](bible-api-and-caching.md#rate-limiting)),
-with its own copy of the Bible numbers below so a change there
-redeploys only `bible`. `checkAndIncrementBibleUsage` has no caller left.
+([bible-api-and-caching.md](bible-api-and-caching.md#rate-limiting)).
+Its numbers (`DAILY_LIMIT`) live only there, so a change redeploys only
+`bible`; the others are `LIMITS` in `_shared/usage.ts`.
 
 Tier limits:
 
@@ -209,7 +207,6 @@ Edge functions need:
 - `OPENAI_API_KEY` — only if GPT cleaning is re-enabled
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — to read/write
   `verse_cache`, `usage_daily`, `subscriptions` past RLS
-- `SUPABASE_ANON_KEY` — for `getUserClient` (`getAuthUser`)
 - `HANDOFF_SALT` — HMAC key for `invite-handoff`'s network hash; unset falls back to a
   plain hash (and logs a warning). Not set in prod yet: needs Caelan's yes
   ([release.md](release.md)). After each deploy, check once that the last
@@ -247,7 +244,7 @@ the service role key effectively voids all RLS.
 Also:
 
 1. **Every edge function authenticates before anything else.** No
-   open endpoints: `verifyJwt` or `getAuthUser` for user-facing
+   open endpoints: `verifyJwt` for user-facing
    functions, the cron secret for `send-notifications`. Even rate
    limiting depends on having a user ID.
 2. **Use the service role key inside edge functions, the anon key
@@ -296,8 +293,8 @@ Also:
   the parsed count doesn't match VERSE_COUNTS, but don't fail or
   fall back. See `docs/architecture/bible-versions.md`.
 - **`_shared/usage.ts` has unused helpers.** `getTierAndUsage` calls
-  an RPC no migration defines; the transcription, evaluation and Bible
-  checks have no callers.
+  an RPC no migration defines; the transcription and evaluation checks
+  have no callers.
 - **The local stack answers 503 to several `bible` calls at once**
   (old and new code alike), so flows see some "Failed to load verse
   text" rows. Prod has no such limit.

@@ -87,7 +87,9 @@ one with better progress: mastered beats learning, then higher `passCount`,
 then more completed difficulties. A soft-deleted row never wins, so a verse
 the user reset or removed stays that way. The winner takes the losers'
 collections, and the losers are deleted outright (allowed by the owner
-DELETE policy on `user_verses`; a delete that removes fewer rows throws). `session_attempts` has no
+DELETE policy on `user_verses`; a delete that removes fewer rows throws). The
+[delete guard](data-model.md#user_verses) lets it through because the winner, a row of the
+same reference, already holds every link the losers had. `session_attempts` has no
 foreign key to `user_verses`, so their history and stats stay.
 `fetchMasteredVerses` still lists one row per reference
 (`onePerReference`) for soft-deleted twins. This runs on every hydrate,
@@ -197,7 +199,9 @@ rate limit), and there is no version-aware verse-count override.
 ## Sharp edges
 
 - `collapseVerse` reads the losers' links, upserts them onto the winner, then deletes the
-  losers. An `add_verse` that links to a loser in between loses that link. It needs two
+  losers. An `add_verse` that links to a loser in between leaves a link the winner doesn't
+  hold, so the delete guard refuses the delete and that sync's alignment fails ("Couldn't line
+  your verses up" toast); the next sync reads the new link and collapses. It needs two
   translations of one reference (only old clients make them) and one round trip of overlap.
   It could already happen during pull to refresh; since the one-wave load, alignment runs
   after first paint, so it can also happen in the first second after launch.
