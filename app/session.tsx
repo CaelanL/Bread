@@ -19,7 +19,7 @@ import {
 } from '@/lib/study-chunks';
 import { showErrorToast } from '@/lib/toast';
 import {
-  LiveKeyCache,
+  LiveStandby,
   startLiveTranscription,
   base64ToUint8Array,
 } from '@/lib/transcription/live-session';
@@ -43,6 +43,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Dimensions,
   FlatList,
   Pressable,
@@ -149,11 +150,20 @@ export default function StudySessionScreen() {
     if (__DEV__) micTimingRef.current.renders++;
   });
 
-  // Mint the Soniox key on open, so a tap usually finds one ready
-  const [liveKeys] = useState(() => new LiveKeyCache());
+  // Mint a Soniox key and open a spare socket on open, so a tap streams into
+  // an open connection. Closed in the background and on leaving.
+  const [live] = useState(() => new LiveStandby());
   useEffect(() => {
-    liveKeys.warm();
-  }, [liveKeys]);
+    live.warm();
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'background') live.sleep();
+      else if (state === 'active') live.warm();
+    });
+    return () => {
+      appState.remove();
+      live.dispose();
+    };
+  }, [live]);
 
   useEffect(() => () => { void recorder.cancel(); }, [recorder]);
 
@@ -280,7 +290,7 @@ export default function StudySessionScreen() {
           micPermissionRef.current = granted;
           return granted;
         },
-        openLive: () => startLiveTranscription(chunk.text, liveKeys),
+        openLive: () => startLiveTranscription(chunk.text, live),
         start() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
@@ -308,7 +318,7 @@ export default function StudySessionScreen() {
       // The usual cause is the mic held by a call or another app; the error doesn't say which.
       Alert.alert("Couldn't start recording", "If you're on a call or another app is using the microphone, close it and try again.");
     }
-  }, [liveKeys, logMic, recorder, session.chunks, session.currentIndex, stampMic, waveformLevels]);
+  }, [live, logMic, recorder, session.chunks, session.currentIndex, stampMic, waveformLevels]);
 
   const handleCancel = useCallback(() => {
     if (!recorder.canDiscard()) return;
