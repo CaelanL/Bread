@@ -34,39 +34,34 @@ failure never loses a recording. The `LIVE_TRANSCRIPTION_ENABLED` secret is the
 
 `app/session.tsx` owns the recorder through `useAudioRecorder` from
 `@siteed/audio-studio`, pinned to exactly `3.2.0`. One mic session produces both
-outputs: an m4a file (`output.compressed`, with the WAV primary disabled), and 16
-kHz mono 16-bit PCM chunks every 100 ms.
+outputs: a 64 kbps AAC m4a file (`output.compressed`, with the WAV primary
+disabled), and 16 kHz mono 16-bit PCM chunks every 100 ms.
 
-Tapping the mic in `handleMicPress`:
+The mic and Retry start on finger-down (`onPressIn`), with no slide-off cancel.
+`onPress` covers activations without a press-in; the press ending a touch that
+already pressed in is ignored (`source` in `start`), so a fast denial alerts once.
+Permission is read at screen open and after any prompt. Then `handleMicPress`:
 
-1. Claims one recording attempt for the current chunk and shows a loading ring
-   around the mic circle. It asks for mic permission at once. The X beside the
-   circle discards the attempt. Further mic taps are ignored while that attempt
-   owns the recorder.
-2. Calls `startLiveTranscription(chunk.text)`, which returns at once and connects
-   in the background.
-3. Calls `startRecording`. If the attempt was discarded during permission, it
-   never starts. If discarded during native start, it stops as soon as start
-   resolves and keeps ownership until that stop finishes.
-4. Morphs the circle into a slimmer pill with the waveform, discard and submit
-   actions, and arms the cap timer once native start resolves. The pill and its
-   actions signal readiness even in silence. VoiceOver announces Listening.
-   Motion, the connection to Soniox and the first PCM chunk do not gate capture
-   or readiness. With Reduce Motion enabled, the ring is still and the control
-   fades in place.
+1. Claims one attempt for the chunk; further taps are ignored while it owns the
+   recorder.
+2. If permission is granted, calls `startRecording` and opens live in the touch's
+   own tick, before the loading ring renders. Otherwise the ring shows during the
+   prompt, then live opens and recording starts. The iOS haptic follows.
+3. The X beside the ring discards. Discarded during permission, it never starts;
+   during native start, it stops once start resolves, holding ownership until then.
+4. Once native start resolves, morphs into the pill (waveform, discard, submit) and
+   arms the cap timer. VoiceOver says Listening. Soniox and the first PCM chunk
+   never gate capture. Reduce Motion keeps the ring still and fades.
 
 PCM goes two places:
 
 - **Waveform:** `onAudioStream` calls `handleAudioStream`, which turns each chunk
-  into four RMS levels in a Reanimated shared value. Recording causes no React
-  re-renders, which is why the library's analysis events aren't used.
+  into four RMS levels in a Reanimated shared value, with no React re-renders
+  (why the library's analysis events aren't used).
 - **Live feed:** a screen-lifetime `LegacyEventEmitter` subscription to the
   module's `AudioData` event calls `feedAudio`. It bypasses `onAudioStream` because
   the hook nulls that callback when `stopRecording` resolves, and the trailing PCM
   chunk can reach JS after that.
-
-The screen calls `getAuthToken` on mount, so the first mic press skips a token
-refresh before the key mint.
 
 ### Submit and teardown
 
@@ -75,18 +70,16 @@ the submit, stops the recorder and hands the file and live session to the seam.
 The attempt keeps the live session through `processRecording` so the trailing
 chunk can still reach it. While transcribing, the same pill shows a busy indicator.
 
-Discarding, paging away, and leaving the screen cancel the attempt. The recorder
-closes the live session and holds ownership until native cleanup finishes. A late
-transcript from that attempt is ignored. Discarded recordings do not affect the
-score, duration, or session attempt.
+Discarding, paging away, and leaving cancel the attempt. The recorder closes the
+live session and holds ownership until native cleanup finishes. A late transcript
+is ignored. Discards don't affect the score, duration, or session attempt.
 
 ### Deleting recordings
 
 The recorder writes `<UUID>.m4a` into Documents. `recording-controls.ts` deletes
-each attempt's file (`fileUri` and `compressedFileUri`, deduplicated) through
-`Capture.remove`: after a submit's processing settles (live, batch or failure,
-and a cancel mid-processing waits for it), or after native stop for a discard.
-Delete failures are ignored; cleanup never turns a score into an error.
+each attempt's files (`fileUri`, `compressedFileUri`) through `Capture.remove`
+once a submit's processing settles (a cancel mid-processing waits for it), or
+after native stop for a discard. Delete failures are ignored.
 
 `removeAbandonedRecordings` runs when the session screen mounts. It deletes
 leftovers from crashes and old builds: Documents children named exactly
@@ -111,17 +104,19 @@ between them. There is no second scoring path and no live transcript on screen.
 
 ## Live path
 
-`startLiveTranscription(verseText, format)` returns a `LiveTranscriptionSession`
+`startLiveTranscription(verseText, keys)` returns a `LiveTranscriptionSession`
 synchronously, so audio can be fed from the first callback. Its `state` runs
 `connecting`, `streaming`, then `closed` or `failed`.
 
-1. **Mint.** POST to `transcription-token` with the user's JWT. The response is
-   `{ apiKey, expiresAt, websocketUrl, model }`.
+1. **Key.** The screen's `LiveKeyCache` mints on mount (POST `transcription-token`
+   with the JWT), one mint at a time, and reuses the key 270 s from arrival, not
+   `expiresAt` (clock skew). A stale key is re-minted before the socket opens. A
+   failure before Soniox's first non-error message drops the key.
 2. **Buffer.** PCM captured while Soniox connects is held in memory. The mic
    can start as soon as native setup finishes, regardless of connection state.
-3. **Open.** The first frame is JSON config: key, model, `pcm_s16le`, sample rate,
-   channels, `language_hints`, and the verse as context. The backlog then flushes as
-   individual chunks.
+3. **Open.** The key goes in the protocols list (`['soniox-api-key', key]`). The
+   first frame is JSON config: model, `pcm_s16le`, sample rate, channels,
+   `language_hints`, and the verse as context. The backlog then flushes as chunks.
 4. **Stream.** Tokens with `is_final` accumulate. `<fin>` and `<end>` are dropped.
 5. **Finish.** `finish(timeoutMs)` waits `FLUSH_GRACE_MS` for the trailing chunk,
    sends an empty frame as end-of-audio, and resolves when Soniox says `finished`.
@@ -151,12 +146,10 @@ file. `abort` is safe to call at any time.
 `process-recording`: `audio` (the m4a), `durationMs`, `actualVerse`. It reads from
 the URI, so the file is never loaded into JS memory.
 
-The function commits a 200 once the request validates, streams one space every 10
-seconds while Soniox works, then sends the JSON. `response.json()` tolerates the
-leading whitespace. Failures after the 200 arrive as `{ error }` in the body, so the
-client checks that `transcription` is a string rather than trusting `response.ok`.
-The result is `{ transcription, cleanedTranscription, cleaningUsed }`. Cleaning is
-off (`CLEANING_ENABLED = false`), so `cleanedTranscription` is the raw text.
+The function streams heartbeat spaces before its JSON, and failures after its 200
+arrive as `{ error }` (`docs/architecture/edge-functions.md`), so the client checks
+that `transcription` is a string rather than trusting `response.ok`. Cleaning is
+off, so `cleanedTranscription` is the raw text.
 
 Silent audio gives an empty transcript and a score of 0. Unlike live failures, batch
 failures are shown: the error throws out of the seam, and `handleSubmit` shows the
@@ -169,10 +162,12 @@ the reader records again.
 |---|---|---|---|
 | Recording cap | 300 s | `MAX_RECORDING_MS` in `app/session.tsx` | Auto-submit |
 | Live session cap | 315 s | `MAX_SESSION_SECONDS` in `transcription-token` | Client cap always fires first |
-| Temporary key TTL | 60 s | `KEY_TTL_SECONDS` in `transcription-token` | Gates connecting only; a running stream outlives it |
+| Temporary key TTL | 300 s | `KEY_TTL_SECONDS` in `transcription-token` | Gates connecting only; a running stream outlives it |
+| Key reuse | 270 s | `KEY_REUSE_MS` in `live-session.ts` | TTL less 30 s |
 | Connect buffer | 15 s of audio | `MAX_BUFFER_SECONDS` | Bounds a stalled connect |
 | Flush grace | 50 ms | `FLUSH_GRACE_MS` | Lets the trailing PCM chunk feed |
-| Finalize wait | 3 s | `FINALIZE_TIMEOUT_MS` in `score-recording.ts` | Then batch |
+| Finalize wait | 1.5 s | `FINALIZE_TIMEOUT_MS` in `score-recording.ts` | Then batch |
+| Batch file | 64 kbps AAC | `handleMicPress` | Lower risks a rejected encoder and no m4a |
 | Heartbeat | 10 s | `process-recording` | Beats the phone's roughly 60 s socket idle timeout |
 | Soniox poll deadline | 90 s | `process-recording` | Bounds the batch wait |
 
@@ -182,11 +177,10 @@ deadline bounds the work.
 ### The 5-minute cap
 
 A timer armed at record start fires `handleSubmitRef.current()`, the same submit as
-tapping done, plus the toast "5 minute limit reached — scoring what you recited." It
-goes through a ref because the timer outlives the render it was armed in, and a stale
-handler would miss retry and peek state set after recording began. The reader keeps
-the recitation and gets a score, so a cap hit is not an error, though the toast
-reuses `showErrorToast`. Leaving the recording phase clears the timer.
+done, plus the toast "5 minute limit reached — scoring what you recited." The ref
+keeps a stale handler from missing retry and peek state set after recording began.
+A cap hit isn't an error, though the toast reuses `showErrorToast`. Leaving the
+recording phase clears the timer.
 
 If Soniox ever cuts a stream at its own cap, that's a stream failure, and batch scores
 the full file.
@@ -194,20 +188,20 @@ the full file.
 ## Kill switch
 
 `transcription-token` checks `LIVE_TRANSCRIPTION_ENABLED` after auth. Anything but
-`true`, or unset, returns 403 `{ error: "LIVE_DISABLED" }`, which the client treats like any
-other mint failure, so every client falls back to batch from its next recording. A secret change takes effect with no deploy or app update, and
-in-flight streams finish normally. The batch path doesn't read the secret. Locally it
-goes in `supabase/functions/.env`, then `db:stop` and `db:start`.
+`true` returns 403 `{ error: "LIVE_DISABLED" }`, a mint failure, so clients fall back
+to batch from their next mint: a study screen already open keeps its key for up to
+270 s. No deploy or app update is needed, and in-flight streams finish. Batch
+ignores it. Locally it goes in `supabase/functions/.env`, then `db:stop` and
+`db:start`.
 
 ## Sharp edges
 
 - **Audio leaves the device at record start.** The live stream runs from the first
   chunk, so a cancelled recording has already reached Soniox, though nothing from it
   is scored or stored.
-- **Live usage isn't metered.** `recordTranscriptionUsage` runs only in
-  `process-recording`, so `usage_daily.transcribe_seconds` is batch-only. Minted keys
-  carry `client_reference_id: user.id` for attribution in Soniox. Any future quota
-  has to account for this.
+- **Live usage isn't metered.** `usage_daily.transcribe_seconds` is batch-only
+  (`recordTranscriptionUsage` in `process-recording`). Keys carry
+  `client_reference_id: user.id` for Soniox attribution. A future quota must count live.
 - **A failed upload isn't retried.** That attempt is lost ([Batch path](#batch-path)).
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
   the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
@@ -217,18 +211,18 @@ goes in `supabase/functions/.env`, then `db:stop` and `db:start`.
 
 ## Browser checks
 
-Recording needs a person and a real device. Local runs take the batch path unless the secret is set.
+Recording needs a person and a real device. Local runs use batch unless the secret is set.
 
-- With live on: Library, a verse, Start session, mic. Speak as soon as the waveform pill appears, then submit. Check the first word in the result and confirm the Metro log has no `[LIVE] falling back to batch` line.
-- With the secret unset: same taps. The analysis indicator stays visible longer, the log says `falling back to batch: token endpoint 403`, the score still appears, and no error shows.
+- With live on: Start session, mic, speak as the pill appears, submit, then Retry. The first word scores, and Metro has no `[LIVE] falling back` line for either take (a silent take's `empty transcript` still means Soniox accepted the key).
+- With the secret unset: the log says `mint failed: token endpoint 403`, and the score still appears with no error.
+- Dev builds log `[MIC] down→call →resolve →first audio` (ms from finger-down). VoiceOver double-tap records once.
 - Hold a recording past 5:00: the toast "5 minute limit reached — scoring what you recited." appears and a score follows, with no second submit.
 - Mic, then the X beside the mic or on the pill: the pill collapses to the mic, there is no score, and no toast appears 5 minutes later.
 - In Xcode's app container, `Documents` has no `<UUID>.m4a` after a live or batch score, a discard, or exit mid-analysis. Old ones go once a session opens.
 - Reduce Motion on, relaunch Bread: the startup ring stays still and the control fades in place as capture starts.
 
-**Can't start.** A start that throws (most often a call or app holding the mic; the error
-doesn't say) shows "Couldn't start recording", asking to close it and retry. A denied
-permission shows "Permission required".
+**Can't start.** A throwing start (usually a call or app holding the mic) shows
+"Couldn't start recording". A denied permission shows "Permission required".
 
 ## Decisions
 
@@ -244,3 +238,4 @@ permission shows "Permission required".
 - 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off. Revisit if quota returns.
 - 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
 - 2026-11-12 · Delete each file once its attempt settles, sweep exact-name leftovers, no owned folder · Every take was kept forever. A folder adds a step before native start; the sweep covers it.
+- 2026-11-14 · Finger-down start, native start before the ring, one key per screen (300 s TTL, protocol auth), 1.5 s finalize, 64 kbps · Faster capture, fallback and upload. Soniox refuses `api_key` in the config from 15 January 2027.
