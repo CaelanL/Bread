@@ -196,6 +196,13 @@ describe('alignTranscription — spelling and character normalization', () => {
     ['the jubile', 'the jubilee'],
     ["Moses' hands", "Moses's hands"],
     ["at Jesus' feet", "at Jesus's feet"],
+    // Odd spellings and names the engine wrote in the voice tests.
+    ['Hazael, Take a present', 'hazel, take a present'],
+    ['vaunteth not itself, Doth not behave itself unseemly', 'vaunteth not itself, doth not behave itself unseamly'],
+    ['ships at Ezion-geber.', 'ships at Ezion-gebar.'],
+    ["for thy great mercies' sake", "for thy great mercy's sake"],
+    ['And David enquired of the LORD', 'And David enquied of the LORD'],
+    ['he loved also Rachel more than Leah', 'he loved also Rachel more than Lee'],
   ] as const;
   for (const [expected, transcript] of equivalent) {
     it(`${expected} = ${transcript}`, () => {
@@ -206,6 +213,7 @@ describe('alignTranscription — spelling and character normalization', () => {
 
   it('shows the verse\'s own spelling for a matched word', () => {
     assert.deepEqual(alignTranscription('Honour thy father', 'honor thy father').map((w) => w.word), ['Honour', 'thy', 'father']);
+    assert.deepEqual(alignTranscription('Hazael, Take', 'hazel, take').map((w) => w.word), ['Hazael,', 'Take']);
   });
 
   it('drops more hesitation spellings, but not words scripture uses', () => {
@@ -216,7 +224,7 @@ describe('alignTranscription — spelling and character normalization', () => {
   });
 
   const different = [
-    ['timber', 'timbre'], ['Peter', 'petre'], ['Hazael', 'hazel'], ['scoured', 'scored'], ['outer', 'outré'],
+    ['timber', 'timbre'], ['Peter', 'petre'], ['scoured', 'scored'], ['outer', 'outré'],
     ["the ass's colt", 'the ass colt'], ['the witness', "the witness's"],
   ] as const;
   for (const [expected, transcript] of different) {
@@ -232,6 +240,13 @@ describe('alignTranscription — spelling and character normalization', () => {
     ['I do not know', "I don't know"],
     ["I don't know", 'I do not know'],
     ['And lo a voice', 'And low a voice'],
+    ['they forgat his works', 'they forget his works'],
+    ['stablish you', 'establish you'],
+    ['And builded an altar', 'And built an altar'],
+    ['mine eyes are unto thee', 'my eyes are unto thee'],
+    ['God commendeth his love', 'God commended his love'],
+    ['to him pertained', 'to him pertain'],
+    ['Joab, Though I should receive', 'Job, though I should receive'],
   ] as const;
   for (const [expected, transcript] of staysWrong) {
     it(`stays wrong: ${expected} / ${transcript}`, () => assertNotEquivalent(expected, transcript));
