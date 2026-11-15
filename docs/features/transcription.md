@@ -33,9 +33,9 @@ failure never loses a recording. The `LIVE_TRANSCRIPTION_ENABLED` secret is the
 ## Recording
 
 `app/session.tsx` owns the recorder through `useAudioRecorder` from
-`@siteed/audio-studio`, pinned to exactly `3.2.0`. One mic session produces both
-outputs: an m4a file (`output.compressed`, with the WAV primary disabled), and 16
-kHz mono 16-bit PCM chunks every 100 ms.
+`@siteed/audio-studio`. One mic session produces both outputs: an m4a file
+(`output.compressed`, with the WAV primary disabled), and 16 kHz mono 16-bit PCM
+chunks every 100 ms.
 
 Tapping the mic in `handleMicPress`:
 
@@ -106,8 +106,8 @@ In `useStudySession`, `processRecording` uses `scoreRecording` in order:
    only if the attempt still owns the submission.
 
 Both paths give raw Soniox text with the verse as recognition context. The models
-differ (`stt-rt-v5` live, `stt-async-v5` batch), so a word can occasionally differ
-between them. There is no second scoring path and no live transcript on screen.
+differ (`stt-rt-v6` live, `stt-async-v6` batch), so a word can occasionally differ
+between them. There is no second scoring path.
 
 ## Live path
 
@@ -119,9 +119,9 @@ synchronously, so audio can be fed from the first callback. Its `state` runs
    `{ apiKey, expiresAt, websocketUrl, model }`.
 2. **Buffer.** PCM captured while Soniox connects is held in memory. The mic
    can start as soon as native setup finishes, regardless of connection state.
-3. **Open.** The first frame is JSON config: key, model, `pcm_s16le`, sample rate,
-   channels, `language_hints`, and the verse as context. The backlog then flushes as
-   individual chunks.
+3. **Open.** The key rides as the `soniox-api-key` protocol. The first frame is
+   JSON config: model, `pcm_s16le`, sample rate, channels, `language_hints`, and
+   the verse as context. The backlog then flushes as individual chunks.
 4. **Stream.** Tokens with `is_final` accumulate. `<fin>` and `<end>` are dropped.
 5. **Finish.** `finish(timeoutMs)` waits `FLUSH_GRACE_MS` for the trailing chunk,
    sends an empty frame as end-of-audio, and resolves when Soniox says `finished`.
@@ -135,7 +135,7 @@ down the socket and rejects any pending `finish`.
 |---|---|
 | Token endpoint not 200, including 403 `LIVE_DISABLED` | No key |
 | Mint throws (offline, no session) | No key |
-| Socket error, or close while connecting or streaming | Stream is gone |
+| Socket refused, error, or close while connecting or streaming | Stream is gone |
 | Soniox `error_code` message | Stream is gone |
 | Buffer passes `MAX_BUFFER_SECONDS` of audio | Connect stalled |
 | `finish` called with no bytes ever fed | PCM capture is dead; empty text would score 0 |
@@ -158,6 +158,9 @@ client checks that `transcription` is a string rather than trusting `response.ok
 The result is `{ transcription, cleanedTranscription, cleaningUsed }`. Cleaning is
 off (`CLEANING_ENABLED = false`), so `cleanedTranscription` is the raw text.
 
+The function deletes its Soniox copies after each job. A Soniox 429 past the
+90 s deadline answers a "busy, try again" error.
+
 Silent audio gives an empty transcript and a score of 0. Unlike live failures, batch
 failures are shown: the error throws out of the seam, and `handleSubmit` shows the
 "Recording failed" alert. The chunk stays incomplete, time studied doesn't grow, and
@@ -174,10 +177,7 @@ the reader records again.
 | Flush grace | 50 ms | `FLUSH_GRACE_MS` | Lets the trailing PCM chunk feed |
 | Finalize wait | 3 s | `FINALIZE_TIMEOUT_MS` in `score-recording.ts` | Then batch |
 | Heartbeat | 10 s | `process-recording` | Beats the phone's roughly 60 s socket idle timeout |
-| Soniox poll deadline | 90 s | `process-recording` | Bounds the batch wait |
-
-The upload has no client timeout: the heartbeat removes the silent window and the poll
-deadline bounds the work.
+| Soniox deadline | 90 s | `process-recording` | Bounds the batch wait |
 
 ### The 5-minute cap
 
@@ -194,9 +194,9 @@ the full file.
 ## Kill switch
 
 `transcription-token` checks `LIVE_TRANSCRIPTION_ENABLED` after auth. Anything but
-`true`, or unset, returns 403 `{ error: "LIVE_DISABLED" }`, which the client treats like any
-other mint failure, so every client falls back to batch from its next recording. A secret change takes effect with no deploy or app update, and
-in-flight streams finish normally. The batch path doesn't read the secret. Locally it
+`true`, or unset, returns 403 `{ error: "LIVE_DISABLED" }`, and every client falls
+back to batch from its next recording. A secret change takes effect with no deploy
+or app update, and in-flight streams finish normally. The batch path doesn't read the secret. Locally it
 goes in `supabase/functions/.env`, then `db:stop` and `db:start`.
 
 ## Sharp edges
@@ -212,8 +212,7 @@ goes in `supabase/functions/.env`, then `db:stop` and `db:start`.
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
   the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
   any of them can clip the last word, which raises `missing` with no error.
-- **Naming.** Two functions are called `processRecording`, and `cleanedTranscription`
-  holds raw text while cleaning is off.
+- **Naming.** Two functions are called `processRecording`.
 
 ## Browser checks
 
@@ -244,3 +243,4 @@ permission shows "Permission required".
 - 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off. Revisit if quota returns.
 - 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
 - 2026-11-12 · Delete each file once its attempt settles, sweep exact-name leftovers, no owned folder · Every take was kept forever. A folder adds a step before native start; the sweep covers it.
+- 2026-11-14 · Live key sent as the `soniox-api-key` protocol · Soniox refuses a start-frame key from 2027-01-15.

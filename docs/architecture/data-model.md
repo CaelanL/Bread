@@ -11,7 +11,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `usage_daily` | per-user | Free/Supporter rate-limit counters |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
-| `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits, see `docs/architecture/bible-api-and-caching.md` |
+| `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits ([caching](bible-api-and-caching.md)) |
 | `app_config` | shared | Key/value settings for the stats cron (`stats_min_words`, `stats_cron_schedule`) |
 | `user_collections` | per-user | Editable, soft-deleted; IDs unique per user |
 | `curated_collection_savers` | global | [All-time contribution ledger and access rules](../features/home.md#community-saves) |
@@ -137,10 +137,12 @@ A verse can be in many collections; see `delete_verse` for leaving the last.
 
 ### `verse_cache`
 
-Migration: `004_verse_level_cache.sql`
+Migrations: `004_verse_level_cache.sql`, `20261114200000_verse_cache_text_rev.sql`
+(adds `text_rev`, clears the ESV, NIV, NLT and NKJV rows once).
 
-One row per verse: `book`, `chapter`, `verse`, `version`, `text` (the
-actual verse text), and `last_used_at`, bumped on every read for LRU.
+One row per verse: `book`, `chapter`, `verse`, `version`, `text`,
+`last_used_at` (bumped on every read for LRU) and `text_rev` (nullable,
+the parsing revision that wrote the row).
 
 Unique: `(book, chapter, verse, version)`. Indexed for chapter lookups,
 LRU and per-version counts.
@@ -150,8 +152,8 @@ policies and revoked `anon` and `authenticated`, the same for
 `app_config` and the `verse_cache_stats` view (now `security_invoker`).
 Edge functions reach them with the service role, which bypasses both.
 
-Licensing limits, eviction and its known gaps are in
-`docs/architecture/bible-api-and-caching.md`.
+Licensing limits, eviction, `text_rev` and the known gaps are in
+`docs/architecture/bible-api-and-caching.md`. Tests: `supabase/tests/verse-cache.test.sql`.
 
 The edge function calls none of the cache SQL helpers in the table below.
 
@@ -183,8 +185,6 @@ RLS: SELECT/INSERT where `auth.uid() = user_id`. **No UPDATE, no
 DELETE policy** — the table is append-only by design. Deletion only
 happens via `delete_own_account()` (`SECURITY DEFINER`).
 
-**No FK to `user_verses`.** See Decisions.
-
 ### `usage_daily`, `transcription_locks`, `subscriptions`
 
 `usage_daily` (migration 001): per-user per-day counters used by the
@@ -215,8 +215,7 @@ Public-readable; service role writes. See `docs/features/insights.md`.
 `user_stats` (migration 011): Cron-precomputed every 6 hours by
 `update_user_stats()`. Computes `total_words_mastered` for every user
 with a qualifying attempt, once per reference, and `avg_time_per_word_ms` only for users
-with `stats_min_words` (600) or more mastered words. So the "average
-time to master" insight is null for most users. Not populated
+with `stats_min_words` (600) or more mastered words. Not populated
 incrementally — the cron is the only writer.
 
 ## Functions, triggers and cron
@@ -224,8 +223,7 @@ incrementally — the cron is the only writer.
 | Name | Type | Purpose |
 |---|---|---|
 | `update_updated_at_column()` | trigger fn | sets `updated_at = NOW()` |
-| `update_user_collections_updated_at` | trigger | fires on UPDATE |
-| `update_user_verses_updated_at` | trigger | fires on UPDATE |
+| `update_user_collections_updated_at`, `update_user_verses_updated_at` | triggers | fire on UPDATE |
 | `cleanup_stale_transcription_locks()` | fn | deletes locks > 5 min old |
 | `cleanup_expired_verse_cache()` | fn | unused since migration 001, references a dropped column |
 | `get_verse_cache_count(version)` | fn | row count per version |
@@ -396,8 +394,7 @@ also re-dates new files to sort after prod's newest. See
   that helper.
 - `update_popular_ranges()` includes soft-deleted verses on purpose,
   since mastery is permanent.
-- `popular_ranges` enumerates *every* sub-range with
-  `generate_series` — table size grows fast. Top 1000 only retained.
+- `popular_ranges` grows fast: it enumerates every sub-range (top 1000 kept).
 
 ## Decisions
 
