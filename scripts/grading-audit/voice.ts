@@ -183,9 +183,10 @@ function sonioxKey(): string {
 
 async function transcribeDirect(audio: Buffer, text: string, model = 'stt-async-v5'): Promise<string> {
   const headers = { Authorization: `Bearer ${sonioxKey()}` };
+  const signal = () => AbortSignal.timeout(60_000); // a hung request stalled a whole run
   const form = new FormData();
   form.append('file', new Blob([new Uint8Array(audio)]), 'recording.m4a');
-  const upload = await fetch(`${SONIOX}/files`, { method: 'POST', headers, body: form });
+  const upload = await fetch(`${SONIOX}/files`, { method: 'POST', headers, body: form, signal: signal() });
   if (!upload.ok) throw new Error(`soniox upload ${upload.status}`);
   const fileId: string = (await upload.json()).id;
   let txId: string | undefined;
@@ -193,6 +194,7 @@ async function transcribeDirect(audio: Buffer, text: string, model = 'stt-async-
     const job = await fetch(`${SONIOX}/transcriptions`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
+      signal: signal(),
       // Same body as transcribeWithSoniox in supabase/functions/process-recording/index.ts.
       body: JSON.stringify({
         file_id: fileId,
@@ -210,18 +212,18 @@ async function transcribeDirect(audio: Buffer, text: string, model = 'stt-async-
     if (!job.ok) throw new Error(`soniox job ${job.status}`);
     txId = (await job.json()).id as string;
     for (let i = 0; ; i++) {
-      const poll = await fetch(`${SONIOX}/transcriptions/${txId}`, { headers });
+      const poll = await fetch(`${SONIOX}/transcriptions/${txId}`, { headers, signal: signal() });
       if (!poll.ok) throw new Error(`soniox poll ${poll.status}`);
       const status = await poll.json();
       if (status.status === 'completed') break;
       if (status.status === 'error' || i > 180) throw new Error(`soniox ${status.status}`);
       await new Promise((r) => setTimeout(r, 1000));
     }
-    const { text: transcript } = await (await fetch(`${SONIOX}/transcriptions/${txId}/transcript`, { headers })).json();
+    const { text: transcript } = await (await fetch(`${SONIOX}/transcriptions/${txId}/transcript`, { headers, signal: signal() })).json();
     return transcript ?? '';
   } finally {
-    if (txId) await fetch(`${SONIOX}/transcriptions/${txId}`, { method: 'DELETE', headers });
-    await fetch(`${SONIOX}/files/${fileId}`, { method: 'DELETE', headers });
+    if (txId) await fetch(`${SONIOX}/transcriptions/${txId}`, { method: 'DELETE', headers, signal: signal() });
+    await fetch(`${SONIOX}/files/${fileId}`, { method: 'DELETE', headers, signal: signal() });
   }
 }
 

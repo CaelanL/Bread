@@ -518,8 +518,14 @@ export function alignTranscription(
   );
   const expectedWords = toComparisonUnits(expectedTokens);
   const transcribedWords = toComparisonUnits(transcribedTokens);
-  const expectedUnits = mergeContextNumbers(expectedWords, transcribedWords);
-  const transcribedUnits = mergeContextNumbers(transcribedWords, expectedWords);
+  const expectedMerged = mergeContextNumbers(expectedWords, transcribedWords);
+  const transcribedMerged = mergeContextNumbers(transcribedWords, expectedWords);
+  // A run of words whose letters spell one word said on either side ("for as much" /
+  // "forasmuch") becomes one unit before the diff, so a shared short word ("as", "for")
+  // can't anchor the diff inside the compound and split it into missing and added.
+  const said = new Set([...expectedMerged, ...transcribedMerged].filter(isWordUnit).map(compoundKey));
+  const expectedUnits = joinCompounds(expectedMerged, said);
+  const transcribedUnits = joinCompounds(transcribedMerged, said);
 
   // Numeric spans become one comparison unit before the diff, so formatting
   // differences ("seventy-two" vs "72") match without hiding real value
@@ -585,63 +591,129 @@ export function alignTranscription(
   return alignment;
 }
 
+const MAX_COMPOUND_PARTS = 4;
+
+// Said as two words: "withal" is "with all", "altogether" is "all together".
+const COMPOUND_SAID: Record<string, string> = { withal: 'withall', altogether: 'alltogether' };
+const compoundKey = (unit: ComparisonUnit) => COMPOUND_SAID[unit.key] ?? unit.key;
+
+function isWordUnit(unit: ComparisonUnit): boolean {
+  return unit.tokens.length === 1 && isAlphabetic(unit.tokens[0]);
+}
+
+function joinCompounds(units: ComparisonUnit[], said: Set<string>): ComparisonUnit[] {
+  const out: ComparisonUnit[] = [];
+  for (let i = 0; i < units.length;) {
+    let end = i;
+    let key = compoundKey(units[i]);
+    for (let j = i + 1; j < Math.min(units.length, i + MAX_COMPOUND_PARTS) && isWordUnit(units[i]) && isWordUnit(units[j]); j++) {
+      key += compoundKey(units[j]);
+      if (said.has(key)) end = j;
+    }
+    const parts = units.slice(i, end + 1);
+    out.push({ key: parts.map(compoundKey).join(''), tokens: parts.flatMap((unit) => unit.tokens) });
+    i = end + 1;
+  }
+  return out;
+}
+
 function isAlphabetic(token: Token): boolean {
   return /^[a-z]+$/.test(token.normalized);
 }
 
+const pushToken = (alignment: AlignmentWord[], token: Token, status: 'correct' | 'missing' | 'added') =>
+  alignment.push(
+    status === 'added'
+      ? { word: token.raw.toLowerCase(), status }
+      : status === 'missing'
+        ? { word: token.raw, status, expected: token.raw }
+        : { word: token.raw, status },
+  );
+
 /**
  * Resolve a substitution region (expected tokens the diff removed vs
- * transcribed tokens it added). Alphabetic words that only differ in how
- * they're split ("for ever" ↔ "forever") are spoken identically, so greedily
- * match runs whose normalized concatenations are equal. Digits are excluded:
- * numeric equivalence is handled before the diff, and `72` must not match
- * `7 2` through generic string concatenation.
+ * transcribed tokens it added). First re-diff it word by word: a number span
+ * or compound the unit diff treated as one block may still share plain words
+ * with the transcript. What's left goes to `greedySubstitution`.
  */
 function alignSubstitution(
   removed: Token[],
   added: Token[],
   alignment: AlignmentWord[]
 ): void {
+  const wordKey = (t: Token) => spelling(t.normalized);
+  const parts = diffArrays(removed.map(wordKey), added.map(wordKey));
+  if (!parts.some((part) => !part.added && !part.removed)) {
+    greedySubstitution(removed, added, alignment);
+    return;
+  }
   let a = 0;
   let b = 0;
-  while (a < removed.length && b < added.length) {
-    if (!isAlphabetic(removed[a]) || !isAlphabetic(added[b])) {
-      alignment.push({ word: removed[a].raw, status: 'missing', expected: removed[a].raw });
-      a++;
-      continue;
+  for (let p = 0; p < parts.length; p++) {
+    const n = parts[p].value.length;
+    if (parts[p].removed && parts[p + 1]?.added) {
+      const m = parts[p + 1].value.length;
+      greedySubstitution(removed.slice(a, a + n), added.slice(b, b + m), alignment);
+      a += n;
+      b += m;
+      p++;
+    } else if (parts[p].removed) {
+      for (const t of removed.slice(a, a + n)) pushToken(alignment, t, 'missing');
+      a += n;
+    } else if (parts[p].added) {
+      for (const t of added.slice(b, b + n)) pushToken(alignment, t, 'added');
+      b += n;
+    } else {
+      for (const t of removed.slice(a, a + n)) pushToken(alignment, t, 'correct');
+      a += n;
+      b += n;
     }
+  }
+}
 
-    let i = a, j = b;
+/**
+ * Alphabetic words that only differ in how they're split ("for ever" ↔
+ * "forever") are spoken identically, so match runs whose letters, as
+ * written, concatenate equal. A transcript word that matches nothing is
+ * skipped as added rather than stalling the walk, so one slip costs only
+ * itself. Digits are excluded: numeric equivalence is handled before the
+ * diff, and `72` must not match `7 2` through string concatenation.
+ */
+function greedySubstitution(
+  removed: Token[],
+  added: Token[],
+  alignment: AlignmentWord[]
+): void {
+  const tryMatch = (a: number, b: number): [number, number] | null => {
+    if (!isAlphabetic(removed[a]) || !isAlphabetic(added[b])) return null;
+    let i = a;
+    let j = b;
     let exp = removed[i].normalized;
     let got = added[j].normalized;
     while (exp !== got) {
-      if (got.startsWith(exp) && i + 1 < removed.length && isAlphabetic(removed[i + 1])) {
-        exp += removed[++i].normalized;
-      } else if (exp.startsWith(got) && j + 1 < added.length && isAlphabetic(added[j + 1])) {
-        got += added[++j].normalized;
-      } else {
-        break;
-      }
+      if (got.startsWith(exp) && i + 1 < removed.length && isAlphabetic(removed[i + 1])) exp += removed[++i].normalized;
+      else if (exp.startsWith(got) && j + 1 < added.length && isAlphabetic(added[j + 1])) got += added[++j].normalized;
+      else return null;
     }
-    if (exp === got) {
-      for (let k = a; k <= i; k++) {
-        alignment.push({ word: removed[k].raw, status: 'correct' });
-      }
-      a = i + 1;
-      b = j + 1;
+    return [i, j];
+  };
+  let a = 0;
+  let b = 0;
+  while (a < removed.length) {
+    let hit: [number, number] | null = null;
+    let at = b;
+    for (; at < added.length && !hit; at++) hit = tryMatch(a, at);
+    if (hit) {
+      for (let k = b; k < at - 1; k++) pushToken(alignment, added[k], 'added');
+      for (let k = a; k <= hit[0]; k++) pushToken(alignment, removed[k], 'correct');
+      a = hit[0] + 1;
+      b = hit[1] + 1;
     } else {
-      alignment.push({ word: removed[a].raw, status: 'missing', expected: removed[a].raw });
+      pushToken(alignment, removed[a], 'missing');
       a++;
     }
   }
-  while (a < removed.length) {
-    alignment.push({ word: removed[a].raw, status: 'missing', expected: removed[a].raw });
-    a++;
-  }
-  while (b < added.length) {
-    alignment.push({ word: added[b].raw.toLowerCase(), status: 'added' });
-    b++;
-  }
+  for (; b < added.length; b++) pushToken(alignment, added[b], 'added');
 }
 
 /**

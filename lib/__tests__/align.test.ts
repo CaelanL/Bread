@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { alignTranscription } from '../align';
+import { calculateChunkScore } from '../study-chunks';
 
 const SMALL_WORDS = [
   'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
@@ -291,4 +292,43 @@ describe('alignTranscription — fractions', () => {
     it(`${same ? '=' : '≠'} ${expected} | ${transcript}`, () =>
       (same ? assertEquivalent : assertNotEquivalent)(expected, transcript));
   }
+});
+
+describe('alignTranscription — compounds and slips', () => {
+  const equivalent = [
+    ['Forasmuch as God hath shewed thee', 'for as much as God hath showed thee'],
+    ['Nevertheless the people be strong', 'never the less the people be strong'],
+    ['to reconcile withal in the holy place', 'to reconcile with all in the holy place'],
+    ['they were altogether become filthy', 'they were all together become filthy'],
+    ['children of Israel for ever: for in six days', 'children of Israel forever for in six days'],
+    ['and\u200Bthe', 'and the'], // zero-width space between words
+  ] as const;
+  for (const [expected, transcript] of equivalent) {
+    it(`${expected} = ${transcript}`, () => {
+      assertEquivalent(expected, transcript);
+      assertEquivalent(transcript, expected);
+    });
+  }
+
+  // D9: a restart costs the repeated words, nothing more.
+  it('a restart costs exactly the repeated words', () => {
+    const alignment = alignTranscription('For God so loved the world', 'For God so loved for God so loved the world');
+    assert.equal(alignment.filter((w) => w.status === 'correct').length, 6);
+    assert.equal(alignment.filter((w) => w.status === 'added').length, 4);
+    assert.equal(alignment.filter((w) => w.status === 'missing').length, 0);
+    assert.equal(calculateChunkScore(alignment), 60);
+  });
+
+  it('one stutter beside "to day" and "for ever" costs only itself', () => {
+    const alignment = alignTranscription('Jesus Christ the same yesterday, and to day, and for ever.', 'Jesus Christ the same yesterday and and today and forever');
+    assert.ok(calculateChunkScore(alignment) >= 90, JSON.stringify(alignment));
+  });
+
+  it('one stray word inside a number costs only itself (Nehemiah 7:38)', () => {
+    const alignment = alignTranscription(
+      'The children of Senaah, three thousand nine hundred and thirty.',
+      'The children of Senaah, three thousand so nine hundred and thirty.',
+    );
+    assert.ok(calculateChunkScore(alignment) >= 90, JSON.stringify(alignment));
+  });
 });

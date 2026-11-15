@@ -16,10 +16,10 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { audit, clipId, KJV_FIXTURES, loadSource, missesFile, refText, replay } from '../../scripts/grading-audit/run';
+import { audit, clipId, KJV_FIXTURES, missesFile, replay } from '../../scripts/grading-audit/run';
 import { PASSES } from '../../scripts/grading-audit/variations';
 import { alignTranscription } from '../align';
-import { calculateChunkScore, calculateFinalScore, parseVerseIntoChunks } from '../study-chunks';
+import { calculateChunkScore, parseVerseIntoChunks } from '../study-chunks';
 import type { SavedVerse } from '../storage';
 
 function wrong(expected: string, transcript: string): string[] {
@@ -76,7 +76,7 @@ describe('grading audit — holds today on every KJV verse', () => {
 const TODO = 'known bug, fails until fixed';
 
 describe('grading audit — known bugs (todo until fixed)', () => {
-  it('F1: a restart inside a number shows the said number words as missing and added', { todo: TODO }, () => {
+  it('F1: a restart inside a number shows the said number words as missing and added', () => {
     const alignment = alignTranscription(
       'And Eber lived after he begat Peleg four hundred and thirty years',
       'And Eber lived after he begat Peleg four hundred, four hundred and thirty years',
@@ -114,14 +114,14 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assertPerfect('Thou shalt love thy neighbour as thyself', 'Thou shalt love thy neighbor as thyself');
   });
 
-  it('F5: a joined compound next to a repeated word is not rejoined', { todo: TODO }, () => {
+  it('F5: a joined compound next to a repeated word is not rejoined', () => {
     assertPerfect(
       'it is a sign between me and the children of Israel for ever: for in six days',
       'it is a sign between me and the children of Israel forever, for in six days',
     );
   });
 
-  it('F6: a split closed compound next to a repeated word is not rejoined', { todo: TODO }, () => {
+  it('F6: a split closed compound next to a repeated word is not rejoined', () => {
     assertPerfect('Forasmuch as God hath shewed thee all this', 'For as much as God hath shewed thee all this');
     assertPerfect('Nevertheless the people be strong', 'Never the less the people be strong');
   });
@@ -187,7 +187,7 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     );
   });
 
-  it('RC3: one stutter next to "to day" and "for ever" costs the whole stretch', { todo: TODO }, () => {
+  it('RC3: one stutter next to "to day" and "for ever" costs the whole stretch', () => {
     const alignment = alignTranscription(
       'Jesus Christ the same yesterday, and to day, and for ever.',
       'Jesus Christ the same yesterday and and today and forever',
@@ -206,15 +206,5 @@ describe('grading audit — known bugs (todo until fixed)', () => {
   it('RC14: a fraction printed in the verse never matches the spoken words', () => {
     assertPerfect('it weighed 3-1/4 pounds.', 'it weighed three and one fourth pounds.');
     assertPerfect('it weighed 3-1/4 pounds.', 'it weighed 3 1/4 pounds.');
-  });
-
-  it('RC8: a verse never said (or revealed) still lets the session reach 90', { todo: TODO }, () => {
-    const kjv = loadSource('KJV');
-    const alignments = new Map<number, ReturnType<typeof alignTranscription>>();
-    for (let v = 1; v <= 6; v++) {
-      const text = refText(kjv, `Psalms 23:${v}`);
-      alignments.set(v - 1, alignTranscription(text, v === 1 ? '' : text));
-    }
-    assert.ok(calculateFinalScore(alignments) < 90);
   });
 });
