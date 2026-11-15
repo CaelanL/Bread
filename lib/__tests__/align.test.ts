@@ -259,6 +259,11 @@ describe('alignTranscription — number grammar', () => {
     ['37', 'thirty, and seven', false],
     ['137', 'an hundred and thirty," and seven', false],
     ['five and twenty', 'twenty five', false], // F4: another wording said aloud
+    ['twelve', '10 and 2', false], // F9: digits for another reading, not another spelling
+    ['twelve tribes', '10 and 2 tribes', false],
+    ['twenty-five', '20 and 5', false],
+    ['forty-two', '40 and 2', false],
+    ['three hundred thousand and seven and thirty thousand and five hundred sheep', '300,000 and 7 and 30,000 and 500 sheep', true],
     ['ten and two', 'twelve', false],
     ['one fourth part', 'a quarter part', false],
     ['three fourths', 'three quarters', false],

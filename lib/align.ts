@@ -489,7 +489,7 @@ function mergeContextNumbers(units: ComparisonUnit[], other: ComparisonUnit[]): 
       i += 2;
       continue;
     }
-    const chain = numberChain(units, i, keys, digitKeys);
+    const chain = numberChain(units, i, other, digitKeys);
     if (chain) {
       out.push(chain.unit);
       i = chain.end - 1;
@@ -515,8 +515,9 @@ const lastPlace = (n: number) => {
   return place;
 };
 
-function numberChain(units: ComparisonUnit[], start: number, keys: Set<string>, digitKeys: Set<string>): { unit: ComparisonUnit; end: number } | undefined {
+function numberChain(units: ComparisonUnit[], start: number, other: ComparisonUnit[], digitKeys: Set<string>): { unit: ComparisonUnit; end: number } | undefined {
   const totals: number[] = [];
+  const parts: string[] = [];
   const ends: number[] = [];
   let sum = 0;
   let last = 0;
@@ -531,6 +532,7 @@ function numberChain(units: ComparisonUnit[], start: number, keys: Set<string>, 
     if (totals.length && value >= lastPlace(last) && !scale) break;
     j = at + 1;
     ends.push(j);
+    parts.push(units[at].key);
     sum = scale ? (sum + Math.floor(value / scale)) * scale + (value % scale) : sum + value;
     last = scale ? sum : value;
     totals.push(sum);
@@ -538,10 +540,27 @@ function numberChain(units: ComparisonUnit[], start: number, keys: Set<string>, 
   for (let n = totals.length; n >= 2; n--) {
     const key = `number:cardinal:${totals[n - 1]}`;
     const tokens = unitTokens(units.slice(start, ends[n - 1]));
-    // Digits on either side: "300,000 and 7" is how an engine writes "three hundred thousand and seven".
-    if (digitKeys.has(key) || (keys.has(key) && tokens.some((t) => /\d/.test(t.raw)))) return { unit: { key, tokens }, end: ends[n - 1] };
+    // Digits on the other side, or digits here when the other side says the same parts with "and"
+    // between them: "300,000 and 7" is how an engine writes "three hundred thousand and seven",
+    // but "10 and 2" is not "twelve".
+    const ownDigits = tokens.some((t) => /\d/.test(t.raw)) && other.some((unit) => unit.key === key && sameParts(unit, parts.slice(0, n)));
+    if (digitKeys.has(key) || ownDigits) return { unit: { key, tokens }, end: ends[n - 1] };
   }
   return undefined;
+}
+
+// The unit's words split at "and" read as these numbers, in order.
+function sameParts(unit: ComparisonUnit, parts: string[]): boolean {
+  const groups: Token[][] = [[]];
+  for (const token of unit.tokens) {
+    if (token.normalized === 'and') groups.push([]);
+    else groups[groups.length - 1].push(token);
+  }
+  if (groups.length !== parts.length) return false;
+  return groups.every((group, i) => {
+    const read = toComparisonUnits(group);
+    return read.length === 1 && read[0].key === parts[i];
+  });
 }
 
 function unitTokens(units: ComparisonUnit[]): Token[] {
