@@ -547,4 +547,101 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.deepEqual(store().masteredVerses.map((v) => v.id), []);
     assert.deepEqual(saved('A').masteredVerses, []);
   });
+  // ---- Round 4: the three rules, each through several actions ----
+
+  await t.test("rule 1: A's late answers (a reset's rollback, a sort's rollback, an add) never touch B", async () => {
+    verseRows.A = [membership('A'), membership('A', 'A-two')];
+    await startSynced('A');
+    const reset = hold('/rest/v1/user_verses', null, 'PATCH');
+    const sort = hold('/rest/v1/user_collections', null, 'PATCH');
+    const add = hold('/rest/v1/user_collections', null, 'POST');
+    const resetting = store().resetVerseProgress('A-verse');
+    const sorting = store().setCollectionSort('psalms', 'alphabetical');
+    const adding = store().addCollection('Late A');
+    await Promise.all([reset.sent, sort.sent, add.sent]);
+    await startSynced('B');
+    const before = JSON.stringify({ verses: store().verses, mastered: store().masteredVerses, collections: store().collections });
+    reset.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    sort.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    add.reply(new Response(null, { status: 201 }));
+    await Promise.allSettled([resetting, sorting, adding]);
+    assert.equal(JSON.stringify({ verses: store().verses, mastered: store().masteredVerses, collections: store().collections }), before);
+    assert.equal(saved('B').verses.some((v) => v.id.startsWith('A-')), false);
+  });
+
+  await t.test("F31: A's failed delete, answered after a switch to B, puts nothing into B's library", async () => {
+    await startSynced('A');
+    const remove = hold('/rest/v1/rpc/delete_verse');
+    const deleting = store().deleteVerse('A-verse', 'my-verses');
+    await remove.sent;
+    await startSynced('B');
+    remove.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    await assert.rejects(deleting);
+    assert.deepEqual(store().verses.map((v) => v.id), ['B-verse']);
+  });
+
+  await t.test('F32: a delete that succeeds after a read during it still has the verse gone, in memory and on disk', async () => {
+    await startSynced('A');
+    const remove = hold('/rest/v1/rpc/delete_verse');
+    const deleting = store().deleteVerse('A-verse', 'my-verses');
+    await remove.sent;
+    await store().fetchVerses();
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-two'], 'the read leaves the pending delete out');
+    remove.reply(new Response(null, { status: 204 }));
+    await deleting;
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-two']);
+    assert.deepEqual(saved('A').verses.map((v) => v.id), ['A-two']);
+  });
+
+  await t.test('rule 2: a pull to refresh and a shared open during a delete keep it out; its failure puts it back once', async () => {
+    await startSynced('A');
+    const remove = hold('/rest/v1/rpc/delete_verse');
+    const deleting = store().deleteVerse('A-verse', 'my-verses');
+    await remove.sent;
+    await store().refresh();
+    await store().openSharedCollection('g1');
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-two']);
+    remove.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    await assert.rejects(deleting);
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-verse', 'A-two']);
+  });
+
+  const writePaths = ['/rest/v1/rpc/copy_verse_to_collection', '/rest/v1/rpc/join_shared_collection', '/rest/v1/rpc/share_collection',
+    '/rest/v1/rpc/add_verse', '/rest/v1/rpc/sync_shared_collection'];
+  const writesSent = () => requests.filter((path) => writePaths.includes(path));
+
+  await t.test('rule 3: copy, join, share and add wait for the profile before writing', async () => {
+    setAccount(null);
+    await signIn('A');
+    const profileRead = hold('/rest/v1/profiles');
+    setAccount('A');
+    await profileRead.sent;
+    requests.length = 0;
+    const actions = [
+      store().copyVerseToCollection('A-verse', 'psalms'),
+      store().joinSharedCollection('ABCD-EFGH'),
+      store().shareCollection('psalms'),
+      store().addVerse({ book: 'John', chapter: 1, verseStart: 1, verseEnd: 1 }, 'my-verses'),
+    ];
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(writesSent(), [], 'nothing written on the saved translation and name');
+    profileRead.reply(Response.json([{ translation: 'ESV', display_name: 'A L.', first_name: 'A', last_name: 'L', welcome_v2_seen_at: null }]));
+    await Promise.allSettled(actions);
+    assert.deepEqual(writesSent().sort(), writePaths.slice(0, 4).sort());
+  });
+
+  await t.test("F30: opening a shared collection syncs its copy only once the account's translation is known", async () => {
+    setAccount(null);
+    await signIn('A');
+    const profileRead = hold('/rest/v1/profiles');
+    setAccount('A');
+    await profileRead.sent;
+    requests.length = 0;
+    const opening = store().openSharedCollection('g1');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(writesSent(), []);
+    profileRead.reply(Response.json([{ translation: 'ESV', display_name: 'A L.', first_name: 'A', last_name: 'L', welcome_v2_seen_at: null }]));
+    await opening;
+    assert.deepEqual(writesSent(), ['/rest/v1/rpc/sync_shared_collection']);
+  });
 });

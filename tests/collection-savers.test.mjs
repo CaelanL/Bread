@@ -148,7 +148,7 @@ test('community saver reads use authoritative totals and stay with their account
     const read = hold();
     let importFinished = false;
     // Imports use the account translation.
-    useAppStore.setState({ bibleVersion: 'KJV' });
+    useAppStore.setState({ bibleVersion: 'KJV', synced: true });
     const importing = state().importCuratedCollection('hope').then((result) => {
       importFinished = true;
       return result;
@@ -170,7 +170,7 @@ test('community saver reads use authoritative totals and stay with their account
   await t.test('count failure never turns a committed save into a failed import', async () => {
     await signIn('A');
     failCounts = true;
-    useAppStore.setState({ bibleVersion: 'KJV' });
+    useAppStore.setState({ bibleVersion: 'KJV', synced: true });
     assert.deepEqual(await state().importCuratedCollection('hope'), {
       collectionId: 'curated-hope-KJV', loaded: false,
     });

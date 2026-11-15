@@ -353,16 +353,12 @@ Invariants 1 and 10 are above. Also:
 
 - **Session attempts logged offline are silently lost.** No queue, no
   retry, no error toast. Surface errors visibly when fixing.
-- **Hydration race**: components subscribed to Zustand before
-  `hydrate()` finishes read empty arrays. Mitigation: check
-  `useHydrated()` before rendering data.
-- **Soft-delete filter inconsistency**: most queries filter
-  `deleted_at IS NULL`, but the Mastered list intentionally does
-  not. Removing the filter from a query you didn't write may
-  resurrect deleted verses.
-- **Duplicate write paths**: `lib/storage/` and `lib/store/index.ts`
-  both implement verse and collection CRUD. Only the store's runs in
-  the app.
+- **Hydration race**: before `hydrate()` finishes, lists are empty.
+  Check `useHydrated()` before rendering data.
+- **Soft-delete filter**: most queries filter `deleted_at IS NULL`;
+  Mastered on purpose doesn't. Changing one may resurrect verses.
+- **Duplicate write paths**: `lib/storage/` and the store both do verse
+  and collection CRUD; only the store's runs.
 - **The preload stops between requests, not during one.** On sign-out
   up to 3 in-flight reads still complete into the session cache.
 
@@ -377,12 +373,14 @@ Invariants 1 and 10 are above. Also:
   first held them behind the list's render (server data at 731 ms vs 457 ms).
 - **Reloads on return wait for 30 s away (Q26).** Control Center or a
   quick app switch fired a burst of reads.
+- **Three rules, one helper each** (top of `lib/store/index.ts`):
+  `sameAccount`/`setFor` after awaits, reads skip `pendingVerseDeletes`,
+  `requireSynced` before translation or name writes.
 
 ## Browser checks
 
-- `npm run sim -- flow startup-timing`: reader-c with 150ms added to every Supabase request, 5
-  cold launches to Home and 5 to the Library; the `[PERF]` lines in `.expo/sim-metro.log` give
-  each launch's marks and requests (`lib/api/dev-timing.ts`, dev builds on a local DB only).
-  Start from `npm run db:reset`.
+- `npm run sim -- flow startup-timing` (from `npm run db:reset`): reader-c, 150ms added per
+  request, 5 cold launches each to Home and Library; `[PERF]` lines in `.expo/sim-metro.log`
+  (`lib/api/dev-timing.ts`).
 - `npm run sim -- flow snapshot-cold-start`: a relaunch with 10s added
   to every request shows reader-c's Library from the saved copy.

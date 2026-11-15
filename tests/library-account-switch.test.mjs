@@ -121,6 +121,8 @@ test('collection writes stay with the account that started them', async (t) => {
     const session = await supabase.auth.getSession();
     const lookup = Promise.withResolvers();
     scenario.mock.method(supabase.auth, 'getSession', () => lookup.promise, { times: 1 });
+    // Copies wait for a synced library (rule 3); this one is.
+    useAppStore.setState({ synced: true });
     const before = copyWrites;
     const copying = store().copyVerseToCollection('A-verse', 'my-verses');
     await signIn('B');
@@ -132,6 +134,8 @@ test('collection writes stay with the account that started them', async (t) => {
 
   await t.test('a late copy cannot populate the next account or suppress its verse load', async () => {
     await signIn('A');
+    // Copies wait for a synced library (rule 3); this one is.
+    useAppStore.setState({ synced: true });
     const copy = hold(copyPath);
     const copying = store().copyVerseToCollection('A-verse', 'my-verses');
     assert.equal(await copy.sent, 'A');

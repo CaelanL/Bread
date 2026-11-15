@@ -284,4 +284,17 @@ test('account translation sync and switch', async (t) => {
     assert.equal(state().bibleVersion, 'KJV');
     assert.deepEqual(writes.filter(([kind]) => kind === 'profile'), [['profile', 'KJV']]);
   });
+  await t.test('F29: a collapse that fails still rereads the verse lists, so a row it deleted leaves the screen', async () => {
+    profile = 'NIV';
+    identityRows = null;
+    deleteBlocked = true;
+    requests.length = 0;
+    toasts.length = 0;
+    await state().refresh();
+    deleteBlocked = false;
+    assert.match(toasts.at(-1), /Pull to refresh/);
+    const afterLastDelete = requests.slice(requests.lastIndexOf('DELETE /rest/v1/user_verses') + 1);
+    assert.ok(afterLastDelete.includes('GET /rest/v1/user_verses mastered'), 'mastered read again after the failed collapse');
+    assert.ok(afterLastDelete.includes('GET /rest/v1/verse_collections'), 'verses read again after the failed collapse');
+  });
 });
