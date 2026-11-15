@@ -102,6 +102,11 @@ v6 is the engine's, not the grader's: tense and number slips ("pertain" for "per
 ("104 score", "703" for "seven hundred and threescore", "2,730" for "a thousand seven hundred
 and thirty"). The one writing-only case found, "instructor" for "instructer", is in the spelling
 table, and "an hundred and thirty and seven" now matches "137" (`numberChain` in `lib/align.ts`).
+Context doesn't explain the gap. The request is the same shape on both models (`general` and
+`text`; Soniox documents one context format, with an optional `terms` list neither uses), and v6
+leans on it: rerun on the 61 clips v6 missed, v6 with the verse as context missed 58 again (23
+under 90), v6 without it missed 60 (52 under 90), and v5 with it missed 21 of the same clips
+(`voice.ts replay --no-context`).
 Pins: `say-kjv-misses.json` 51, `say-kjv-v6-misses.json` 61, `say-kjv-rt-v6-misses.json` 26.
 
 ## Ranked
