@@ -25,7 +25,8 @@
     "test:db": "supabase test db",
     "doctor": "node scripts/doctor.mjs",
     "release": "node scripts/release.mjs",
-    "sim": "node scripts/sim.mjs"
+    "sim": "node scripts/sim.mjs",
+    "audit:grading": "tsx scripts/grading-audit/run.ts"
   },
   "dependencies": {
     "@expo-google-fonts/playfair-display": "^0.4.2",
