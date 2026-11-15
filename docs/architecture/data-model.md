@@ -384,5 +384,5 @@ also re-dates new files to sort after prod's newest. See
 - 2026-08-25 · Study prefs are columns, not `progress` keys · Progress writes are whole-object read-modify-write through `parseProgress`, which strips unknown keys, so old clients would clobber a JSONB key and Reset Progress would wipe it.
 - 2026-08-25 · `verse_cache`, `app_config` and `verse_cache_stats` locked to the service role (020) · Clients never query them directly, so this is safe for old clients.
 - 2026-11-11 · Account settings live in `profiles`, not auth metadata · RLS-guarded, additive, room for display names.
-- 2026-11-14 · Old apps' unsafe verse delete is refused by a trigger (Q30) · Old clients stay in the wild; it refuses only a delete that would drop a collection link nothing else holds, which no current path does.
-- 2026-11-14 · Owner policies are signed-in only with `(select auth.uid())`; "Service role can manage" policies dropped (Q24) · The sub-select runs once per query, and the service role bypasses RLS anyway.
+- 2026-11-14 · Old apps' unsafe verse delete is refused by a trigger · Old clients stay in the wild; it refuses only a delete that would drop a collection link nothing else holds, which no current path does.
+- 2026-11-14 · Owner policies are signed-in only with `(select auth.uid())`; "Service role can manage" policies dropped · The sub-select runs once per query, and the service role bypasses RLS anyway.

@@ -364,14 +364,14 @@ Invariants 1 and 10 are above. Also:
 
 ## Decisions
 
-- **The library is saved to disk (Q16, Q18).** Reverses "never
+- **The library is saved to disk.** Reverses "never
   persisted": Caelan wanted the Library to show at once, Spotify-style.
   The allowlist keeps verse text off the device.
-- **Sign-out removes the saved library (Q21).** Shared devices; a
+- **Sign-out removes the saved library.** Shared devices; a
   sign-in again loads from the server.
 - **The wave's requests go out before the saved library paints.** Painting
   first held them behind the list's render (server data at 731 ms vs 457 ms).
-- **Reloads on return wait for 30 s away (Q26).** Control Center or a
+- **Reloads on return wait for 30 s away.** Control Center or a
   quick app switch fired a burst of reads.
 - **Three rules, one helper each** (top of `lib/store/index.ts`):
   `sameAccount`/`setFor` after awaits, reads skip `pendingVerseDeletes`,

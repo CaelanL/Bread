@@ -103,4 +103,4 @@ Run these on a freshly reset local database. Seed attempts are dated from the re
 - 2026-01-16 · Streak and time studied run as SQL functions · The client doesn't have to fetch every attempt.
 - 2026-04-28 · `popular_ranges` counts mastered verses only, soft-deleted included · "Popular" means memorized, not just added, and mastery is permanent.
 - 2026-11-11 · Words mastered group by reference, not version · A verse follows the account translation, so attempts in two versions are one verse.
-- 2026-11-14 · The stats functions run as the caller and answer only for the caller's id; the cron functions are closed to clients (Q31) · They were `security definer` and answered for any id. Same signatures, so old clients, which pass their own id, get the same numbers.
+- 2026-11-14 · The stats functions run as the caller and answer only for the caller's id; the cron functions are closed to clients · They were `security definer` and answered for any id. Same signatures, so old clients, which pass their own id, get the same numbers.

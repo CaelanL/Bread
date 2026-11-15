@@ -295,9 +295,6 @@ Also:
 - **`_shared/usage.ts` has unused helpers.** `getTierAndUsage` calls
   an RPC no migration defines; the transcription and evaluation checks
   have no callers.
-- **The local stack answers 503 to several `bible` calls at once**
-  (old and new code alike), so flows see some "Failed to load verse
-  text" rows. Prod has no such limit.
 
 ## Decisions
 

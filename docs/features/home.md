@@ -200,4 +200,4 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - 2026-11-11 · Monthly art is plain public URLs · Signed URLs expire.
 - 2026-11-11 · Intro sound ignores the silent switch; scrubbing uses RN responders · A chosen video should just play; no new native module.
 - 2026-11-11 · The curated preview picker previews only; imports use the account translation · One translation per account (`docs/architecture/bible-versions.md`).
-- 2026-11-14 · Home's monthly verse and streak reload only when stale, after a session or in a new month (Q27) · Every focus reread both.
+- 2026-11-14 · Home's monthly verse and streak reload only when stale, after a session or in a new month · Every focus reread both.

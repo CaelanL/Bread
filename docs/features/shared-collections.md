@@ -217,4 +217,4 @@ card personal, Stop sharing alone and with members, the old code dead).
 - 2026-11-12 · Stop sharing deletes the group, members or not · The dissolve keeps copies and kills codes; no migration.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.
 - 2026-11-12 · No Leave or Delete until the role loads · A guess shows the wrong confirm; the store refuses it anyway.
-- 2026-11-14 · Join waits for one wave, not a full `refresh()` (Q25) · Join opens at once.
+- 2026-11-14 · Join waits for one wave, not a full `refresh()` · Join opens at once.
