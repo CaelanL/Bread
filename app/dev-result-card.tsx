@@ -12,11 +12,13 @@ import { calculateChunkScore } from '@/lib/study-chunks';
 
 /**
  * Dev only: the result card for a verse and a transcript, graded by the real aligner, so
- * `npm run sim -- shot "/dev-result-card?expected=…&transcript=…"` can show it without recording.
+ * `npm run sim -- shot "/dev-result-card?card=<expected>|<transcript>"` can show it without recording.
  * Goes home in a production build or against a non-local Supabase.
  */
 export default function DevResultCard() {
-  const { expected = '', transcript = '' } = useLocalSearchParams<{ expected?: string; transcript?: string }>();
+  // One param: the dev-sign-in hop that `npm run sim -- shot` uses keeps only the first one.
+  const { card = '' } = useLocalSearchParams<{ card?: string }>();
+  const [expected, transcript = ''] = card.split('|');
   const allowed = canDevSignIn(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL);
   const colors = Colors[useColorScheme() ?? 'light'];
 
