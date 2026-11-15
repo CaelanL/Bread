@@ -72,7 +72,7 @@ serve(async (req) => {
         apiKey: minted.api_key,
         expiresAt: minted.expires_at ?? null,
         websocketUrl: "wss://stt-rt.soniox.com/transcribe-websocket",
-        model: "stt-rt-v5",
+        model: "stt-rt-v6",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

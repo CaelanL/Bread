@@ -253,7 +253,7 @@ async function transcribe(token: string, text: string, voice: string, rate: numb
 // `say` is deterministic, so a fixture's clips can be remade from ref, voice and rate (with the
 // 300 ms lead-in) and sent to another model. Batch goes straight to Soniox like `run`; `--live`
 // streams 16 kHz PCM over the websocket at real-time pace with the start frame
-// lib/transcription/live-session.ts sends (`--via-token` mints the key through the local
+// and the key protocol lib/transcription/live-session.ts sends (`--via-token` mints the key through the local
 // transcription-token, as the app does, and takes the model it answers). Resumable: clips already
 // in --out are skipped.
 //   npx tsx scripts/grading-audit/voice.ts replay <fixture> --model stt-async-v6 --out <file> [--max N]
@@ -291,6 +291,18 @@ interface LiveKey {
   model: string;
 }
 
+// The same temporary key transcription-token mints, straight from Soniox.
+async function mintDirect(model: string): Promise<LiveKey> {
+  const res = await fetch(`${SONIOX}/auth/temporary-api-key`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${sonioxKey()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usage_type: 'transcribe_websocket', expires_in_seconds: 60, max_session_duration_seconds: 315 }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`soniox mint ${res.status}`);
+  return { apiKey: (await res.json()).api_key, websocketUrl: 'wss://stt-rt.soniox.com/transcribe-websocket', model };
+}
+
 async function mintLiveKey(token: string): Promise<LiveKey> {
   const res = await fetch(functionUrl('transcription-token'), { method: 'POST', headers: authHeaders(token) });
   if (!res.ok) throw new Error(`transcription-token ${res.status}`);
@@ -299,7 +311,7 @@ async function mintLiveKey(token: string): Promise<LiveKey> {
 
 // 100 ms chunks at real-time pace, then the empty end-of-audio frame; the final tokens joined.
 async function transcribeLive(pcm: Buffer, text: string, key: LiveKey): Promise<string> {
-  const ws = new WebSocket(key.websocketUrl);
+  const ws = new WebSocket(key.websocketUrl, ['soniox-api-key', key.apiKey]);
   const finals: string[] = [];
   return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -314,7 +326,6 @@ async function transcribeLive(pcm: Buffer, text: string, key: LiveKey): Promise<
     };
     ws.onopen = async () => {
       ws.send(JSON.stringify({
-        api_key: key.apiKey,
         model: key.model,
         audio_format: 'pcm_s16le',
         sample_rate: 16000,
@@ -373,9 +384,7 @@ async function replayFixture() {
         try {
           calls++;
           const transcript = live
-            ? await transcribeLive(wavData(readFileSync(file)), text, viaToken
-              ? await mintLiveKey(token)
-              : { apiKey: sonioxKey(), websocketUrl: 'wss://stt-rt.soniox.com/transcribe-websocket', model: model! })
+            ? await transcribeLive(wavData(readFileSync(file)), text, viaToken ? await mintLiveKey(token) : await mintDirect(model!))
             : await transcribeDirect(readFileSync(file), text, model);
           return { ...clip, transcript };
         } catch (e) {

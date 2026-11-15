@@ -80,6 +80,7 @@ class LiveSession implements LiveTranscriptionSession {
   private async connect(): Promise<void> {
     let config: string;
     let websocketUrl: string;
+    let apiKey: string;
     try {
       const token = await getAuthToken();
       const res = await fetch(
@@ -96,8 +97,8 @@ class LiveSession implements LiveTranscriptionSession {
       }
       const minted: TokenEndpointResponse = await res.json();
       websocketUrl = minted.websocketUrl;
+      apiKey = minted.apiKey;
       config = JSON.stringify({
-        api_key: minted.apiKey,
         model: minted.model,
         audio_format: 'pcm_s16le',
         sample_rate: this.format.sampleRate,
@@ -117,7 +118,15 @@ class LiveSession implements LiveTranscriptionSession {
     }
     if (this.state !== 'connecting') return; // aborted during mint
 
-    const ws = new WebSocket(websocketUrl);
+    // The key goes with the connection, as a protocol: Soniox refuses a key
+    // in the start frame from 2027-01-15.
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(websocketUrl, ['soniox-api-key', apiKey]);
+    } catch (e) {
+      this.fail(`socket refused: ${e}`);
+      return;
+    }
     this.ws = ws;
 
     ws.onopen = () => {
