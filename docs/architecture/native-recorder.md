@@ -26,7 +26,10 @@ keeps the session warm, and every chunk starts without activating it.
   attempt's stop: sent earlier, it would reach the native queue first and be a no-op.
   `wake()` prepares again on `'active'` after a background. No idle release.
 - **Never twice.** No prepare while an attempt owns native or a prepare is in flight. A
-  tap during a prepare queues behind it natively and uses the prepared state.
+  tap during a prepare queues behind it natively and uses the prepared state. A warm-up
+  asked for during a prepare (a return from background, or another screen opening) runs
+  once that prepare settles, unless the screen was left or backgrounded since: a release
+  sent during the prepare runs natively after it.
 - **Unpatched binaries** (old builds, Android, web, or patch-package failing on EAS):
   `warm` is undefined, nothing is prepared or released, and stop deactivates as before.
 

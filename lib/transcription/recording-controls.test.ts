@@ -636,6 +636,34 @@ test('backgrounding releases the session and coming back warms it up again', asy
   recorder.sleep();
 });
 
+test('a return during an in-flight prepare prepares again after it', async () => {
+  const { calls, module, holdPrepare } = recorderModule();
+  const prepare = deferred<void>();
+  holdPrepare(prepare.promise);
+  const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  await recorder.open(noLeftovers(), Promise.resolve());
+  recorder.sleep();
+  recorder.wake();
+  assert.deepEqual(calls, ['prepare', 'release']);
+  holdPrepare(Promise.resolve());
+  prepare.resolve();
+  await settle();
+  assert.deepEqual(calls, ['prepare', 'release', 'prepare']);
+  recorder.sleep();
+
+  const left = recorderModule();
+  const leftPrepare = deferred<void>();
+  left.holdPrepare(leftPrepare.promise);
+  const leaving = createRecordingControls(() => {}, warmSession(left.module, {}, () => true));
+  await leaving.open(noLeftovers(), Promise.resolve());
+  leaving.sleep();
+  leaving.wake();
+  leaving.sleep();
+  leftPrepare.resolve();
+  await settle();
+  assert.deepEqual(left.calls, ['prepare', 'release', 'release']);
+});
+
 test('without the native patch nothing is prepared or released', async () => {
   const { calls, module } = recorderModule(false);
   const session = warmSession(module, {}, () => true);

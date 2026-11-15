@@ -70,6 +70,9 @@ export function warmSession(module: RecorderModule, options: object, hasPermissi
 }
 
 let preparing = false;
+// A warm-up asked for during a prepare, run once that prepare settles: the
+// prepare may be followed natively by a release sent while it was in flight.
+let warmAfterPrepare: (() => void) | undefined;
 // A release asked for while an attempt owns native runs after that attempt's
 // stop: sent earlier, it would reach native first and leave the session active.
 let pendingRelease: WarmSession | undefined;
@@ -144,9 +147,18 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
   function warmUp() {
     if (!warm || !opened || away || !warm.hasPermission()) return;
     pendingRelease = undefined;
-    if (nativeOwner || preparing) return;
+    if (nativeOwner) return;
+    if (preparing) {
+      warmAfterPrepare = warmUp;
+      return;
+    }
     preparing = true;
-    void warm.prepare().catch(() => {}).finally(() => { preparing = false; });
+    void warm.prepare().catch(() => {}).finally(() => {
+      preparing = false;
+      const again = warmAfterPrepare;
+      warmAfterPrepare = undefined;
+      again?.();
+    });
   }
 
   async function cancel() {
