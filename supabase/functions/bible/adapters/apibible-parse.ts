@@ -63,12 +63,13 @@ export function parseApiBibleHtml(html: string): Record<string, string> {
 }
 
 // One verse from a passage. NLT merges some rows ("20-21"), so a verse inside a merged row gets
-// that row's text: it is the translation's text for both numbers.
-export function parseApiBibleVerse(html: string, verse: string): string | undefined {
+// that row's text: it is the translation's text for both numbers. `merged` marks the second
+// number's answer, which must not be cached as that verse, or a range would say the row twice.
+export function parseApiBibleVerse(html: string, verse: string): { text: string; merged: boolean } | undefined {
   const verses = parseApiBibleHtml(html);
-  if (verses[verse]) return verses[verse];
+  if (verses[verse]) return { text: verses[verse], merged: false };
   for (const [, first, last] of html.matchAll(/data-number="(\d+)-(\d+)"/g)) {
-    if (Number(first) <= Number(verse) && Number(verse) <= Number(last)) return verses[first];
+    if (Number(first) < Number(verse) && Number(verse) <= Number(last) && verses[first]) return { text: verses[first], merged: true };
   }
   return undefined;
 }

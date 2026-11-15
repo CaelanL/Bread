@@ -106,12 +106,24 @@ describe('API.Bible parser', () => {
     });
   });
 
-  it('serves a verse inside a merged row the merged text, and nothing else', () => {
+  it('serves a verse inside a merged row the merged text, marked so it is never cached', () => {
     const html = `<p class="p"><span data-number="20-21" data-sid="NUM 1:20-21" class="v">20-21</span>The children of Reuben, forty and six thousand.</p>`;
-    assert.equal(parseApiBibleVerse(html, '21'), 'The children of Reuben, forty and six thousand.');
-    assert.equal(parseApiBibleVerse(html, '20'), 'The children of Reuben, forty and six thousand.');
+    assert.deepEqual(parseApiBibleVerse(html, '21'), { text: 'The children of Reuben, forty and six thousand.', merged: true });
+    assert.deepEqual(parseApiBibleVerse(html, '20'), { text: 'The children of Reuben, forty and six thousand.', merged: false });
     assert.equal(parseApiBibleVerse(html, '22'), undefined);
     assert.equal(parseApiBibleVerse(`<p class="p">${v('10')}Take heed.</p><p class="p">${v('12')}How think ye?</p>`, '11'), undefined);
+  });
+
+  it('a range never repeats a merged row: the chapter keys it once, and the second number is not cacheable', () => {
+    const chapter = `<p class="p">${v('19')}As the LORD commanded.</p><p class="p"><span data-number="20-21" data-sid="NUM 1:20-21" class="v">20-21</span>The children of Reuben.</p><p class="p">${v('22')}Of the children of Simeon.</p>`;
+    // What the cache can hold for 19-22: the chapter's rows, plus single verses that aren't merged.
+    const rows: Record<string, string> = { ...parseApiBibleHtml(chapter) };
+    for (const verse of ['19', '20', '21', '22']) {
+      const single = parseApiBibleVerse(chapter, verse);
+      if (single && !single.merged) rows[verse] = single.text;
+    }
+    const range = Object.values(rows).join(' ');
+    assert.equal(range, 'As the LORD commanded. The children of Reuben. Of the children of Simeon.');
   });
 
   it('keeps a verse that sits in a heading element', () => {

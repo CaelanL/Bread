@@ -10,6 +10,8 @@
  */
 export interface VerseResult {
   text: string;
+  // Answered from a row the translation merges with the verse before (NLT "20-21"): not cached.
+  merged?: boolean;
 }
 
 /**

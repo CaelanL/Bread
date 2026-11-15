@@ -175,13 +175,13 @@ export const apiBibleAdapter: BibleAdapter = {
 
     const verse = ref.match(/:(\d+)$/)?.[1];
     const content = await fetchContent(version, `passages/${passageId}`);
-    const text = verse ? parseApiBibleVerse(content, verse) : undefined;
+    const found = verse ? parseApiBibleVerse(content, verse) : undefined;
 
-    if (!text) {
+    if (!found) {
       throw new Error(`Verse not found: ${ref}`);
     }
 
-    return { text };
+    return found;
   },
 
   async fetchChapter(
