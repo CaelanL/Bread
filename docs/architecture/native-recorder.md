@@ -90,8 +90,9 @@ Needs a person and a phone with a patched dev build.
   mid-recording: "Recording interrupted", no score, and the next tap records.
 - No `<UUID>.m4a` in the app's `Documents` after leaving, including without recording.
 - The `[MIC]` line after each take: `native` names the slow step. Audio pieces are about
-  3,200 B (100 ms) or 1,600 B (50 ms); note which. `B/s` is about 32,000, and `m4a` is
-  about 64 kbps (higher means the bitrate setting didn't take).
+  3,200 B (100 ms) or 1,600 B (50 ms); note which. `B/s` is about 31,000 to 32,000.
+  Between a short and a long take, the m4a should grow about 8 KB per extra second
+  (64 kbps). The simulator adds a fixed ~60 KB per file, so one take's size alone misleads.
 
 ## Decisions
 

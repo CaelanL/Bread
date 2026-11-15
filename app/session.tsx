@@ -171,7 +171,7 @@ export default function StudySessionScreen() {
         .join(' ');
       const m4a = recording.compression?.size;
       // eslint-disable-next-line no-console -- dev-only measurement
-      console.log(`${line} · native ${native || 'n/a'} ms · ${events} pieces, ${Math.round(bytes / Math.max(events, 1))} B each, ${Math.round(bytes / seconds)} B/s · m4a ${m4a === undefined ? '?' : Math.round((m4a * 8) / seconds / 1000)} kbps`);
+      console.log(`${line} · native ${native || 'n/a'} ms · ${events} pieces, ${Math.round(bytes / Math.max(events, 1))} B each, ${Math.round(bytes / seconds)} B/s · m4a ${m4a === undefined ? '?' : Math.round(m4a / 1000)} KB over ${seconds.toFixed(1)} s`);
     }, () => {});
   }, []);
   useEffect(() => {
