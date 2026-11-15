@@ -94,7 +94,7 @@ In `useStudySession`, `processRecording` uses `scoreRecording` in order:
    only if the attempt still owns the submission.
 
 Both paths give raw Soniox text with the verse as recognition context. The models
-differ (`stt-rt-v6` live, `stt-async-v6` batch), so a word can occasionally differ.
+differ (`stt-rt-v5` live, `stt-async-v5` batch), so a word can occasionally differ.
 There's no second scoring path and no live transcript on screen.
 
 ## Live path
@@ -112,7 +112,8 @@ synchronously, so audio can be fed from the first callback. Its `state` runs
    a failed mint. A failure before Soniox's first good message drops the key.
 2. **Buffer.** PCM captured while Soniox connects is held in memory, so capture
    never waits on the connection.
-3. **Open.** The key goes in the protocols list (`['soniox-api-key', key]`). The
+3. **Open.** The key goes in the protocols list (`['soniox-api-key', key]`), on v5
+   and v6 alike; a key only in the start frame (2.0.0) is refused from 2027-01-15. The
    first frame is JSON config: model, `pcm_s16le`, sample rate, channels,
    `language_hints`, and the verse as context. The backlog then flushes as chunks.
 4. **Stream.** Tokens with `is_final` accumulate. `<fin>` and `<end>` are dropped.
@@ -235,6 +236,6 @@ Recording needs a person and a real device (more in native-recorder.md). Local r
 - 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off.
 - 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
 - 2026-11-12 · Delete each file once its attempt settles, sweep exact-name leftovers, no owned folder · Every take was kept forever. A folder adds a step before native start; the sweep covers it.
-- 2026-11-14 · Finger-down start, native start before the ring, one key per screen (300 s TTL, protocol auth), 1.5 s finalize, 64 kbps, 50 ms pieces, no recorder hook · Faster capture, fallback and upload. Soniox refuses `api_key` in the config from 15 January 2027.
+- 2026-11-14 · Finger-down start, native start before the ring, one key per screen (300 s TTL, protocol auth), 1.5 s finalize, 64 kbps, 50 ms pieces, no recorder hook · Faster capture, fallback and upload.
 - 2026-11-14 · Spare socket from screen open, config only at the tap · Tested: Soniox bills and caps sessions from config; a pause after config is billed.
 - 2026-11-14 · Warm audio session, interrupted attempts discarded · Activation was most of tap-to-capture (native-recorder.md).
