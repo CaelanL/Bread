@@ -582,7 +582,7 @@ index 4d69b16..4fe6dd6 100644
              
              // Force prepare engine again to ensure it's ready
 diff --git a/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift b/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
-index 3627274..25593d9 100644
+index 3627274..0d6c871 100644
 --- a/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
 +++ b/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
 @@ -43,6 +43,9 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
@@ -614,16 +614,21 @@ index 3627274..25593d9 100644
  
                          Logger.info("AudioStudioModule", "stopRecording: Recording stopped successfully. fileUri: \(recordingResult.fileUri), size: \(recordingResult.size)")
                          promise.resolve(resultDict)
-@@ -405,6 +413,16 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+@@ -405,6 +413,21 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
              }
          }
          
 +        /// Bread: ends a warm or prepared session. A no-op while recording.
 +        AsyncFunction("releaseAudioSession") { (promise: Promise) in
-+            self.audioLifecycleQueue.async {
-+                self.streamManager.releaseAudioSession()
-+                DispatchQueue.main.async {
-+                    promise.resolve()
++            // Bread: every session call hops to main before the lifecycle queue, as
++            // prepare and start do in checkMicrophonePermission, so native runs them
++            // in JS call order. Without it a release overtakes an in-flight prepare.
++            DispatchQueue.main.async {
++                self.audioLifecycleQueue.async {
++                    self.streamManager.releaseAudioSession()
++                    DispatchQueue.main.async {
++                        promise.resolve()
++                    }
 +                }
 +            }
 +        }
