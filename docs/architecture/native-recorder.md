@@ -19,8 +19,10 @@ keeps the session warm, and every chunk starts without activating it.
   prepare-time settings are the right ones). Only with permission already granted:
   native prepare would show the first-run prompt at screen open. A reader who grants at
   the first tap gets the warm session from that recording on.
-- **Between chunks.** `keepSessionActive: true` leaves the session active at stop. No
-  prepare after a chunk: the next start skips activation on its own.
+- **Between chunks.** `keepSessionActive: true` leaves the session active at stop, and
+  the end of each take (submit, discard or a failed start) prepares again while the
+  screen is open and in front, so every tap takes the prepared path. Prepared and idle
+  is the state the screen-open prepare leaves: nothing captures until a tap.
 - **Release.** `sleep()` on `AppState` `'background'` and on leaving calls
   `releaseAudioSession`. While an attempt owns native, the release waits for that
   attempt's stop: sent earlier, it would reach the native queue first and be a no-op.
@@ -64,8 +66,10 @@ All in `ios/` unless noted. Each change carries a `Bread:` comment.
 | No `compression.data` in audio events | `buildCompressionInfo` | It read and base64-encoded the m4a on the audio thread; Bread never reads it. Size bookkeeping stays |
 | One sample-rate converter per recording | `resampleAudioBuffer` | A converter per buffer reset the filter at every edge. The buffer goes in once per call, then `.noDataNow` |
 | No tap with an invalid input format (0 channels or 0 Hz); prepare and start fail instead | `installTapWithHardwareFormat` and its callers | Port of upstream audiolab #417 (3.2.1): a fresh permission grant or a Bluetooth handoff could report that format, and the synthetic fallback tap crashed |
-| Dev timings | `breadMark`, `#if DEBUG` | Debug builds return `breadTimings` from `stopRecording`: ms from the start call to `queue`, the path (`prepared`, `stale`, `warm`, `cold`), `category`, `bufferHint`, `active`, `tap`, `m4aPrepared`, `record`, `engine`, `firstBuffer`. Release builds compile none of it |
+| Dev timings | `breadMark`, `#if DEBUG` | Debug builds return `breadTimings` from `stopRecording`: ms from the start call to `queue`, the path (`prepared`, `stale`, `warm`, `cold`), `prepareCallCheck`, `category`, `bufferHint`, `active`, `inputFormat`, `inputConnected`, `enginePrepared`, `tap`, `m4aPrepared`, `callCheck`, `record`, `engine`, `firstBuffer`. Release builds compile none of it |
 | `breadPatch` constant (1) | `AudioStudioModule` | The JS gate |
+| Live PCM from an `AVAudioSinkNode`, not an input tap | `installTapWithHardwareFormat`, `connectInputSink`, `BreadInputRing` | An input tap delivers about 100 ms buffers whatever `bufferSize` asks (AVAudioNode.h: "Supported range is [100, 400] ms"), so the first audio came ~120 ms after the engine started and pieces were 100 ms. The sink gets each IO cycle on the realtime thread, which only copies into 64 preallocated slots and signals a processing thread; that thread runs the same `processAudioBuffer`. Kept connected between recordings, reconnected when the hardware format changes. The library's device fallback (unused: Bread pauses) still taps |
+| IO buffer hint 10 ms | `prepareRecording` | Was 1024 frames at 16 kHz (64 ms). The IO cycle is now the sink's step, so first audio lands one short cycle after the engine starts and pieces are about 50 ms |
 | `keepSessionActive` in the TS types | `src/`, `build/types/` | No casts |
 | No "Adding recording interruption listener" log | `events.{js,ts}` | Noise |
 
@@ -85,19 +89,24 @@ orange dot, AirPods and interruptions need a phone.
 
 Needs a person and a phone with a patched dev build.
 
-- The first tap after reading for a minute starts as fast as chunk 2 onward
-  (`[MIC] →resolve`), with the built-in mic and with AirPods.
+- Every tap, the first included, names `warm at tap: prepared` and `native … prepared`,
+  and starts as fast as the others (`[MIC] →resolve`), with the built-in mic and with
+  AirPods. The `[MIC] screen open` line says the permission read and when the warm-up
+  prepared, in ms after open; `warm-up no permission` with `asked permission` on the
+  first tap means the first-run prompt, so that tap is cold.
 - With AirPods, the first tap's `[MIC] native` names `prepared`. `stale` means the
   switch to call mode invalidated the screen-open prepare, so the first tap prepared
   again; `cold` means it wasn't prepared at all.
 - With music playing: it ducks as the study screen opens and returns on leaving and on
-  backgrounding. The orange dot is gone within about 1 s of leaving.
+  backgrounding. The orange dot is gone within about 1 s of leaving, and never shows
+  while idle on the study screen, after a take included.
 - Pull an AirPod while idle on Library, or on the study screen: no orange dot, no toast,
   and the next tap records from the iPhone. Mid-recording, and Siri or a call
   mid-recording: "Recording interrupted", no score, and the next tap records.
 - No `<UUID>.m4a` in the app's `Documents` after leaving, including without recording.
-- The `[MIC]` line after each take: `native` names the slow step. Audio pieces are about
-  3,200 B (100 ms) or 1,600 B (50 ms); note which. `B/s` is about 31,000 to 32,000.
+- The `[MIC]` line after each take: `native` names the slow step. `firstBuffer` lands
+  within about 10–30 ms of `engine`, and audio pieces are about 1,700 B (50 ms), not
+  3,200 B (100 ms). `B/s` is about 30,000 to 32,000 (short takes read lower).
   Between a short and a long take, the m4a should grow about 8 KB per extra second
   (64 kbps). The simulator adds a fixed ~60 KB per file, so one take's size alone misleads.
 
@@ -106,4 +115,6 @@ Needs a person and a phone with a patched dev build.
 - 2026-11-14 · Patch 3.2.0 rather than upgrade · 3.2.1 and 4.0.0-beta.0 declare `expo >=52` like 3.2.0, so the SDK doesn't block an upgrade, but 3.2.1's only fix Bread needs (#417) is ported and 4.0 is a beta. Upgrading means re-porting this patch.
 - 2026-11-14 · Warm at screen open, held until leaving or backgrounding, no idle release · Caelan accepted ducking and call mode while the screen is open; an idle release would undo the warm-up for anyone reading longer before tapping.
 - 2026-11-14 · `keepSessionActive` is opt-in, and the JS gate is a native constant · The library behaves like upstream unless Bread asks, and the gate holds even if the patch fails to apply on EAS.
+- 2026-11-14 · Prepare again after each take · The prepared path skips the tap install and m4a setup (about 110 ms on a phone's warm path). It's the same idle state as the screen-open prepare, and release still follows any stop.
+- 2026-11-14 · Sink node, not a smaller tap `bufferSize` · iOS ignores tap sizes under 100 ms (the header's supported range; the library already asked for 1024 frames and got ~4,800). The realtime block does no locking or allocation, and the m4a still comes from its own recorder, so the batch file doesn't depend on the sink.
 - 2026-11-14 · AirPods disconnect pauses, and the attempt is discarded · The library's fallback restarts the engine but never the m4a recorder, so the backup file would miss the rest of the recitation.

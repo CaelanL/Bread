@@ -36,7 +36,7 @@ index 1ffa17f..9ab0827 100644
      showNotification?: boolean;
      /** Show waveform in the notification (Android only, when showNotification is true) */
 diff --git a/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift b/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
-index 4d69b16..af9c458 100644
+index 4d69b16..20a9ac8 100644
 --- a/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
 +++ b/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
 @@ -7,6 +7,7 @@
@@ -47,7 +47,101 @@ index 4d69b16..af9c458 100644
  import Accelerate
  import UIKit
  import MediaPlayer
-@@ -51,6 +52,41 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -37,8 +38,93 @@ enum DeviceDisconnectionBehavior: String {
+     case FALLBACK = "fallback"
+ }
+ 
++/// Bread: carries input audio from the sink node's realtime IO thread to a processing
++/// thread. The IO side only copies into preallocated slots and signals a semaphore: no
++/// locks, no allocation, no Objective-C calls. If processing falls a full ring behind,
++/// the IO side drops the cycle rather than wait.
++final class BreadInputRing {
++    let format: AVAudioFormat
++    private static let slotCount = 64
++    private static let slotFrames: AVAudioFrameCount = 4096
++    private let slots: [AVAudioPCMBuffer]
++    private let slotLists: [UnsafeMutableAudioBufferListPointer]
++    private let slotFrameCounts = UnsafeMutablePointer<AVAudioFrameCount>.allocate(capacity: BreadInputRing.slotCount)
++    // [0] slots written (IO thread only), [1] slots read (processing thread only)
++    private let counts = UnsafeMutablePointer<Int>.allocate(capacity: 2)
++    private let closed = UnsafeMutablePointer<Bool>.allocate(capacity: 1)
++    private let bytesPerFrame: Int
++    private let ready = DispatchSemaphore(value: 0)
++
++    init?(format: AVAudioFormat, process: @escaping (AVAudioPCMBuffer) -> Void) {
++        var buffers: [AVAudioPCMBuffer] = []
++        for _ in 0..<BreadInputRing.slotCount {
++            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: BreadInputRing.slotFrames) else { return nil }
++            buffers.append(buffer)
++        }
++        self.format = format
++        slots = buffers
++        slotLists = buffers.map { UnsafeMutableAudioBufferListPointer($0.mutableAudioBufferList) }
++        bytesPerFrame = Int(format.streamDescription.pointee.mBytesPerFrame)
++        counts.initialize(repeating: 0, count: 2)
++        closed.initialize(to: false)
++        slotFrameCounts.initialize(repeating: 0, count: BreadInputRing.slotCount)
++        let thread = Thread { [self] in self.drain(process) }
++        thread.name = "Bread input"
++        thread.qualityOfService = .userInteractive
++        thread.start()
++    }
++
++    deinit {
++        slotFrameCounts.deallocate()
++        counts.deallocate()
++        closed.deallocate()
++    }
++
++    /// IO thread only.
++    func push(_ input: UnsafePointer<AudioBufferList>, frameCount: AVAudioFrameCount) {
++        let source = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
++        var offset: AVAudioFrameCount = 0
++        while offset < frameCount {
++            let written = counts[0]
++            if written - counts[1] >= BreadInputRing.slotCount { return }
++            let slot = written % BreadInputRing.slotCount
++            let frames = min(frameCount - offset, BreadInputRing.slotFrames)
++            let target = slotLists[slot]
++            for i in 0..<min(source.count, target.count) {
++                guard let from = source[i].mData, let to = target[i].mData else { continue }
++                memcpy(to, from + Int(offset) * bytesPerFrame, Int(frames) * bytesPerFrame)
++            }
++            slotFrameCounts[slot] = frames
++            counts[0] = written + 1
++            ready.signal()
++            offset += frames
++        }
++    }
++
++    func close() {
++        closed.pointee = true
++        ready.signal()
++    }
++
++    private func drain(_ process: (AVAudioPCMBuffer) -> Void) {
++        while true {
++            ready.wait()
++            if closed.pointee { return }
++            let read = counts[1]
++            let slot = read % BreadInputRing.slotCount
++            let buffer = slots[slot]
++            buffer.frameLength = slotFrameCounts[slot]
++            process(buffer)
++            counts[1] = read + 1
++        }
++    }
++}
++
+ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+     private let audioEngine = AVAudioEngine()
++    // Bread: live PCM comes from a sink node on the input, not an input tap
++    private var inputSink: AVAudioSinkNode?
++    private var inputRing: BreadInputRing?
+     private var inputNode: AVAudioInputNode {
+         return audioEngine.inputNode
+     }
+@@ -51,6 +137,41 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
      var isRecording = false
      var isPaused = false
      var isPrepared = false  // Add this new state flag
@@ -89,7 +183,7 @@ index 4d69b16..af9c458 100644
      
      // Move static variables to class level
      private var debugBufferCounter = 0
-@@ -214,7 +250,26 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -214,9 +335,28 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              name: UIApplication.willEnterForegroundNotification,
              object: nil
          )
@@ -105,18 +199,20 @@ index 4d69b16..af9c458 100644
 +            name: .AVAudioEngineConfigurationChange,
 +            object: audioEngine
 +        )
-+
-+    }
+ 
+     }
      
 +    /// Bread: after a media reset or an engine configuration change, the next
 +    /// prepare configures the session again, and a prepared state is redone at start.
 +    @objc private func handleAudioStateLost(_ notification: Notification) {
 +        audioSessionActive = false
 +        if isPrepared && !isRecording { preparedStale = true }
-     }
-     
++    }
++    
      deinit {
-@@ -252,6 +307,9 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         // Ensure wake lock is disabled when the manager is deallocated
+         disableWakeLock()
+@@ -252,6 +392,9 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          switch type {
          case .began:
              Logger.debug("AudioStreamManager", "Audio session interruption began")
@@ -126,7 +222,7 @@ index 4d69b16..af9c458 100644
              // Store the pause start time if not already paused
              if !wasSuspended {
                  currentPauseStart = Date()
-@@ -499,7 +557,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -499,7 +642,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              // Now restart the engine if it was paused due to background
              do {
                  // Reinstall tap with hardware format to ensure we have good input
@@ -135,7 +231,7 @@ index 4d69b16..af9c458 100644
                  // Restart the engine
                  try audioEngine.start()
                  Logger.debug("AudioStreamManager", "Successfully restarted audio engine after returning from background")
-@@ -761,7 +819,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -761,7 +904,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
  
              let eventDataSize = compressedSize - lastEmittedCompressedSize
  
@@ -144,7 +240,7 @@ index 4d69b16..af9c458 100644
                  "position": lastEmittedCompressedSize,
                  "fileUri": compressedURL.absoluteString,
                  "eventDataSize": eventDataSize,
-@@ -772,14 +830,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -772,14 +915,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
                  "format": compressedFormat
              ]
  
@@ -161,7 +257,7 @@ index 4d69b16..af9c458 100644
  
              lastEmittedCompressedSize = compressedSize
              cachedCompressedFileSize = compressedSize
-@@ -809,7 +861,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -809,11 +946,12 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
      private func installTapWithHardwareFormat(
          customTapBlock: ((AVAudioPCMBuffer, AVAudioTime) -> Void)? = nil,
          prepareEngine: Bool = true
@@ -170,7 +266,12 @@ index 4d69b16..af9c458 100644
          // Get the hardware input format
          let inputNode = audioEngine.inputNode
          let inputHardwareFormat = inputNode.inputFormat(forBus: 0)
-@@ -828,6 +880,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
++        breadMark("inputFormat")
+         
+         // Log format information for diagnostic purposes
+         Logger.debug("AudioStreamManager", "Installing tap - Hardware input format: \(describeAudioFormat(inputHardwareFormat))")
+@@ -828,6 +966,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
                    self.isRecording else {
                  return
              }
@@ -178,7 +279,7 @@ index 4d69b16..af9c458 100644
              // Process audio buffer for streaming, analysis, and optional file writing
              // Note: Audio streaming works regardless of primary output settings (consistent with Web/Android)
              self.processAudioBuffer(buffer)
-@@ -854,20 +907,12 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -854,66 +993,97 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          }
          
          // Validate hardware format before installing tap (#223)
@@ -203,8 +304,70 @@ index 4d69b16..af9c458 100644
 +            return nil
          }
  
-         // Install the tap with hardware format
-@@ -889,15 +934,15 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+-        // Install the tap with hardware format
+-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputHardwareFormat, block: tapBlock)
+-        Logger.debug("AudioStreamManager", "Tap installed with hardware-compatible format")
++        if customTapBlock == nil {
++            // Bread: an input tap delivers about 100 ms buffers whatever bufferSize asks
++            // (AVAudioNode.h: "Supported range is [100, 400] ms"), so the first audio came
++            // ~120 ms after the engine started and pieces were 100 ms. A sink node gets every
++            // IO cycle (about 10 ms with the IO buffer hint). Kept connected between
++            // recordings; reconnected only when the hardware format changes.
++            guard connectInputSink(format: inputHardwareFormat) else { return nil }
++        } else {
++            disconnectInputSink()
++            // Install the tap with hardware format
++            inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputHardwareFormat, block: tapBlock)
++            Logger.debug("AudioStreamManager", "Tap installed with hardware-compatible format")
++        }
++        breadMark("inputConnected")
+         
+         // Prepare the engine if requested
+         if prepareEngine {
+             audioEngine.prepare()
++            breadMark("enginePrepared")
+             Logger.debug("AudioStreamManager", "Engine prepared after tap installation")
+         }
+         
+         return inputHardwareFormat
+     }
+     
++    /// Bread: input from a sink node through BreadInputRing to processAudioBuffer.
++    /// The engine must not be running. False if the ring's buffers can't be made.
++    private func connectInputSink(format: AVAudioFormat) -> Bool {
++        if let sink = inputSink, let ring = inputRing, ring.format.isEqual(format),
++           audioEngine.inputConnectionPoint(for: sink, inputBus: 0)?.node === audioEngine.inputNode {
++            return true
++        }
++        disconnectInputSink()
++        guard let ring = BreadInputRing(format: format, process: { [weak self] buffer in
++            guard let self = self, self.isRecording else { return }
++            self.breadMark("firstBuffer", once: true)
++            self.processAudioBuffer(buffer)
++        }) else { return false }
++        let sink = AVAudioSinkNode { _, frameCount, inputData in
++            ring.push(inputData, frameCount: frameCount)
++            return noErr
++        }
++        audioEngine.attach(sink)
++        audioEngine.connect(audioEngine.inputNode, to: sink, format: format)
++        inputSink = sink
++        inputRing = ring
++        return true
++    }
++
++    private func disconnectInputSink() {
++        if let sink = inputSink {
++            audioEngine.detach(sink)
++        }
++        inputRing?.close()
++        inputSink = nil
++        inputRing = nil
++    }
++
+     /// Prepares the audio recording with the specified settings without starting it.
+     /// This reduces latency when startRecording is called later.
+     /// - Parameters:
      ///   - settings: The recording settings to use.
      /// - Returns: A boolean indicating if preparation was successful.
      func prepareRecording(settings: RecordingSettings) -> Bool {
@@ -221,9 +384,12 @@ index 4d69b16..af9c458 100644
 +        recordingSettings = settings
 +
          // Check for active call using the new method
-         if isPhoneCallActive() {
+-        if isPhoneCallActive() {
++        let callActive = isPhoneCallActive()
++        breadMark("prepareCallCheck")
++        if callActive {
              Logger.debug("AudioStreamManager", "Cannot prepare recording during an active phone call")
-@@ -905,15 +950,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+             delegate?.audioStreamManager(self, didFailWithError: "Cannot prepare recording during an active phone call")
              return false
          }
  
@@ -240,7 +406,7 @@ index 4d69b16..af9c458 100644
  
          // Update auto-resume preference from settings
          autoResumeAfterInterruption = settings.autoResumeAfterInterruption
-@@ -981,15 +1018,22 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -981,15 +1151,24 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
                  newSettings.sampleRate = settings.sampleRate  // Keep original sample rate
              }
              
@@ -263,7 +429,9 @@ index 4d69b16..af9c458 100644
 +                // often prevents the input node's tap from receiving any buffers.
 +                // Instead, we let the session negotiate the rate.
 +                // Resampling to the desired settings.sampleRate happens later in processAudioBuffer.
-+                try session.setPreferredIOBufferDuration(1024 / Double(settings.sampleRate)) // Use desired rate for buffer duration hint
++                // Bread: 10 ms IO cycles, so the sink node's first audio and each piece come
++                // soon after capture starts (was 1024 frames at the target rate, 64 ms)
++                try session.setPreferredIOBufferDuration(0.01)
 +                breadMark("bufferHint")
 +                try session.setActive(true, options: .notifyOthersOnDeactivation)
 +                breadMark("active")
@@ -272,7 +440,7 @@ index 4d69b16..af9c458 100644
  
              // Log session config details as single lines for clarity
              Logger.debug("AudioStreamManager", "Audio session configured:")
-@@ -1006,7 +1050,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1006,7 +1185,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              Logger.debug("AudioStreamManager", "  - compression enabled: \(settings.output.compressed.enabled)")
  
              // Use our shared tap installation method
@@ -282,7 +450,7 @@ index 4d69b16..af9c458 100644
  
              // Log tap configuration
              Logger.debug("AudioStreamManager", "Final Tap Configuration (Using Hardware Format):")
-@@ -1057,39 +1102,39 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1057,39 +1237,39 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
                  if let url = compressedFileURL {
                      Logger.debug("AudioStreamManager", "Using compressed file URL: \(url.path)")
                      
@@ -343,10 +511,10 @@ index 4d69b16..af9c458 100644
 -        NotificationCenter.default.addObserver(self, selector: #selector(handleAudioSessionInterruption), name: AVAudioSession.interruptionNotification, object: nil)
 +        // Bread: no interruption observer here; init registers it once, and one per
 +        // prepare made every interruption reach JS once per past prepare.
- 
+         
          if settings.enableProcessing == true {
              // Initialize the AudioProcessor for buffer-based processing
-@@ -1117,6 +1162,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1117,6 +1297,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          
          // Mark preparation as complete
          isPrepared = true
@@ -354,7 +522,7 @@ index 4d69b16..af9c458 100644
          Logger.debug("Recording prepared successfully. Ready to start.")
          
          return true
-@@ -1127,12 +1173,24 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1127,12 +1308,24 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
      ///   - settings: The recording settings to use.
      /// - Returns: A StartRecordingResult object if recording starts successfully, or nil otherwise.
      func startRecording(settings: RecordingSettings) -> StartRecordingResult? {
@@ -380,7 +548,18 @@ index 4d69b16..af9c458 100644
              Logger.debug("Tap was reinstalled during recording start")
          } else {
              // If not prepared, prepare now
-@@ -1180,11 +1238,16 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1145,7 +1338,9 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+         
+         // Rest of the method remains unchanged
+         // Check for active phone call again, in case one started after preparation
+-        if isPhoneCallActive() {
++        let callActive = isPhoneCallActive()
++        breadMark("callCheck")
++        if callActive {
+             Logger.debug("Cannot start recording during an active phone call")
+             delegate?.audioStreamManager(self, didFailWithError: "Cannot start recording during an active phone call")
+             cleanupPreparation()
+@@ -1180,11 +1375,16 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              isPaused = false
              pausedBySystemInterruption = false
              
@@ -400,7 +579,7 @@ index 4d69b16..af9c458 100644
              
              // Show notifications if enabled
              if settings.showNotification {
-@@ -1220,13 +1283,14 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1220,13 +1420,14 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          } catch {
              Logger.debug("Error starting audio engine: \(error.localizedDescription)")
              isRecording = false
@@ -416,7 +595,7 @@ index 4d69b16..af9c458 100644
          // Only run if prepared but not recording
          guard isPrepared && !isRecording else { return }
          
-@@ -1249,11 +1313,15 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1249,11 +1450,15 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          }
          
          // Reset audio session
@@ -436,7 +615,7 @@ index 4d69b16..af9c458 100644
          
          // Clear notification setup if it was initialized
          notificationManager?.stopUpdates()
-@@ -1272,6 +1340,30 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1272,6 +1477,30 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          Logger.debug("Preparation cleanup completed")
      }
  
@@ -467,7 +646,7 @@ index 4d69b16..af9c458 100644
      /// Pauses the current audio recording.
      func pauseRecording(isSystemInterruption: Bool = false) {
          guard isRecording, !isPaused else { return }
-@@ -1337,7 +1429,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1337,7 +1566,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          
          do {
              // Check and reinstall tap with hardware format
@@ -476,7 +655,7 @@ index 4d69b16..af9c458 100644
              Logger.debug("Tap reinstalled for resume")
              
              // Try to restart the engine
-@@ -1428,15 +1520,20 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1428,15 +1657,20 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              return nil
          }
          
@@ -501,7 +680,7 @@ index 4d69b16..af9c458 100644
          
          // Create output buffer
          guard let outputBuffer = AVAudioPCMBuffer(
-@@ -1447,15 +1544,24 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1447,15 +1681,24 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              return nil
          }
          
@@ -530,7 +709,7 @@ index 4d69b16..af9c458 100644
              return nil
          }
          
-@@ -1791,7 +1897,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1791,7 +2034,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              try AVAudioSession.sharedInstance().setPreferredInput(port)
              Thread.sleep(forTimeInterval: 0.15)
              audioEngine.reset()
@@ -539,7 +718,7 @@ index 4d69b16..af9c458 100644
              if wasRunning {
                  audioEngine.prepare()
                  try audioEngine.start()
-@@ -1803,7 +1909,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1803,7 +2046,7 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              Logger.debug("AudioStreamManager", "Device switch failed: \(error.localizedDescription)")
              if wasRunning {
                  do {
@@ -548,7 +727,7 @@ index 4d69b16..af9c458 100644
                      audioEngine.prepare()
                      try audioEngine.start()
                      Logger.debug("AudioStreamManager", "Engine recovery after device switch succeeded")
-@@ -1898,14 +2004,16 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1898,14 +2141,16 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          isRecording = false
          isPaused = false
          pausedBySystemInterruption = false
@@ -566,7 +745,7 @@ index 4d69b16..af9c458 100644
          
          // PERFORMANCE OPTIMIZATION: Capture current state for immediate return
          let capturedFileURL = recordingFileURL
-@@ -1917,6 +2025,11 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1917,6 +2162,11 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
          
          // PERFORMANCE OPTIMIZATION: Move all slow operations to background
          let capturedShowNotification = recordingSettings?.showNotification == true
@@ -578,7 +757,7 @@ index 4d69b16..af9c458 100644
          
          // Queue notification and audio session cleanup for background
          DispatchQueue.global(qos: .utility).async { [weak self] in
-@@ -1940,6 +2053,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -1940,6 +2190,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
                  }
              }
              
@@ -587,7 +766,7 @@ index 4d69b16..af9c458 100644
              // Reset audio session in background
              do {
                  try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-@@ -2113,6 +2228,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -2113,6 +2365,8 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
      }
  
      private func handleDeviceDisconnection(disconnectedDeviceId: String) {
@@ -596,7 +775,7 @@ index 4d69b16..af9c458 100644
          Logger.debug("handleDeviceDisconnection entered. isRecording: \(isRecording), settingsExist: \(recordingSettings != nil), deviceIdExists: \(recordingSettings?.deviceId != nil), currentDeviceId: \(recordingSettings?.deviceId ?? "nil")")
  
          // --- Modify Guard: Only require settings object, handle nil deviceId later ---
-@@ -2241,7 +2358,10 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
+@@ -2241,7 +2495,10 @@ class AudioStreamManager: NSObject, AudioDeviceManagerDelegate {
              }
              
              // Use our shared tap installation method with the custom block
