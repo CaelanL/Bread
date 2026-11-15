@@ -4,7 +4,9 @@
 //   <VERSION>-fetch.json   per chapter: verses expected (KJV numbering) and returned
 //   <VERSION>-single.json  a few verses from the single-verse path, to compare with the chapter path
 //
-//   npx tsx scripts/grading-audit/fetch-licensed.ts <ESV|NIV|NLT|NKJV> [--chapters all|sample] [--list]
+//   npx tsx scripts/grading-audit/fetch-licensed.ts <ESV|NIV|NLT|NKJV> [--chapters all|sample|"Psalms 23,John 3"] [--list]
+//
+// Named chapters skip the single-verse checks, so "Psalms 23" costs one call.
 //
 // Upstream calls are throttled and capped (Caelan's caps, 2026-11-14): ESV at most 8 a minute
 // (Crossway allows 60/min, 1,000/hour, 5,000/day on a key prod may share); API.Bible at most 900
@@ -63,6 +65,12 @@ function chapterList(mode: string): { chapter: string; expected: number }[] {
   for (const run of verseRuns(loadSource('KJV'))) counts.set(`${run.book} ${run.chapter}`, run.verses.at(-1)!.verse);
   const all = [...counts.keys()];
   if (mode === 'all') return all.map((chapter) => ({ chapter, expected: counts.get(chapter)! }));
+  if (mode !== 'sample') {
+    return mode.split(',').map((c) => c.trim()).map((chapter) => {
+      if (!counts.has(chapter)) throw new Error(`Unknown chapter: ${chapter}`);
+      return { chapter, expected: counts.get(chapter)! };
+    });
+  }
   const picked = new Set<string>();
   for (const book of new Set(all.map((c) => c.replace(/ \d+$/, '')))) picked.add(`${book} 1`);
   for (const p of popularPassages()) picked.add(p.replace(/:.*$/, ''));
@@ -76,7 +84,7 @@ function chapterList(mode: string): { chapter: string; expected: number }[] {
 async function main() {
   const version = process.argv[2];
   const api = API[version];
-  if (!api) throw new Error('Usage: fetch-licensed.ts <ESV|NIV|NLT|NKJV> [--chapters all|sample]');
+  if (!api) throw new Error('Usage: fetch-licensed.ts <ESV|NIV|NLT|NKJV> [--chapters all|sample|"Psalms 23,John 3"]');
   const mode = process.argv.includes('--chapters') ? process.argv[process.argv.indexOf('--chapters') + 1] : 'sample';
   if (process.argv.includes('--list')) {
     const chapters = chapterList(mode);
@@ -122,7 +130,7 @@ async function main() {
     }
   }
 
-  for (const ref of SINGLE) {
+  for (const ref of mode === 'all' || mode === 'sample' ? SINGLE : []) {
     if (typeof single[ref] === 'string') continue;
     const res = await bible(`ref=${encodeURIComponent(ref)}`);
     if (!res) break;
