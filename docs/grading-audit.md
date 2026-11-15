@@ -376,7 +376,7 @@ Not grading, but it fails recordings.
   passed" when the review didn't count. This is the part of the review story the aligner can't fix.
 - **Repro:** the John 3:16 reorder card below; 18 of 184 Bread-suggested verses show a run of 2+
   identical struck and underlined words when said in KJV order against ESV.
-- **Fix:** "Perfect!" only at 100, "Great!" at 90-99 (D14), in `ResultCard`. No "moved" mark: a
+- **Fix:** "Perfect!" only when nothing is marked (`isPerfect`), else "Great!", in `ResultCard`. No "moved" mark: a
   reordered phrase stays wrong, with no card change (decision below). The other two wordings are
   unchanged. No scoring change.
 
@@ -488,7 +488,7 @@ translation, or `session_attempts` for an account around the review date with 3-
   `npm run check`; removing `todo` turns one into a guard once its fix lands.
 - 2026-11-14 · The fixture tests pin each failing clip's score, not a count or a set · A change
   that fixes ten clips and breaks ten others must fail, and so must one that lowers a clip.
-- 2026-11-14 · A person is talking, not spelling: a transcript word that differs from the verse
+- 2026-11-15 · A person is talking, not spelling: a transcript word that differs from the verse
   only in how it is written (spelling, spacing, accents, hyphens) is correct, and the card shows
   the verse's spelling. No rules for people using the app wrong · Grading checks what was said.
 - 2026-11-14 · D1: no half credit for archaic and modern forms (hath/has, spake/spoke) · Keep it
@@ -509,14 +509,12 @@ translation, or `session_attempts` for an account around the review date with 3-
   costs only those words.
 - 2026-11-14 · D10: no hint that the reader's wording looks like another translation · Not a
   grading fix.
-- 2026-11-14 · D11: move both Soniox model strings to v6 on purpose before 2026-12-15 · Soniox
-  reroutes v5 then with no deploy; moving first lets the fixture be replayed on v6.
+- 2026-11-15 · D11: stay on v5 and move to v6 on purpose before 2026-12-15, by one setting
+  (`docs/architecture/edge-functions.md`) · v6 missed more audit clips; Soniox reroutes v5 then.
 - 2026-11-14 · D12: keep sending the verse as Soniox context; RC12 is accepted · Without it,
   correct recitations fail far more.
 - 2026-11-14 · D13, D19: the adapter fixes (B1, B3) also clear the saved ESV, NIV, NLT and NKJV
   rows of `verse_cache` · A poisoned or glued row stays wrong until something overwrites it.
-- 2026-11-14 · D14: "Perfect!" only at 100; 90-99 says "Great!" · A card with visible mistakes
-  isn't perfect.
 - 2026-11-14 · D15: an empty transcript stays a 0% attempt · No change to the pass rule.
 - 2026-11-14 · D16: no separate Soniox account for audits and local dev · `voice.ts` throttles
   itself and deletes its own files and transcriptions.

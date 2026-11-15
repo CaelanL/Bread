@@ -133,8 +133,8 @@ being retried, its hide mode applies again.
 
 **Use `lib/align.ts` for any verse-versus-transcription comparison (invariant
 6).** `alignTranscription(expected, spoken)` produces the `AlignmentWord[]` that
-scoring depends on. Each word is `correct`, `missing`, or `added`. `close` exists
-in the type and the formula, but nothing produces it yet.
+scoring depends on. Each word is `correct`, `missing`, or `added`. `close` is in
+the formula, but nothing produces it yet.
 
 The rule: a person is talking, not spelling. A word written differently but said
 the same is correct, and the card shows the verse's word. Rulings:
@@ -246,9 +246,10 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 
 - 2026-04-26 · Retries are display-only and never change `chunkResults` · One attempt counts, so practice is free. Hidden on single-chunk sessions (2026-04-30), where it would mislead.
 - 2026-05-01 · Chunk picker is a tap-to-commit modal, with a floating Start pill over a scrolling form · The old dropdown overlapped the form on small phones.
-- 2026-06-06 · A peeked chunk scores 0 through an all-`missing` alignment, with no confirm dialog · No scorer special case, can't be gamed, and a peeked Hard session can't reach 90. An accidental peek just means practicing again.
-- 2026-08-25 · Scoring formula `(correct + 0.5*close) / (correct + close + missing + added)` in `lib/study-chunks.ts` is deliberate · Added words count in the denominator to reward clean recitation. Fix fairness in alignment normalization, never in the formula. Don't re-propose it.
+- 2026-06-06 · A peeked chunk scores 0 through an all-`missing` alignment, with no confirm dialog · No scorer special case, can't be gamed, and a peeked Hard session can't reach 90.
+- 2026-08-25 · Scoring formula `(correct + 0.5*close) / (correct + close + missing + added)` in `lib/study-chunks.ts` is deliberate · Added words count in the denominator to reward clean recitation. Fix fairness in alignment normalization, never in the formula.
 - 2026-08-25 · Prefs are per-verse columns, not `progress` keys; mastered verses with none open on Hard, whole passage · `progress` round-trips through `parseProgress`, so older clients would clobber JSONB keys. Engraved reviews only qualify on Hard, so Easy would stall them.
-- 2026-09-17 · Blanks are drawn apart from the glyph and stay word-width · A native underline breaks at hyphens and descenders, so one word looked like several blanks. This keeps the length hint and wrapping.
+- 2026-09-17 · Blanks are drawn apart from the glyph and stay word-width · A native underline breaks at hyphens and descenders, so one word looked like several blanks.
 - 2026-09-17 · Numbers compare as canonical spans before the diff · Translations and the recognizer both mix digits and words. Exact value and kind keep false positives out.
 - 2026-11-12 · The session reads its verse from the store, not a second query · Same lookup as setup, so removed mastered verses open and failures show.
+- 2026-11-15 · "Perfect!" only when nothing is marked, else "Great!" · Visible marks aren't perfect, even at a rounded 100.

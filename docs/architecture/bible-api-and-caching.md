@@ -179,9 +179,8 @@ Auth: `api-key: ${API_BIBLE_KEY}`. Bible IDs hardcoded:
 | NKJV | `63097d2a0a2f7db3-01` |
 
 References are converted to USFM codes (`John 3:16` → `JHN.3.16`).
-A single verse is read from its chapter (NLT tags census table rows
-with wrong verse ids), so both paths parse the same HTML with
-`parseApiBibleHtml` in `adapters/apibible-parse.ts`. Verses start at
+A single verse is read from its chapter, so both paths parse the
+same HTML with `parseApiBibleHtml` in `adapters/apibible-parse.ts`. Verses start at
 `data-number="n"` spans. `cleanApiBibleText` turns tags into spaces
 (no glued words), decodes entities and drops bracketed notes. A block holding only a Psalm 119 stanza name, or
 a Hebrew letter and one word in any spelling (NKJV's "ס Samek"), is
@@ -416,8 +415,8 @@ Also:
 - 2026-08-15 · Session `verseCache` holds single-verse text only, and `fetchVerse` always returns keyed `verses` · Combined range text under the start verse put a whole passage in chunk 1 (Psalm 103).
 - 2026-11-14 · One parser per adapter, in a pure file tested from `lib/__tests__/` · Titles, stanza letters and "Psalm N" only reached the single-verse path because it parsed differently. `npm test` already globs there; a new test glob would change `package.json` and the native fingerprint.
 - 2026-11-14 · An omitted single verse answers not found and isn't cached · Crossway answered with its neighbours, cached under the omitted number. `isAvailableIn` reads a failure as not available, and adding it fails visibly instead of making an empty chunk.
-- 2026-11-14 · NLT's merged rows key under the first number · Under both, a range would repeat the words.
+- 2026-11-15 · A single API.Bible verse is read from its chapter; a merged row keys and caches under its first number only · NLT tags a census table's first row with the next verse's id (Numbers 1-2); any other key repeats a row in a range.
 - 2026-11-14 · A cached range is answered from one keyed read · Two reads could race, and a range answered with `verses: {}` fell to the sentence splitter.
-- 2026-11-14 · Rows carry `text_rev`, and the ESV, NIV, NLT and NKJV rows were cleared in the same migration · Migrations apply before functions deploy, so an old function could refill a cleared row with old text in that gap; the new function reads only its own revision. Schema: `docs/architecture/data-model.md`.
-- 2026-11-14 · The daily limit counts only server cache misses (it used to count every request, "for fairness") · Only a miss spends the external API's budget; a hit costs our own database and stores nothing new. Old clients get the same responses, with a 429 only on a miss.
-- 2026-11-14 · Launch preload after first paint, 3 at a time, none with Hide verses on, stopping on a 429 (it was every verse at once at hydrate) · Previews still load for people who show them, without crowding the first paint or spending a day's limit.
+- 2026-11-15 · Rows carry `text_rev`, and the ESV, NIV, NLT and NKJV rows were cleared in the same migration · Migrations apply before functions deploy, so an old function could refill a cleared row with old text in that gap; the new function reads only its own revision. Schema: `docs/architecture/data-model.md`.
+- 2026-11-14 · The daily limit counts only server cache misses · Only a miss spends the external API's budget; a hit costs our own database and stores nothing new. Old clients get the same responses, with a 429 only on a miss.
+- 2026-11-14 · Launch preload after first paint, 3 at a time, none with Hide verses on, stopping on a 429 · Previews still load for people who show them, without crowding the first paint or spending a day's limit.
