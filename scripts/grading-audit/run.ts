@@ -1,10 +1,10 @@
 // Grading audit: feeds "correct" recitations through the app's own chunking, alignment
 // and scoring, and reports every chunk that scores under 100.
 //
-//   npm run audit:grading -- [--source KJV|ESV|...] [--pass <prefix>] [--chunk-size 1|3|all]
+//   npx tsx scripts/grading-audit/run.ts [--source KJV|ESV|...] [--pass <prefix>] [--chunk-size 1|3|all]
 //                            [--examples N] [--limit N] [--aligner <file>] [--check-chunks]
 //                            [--replay <transcripts.json> [--as-printed]]
-//   npm run audit:grading -- --card (--ref "John 3:16" | --expected "<text>") --transcript "<text>" [--aligner <file>]
+//   npx tsx scripts/grading-audit/run.ts --card (--ref "John 3:16" | --expected "<text>") --transcript "<text>" [--aligner <file>]
 //
 // Chunk size 1 (the default) skips `reference:verse-numbers-in-chunk`, which needs multi-verse
 // chunks: run it with --chunk-size 3. Older aligners for --aligner, from git:
