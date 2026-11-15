@@ -24,12 +24,18 @@ test('monthly loads publish reference metadata promptly and keep text with its c
   let failText = false;
   let failCount = false;
   const held = new Map();
+  const bibleCalls = [];
+  let heldMonth = null;
+  let chapter = null;
+  let verse = null;
   const monthCalls = [];
   t.mock.method(globalThis, 'fetch', async (input, init) => {
     const url = new URL(input);
     if (url.pathname === '/auth/v1/token') return Response.json({ access_token: token, refresh_token: 'refresh', token_type: 'bearer', expires_in: 3600, user: { id: 'A' } });
     if (url.pathname === '/rest/v1/verse_of_month') {
       const month = url.searchParams.get('year_month').slice(3); monthCalls.push(month);
+      if (heldMonth) { const waiting = heldMonth; heldMonth = null; await waiting.promise; }
+      if (chapter) return Response.json({ id: month, year_month: month, book, chapter, verse_start: verse, verse_end: verse, image_url: null });
       if (failMetadata) return Response.json({ message: 'Unavailable' }, { status: 503 });
       if (emptyMetadata) return Response.json(null);
       return Response.json({ id: month, year_month: month, book, chapter: month === '2026-11' ? 23 : 46,
@@ -40,8 +46,11 @@ test('monthly loads publish reference metadata promptly and keep text with its c
     if (url.pathname === '/rest/v1/user_verses') return Response.json(null);
     if (url.pathname === '/functions/v1/bible') {
       const version = url.searchParams.get('version'); const reference = url.searchParams.get('ref');
-      const pending = held.get(version);
-      if (pending) { held.delete(version); pending.sent.resolve(); return pending.reply.promise; }
+      bibleCalls.push(reference);
+      // Held by translation and reference: the month's scheduled passage is read alongside its row.
+      const key = version + ' ' + reference;
+      const pending = held.get(key);
+      if (pending) { held.delete(key); pending.sent.resolve(); return pending.reply.promise; }
       if (failText) return Response.json({ error: 'Unavailable' }, { status: 503 });
       return Response.json({ reference, version, text: 'Synthetic ' + version, verses: { 1: 'Synthetic ' + version }, cached: false });
     }
@@ -55,10 +64,10 @@ test('monthly loads publish reference metadata promptly and keep text with its c
   t.after(() => supabase.auth.stopAutoRefresh());
   const november = new Date(2026, 10, 30, 23, 59);
   const december = new Date(2026, 11, 1, 0, 1);
-  const reset = () => { held.clear(); monthCalls.length = 0; book = 'Psalms'; clearSessionCache(); failMetadata = false; emptyMetadata = false; failText = false; failCount = false; };
-  const hold = (version) => {
+  const reset = () => { held.clear(); monthCalls.length = 0; bibleCalls.length = 0; heldMonth = null; chapter = null; verse = null; book = 'Psalms'; clearSessionCache(); failMetadata = false; emptyMetadata = false; failText = false; failCount = false; };
+  const hold = (version, reference = 'Psalms 23:1') => {
     const pending = { sent: Promise.withResolvers(), reply: Promise.withResolvers() };
-    held.set(version, pending); return pending;
+    held.set(version + ' ' + reference, pending); return pending;
   };
 
   await t.test('local calendar key rolls over locally rather than in UTC', () => {
@@ -96,7 +105,7 @@ test('monthly loads publish reference metadata promptly and keep text with its c
     reset(); const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));
     await loader.load('ESV', november);
     assert.equal(updates.at(-1).votm.yearMonth, '2026-11');
-    const pending = hold('ESV'); const next = loader.load('ESV', december);
+    const pending = hold('ESV', 'Psalms 46:1'); const next = loader.load('ESV', december);
     assert.equal(updates.at(-1).text, null); assert.equal(updates.at(-1).loading, true);
     await pending.sent.promise;
     assert.equal(updates.at(-1).votm.yearMonth, '2026-12'); assert.equal(updates.at(-1).text, null);
@@ -116,6 +125,20 @@ test('monthly loads publish reference metadata promptly and keep text with its c
     }
     pending.reply.resolve(Response.json({ reference: 'Psalms 23:1', version: 'ESV', text: 'Fresh', verses: { 1: 'Fresh' } }));
     await again; assert.equal(updates.at(-1).text, 'Fresh');
+  });
+  await t.test('the scheduled passage\'s text read starts alongside the month\'s row, and is the only one when the row agrees', async () => {
+    reset(); book = '1 Peter'; const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));
+    chapter = 5; verse = 7;
+    const month = Promise.withResolvers(); heldMonth = month;
+    const text = hold('ESV', '1 Peter 5:7');
+    const loading = loader.load('ESV', november);
+    await text.sent.promise;
+    assert.deepEqual(bibleCalls, ['1 Peter 5:7'], 'the text read went out before the row answered');
+    month.resolve();
+    text.reply.resolve(Response.json({ reference: '1 Peter 5:7', version: 'ESV', text: 'Scheduled', verses: { 7: 'Scheduled' } }));
+    assert.equal(await loading, true);
+    assert.equal(updates.at(-1).text, 'Scheduled');
+    assert.deepEqual(bibleCalls, ['1 Peter 5:7']);
   });
   await t.test('leaving or changing accounts prevents late publication', async () => {
     reset(); const updates = []; const loader = createMonthlyLoader((state) => updates.push(state));

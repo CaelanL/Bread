@@ -227,7 +227,7 @@ function deployFunctions() {
   }
   for (const name of names) {
     console.log(`Deploying function ${name}...`);
-    const r = linked(['functions', 'deploy', name, '--project-ref', kit.prodProjectRef, '--use-api'], { stdio: 'inherit' });
+    const r = linked(['functions', 'deploy', name, '--project-ref', kit.prodProjectRef, '--use-api', '--yes'], { stdio: 'inherit' });
     if (!r.ok) stop(`function ${name} failed to deploy.`, 'read the output above, then rerun.');
   }
 }

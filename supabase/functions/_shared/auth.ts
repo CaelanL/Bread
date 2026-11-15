@@ -157,49 +157,6 @@ export function getAdminClient(): SupabaseClient {
 }
 
 /**
- * Get client with user's JWT (respects RLS)
- */
-export function getUserClient(authHeader: string): SupabaseClient {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    }
-  );
-}
-
-/**
- * Extract and validate user from request
- * Works with both anonymous and authenticated users
- */
-export async function getAuthUser(req: Request): Promise<AuthUser | null> {
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) {
-    return null;
-  }
-
-  const client = getUserClient(authHeader);
-
-  const {
-    data: { user },
-    error,
-  } = await client.auth.getUser();
-
-  if (error || !user) {
-    return null;
-  }
-
-  return {
-    id: user.id,
-    email: user.email,
-    isAnonymous: user.is_anonymous ?? false,
-  };
-}
-
-/**
  * Get user's subscription tier
  */
 export async function getUserTier(

@@ -15,6 +15,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Setup screen, chunks, masks, peek, scoring | `docs/features/study-session.md` |
 | Grading accuracy, known grading gaps, the audit harness | `docs/grading-audit.md` |
 | Recording, Soniox, batch and live paths | `docs/features/transcription.md` |
+| Warm audio session, interruptions, the `@siteed/audio-studio` patch | `docs/architecture/native-recorder.md` |
 | Mastery, spaced repetition, engraved | `docs/features/review.md` |
 | Collections, sorting, library list | `docs/features/library.md` |
 | Add screen, quick add, chapter range select, double-tap guard | `docs/features/adding-verses.md` |
@@ -55,7 +56,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 
 **Invariants.** Breaking these causes silent data loss, licensing violations or broken core flows.
 1. All Supabase writes live in `lib/`, never in components or screens. Exception: auth calls in `lib/auth/context.tsx`. See `docs/architecture/sync-and-storage.md`.
-2. Verse text is never stored in `user_verses` or any user-owned table (ESV and NLT licensing). See `docs/architecture/bible-api-and-caching.md`.
+2. Verse text is never stored in `user_verses`, any user-owned table or the saved library snapshot (ESV and NLT licensing). See `docs/architecture/bible-api-and-caching.md`.
 3. All Bible reads go through `fetchVerse()` and `fetchChapter()` in `lib/api/bible.ts`. `lib/bible/kjv-bundle.ts` is read only from inside them. See `docs/architecture/bible-api-and-caching.md`.
 4. `chunk.text` is the ground truth for scoring, not `displayWords`. See `docs/features/study-session.md`.
 5. Chunk masks are computed once at session start and frozen. See `docs/features/study-session.md`.
@@ -69,7 +70,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 
 **Code conventions**
 - `@/` resolves to the project root.
-- State: read with selectors (`useCollections()`, `useVersesByCollection(id)`, `useHydrated()`), write with actions (`useAppStore.getState().addVerse(...)`).
+- State: read with selectors (`useCollections()`, `useVersesByCollection(id)`, `useHydrated()`), write with actions (`useAppStore.getState().addVerse(...)`). In a store action, check `sameAccount` (or write through `setFor`) after every await, and call `requireSynced()` before a write that depends on the translation or name. See `docs/architecture/sync-and-storage.md`.
 - Styles: `StyleSheet.create()` at module level, inline `style={{}}` only for dynamic theme or state values. Lint rejects radii, durations and press scales outside `constants/theme.ts`.
 - Icons: `IconSymbol` from `components/ui/icon-symbol.tsx`. A new icon needs a `MAPPING` entry for Android and web.
 - Haptics are gated to iOS with `process.env.EXPO_OS === 'ios'`.

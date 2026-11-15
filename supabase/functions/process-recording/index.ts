@@ -313,9 +313,10 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
     console.log(`[PROCESS] Soniox job created: ${jobMs}ms`);
 
     // Step 3: Poll for completion, up to the deadline (the client can
-    // wait — the response heartbeat keeps its socket alive). Fast 250ms
-    // cadence for the first 3s: short clips finish in ~1s, and a flat 1s
-    // sleep was costing more than the transcription itself.
+    // wait — the response heartbeat keeps its socket alive). A short first
+    // wait, then 250ms for 10s: short clips finish in ~1s, and a 1s sleep
+    // can cost more than the transcription itself. 1s after that.
+    await new Promise((resolve) => setTimeout(resolve, 150));
     const pollStart = Date.now();
     let completed = false;
     let polls = 0;
@@ -341,7 +342,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
       }
 
       const elapsed = Date.now() - pollStart;
-      await new Promise((resolve) => setTimeout(resolve, elapsed < 3000 ? 250 : 1000));
+      await new Promise((resolve) => setTimeout(resolve, elapsed < 10_000 ? 250 : 1000));
     }
 
     if (!completed) {

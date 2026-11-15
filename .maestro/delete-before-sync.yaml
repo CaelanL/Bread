@@ -1,0 +1,37 @@
+# Delete before sync (docs/features/library.md): a cold start paints the saved library, and a
+# delete swiped before the server's library lands waits for it, so the dialog counts from the
+# server, not the snapshot. Every Supabase request takes 10s longer (dev latency), so the wait is
+# wide. Meanwhile another device emptied "Psalm 23": the saved library says it has verses.
+appId: com.caelanliu.biblemem
+name: delete-before-sync
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&latency=10000&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Psalm 23, 2 verses.*"
+    timeout: 60000
+- runScript:
+    file: scripts/delete-before-sync.js
+    env:
+      MODE: empty
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: ".*Psalm 23, 2 verses.*"
+    timeout: 30000
+- swipe:
+    from: ".*Psalm 23, 2 verses.*"
+    direction: LEFT
+- tapOn:
+    id: swipe-delete
+    below: ".*Joshua 1.*"
+- extendedWaitUntil:
+    visible: 'Delete "Psalm 23"?'
+    timeout: 60000
+- takeScreenshot: delete-before-sync-dialog
+- assertVisible: "This collection will be permanently deleted."
+- tapOn: Cancel
+- runScript:
+    file: scripts/delete-before-sync.js
+    env:
+      MODE: restore

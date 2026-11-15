@@ -84,23 +84,23 @@ export async function cacheChapter(
   const admin = getAdminClient();
   const verseCount = Object.keys(verses).length;
 
-  // Check current count for this version
-  const { count } = await admin
-    .from("verse_cache")
-    .select("*", { count: "exact", head: true })
-    .eq("version", version);
+  // This version's count, and how many of these verses are already cached
+  const verseNums = Object.keys(verses).map((v) => parseInt(v, 10));
+  const [{ count }, { count: existingCount }] = await Promise.all([
+    admin
+      .from("verse_cache")
+      .select("*", { count: "exact", head: true })
+      .eq("version", version),
+    admin
+      .from("verse_cache")
+      .select("*", { count: "exact", head: true })
+      .eq("book", book)
+      .eq("chapter", chapter)
+      .eq("version", version)
+      .in("verse", verseNums),
+  ]);
 
   const currentCount = count || 0;
-
-  // Check how many of these verses are already cached
-  const verseNums = Object.keys(verses).map((v) => parseInt(v, 10));
-  const { count: existingCount } = await admin
-    .from("verse_cache")
-    .select("*", { count: "exact", head: true })
-    .eq("book", book)
-    .eq("chapter", chapter)
-    .eq("version", version)
-    .in("verse", verseNums);
 
   const newVerses = verseCount - (existingCount || 0);
   const projectedCount = currentCount + newVerses;
@@ -171,48 +171,10 @@ async function evictOldestVerses(
 }
 
 /**
- * Get cached single verse
- */
-export async function getCachedVerse(
-  book: string,
-  chapter: number,
-  verse: number,
-  version: string
-): Promise<string | null> {
-  const admin = getAdminClient();
-
-  const { data, error } = await admin
-    .from("verse_cache")
-    .select("text")
-    .eq("book", book)
-    .eq("chapter", chapter)
-    .eq("verse", verse)
-    .eq("version", version)
-    .eq("text_rev", TEXT_REV)
-    .single();
-
-  if (error || !data) {
-    return null;
-  }
-
-  // Update last_used_at for LRU (fire and forget)
-  admin
-    .from("verse_cache")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("book", book)
-    .eq("chapter", chapter)
-    .eq("verse", verse)
-    .eq("version", version)
-    .then(() => {});
-
-  return data.text;
-}
-
-/**
- * Get cached verse range as keyed data (preserves verse numbers)
+ * Get cached verses, keyed by verse number (one query for a verse or a range)
  * Returns null if ANY verse in range is missing
  */
-export async function getCachedVerseRangeKeyed(
+export async function getCachedVerses(
   book: string,
   chapter: number,
   verseStart: number,
@@ -253,7 +215,6 @@ export async function getCachedVerseRangeKeyed(
     .lte("verse", verseEnd)
     .then(() => {});
 
-  // Return keyed data
   const verses: Record<string, string> = {};
   for (const row of data) {
     verses[row.verse.toString()] = row.text;
@@ -273,25 +234,24 @@ export async function cacheVerse(
 ): Promise<void> {
   const admin = getAdminClient();
 
-  // Check if already exists
-  const { count: existingCount } = await admin
-    .from("verse_cache")
-    .select("*", { count: "exact", head: true })
-    .eq("book", book)
-    .eq("chapter", chapter)
-    .eq("verse", verse)
-    .eq("version", version);
-
-  // If new verse, check limit
-  if (!existingCount) {
-    const { count } = await admin
+  // Whether it already exists, and this version's count
+  const [{ count: existingCount }, { count }] = await Promise.all([
+    admin
       .from("verse_cache")
       .select("*", { count: "exact", head: true })
-      .eq("version", version);
+      .eq("book", book)
+      .eq("chapter", chapter)
+      .eq("verse", verse)
+      .eq("version", version),
+    admin
+      .from("verse_cache")
+      .select("*", { count: "exact", head: true })
+      .eq("version", version),
+  ]);
 
-    if ((count || 0) >= MAX_VERSES_PER_VERSION) {
-      await evictOldestVerses(version, 1);
-    }
+  // If new verse, check limit
+  if (!existingCount && (count || 0) >= MAX_VERSES_PER_VERSION) {
+    await evictOldestVerses(version, 1);
   }
 
   // Upsert

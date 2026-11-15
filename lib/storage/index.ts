@@ -57,6 +57,7 @@ export interface SavedVerse {
   lastPracticedAt?: string; // ISO UTC of last completed session (any difficulty)
   lastChunkSize?: number; // Last chunk size chosen on the setup screen
   lastDifficulty?: Difficulty; // Last difficulty chosen on the setup screen
+  updatedAt?: string; // user_verses.updated_at as the server sent it (microseconds kept): the progress guard's base
 }
 
 export interface Collection {
@@ -150,7 +151,8 @@ export function parseVerseRowExtras(row: {
   last_practiced_at?: unknown;
   last_chunk_size?: unknown;
   last_difficulty?: unknown;
-}): Pick<SavedVerse, 'lastPracticedAt' | 'lastChunkSize' | 'lastDifficulty'> {
+  updated_at?: unknown;
+}): Pick<SavedVerse, 'lastPracticedAt' | 'lastChunkSize' | 'lastDifficulty' | 'updatedAt'> {
   return {
     lastPracticedAt: typeof row.last_practiced_at === 'string'
       ? row.last_practiced_at
@@ -159,6 +161,7 @@ export function parseVerseRowExtras(row: {
       ? row.last_chunk_size
       : undefined,
     lastDifficulty: parseLastDifficulty(row.last_difficulty),
+    updatedAt: typeof row.updated_at === 'string' ? row.updated_at : undefined,
   };
 }
 

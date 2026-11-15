@@ -4,8 +4,9 @@
  * Functions for logging and querying session attempt data.
  */
 
-import { supabase } from './client';
+import { sessionUserId, supabase } from './client';
 import type { Difficulty } from '@/lib/storage';
+import { useAppStore } from '@/lib/store';
 
 export interface SessionAttemptData {
   book: string;
@@ -24,14 +25,14 @@ export interface SessionAttemptData {
  * Log a completed session attempt
  */
 export async function logSessionAttempt(data: SessionAttemptData): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  const userId = await sessionUserId();
+  if (!userId) {
     console.error('[ANALYTICS] Not authenticated, skipping attempt log');
     return;
   }
 
   const { error } = await supabase.from('session_attempts').insert({
-    user_id: user.id,
+    user_id: userId,
     book: data.book,
     chapter: data.chapter,
     verse_start: data.verseStart,
@@ -46,29 +47,32 @@ export async function logSessionAttempt(data: SessionAttemptData): Promise<void>
 
   if (error) {
     console.error('[ANALYTICS] Failed to log session attempt:', error);
+    return;
   }
+  // Home's streak counts these rows, so it reloads once this one is in, not only after the progress save.
+  useAppStore.getState().markSessionSaved();
 }
 
 /**
  * Get current practice streak (consecutive days with at least one attempt)
- * Returns 0 if no attempts or streak broken
+ * Returns 0 if no attempts or streak broken, null if it couldn't be read
  * Uses SQL function for scalability - no need to fetch all rows
  */
-export async function getCurrentStreak(): Promise<number> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return 0;
+export async function getCurrentStreak(): Promise<number | null> {
+  const userId = await sessionUserId();
+  if (!userId) return 0;
 
   // Get timezone offset in minutes (e.g., -300 for EST)
   const tzOffsetMin = new Date().getTimezoneOffset();
 
   const { data, error } = await supabase.rpc('get_current_streak', {
-    p_user_id: user.id,
+    p_user_id: userId,
     p_tz_offset_min: tzOffsetMin,
   });
 
   if (error) {
     console.error('[ANALYTICS] Failed to get current streak:', error);
-    return 0;
+    return null;
   }
 
   return data || 0;
@@ -79,11 +83,11 @@ export async function getCurrentStreak(): Promise<number> {
  * Uses SQL SUM for scalability - no need to fetch all rows
  */
 export async function getTotalTimeStudied(): Promise<number> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return 0;
+  const userId = await sessionUserId();
+  if (!userId) return 0;
 
   const { data, error } = await supabase.rpc('get_total_time_studied', {
-    p_user_id: user.id,
+    p_user_id: userId,
   });
 
   if (error) {
@@ -99,13 +103,13 @@ export async function getTotalTimeStudied(): Promise<number> {
  * Returns null if user doesn't have enough data yet
  */
 export async function getAvgTimeToMaster(): Promise<number | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const userId = await sessionUserId();
+  if (!userId) return null;
 
   const { data, error } = await supabase
     .from('user_stats')
     .select('avg_time_per_word_ms, total_words_mastered')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
 
   if (error || !data || !data.avg_time_per_word_ms) return null;

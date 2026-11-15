@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,7 +16,7 @@ import { CURATED_COLLECTIONS, type CuratedCollection } from '@/lib/collections/c
 import { curatedCollectionId } from '@/lib/collections/identity';
 import { saverCountLabel } from '@/lib/collections/savers';
 import { BIBLE_VERSIONS, type BibleVersion } from '@/lib/settings';
-import { useAppStore, useCollections, useCuratedSaverCount, useHydrated } from '@/lib/store';
+import { librarySynced, useAppStore, useCollections, useCuratedSaverCount, useSynced } from '@/lib/store';
 
 function goBack() {
   if (router.canGoBack()) router.back();
@@ -178,13 +178,19 @@ export default function CuratedCollectionScreen() {
   const barHeight = useTopBarHeight();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { user } = useAuth();
-  const hydrated = useHydrated();
+  // Add or Open, and the translation, from the server's library: a saved one may miss a collection
+  // added on another device.
+  const synced = useSynced();
   const accountVersion = useAppStore((state) => state.bibleVersion);
   const collection = CURATED_COLLECTIONS.find(({ id }) => id === slug);
+  const signedIn = !!user;
+  useEffect(() => {
+    if (signedIn && !synced) void librarySynced();
+  }, [signedIn, synced]);
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      {collection && hydrated && user ? (
+      {collection && synced && user ? (
         <CollectionIntroduction
           key={`${user.id}:${collection.id}`}
           collection={collection}

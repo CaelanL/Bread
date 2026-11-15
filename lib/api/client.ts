@@ -2,6 +2,9 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
+import { authStorageKey } from "../auth/after-restore";
+import { timedFetch } from "./dev-timing";
+
 // Read from process.env (Expo automatically injects EXPO_PUBLIC_* vars)
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -15,32 +18,24 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Only use AsyncStorage on native platforms, use default (localStorage) on web
 const storage = Platform.OS === "web" ? undefined : AsyncStorage;
 
+/** Where the session is stored: supabase-js's own default, named so a launch can read it early. */
+export const AUTH_STORAGE_KEY = authStorageKey(supabaseUrl);
+
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage,
+    storageKey: AUTH_STORAGE_KEY,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false, // Required for React Native
   },
+  global: { fetch: timedFetch },
 });
 
-/**
- * Ensure user is authenticated (anonymous or signed in)
- * Call this early in app lifecycle
- */
-export async function ensureAuth(): Promise<void> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    // Sign in anonymously - creates a user without email/password
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) {
-      console.error("Anonymous auth failed:", error);
-      throw new Error("Authentication failed");
-    }
-  }
+/** The signed-in user's id from the stored session: no network round trip, and never signs anyone in. */
+export async function sessionUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
 }
 
 /**

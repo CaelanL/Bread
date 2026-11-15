@@ -41,15 +41,14 @@ same as a real collection. Notification taps use that path
 ## Collections
 
 `fetchCollections` pins My Verses, Mastered and In Progress. Custom collections
-follow saved positions, then creation time and client ID. New collections append.
+follow saved positions, then creation time and client ID. New collections append, with no
+fade. Cards fade in on first paint (stagger capped, `Motion.staggerCapMs`), not on a
+saved library's paint.
 
 Long-press a custom collection for Rename, Reorder and Delete, plus Share… on one you own. Shared collections change the menu, swipe, add and delete; see
 [shared collections](shared-collections.md#in-the-app). On iOS, one light
-haptic confirms it. The menu opens under the press, and `PopoverMenu` moves it up to stay
-inside the safe area. Rename prefills
-`AddCollectionModal`. Reorder or Edit reveals drag handles with accessibility
-actions to move up or down. Each drop saves the order, rolling back on failure.
-Done ends editing.
+haptic confirms it. `PopoverMenu` opens under the press, kept inside the safe area. Rename prefills
+`AddCollectionModal`. Reorder or Edit shows drag handles (and accessibility move actions); each drop saves the order, rolled back on failure.
 
 Collections are flat rows split by `separator` hairlines, like verse rows inside a
 collection, with no cards. Each row: the icon square, name, a subtitle (verse count; "<owner's first name> · M members" once someone else
@@ -59,8 +58,9 @@ mastered or engraved (engraved also fills the square and washes the row gold; se
 
 **Hide verses.** Settings → Appearance → Hide verses (`hideVerseText`, a device pref in the store,
 kept across sign-out like Theme, default off) drops the text line from a collection's verse rows
-(`SwipeableVerseCard`, which then skips the text fetch) and from Study setup's preview card, where
-the expand button still shows the full text.
+(`SwipeableVerseCard`, skipping the fetch) and from Study setup's preview card, where
+the expand button still shows the full text. Off, a collection warms its text on open
+([preload](../architecture/bible-api-and-caching.md#preloading-verse-text)).
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.
 
@@ -170,7 +170,7 @@ progress still need the network
 
 ## Curated collections
 
-Tap a custom collection's header icon, or Change icon in its menu, to change it. See [Explore collections](home.md#explore-collections) for imports and [save totals](home.md#community-saves).
+Change a custom collection's icon from its header icon or menu. Imports: [Explore collections](home.md#explore-collections), [save totals](home.md#community-saves).
 
 ## Deleting a verse
 
@@ -201,7 +201,7 @@ remove](shared-collections.md#leave-and-remove)) repeat the rule. Change all thr
 ## Deleting a collection
 
 Swipe a custom collection, or a verse in a real collection, left for Delete, which opens the
-confirmation; the collection long-press menu offers it too.
+confirmation (so does the long-press menu) once the server's library is in (`librarySynced`).
 
 `deleteCollection` returns early for My Verses; a member's shared copy is left. Otherwise
 one `public.delete_collection` call (latest in `*_delete_collection_for_everyone.sql`) does it
@@ -209,8 +209,7 @@ in one transaction: an owner's group [dissolves](shared-collections.md#dissolve)
 leaves, a verse no other collection holds is soft-deleted if mastered and hard-deleted
 otherwise, and the collection gets `deleted_at`. All or nothing; a retry after success is a
 no-op. It refuses My Verses and a member's copy. Only after it succeeds does the store drop
-the collection (and its group) locally. Virtual collections never get here (their
-swipe is disabled); the function would answer `Collection not found`.
+the collection (and its group) locally. Virtual collections never get here.
 
 ## Reset progress
 
@@ -251,16 +250,17 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
 - `npm run sim -- flow account-translation`: reader-a switches to KJV on the add screen; cards follow, mastery stays.
-- After a local reset, `npm run sim -- flow library-plus`: the + menu, Share… with the invite opened by link over it and Open, then the Library tab pops to the Library and + still opens; New shared collection lands on the code; Join with code.
-- After a local reset, `npm run sim -- flow library-management`: rename, drag and reopen the saved order, copy from Mastered, remove the copy, and inspect swipe Delete in both themes.
-- Tap path: open My Verses, tap the sort pill to Mastery, force-quit and reopen. It's still Mastery.
+- After a local reset, `npm run sim -- flow library-plus`: the + menu, Share… with an invite linked over it, the Library tab pops back, New shared collection, Join with code.
+- After a local reset, `npm run sim -- flow library-management`: rename, reorder and reopen, copy from Mastered, remove the copy, swipe Delete in both themes.
+- Tap path: My Verses, sort to Mastery, force-quit, reopen: still Mastery.
+- `npm run sim -- flow delete-before-sync`: a delete on the saved library counts from the server.
 
 ## Decisions
 
 - 2026-04-27 · Sort is per collection, not one global setting · The user preferred it that way, and the database cost is small.
 - 2026-04-27 · Real collections save sort in the database, virtual ones in AsyncStorage · Virtual collections have no row to hold it.
 - 2026-04-28 · Recent means last practiced, stored on `user_verses.last_practiced_at` · Joining `session_attempts` on every render is too slow, and `engraved.lastReviewedAt` doesn't cover unmastered verses.
-- 2026-04-28 · `last_practiced_at` is per verse, not per collection, with no backfill · Per collection would thread `collectionId` through the study loop and needs a special case for virtual collections. Verses float as they're practiced.
+- 2026-04-28 · `last_practiced_at` is per verse, not per collection, with no backfill · Per collection would thread `collectionId` through the study loop and special-case virtual collections.
 - 2026-04-28 · Never-practiced verses sort after practiced ones · Recently practiced work floats to the top, and new verses queue below.
 - 2026-04-28 · Mastered defaults to Due first, and every other collection to Recent · Due first is the useful view for reviewing.
 - 2026-11-12 · One `delete_verse` call, not four requests · A failure partway left a verse in no collection.

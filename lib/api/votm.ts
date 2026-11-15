@@ -49,7 +49,7 @@ export async function getCurrentVOTM(now = new Date()): Promise<VOTM | null> {
  * Get count of users who have mastered the VOTM (any Bible version)
  * Uses SECURITY DEFINER function to bypass RLS and count across all users
  */
-export async function getVOTMMasteryCount(votm: VOTM): Promise<number | null> {
+export async function getVOTMMasteryCount(votm: Pick<VOTM, 'book' | 'chapter' | 'verseStart' | 'verseEnd'>): Promise<number | null> {
   const { data, error } = await supabase.rpc('get_votm_mastery_count', {
     p_book: votm.book,
     p_chapter: votm.chapter,
@@ -64,7 +64,7 @@ export async function getVOTMMasteryCount(votm: VOTM): Promise<number | null> {
 /**
  * Check if current user has mastered the VOTM (any Bible version)
  */
-export async function hasUserMasteredVOTM(votm: VOTM): Promise<boolean> {
+export async function hasUserMasteredVOTM(votm: Pick<VOTM, 'book' | 'chapter' | 'verseStart' | 'verseEnd'>): Promise<boolean> {
   const { data, error } = await supabase
     .from('user_verses')
     .select('id')

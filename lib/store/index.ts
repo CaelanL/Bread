@@ -6,9 +6,9 @@
  * Components subscribe and auto-update when data changes.
  */
 
-import { ensureAuth } from '@/lib/api';
-import { fetchVerse, getVerseText } from '@/lib/api/bible';
-import { supabase } from '@/lib/api/client';
+import { DailyLimitError, fetchVerse, warmVerseText, whenForegroundIdle } from '@/lib/api/bible';
+import { sessionUserId, supabase } from '@/lib/api/client';
+import { perfMark } from '@/lib/api/dev-timing';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 import { importCollection } from '@/lib/collections/import';
@@ -25,8 +25,10 @@ import { DEFAULT_COLLECTION_ID, DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLL
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { Alert, InteractionManager } from 'react-native';
 import { create } from 'zustand';
+import { pickPreload } from './preload';
+import { parseSnapshot, serializeSnapshot, snapshotKey, type SnapshotData } from './snapshot';
 
 import {
   getInProgressSort,
@@ -74,6 +76,16 @@ const IN_PROGRESS_COLLECTION: Collection = {
   createdAt: 0,
 };
 
+// My Verses (a stand-in until the server makes it), then the virtual collections, then the rest.
+function withPinned(collections: Collection[]): Collection[] {
+  return [
+    collections.find((c) => c.isDefault) ?? DEFAULT_COLLECTION,
+    MASTERED_COLLECTION,
+    IN_PROGRESS_COLLECTION,
+    ...collections.filter((c) => !c.isDefault),
+  ];
+}
+
 // ============ STORE INTERFACE ============
 
 interface AppState {
@@ -103,7 +115,18 @@ interface AppState {
   inProgressSort: SortOption;
 
   // Loading states
+  /** Something to paint: the saved snapshot or the server's rows. */
   hydrated: boolean;
+  /** Where the first paint came from; 'server' once the account's first wave has settled. */
+  hydratedFrom: 'snapshot' | 'server' | null;
+  /** The server's collections, verses, mastered rows and shared groups were all applied for this account. */
+  synced: boolean;
+  /** The account's profile row was read this run (false offline): names and `welcomeSeen` are the server's. */
+  profileLoaded: boolean;
+  /** profiles.welcome_v2_seen_at is set: the 2.0 walkthrough needs no claim (lib/welcome.ts). */
+  welcomeSeen: boolean;
+  /** When this run last saved a session (its progress or its attempt); Home reloads its streak and monthly verse after it. */
+  lastSessionAt: number | null;
   collectionsLoading: boolean;
   collectionOrderSaving: boolean;
   versesLoading: boolean;
@@ -118,9 +141,26 @@ interface AppState {
   fetchMasteredVerses: () => Promise<boolean>;
   fetchCuratedSaverCounts: (signal?: AbortSignal) => Promise<boolean>;
   fetchSharedCollections: () => Promise<boolean>;
-  hydrate: () => Promise<void>;
+  /** Starts an account: the server's library, with its saved library painted meanwhile. Called by lib/auth/account.ts. */
+  hydrate: (userId: string) => Promise<void>;
+  /** The account's saved library only, nothing on the network (lib/auth/account.ts). */
+  paintSnapshot: (userId: string) => Promise<void>;
+  /**
+   * The stored user's session still isn't restored after the splash failsafe and nothing was
+   * painted: show the library empty with the load error, still signed in (lib/auth/context.tsx).
+   */
+  showOffline: (userId: string) => Promise<void>;
   refresh: () => Promise<void>;
+  /**
+   * True once `synced`. Waits for the running wave, then refreshes once; false if still not synced.
+   * Anything that decides from library data a snapshot may have wrong (delete counts, name steps) waits on it.
+   */
+  whenSynced: () => Promise<boolean>;
+  /** Warms these verses' text ahead of the rest (a collection opening). */
+  preloadVerseText: (verses: SavedVerse[]) => void;
   clearError: () => void;
+  /** A session's attempt row is saved (the streak reads those rows). */
+  markSessionSaved: () => void;
 
   // Actions - Settings
   setColorMode: (mode: ColorMode) => Promise<void>;
@@ -143,9 +183,9 @@ interface AppState {
   stopSharing: (sharedId: string) => Promise<void>;
   mintInvite: (sharedId: string) => Promise<{ code: string; expiresAt: string }>;
   joinSharedCollection: (code: string) => Promise<string>;
-  syncSharedCollection: (sharedId: string) => Promise<boolean>;
   fetchSharedProgress: (sharedId: string) => Promise<boolean>;
-  openSharedCollection: (sharedId: string) => Promise<boolean>;
+  /** Syncs the copy, then reads the grid and the library alongside; `pull` (pull to refresh) also reads the mastered list. */
+  openSharedCollection: (sharedId: string, options?: { pull?: boolean }) => Promise<boolean>;
   leaveSharedCollection: (sharedId: string) => Promise<void>;
   removeSharedMember: (sharedId: string, userId: string) => Promise<void>;
   setSharedMemberRole: (sharedId: string, userId: string, role: Exclude<SharedRole, 'owner'>) => Promise<void>;
@@ -181,16 +221,60 @@ export interface SharedProgress {
 
 // ============ HELPERS ============
 
-// The session ensureAuth just read, so no network round trip; its own error is kept.
 async function getCurrentUserId(): Promise<string> {
-  await ensureAuth();
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  if (!data.session) throw new Error('Not authenticated');
-  return data.session.user.id;
+  const userId = await sessionUserId();
+  if (!userId) throw new Error('Not authenticated');
+  return userId;
 }
 
 let accountGeneration = 0;
+
+// ---- The three rules every action follows (the coverage list is in the feature's plan.md). ----
+
+/**
+ * Rule 1, account: the account an action started with (`const generation = accountGeneration`
+ * before its first await) is still the signed-in one. Every step after an await (apply, rollback,
+ * retry, refetch, snapshot) checks it, or drops its result.
+ */
+function sameAccount(generation: number | undefined): boolean {
+  return generation === accountGeneration;
+}
+
+/** Rule 1: `setState` for the account that started the action only. Applies and rollbacks go through it. */
+function setFor(generation: number, update: Partial<AppState> | ((state: AppState) => Partial<AppState>)) {
+  if (sameAccount(generation)) useAppStore.setState(update);
+}
+
+/**
+ * Rule 2, deletes in flight: the verse entries (`id|collectionId`) an optimistic delete has taken
+ * out and the server hasn't answered for. Every read of the verse list leaves them out, so they
+ * stay gone until the delete succeeds (gone for good) or fails (only that entry comes back).
+ */
+let pendingVerseDeletes = new Set<string>();
+const entryKey = (v: Pick<SavedVerse, 'id' | 'collectionId'>) => `${v.id}|${v.collectionId}`;
+const withoutPendingDeletes = (verses: SavedVerse[]) =>
+  pendingVerseDeletes.size === 0 ? verses : verses.filter((v) => !pendingVerseDeletes.has(entryKey(v)));
+
+/**
+ * Rule 3, translation and name: a write that depends on the account's translation or name (add,
+ * copy, import, join, share, a shared copy's sync) waits for the profile and library (`whenSynced`),
+ * and fails visibly when they can't be read.
+ */
+async function requireSynced(): Promise<void> {
+  if (!(await useAppStore.getState().whenSynced())) {
+    throw new Error("Couldn't load your library. Check your connection and try again.");
+  }
+}
+// The account `hydrate` started, for reads that need its id. Null after `clear()`.
+let accountUserId: string | null = null;
+// The running library wave (hydrate's or refresh's), for `whenSynced`. Never rejects.
+let accountLoad: Promise<unknown> = Promise.resolve();
+
+// The library reads that applied server rows this generation (not merely returned: a read that
+// lands after a change made during it keeps the change). All four make the store `synced`.
+type LibraryRead = 'collections' | 'verses' | 'mastered' | 'shared';
+let applied = new Set<LibraryRead>();
+const allApplied = () => applied.size === 4;
 
 function inSharedCollection(state: Pick<AppState, 'verses' | 'collections'>, verseId: string): boolean {
   return state.verses.some((v) => v.id === verseId && state.collections.some((c) => c.id === v.collectionId && c.sharedId));
@@ -199,10 +283,10 @@ let saverReadGeneration = 0;
 
 async function getCollectionWriteSession(generation: number) {
   const result = await supabase.auth.getSession().catch((error: unknown) => {
-    if (generation === accountGeneration) throw error;
+    if (sameAccount(generation)) throw error;
     return null;
   });
-  if (!result || generation !== accountGeneration) return null;
+  if (!result || !sameAccount(generation)) return null;
   if (result.error) throw result.error;
   if (!result.data.session) throw new Error('Not authenticated');
   return result.data.session;
@@ -212,6 +296,7 @@ type VerseRow = Database['public']['Tables']['user_verses']['Row'];
 // The shared client isn't typed with Database; this view of it is, for the shared-collection calls.
 const db: SupabaseClient<Database> = supabase;
 type VerseMembershipRow = { user_verses: VerseRow; added_at: string };
+type ProgressGuardRow = Database['public']['Functions']['save_verse_progress']['Returns'][number];
 
 function parseVerseMembership(row: VerseRow, collectionId: string, addedAt: string): SavedVerse {
   return {
@@ -232,9 +317,9 @@ function isBibleVersion(value: unknown): value is BibleVersion {
   return BIBLE_VERSIONS.some((version) => version.value === value);
 }
 
-type VerseIdentityRow = Pick<VerseRow, 'id' | 'client_id' | 'book' | 'chapter' | 'verse_start' | 'verse_end' | 'version' | 'progress' | 'deleted_at'>;
-type HeldVerse = VerseRecord & { clientId: string };
-const VERSE_IDENTITY_COLUMNS = 'id, client_id, book, chapter, verse_start, verse_end, version, progress, deleted_at';
+type VerseIdentityRow = Pick<VerseRow, 'id' | 'client_id' | 'book' | 'chapter' | 'verse_start' | 'verse_end' | 'version' | 'progress' | 'deleted_at' | 'updated_at'>;
+type HeldVerse = VerseRecord & { clientId: string; updatedAt: string };
+const VERSE_IDENTITY_COLUMNS = 'id, client_id, book, chapter, verse_start, verse_end, version, progress, deleted_at, updated_at';
 
 function toRecord(row: VerseIdentityRow): HeldVerse {
   return {
@@ -247,6 +332,7 @@ function toRecord(row: VerseIdentityRow): HeldVerse {
     version: row.version,
     progress: parseProgress(row.progress),
     deleted: row.deleted_at !== null,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -265,7 +351,7 @@ let requestedTranslation: BibleVersion | null = null;
 // A sync for an account that has since signed out says nothing.
 function reportSyncFailure(generation: number) {
   return (e: unknown) => {
-    if (generation !== accountGeneration) return;
+    if (!sameAccount(generation)) return;
     console.error('[STORE] Failed to sync translation:', e);
     showErrorToast("Couldn't line your verses up with your translation. Pull to refresh to try again.");
   };
@@ -274,14 +360,9 @@ function reportSyncFailure(generation: number) {
 // The winner takes the losers' collections, then the losers are deleted for good, so a
 // reset or removed winner is never replaced by its twin. session_attempts has no foreign
 // key to user_verses, so their history stays.
-// A delete that RLS filters out returns no error, so the deleted ids are counted.
-async function hardDeleteVerses(ids: string[]) {
-  const { data, error } = await supabase.from('user_verses').delete().in('id', ids).select('id');
-  if (error) throw error;
-  if (data.length !== ids.length) throw new Error(`Deleted ${data.length} of ${ids.length} verses`);
-}
-
-async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
+// Each loser is deleted only while it is the row that was read (same `updated_at`): progress saved
+// on it since (this device or another) makes the delete remove nothing. Returns the losers deleted.
+async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]): Promise<HeldVerse[]> {
   const loserIds = losers.map(({ id }) => id);
   const { data: links, error } = await supabase
     .from('verse_collections')
@@ -298,7 +379,14 @@ async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
     if (linkError) throw linkError;
   }
 
-  await hardDeleteVerses(loserIds);
+  const deleted: HeldVerse[] = [];
+  for (const loser of losers) {
+    const { data, error: deleteError } = await supabase.from('user_verses').delete()
+      .eq('id', loser.id).eq('updated_at', loser.updatedAt).select('id');
+    if (deleteError) throw deleteError;
+    if (data.length > 0) deleted.push(loser);
+  }
+  return deleted;
 }
 
 async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promise<boolean> {
@@ -317,22 +405,28 @@ async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promi
  * Makes every verse follow the account translation: collapses two active translations
  * of one reference into the row with better progress, then moves each reference to
  * `translation` (`planMoves`). A verse the translation leaves out keeps its version.
- * Returns those kept rows. `rows` saves a read when the caller already has them.
+ * Returns those kept rows, and whether anything was collapsed or moved. `rows` saves a read
+ * when the caller already has them.
  */
-async function alignVerses(userId: string, translation: BibleVersion, rows?: VerseIdentityRow[]): Promise<HeldVerse[]> {
-  let records = rows?.map(toRecord);
-  if (!records) {
-    const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
-    if (error) throw error;
-    records = data.map(toRecord);
-  }
+async function alignVerses(userId: string, translation: BibleVersion, rows?: VerseIdentityRow[]): Promise<{ kept: HeldVerse[]; changed: boolean }> {
+  let records = (rows ?? await readVerseIdentities(userId)).map(toRecord);
 
+  // A loser that changed since `records` was read stays; the rows are read again and the
+  // collapse picked again from them, once. Still changing after that is an error, retried by the
+  // next hydrate or pull to refresh.
   const merged = new Set<string>();
-  for (const { winner, losers } of planCollapse(records, translation)) {
-    await collapseVerse(winner, losers);
-    for (const { id } of losers) merged.add(id);
+  for (let attempt = 0; ; attempt++) {
+    let changedSince = false;
+    for (const { winner, losers } of planCollapse(records, translation)) {
+      const deleted = await collapseVerse(winner, losers);
+      for (const { id } of deleted) merged.add(id);
+      if (deleted.length < losers.length) changedSince = true;
+    }
+    records = records.filter(({ id }) => !merged.has(id));
+    if (!changedSince) break;
+    if (attempt === 1) throw new Error('Verses changed during the translation sync');
+    records = (await readVerseIdentities(userId)).map(toRecord);
   }
-  records = records.filter(({ id }) => !merged.has(id));
 
   const kept = new Set<string>();
   const available = new Map<string, boolean>();
@@ -355,7 +449,10 @@ async function alignVerses(userId: string, translation: BibleVersion, rows?: Ver
     const { error } = await supabase.from('user_verses').update({ version: translation }).in('id', movers);
     if (error) throw error;
   }
-  return records.filter(({ id }) => kept.has(id)).filter(isVisible);
+  return {
+    kept: records.filter(({ id }) => kept.has(id)).filter(isVisible),
+    changed: merged.size > 0 || moves.length > 0,
+  };
 }
 
 /** Tells the user, once per verse and translation, which verses stayed in their old translation. */
@@ -383,54 +480,312 @@ async function tellKeptVerses(kept: HeldVerse[], translation: BibleVersion) {
   }
 }
 
-/**
- * Reads the account translation from `profiles` into the store and its local cache.
- * An account with none yet gets this device's translation, which is how devices
- * from before account translations carry their choice over. Then lines the
- * verses up with it.
- */
-async function syncAccountTranslation(generation: number) {
-  const userId = await getCurrentUserId();
-  const { data, error } = await supabase.from('profiles').select('translation, display_name, first_name, last_name').eq('user_id', userId).maybeSingle();
-  if (error) throw error;
-  if (generation !== accountGeneration) return;
-  useAppStore.setState({
-    displayName: data?.display_name ?? null,
-    firstName: data?.first_name ?? null,
-    lastName: data?.last_name ?? null,
-  });
+// ============ SAVED LIBRARY ============
 
-  let translation: BibleVersion;
-  let rows: VerseIdentityRow[] | undefined;
-  if (data?.translation) {
-    // A newer app version may know translations this one doesn't. Leave it alone.
-    if (!isBibleVersion(data.translation)) return;
-    translation = data.translation;
-    if (requestedTranslation === null) {
-      useAppStore.setState({ bibleVersion: translation });
-      await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
-        console.error('[STORE] Failed to cache bibleVersion:', e);
-      });
-    }
-  } else {
-    // No profile yet: keep the verses where most of them already are.
-    const { data: held, error: heldError } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
-    if (heldError) throw heldError;
-    rows = held;
-    translation = seedTranslation(held.map(toRecord), useAppStore.getState().bibleVersion, isBibleVersion);
-    const { error: saveError } = await supabase.from('profiles').upsert({ user_id: userId, translation });
-    if (saveError) throw saveError;
-    if (generation !== accountGeneration) return;
-    if (requestedTranslation === null) {
-      useAppStore.setState({ bibleVersion: translation });
-      await AsyncStorage.setItem(BIBLE_VERSION_KEY, translation).catch((e) => {
-        console.error('[STORE] Failed to cache bibleVersion:', e);
-      });
+/**
+ * Saves the library for the next launch's first frame (lib/store/snapshot.ts holds the allowlist).
+ * Only from server-applied state: once synced, after each wave, and after a write the server
+ * confirmed; never from a subscriber, which would save unconfirmed study prefs. The generation is
+ * checked with no await before `setItem`, so a late write for an account that has left saves nothing.
+ */
+function saveSnapshot(generation: number) {
+  const state = useAppStore.getState();
+  if (!sameAccount(generation) || !state.synced || !accountUserId || pendingWrites > 0) return;
+  AsyncStorage.setItem(snapshotKey(accountUserId), serializeSnapshot(state, Date.now()))
+    .catch((e) => console.error('[STORE] Failed to save the library snapshot:', e));
+}
+
+// Optimistic writes in flight this generation. The snapshot waits for them, so it never saves a
+// change the server may still refuse; the last one to settle saves it.
+let pendingWrites = 0;
+
+async function confirming<T>(generation: number, write: () => Promise<T>): Promise<T> {
+  pendingWrites++;
+  try {
+    return await write();
+  } finally {
+    if (sameAccount(generation)) {
+      pendingWrites--;
+      saveSnapshot(generation);
     }
   }
+}
 
-  const kept = await alignVerses(userId, translation, rows);
-  if (generation === accountGeneration) await tellKeptVerses(kept, translation);
+function snapshotState(data: SnapshotData): Partial<AppState> {
+  return {
+    collections: withPinned(data.collections),
+    verses: data.verses,
+    masteredVerses: data.masteredVerses,
+    sharedCollections: data.sharedCollections,
+    ...data.names,
+    hydrated: true,
+    hydratedFrom: 'snapshot',
+    collectionsLoading: false,
+    versesLoading: false,
+    masteredLoading: false,
+  };
+}
+
+const PROFILE_COLUMNS = 'translation, display_name, first_name, last_name, welcome_v2_seen_at';
+
+async function readProfile(userId: string) {
+  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function readVerseIdentities(userId: string): Promise<VerseIdentityRow[]> {
+  const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Loads an account in one wave, queued with other translation work: the profile, the verse
+ * identity rows and the four library reads together. Then one update sets the translation
+ * (unless a switch is in flight), the name and `hydrated`, so nothing can act on a stale
+ * translation or name. An account with no profile gets this device's translation, which is how
+ * devices from before account translations carry their choice over. Last, the verses are lined up
+ * with the translation, and re-read only if that moved something or the translation changed.
+ * The cached translation stands in when the profile can't be read (offline). A failed profile,
+ * identity or alignment step throws at the end, after `hydrated`, for `reportSyncFailure`.
+ * `launch`: retry failed library reads once after 500ms, then toast or warm the verse text.
+ */
+async function loadAccount(generation: number, userId: string, launch: boolean) {
+  const store = useAppStore.getState;
+  const cached = store().bibleVersion;
+  const [[profile, identity], fetched] = await Promise.all([
+    Promise.allSettled([readProfile(userId), readVerseIdentities(userId)]),
+    Promise.all([store().fetchCollections(), store().fetchVerses(), store().fetchMasteredVerses(), store().fetchSharedCollections()]),
+  ]);
+  if (!sameAccount(generation)) return;
+  let [collectionsOk, versesOk, masteredOk, sharedOk] = fetched;
+  if (launch && fetched.includes(false)) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (!sameAccount(generation)) return;
+    [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
+      collectionsOk || store().fetchCollections(),
+      versesOk || store().fetchVerses(),
+      masteredOk || store().fetchMasteredVerses(),
+      sharedOk || store().fetchSharedCollections(),
+    ]);
+    if (!sameAccount(generation)) return;
+  }
+
+  // A read dropped to keep a change made during it (study prefs on a snapshot paint) reads once more.
+  if (collectionsOk && versesOk && masteredOk && sharedOk && !allApplied()) {
+    await Promise.all([
+      applied.has('collections') || store().fetchCollections(),
+      applied.has('verses') || store().fetchVerses(),
+      applied.has('mastered') || store().fetchMasteredVerses(),
+    ]);
+    if (!sameAccount(generation)) return;
+  }
+
+  let failure: unknown = null;
+  let translation: BibleVersion | null = null;
+  const updates: Partial<AppState> = { hydrated: true, hydratedFrom: 'server' };
+  if (profile.status === 'rejected') {
+    failure = profile.reason;
+  } else {
+    const data = profile.value;
+    Object.assign(updates, {
+      displayName: data?.display_name ?? null,
+      firstName: data?.first_name ?? null,
+      lastName: data?.last_name ?? null,
+      profileLoaded: true,
+      welcomeSeen: !!data?.welcome_v2_seen_at,
+    });
+    if (data?.translation) {
+      // A newer app version may know translations this one doesn't. Leave it alone.
+      if (isBibleVersion(data.translation)) translation = data.translation;
+    } else if (identity.status === 'rejected') {
+      failure = identity.reason;
+    } else {
+      // No profile yet: keep the verses where most of them already are.
+      const seeded = seedTranslation(identity.value.map(toRecord), cached, isBibleVersion);
+      const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: seeded });
+      if (!sameAccount(generation)) return;
+      if (error) failure = error;
+      else translation = seeded;
+    }
+    // A missing profile that couldn't be seeded isn't loaded.
+    if (failure) updates.profileLoaded = store().profileLoaded;
+  }
+  // Name and translation decisions wait for `synced`, so it needs the profile too.
+  updates.synced = store().synced || (allApplied() && !failure);
+  if (translation && requestedTranslation === null) updates.bibleVersion = translation;
+  useAppStore.setState(updates);
+  perfMark('hydrated');
+  saveSnapshot(generation);
+  if (updates.bibleVersion) {
+    AsyncStorage.setItem(BIBLE_VERSION_KEY, updates.bibleVersion).catch((e) => {
+      console.error('[STORE] Failed to cache bibleVersion:', e);
+    });
+  }
+  const libraryOk = collectionsOk && versesOk && masteredOk && sharedOk;
+  if (launch) {
+    if (libraryOk) useAppStore.setState({ error: null });
+    else showErrorToast('Some data failed to load. Pull to refresh.');
+  }
+
+  if (translation) {
+    if (identity.status === 'rejected') throw identity.reason;
+    let aligned: Awaited<ReturnType<typeof alignVerses>>;
+    try {
+      aligned = await alignVerses(userId, translation, identity.value);
+    } catch (e) {
+      // A collapse may have deleted rows before it threw: the lists on screen read them again.
+      if (sameAccount(generation)) {
+        await Promise.all([store().fetchVerses(), store().fetchMasteredVerses()]);
+        saveSnapshot(generation);
+      }
+      throw e;
+    }
+    const { kept, changed } = aligned;
+    if (!sameAccount(generation)) return;
+    if (changed || translation !== cached) {
+      await Promise.all([store().fetchVerses(), store().fetchMasteredVerses()]);
+      saveSnapshot(generation);
+    }
+    if (!sameAccount(generation)) return;
+    await tellKeptVerses(kept, translation);
+  }
+  if (launch && libraryOk && sameAccount(generation)) {
+    InteractionManager.runAfterInteractions(() => {
+      if (sameAccount(generation)) preloadVerseText(store().verses, false);
+    });
+  }
+  if (failure) throw failure;
+}
+
+/**
+ * Device settings (color mode, cached translation, Hide verses, review interval, sorts), read once
+ * at module load so the first frame has them; app/_layout.tsx holds the splash until it's done.
+ * Account starts wait for it instead of reading again.
+ */
+async function readSettings() {
+  try {
+    const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText] = await Promise.all([
+      AsyncStorage.getItem(COLOR_MODE_KEY),
+      AsyncStorage.getItem(BIBLE_VERSION_KEY),
+      AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
+      getMasteredSort(),
+      getInProgressSort(),
+      AsyncStorage.getItem(HIDE_VERSE_TEXT_KEY),
+    ]);
+
+    const updates: Partial<AppState> = {};
+    if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
+      updates.colorMode = savedColorMode as ColorMode;
+    }
+    if (savedHideVerseText === 'true') updates.hideVerseText = true;
+    if (isBibleVersion(savedBibleVersion)) {
+      updates.bibleVersion = savedBibleVersion;
+    }
+    if (savedReviewMax) {
+      const parsed = parseInt(savedReviewMax, 10);
+      if (Number.isFinite(parsed) && parsed >= MIN_USER_MAX_INTERVAL_DAYS && parsed <= MAX_USER_MAX_INTERVAL_DAYS) {
+        updates.reviewMaxIntervalDays = parsed;
+      }
+    }
+    if (savedMasteredSort) {
+      updates.masteredSort = savedMasteredSort;
+    }
+    if (savedInProgressSort) {
+      updates.inProgressSort = savedInProgressSort;
+    }
+    if (Object.keys(updates).length > 0) {
+      useAppStore.setState(updates);
+    }
+  } catch (e) {
+    console.error('[STORE] Failed to load settings:', e);
+  }
+}
+
+// The snapshot paint for one account start.
+let localRead: { generation: number; userId: string; done: Promise<void> } | null = null;
+// The lists a snapshot painted. A server read that lands over them replaces them, as if they were
+// still the lists it started from (the read may start before the paint).
+let painted: { collections?: Collection[]; verses?: SavedVerse[]; masteredVerses?: SavedVerse[] } | null = null;
+
+async function readLocal(generation: number, userId: string) {
+  const get = useAppStore.getState;
+  try {
+    const [, savedLibrary] = await Promise.all([
+      settingsRead,
+      AsyncStorage.getItem(snapshotKey(userId)).catch(() => null),
+    ]);
+    if (!sameAccount(generation)) return;
+    const library = parseSnapshot(savedLibrary, Date.now());
+    if (savedLibrary && !library) {
+      AsyncStorage.removeItem(snapshotKey(userId)).catch((e) => console.error('[STORE] Failed to remove an old snapshot:', e));
+    }
+    if (!library) return;
+    // A frame later, so a library load started alongside has its requests out before the list renders.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (!sameAccount(generation) || get().hydrated) return;
+    // A list the server's reads already applied stays.
+    const paint = snapshotState(library);
+    if (applied.has('collections')) delete paint.collections;
+    if (applied.has('verses')) delete paint.verses;
+    if (applied.has('mastered')) delete paint.masteredVerses;
+    if (applied.has('shared')) delete paint.sharedCollections;
+    useAppStore.setState(paint);
+    painted = {
+      collections: paint.collections && get().collections,
+      verses: paint.verses && get().verses,
+      masteredVerses: paint.masteredVerses && get().masteredVerses,
+    };
+    perfMark('snapshot');
+  } catch (e) {
+    console.error('[STORE] Failed to read the saved library:', e);
+  }
+}
+
+// ============ VERSE TEXT PRELOAD ============
+
+const PRELOAD_CONCURRENCY = 3;
+
+type PreloadRun = { generation: number; queue: SavedVerse[]; active: number; stopped: boolean };
+let preloadRun: PreloadRun | null = null;
+
+/**
+ * Warms verse text into the session cache through `warmVerseText`, a few at a time, so cards and
+ * Setup show it at once. Each read waits while a read someone is waiting on is in flight. `first` puts these ahead of what's queued. One run per account: it stops
+ * on an account change, on Hide verses, and on the first daily-limit answer, so warming never
+ * spends the rest of the day's reads.
+ */
+function preloadVerseText(verses: SavedVerse[], first: boolean) {
+  if (!preloadRun || !sameAccount(preloadRun.generation)) {
+    preloadRun = { generation: accountGeneration, queue: [], active: 0, stopped: false };
+  }
+  const run = preloadRun;
+  const { hideVerseText } = useAppStore.getState();
+  if (run.stopped || hideVerseText) return;
+  const picked = pickPreload(verses, { hideVerseText });
+  run.queue = first ? [...picked, ...run.queue] : [...run.queue, ...picked];
+  while (run.active < PRELOAD_CONCURRENCY && run.queue.length > 0) {
+    run.active++;
+    void drainPreload(run);
+  }
+}
+
+async function drainPreload(run: PreloadRun) {
+  for (let verse = run.queue.shift(); verse; verse = run.queue.shift()) {
+    try {
+      await whenForegroundIdle();
+      if (!sameAccount(run.generation)) break;
+      await warmVerseText(verse);
+    } catch (e) {
+      if (e instanceof DailyLimitError) run.stopped = true;
+    }
+    if (run.stopped || !sameAccount(run.generation) || useAppStore.getState().hideVerseText) {
+      run.queue = [];
+      break;
+    }
+  }
+  run.active--;
 }
 
 // ============ SHARED COLLECTIONS ============
@@ -443,6 +798,16 @@ function sharedRole(sharedId: string): SharedRole {
   const role = useAppStore.getState().sharedCollections[sharedId]?.role;
   if (!role) throw new Error("This shared collection hasn't loaded. Pull to refresh.");
   return role;
+}
+
+// Makes the user's copy match the group; true when the server changed something.
+async function syncSharedCopy(sharedId: string): Promise<boolean> {
+  const { data, error } = await db.rpc('sync_shared_collection', {
+    p_shared: sharedId,
+    p_version: useAppStore.getState().bibleVersion,
+  });
+  if (error) throw error;
+  return data[0]?.changed ?? false;
 }
 
 // After a change to the group's verses or members, the grid follows if this device has it open.
@@ -475,7 +840,7 @@ async function noticeDepartedGroups(userId: string, current: KnownGroup[], gener
       .in('client_id', gone.map((g) => `shared-${g.id}`)).is('deleted_at', null);
     if (error) throw error;
     const kept = new Set(data.map((row) => row.client_id));
-    if (generation === accountGeneration) {
+    if (sameAccount(generation)) {
       showErrorToast(gone.map((g) => kept.has(`shared-${g.id}`)
         ? `${g.name} is now your own copy.`
         : `You were removed from ${g.name}.`).join('\n'));
@@ -504,10 +869,15 @@ async function addSharedVerse(
   });
   // Already a reference (another editor added it): sync still links the copy.
   if (error && error.code !== '23505') throw error;
-  await useAppStore.getState().syncSharedCollection(sharedId);
-  await refetchLoadedProgress(sharedId);
-  const find = () => useAppStore.getState().verses.find((v) => v.collectionId === collectionId && sameReference(v, verse));
-  if (!find()) await useAppStore.getState().fetchVerses();
+  const store = useAppStore.getState;
+  const changed = await syncSharedCopy(sharedId);
+  await Promise.all([
+    changed && Promise.all([store().fetchCollections(), store().fetchVerses(), store().fetchSharedCollections()]),
+    refetchLoadedProgress(sharedId),
+  ]);
+  const find = () => store().verses.find((v) => v.collectionId === collectionId && sameReference(v, verse));
+  // Sync linked nothing new (the copy already held it): the verse may still be missing here.
+  if (!changed && !find()) await store().fetchVerses();
   const added = find();
   if (!added) throw new Error('Failed to add verse to collection');
   return added;
@@ -536,6 +906,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   masteredSort: 'due-first',
   inProgressSort: DEFAULT_SORT,
   hydrated: false,
+  hydratedFrom: null,
+  synced: false,
+  profileLoaded: false,
+  welcomeSeen: false,
+  lastSessionAt: null,
   collectionsLoading: true,
   collectionOrderSaving: false,
   versesLoading: true,
@@ -553,7 +928,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const counts = await readCollectionSavers(supabase, session, signal);
       const current = await getCollectionWriteSession(generation);
       if (signal?.aborted || request !== saverReadGeneration
-        || generation !== accountGeneration || current?.user.id !== session.user.id) return false;
+        || !sameAccount(generation) || current?.user.id !== session.user.id) return false;
       set({ curatedSaverCounts: counts });
       return true;
     } catch {
@@ -575,7 +950,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .order('created_at', { ascending: true })
         .order('client_id', { ascending: true });
 
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       if (error) {
         console.error('[STORE] Failed to fetch collections:', error);
         // Keep existing state, set error
@@ -583,24 +958,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         return false;
       }
 
-      const collections = data.map(parseCollectionRow);
-
-      const pinned = [
-        collections.find((c) => c.isDefault) ?? DEFAULT_COLLECTION,
-        MASTERED_COLLECTION,
-        IN_PROGRESS_COLLECTION,
-      ];
-      set((state) => ({
+      const collections = withPinned(data.map(parseCollectionRow));
+      set((state) => {
         // An older refresh must not replace a collection write made during the request.
-        collections: state.collections === previousCollections
-          ? [...pinned, ...collections.filter((c) => !c.isDefault)]
-          : state.collections,
-        collectionsLoading: false,
-        error: null,
-      }));
+        if (state.collections !== previousCollections && state.collections !== painted?.collections) {
+          return { collectionsLoading: false, error: null };
+        }
+        applied.add('collections');
+        return { collections, collectionsLoading: false, error: null };
+      });
       return true;
     } catch (e) {
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       console.error('[STORE] Collection fetch error:', e);
       // Keep existing state, set error
       set({ collectionsLoading: false, error: 'Failed to load collections' });
@@ -625,7 +994,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .order('added_at', { ascending: false })
         .overrideTypes<(VerseMembershipRow & { user_collections: { client_id: string } })[], { merge: false }>();
 
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       if (error) {
         console.error('[STORE] Failed to fetch verses:', error);
         // Keep existing state, set error
@@ -638,14 +1007,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         parseVerseMembership(vc.user_verses, vc.user_collections.client_id, vc.added_at)
       );
 
-      set((state) => ({
-        verses: state.verses === previousVerses ? verses : state.verses,
-        versesLoading: false,
-        error: null,
-      }));
+      set((state) => {
+        if (state.verses !== previousVerses && state.verses !== painted?.verses) return { versesLoading: false, error: null };
+        applied.add('verses');
+        return { verses: withoutPendingDeletes(verses), versesLoading: false, error: null };
+      });
       return true;
     } catch (e) {
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       console.error('[STORE] Verse fetch error:', e);
       // Keep existing state, set error
       set({ versesLoading: false, error: 'Failed to load verses' });
@@ -655,6 +1024,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchMasteredVerses: async () => {
     const generation = accountGeneration;
+    const previousMastered = get().masteredVerses;
     set({ masteredLoading: true });
     try {
       // Fetch mastered verses directly from DB - NO deleted_at filter
@@ -665,7 +1035,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .eq('progress->hard->completed', true)
         .order('updated_at', { ascending: false });
 
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       if (error) {
         console.error('[STORE] Failed to fetch mastered verses:', error);
         set({ masteredLoading: false });
@@ -687,10 +1057,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...parseVerseRowExtras(v),
       }));
 
-      set({ masteredVerses, masteredLoading: false });
+      set((state) => {
+        // A mastery saved during the read is newer than it.
+        if (state.masteredVerses !== previousMastered && state.masteredVerses !== painted?.masteredVerses) {
+          return { masteredLoading: false };
+        }
+        applied.add('mastered');
+        return { masteredVerses, masteredLoading: false };
+      });
       return true;
     } catch (e) {
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       console.error('[STORE] Mastered verses fetch error:', e);
       set({ masteredLoading: false });
       return false;
@@ -700,13 +1077,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchSharedCollections: async () => {
     const generation = accountGeneration;
     try {
-      const userId = await getCurrentUserId();
+      const userId = accountUserId ?? await getCurrentUserId();
       const [groups, mine, status] = await Promise.all([
         db.from('shared_collections').select('id, name'),
         db.from('shared_collection_members').select('shared_collection_id, role').eq('user_id', userId),
         db.rpc('get_shared_status'),
       ]);
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       if (groups.error) throw groups.error;
       if (mine.error) throw mine.error;
       if (status.error) throw status.error;
@@ -714,12 +1091,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       const roles = new Map(mine.data.map((m) => [m.shared_collection_id, m.role]));
       const counts = new Map(status.data.map((row) => [row.shared_id, row]));
       // Library cards name the owner. `profiles` is private to each user, so a joined group's owner
-      // comes from its member list, one read per joined group (20 at most); a failed read leaves no name.
+      // comes from its member list, one read per joined group (20 at most); a failed read keeps the
+      // name already shown, so a refetch never blanks it.
       const ownerNames = new Map(await Promise.all(groups.data
         .filter((group) => roles.get(group.id) !== 'owner' && counts.has(group.id))
         .map(async (group) => [group.id, await getSharedMembers(group.id)
           .then((members) => members.find((m) => m.role === 'owner')?.displayName ?? null, () => null)] as const)));
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       const sharedCollections: Record<string, SharedCollectionInfo> = {};
       for (const group of groups.data) {
         const role = roles.get(group.id);
@@ -727,7 +1105,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (!isSharedRole(role) || !count) continue;
         sharedCollections[group.id] = {
           id: group.id,
-          ownerName: ownerNames.get(group.id) ?? null,
+          ownerName: ownerNames.get(group.id) ?? get().sharedCollections[group.id]?.ownerName ?? null,
           name: group.name,
           role,
           memberCount: count.member_count,
@@ -737,112 +1115,72 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       }
       set({ sharedCollections });
+      applied.add('shared');
       const current = Object.values(sharedCollections).map((g) => ({ id: g.id, name: g.name, owned: g.role === 'owner' }));
-      await noticeDepartedGroups(userId, current, generation)
+      void noticeDepartedGroups(userId, current, generation)
         .catch((e) => console.error('[STORE] Failed to check for removed shared collections:', e));
       return true;
     } catch (e) {
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       console.error('[STORE] Failed to fetch shared collections:', e);
       return false;
     }
   },
 
-  hydrate: async () => {
+  hydrate: async (userId) => {
+    perfMark('hydrate');
     const generation = accountGeneration;
-    // Load settings from AsyncStorage (doesn't require auth)
-    try {
-      const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText] = await Promise.all([
-        AsyncStorage.getItem(COLOR_MODE_KEY),
-        AsyncStorage.getItem(BIBLE_VERSION_KEY),
-        AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
-        getMasteredSort(),
-        getInProgressSort(),
-        AsyncStorage.getItem(HIDE_VERSE_TEXT_KEY),
-      ]);
+    accountUserId = userId;
+    await settingsRead;
+    if (!sameAccount(generation)) return;
+    // The library requests go out first; the saved library paints while they're in flight.
+    accountLoad = queueTranslationWork(() => loadAccount(generation, userId, true)).catch(reportSyncFailure(generation));
+    void get().paintSnapshot(userId);
+    await accountLoad;
+  },
 
-      const updates: Partial<AppState> = {};
-      if (savedColorMode && ['light', 'dark', 'system'].includes(savedColorMode)) {
-        updates.colorMode = savedColorMode as ColorMode;
-      }
-      if (savedHideVerseText === 'true') updates.hideVerseText = true;
-      if (isBibleVersion(savedBibleVersion)) {
-        updates.bibleVersion = savedBibleVersion;
-      }
-      if (savedReviewMax) {
-        const parsed = parseInt(savedReviewMax, 10);
-        if (Number.isFinite(parsed) && parsed >= MIN_USER_MAX_INTERVAL_DAYS && parsed <= MAX_USER_MAX_INTERVAL_DAYS) {
-          updates.reviewMaxIntervalDays = parsed;
-        }
-      }
-      if (savedMasteredSort) {
-        updates.masteredSort = savedMasteredSort;
-      }
-      if (savedInProgressSort) {
-        updates.inProgressSort = savedInProgressSort;
-      }
-      if (Object.keys(updates).length > 0) {
-        set(updates);
-      }
-    } catch (e) {
-      console.error('[STORE] Failed to load settings:', e);
+  // The account's snapshot, if nothing is painted yet. A launch that painted provisionally
+  // (lib/auth/account.ts) shares the read with the hydrate after it.
+  paintSnapshot: (userId) => {
+    const generation = accountGeneration;
+    if (localRead?.generation !== generation || localRead.userId !== userId) {
+      localRead = { generation, userId, done: readLocal(generation, userId) };
     }
+    return localRead.done;
+  },
 
-    if (generation !== accountGeneration) return;
-    // The cached translation stands in when the profile can't be read (offline).
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure(generation));
-    if (generation !== accountGeneration) return;
-    let [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
-      get().fetchCollections(),
-      get().fetchVerses(),
-      get().fetchMasteredVerses(),
-      get().fetchSharedCollections(),
-    ]);
-    if (generation !== accountGeneration) return;
-
-    // Retry once after short delay if any fetch failed (handles auth propagation race)
-    if (!collectionsOk || !versesOk || !masteredOk || !sharedOk) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      if (generation !== accountGeneration) return;
-      [collectionsOk, versesOk, masteredOk, sharedOk] = await Promise.all([
-        collectionsOk ? true : get().fetchCollections(),
-        versesOk ? true : get().fetchVerses(),
-        masteredOk ? true : get().fetchMasteredVerses(),
-        sharedOk ? true : get().fetchSharedCollections(),
-      ]);
-      if (generation !== accountGeneration) return;
-    }
-
-    // Always mark as hydrated so UI can render (partial data is better than nothing)
-    set({ hydrated: true });
-
-    // Show toast only if retry also failed
-    if (!collectionsOk || !versesOk || !masteredOk || !sharedOk) {
-      showErrorToast('Some data failed to load. Pull to refresh.');
-    } else {
-      set({ error: null });
-
-      // Prefetch verse text in background (non-blocking)
-      // This populates the session cache so cards render instantly
-      const verses = get().verses;
-      if (verses.length > 0) {
-        Promise.all(verses.map((v) => getVerseText(v).catch(() => ({ text: '', verses: {} }))));
-      }
-    }
+  showOffline: async (userId) => {
+    const generation = accountGeneration;
+    await get().paintSnapshot(userId);
+    if (!sameAccount(generation) || accountUserId || get().hydrated) return;
+    set({ hydrated: true, collectionsLoading: false, versesLoading: false, masteredLoading: false });
+    showErrorToast('Some data failed to load. Pull to refresh.');
   },
 
   refresh: async () => {
     set({ error: null });
     const generation = accountGeneration;
-    await queueTranslationWork(() => syncAccountTranslation(generation)).catch(reportSyncFailure(generation));
-    await Promise.all([
-      get().fetchCollections(),
-      get().fetchVerses(),
-      get().fetchMasteredVerses(),
-      get().fetchCuratedSaverCounts(),
-      get().fetchSharedCollections(),
-    ]);
+    const load = queueTranslationWork(async () => loadAccount(generation, accountUserId ?? await getCurrentUserId(), false))
+      .catch(reportSyncFailure(generation));
+    accountLoad = load;
+    await Promise.all([load, get().fetchCuratedSaverCounts()]);
   },
+
+  whenSynced: async () => {
+    if (get().synced) return true;
+    const generation = accountGeneration;
+    // No account started: signed out, or a saved library painted while the session restores.
+    if (!accountUserId) return false;
+    await accountLoad;
+    if (!sameAccount(generation)) return false;
+    if (get().synced) return true;
+    await get().refresh();
+    return sameAccount(generation) && get().synced;
+  },
+
+  preloadVerseText: (verses) => preloadVerseText(verses, true),
+
+  markSessionSaved: () => set({ lastSessionAt: Date.now() }),
 
   clearError: () => {
     set({ error: null });
@@ -880,25 +1218,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const kept = await queueTranslationWork(async () => {
         // A later choice replaced this one before it ran.
-        if (generation !== accountGeneration || requestedTranslation !== version) return [];
-        const userId = await getCurrentUserId();
-        const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: version });
+        if (!sameAccount(generation) || requestedTranslation !== version) return [];
+        const session = await getCollectionWriteSession(generation);
+        if (!session) return [];
+        const userId = session.user.id;
+        const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: version })
+          .setHeader('Authorization', `Bearer ${session.access_token}`);
         if (error) throw error;
         saved = true;
         requestedTranslation = null;
-        set({ bibleVersion: version });
+        setFor(generation, { bibleVersion: version });
 
         await AsyncStorage.setItem(BIBLE_VERSION_KEY, version).catch((e) => {
           console.error('[STORE] Failed to cache bibleVersion:', e);
         });
-        return alignVerses(userId, version);
+        return (await alignVerses(userId, version)).kept;
       });
-      if (generation !== accountGeneration) return;
+      if (!sameAccount(generation)) return;
       await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
+      saveSnapshot(generation);
+      if (!sameAccount(generation)) return;
       await tellKeptVerses(kept, version);
     } catch (e) {
       console.error('[STORE] Failed to change translation:', e);
-      if (generation !== accountGeneration) return;
+      if (!sameAccount(generation)) return;
       if (saved) {
         // The profile is right; the next hydrate or pull to refresh moves the rest.
         showErrorToast("Some verses didn't switch translation. Pull to refresh to try again.");
@@ -919,14 +1262,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const generation = accountGeneration;
     set(next);
     try {
-      const userId = await getCurrentUserId();
+      const session = await getCollectionWriteSession(generation);
+      if (!session) return;
       const { error } = await supabase.from('profiles').upsert({
-        user_id: userId, display_name: next.displayName, first_name: firstName, last_name: lastName,
-      });
+        user_id: session.user.id, display_name: next.displayName, first_name: firstName, last_name: lastName,
+      }).setHeader('Authorization', `Bearer ${session.access_token}`);
       if (error) throw error;
+      saveSnapshot(generation);
     } catch (e) {
       console.error('[STORE] Failed to save name:', e);
-      if (generation !== accountGeneration) return;
+      if (!sameAccount(generation)) return;
       if (get().firstName === firstName && get().lastName === lastName) set(previous);
       showErrorToast("Couldn't save your name. Try again.");
     }
@@ -948,18 +1293,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ COLLECTION ACTIONS ============
 
   addCollection: async (name, iconKey) => {
-    const userId = await getCurrentUserId();
+    const generation = accountGeneration;
+    const session = await getCollectionWriteSession(generation);
+    if (!session) throw new Error('Your account changed.');
     const clientId = `collection-${Date.now()}`;
     const createdAt = new Date();
 
     const { error } = await supabase.from('user_collections').insert({
-      user_id: userId,
+      user_id: session.user.id,
       client_id: clientId,
       name,
       is_default: false,
       ...(iconKey ? { icon_key: iconKey } : {}),
       created_at: createdAt.toISOString(),
-    });
+    }).setHeader('Authorization', `Bearer ${session.access_token}`);
 
     if (error) {
       console.error('[STORE] Failed to create collection:', error);
@@ -974,10 +1321,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       createdAt: createdAt.getTime(),
     };
 
-    // Optimistically add to store
-    set((state) => ({
+    setFor(generation, (state) => ({
       collections: [...state.collections, newCollection],
     }));
+    saveSnapshot(generation);
 
     return newCollection;
   },
@@ -985,21 +1332,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   importCuratedCollection: async (catalogId) => {
     const catalog = CURATED_COLLECTIONS.find(({ id }) => id === catalogId);
     if (!catalog) throw new Error('Collection not found.');
+    const generation = accountGeneration;
+    await requireSynced();
+    if (!sameAccount(generation)) throw new Error('Your account changed.');
     const version = get().bibleVersion;
 
-    const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
-    if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!session || !sameAccount(generation)) throw new Error('Your account changed.');
 
     await validateCollectionPassages(catalog.passages, version, fetchVerse);
     const current = await getCollectionWriteSession(generation);
-    if (current?.user.id !== session.user.id || generation !== accountGeneration) {
+    if (current?.user.id !== session.user.id || !sameAccount(generation)) {
       throw new Error('Your account changed.');
     }
     const { collectionId, row } = await importCollection(supabase, current, catalogId, version, () => {
-      if (generation === accountGeneration) void get().fetchCuratedSaverCounts();
+      if (sameAccount(generation)) void get().fetchCuratedSaverCounts();
     });
-    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!sameAccount(generation)) throw new Error('Your account changed.');
     if (!row) return { collectionId, loaded: false };
 
     const collection = parseCollectionRow(row);
@@ -1012,6 +1361,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [...state.collections, collection],
       verses: [...verses, ...state.verses.filter(({ collectionId: id }) => id !== collection.id)],
     }));
+    saveSnapshot(generation);
     return { collectionId, loaded: true };
   },
 
@@ -1023,7 +1373,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const session = await getCollectionWriteSession(generation);
-    if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!session || !sameAccount(generation)) throw new Error('Your account changed.');
     // Members' copies follow on their next sync.
     if (collection.sharedId) {
       if (sharedRole(collection.sharedId) !== 'owner') throw new Error('Only the owner can change this icon.');
@@ -1042,11 +1392,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       .select('icon_key')
       .single();
 
-    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!sameAccount(generation)) throw new Error('Your account changed.');
     if (error || !data) throw new Error('Could not save the collection icon. Try again.');
     set((state) => ({
       collections: state.collections.map((current) => current.id === id ? { ...current, iconKey } : current),
     }));
+    saveSnapshot(generation);
   },
 
   renameCollection: async (id, name) => {
@@ -1058,7 +1409,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const session = await getCollectionWriteSession(generation);
-    if (!session || generation !== accountGeneration) return;
+    if (!session || !sameAccount(generation)) return;
     // Members' copies follow on their next sync.
     if (collection.sharedId) {
       if (sharedRole(collection.sharedId) !== 'owner') throw new Error('Only the owner can rename this collection.');
@@ -1076,12 +1427,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       .select('name')
       .single()
       .setHeader('Authorization', `Bearer ${session.access_token}`);
-    if (generation !== accountGeneration) return;
+    if (!sameAccount(generation)) return;
     if (error) throw error;
 
     set((state) => ({
       collections: state.collections.map((c) => c.id === id ? { ...c, name: data.name } : c),
     }));
+    saveSnapshot(generation);
   },
 
   reorderCollections: async (ids) => {
@@ -1096,25 +1448,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const collections = [...previous.filter((c) => c.isDefault || c.isVirtual), ...ordered];
-    set({ collections, collectionOrderSaving: true });
-    try {
-      const session = await getCollectionWriteSession(generation);
-      if (!session || generation !== accountGeneration) return;
-      const { error } = await supabase.rpc('reorder_collections', { collection_ids: ids })
-        .setHeader('Authorization', `Bearer ${session.access_token}`);
-      if (generation !== accountGeneration) return;
-      if (error) throw error;
-    } catch (error) {
-      if (generation !== accountGeneration) return;
-      set((state) => ({
-        collections: state.collections === collections ? previous : state.collections,
-        collectionOrderSaving: false,
-      }));
-      await get().fetchCollections();
-      if (generation === accountGeneration) throw error;
-      return;
-    }
-    set({ collectionOrderSaving: false });
+    return confirming(generation, async () => {
+      set({ collections, collectionOrderSaving: true });
+      try {
+        const session = await getCollectionWriteSession(generation);
+        if (!session || !sameAccount(generation)) return;
+        const { error } = await supabase.rpc('reorder_collections', { collection_ids: ids })
+          .setHeader('Authorization', `Bearer ${session.access_token}`);
+        if (!sameAccount(generation)) return;
+        if (error) throw error;
+      } catch (error) {
+        if (!sameAccount(generation)) return;
+        set((state) => ({
+          collections: state.collections === collections ? previous : state.collections,
+          collectionOrderSaving: false,
+        }));
+        await get().fetchCollections();
+        if (sameAccount(generation)) throw error;
+        return;
+      }
+      set({ collectionOrderSaving: false });
+    });
   },
 
   deleteCollection: async (id: string) => {
@@ -1133,10 +1487,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     // (supabase/migrations/*_delete_collection*.sql).
     const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
-    if (!session || generation !== accountGeneration) return;
+    if (!session || !sameAccount(generation)) return;
     const { error } = await supabase.rpc('delete_collection', { collection_client_id: id })
       .setHeader('Authorization', `Bearer ${session.access_token}`);
-    if (generation !== accountGeneration) return;
+    if (!sameAccount(generation)) return;
     if (error) {
       console.error('[STORE] Failed to delete collection:', error);
       throw error;
@@ -1151,6 +1505,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
       }),
     }));
+    saveSnapshot(generation);
   },
 
   setCollectionSort: async (collectionId: string, sort: SortOption) => {
@@ -1176,30 +1531,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     // Real user collection — optimistic Zustand update, then DB write.
-    const previous = get().collections;
-    set((state) => ({
-      collections: state.collections.map((c) =>
-        c.id === collectionId ? { ...c, sortPreference: sort } : c,
-      ),
-    }));
-    try {
-      await updateCollectionSort(collectionId, sort);
-    } catch (e) {
-      console.error('[STORE] Failed to persist collection sort:', e);
-      set({ collections: previous });
-      showErrorToast("Couldn't save sort preference.");
-    }
+    const previousSort = get().collections.find((c) => c.id === collectionId)?.sortPreference;
+    const generation = accountGeneration;
+    await confirming(generation, async () => {
+      set((state) => ({
+        collections: state.collections.map((c) =>
+          c.id === collectionId ? { ...c, sortPreference: sort } : c,
+        ),
+      }));
+      try {
+        await updateCollectionSort(collectionId, sort);
+      } catch (e) {
+        console.error('[STORE] Failed to persist collection sort:', e);
+        // Only this collection's sort goes back; anything else changed meanwhile stays.
+        setFor(generation, (state) => ({
+          collections: state.collections.map((c) => c.id === collectionId ? { ...c, sortPreference: previousSort } : c),
+        }));
+        showErrorToast("Couldn't save sort preference.");
+      }
+    });
   },
 
   // ============ SHARED COLLECTION ACTIONS ============
 
   shareCollection: async (collectionId) => {
     const generation = accountGeneration;
+    await requireSynced();
+    if (!sameAccount(generation)) throw new Error('Your account changed.');
     const { data, error } = await db.rpc('share_collection', { p_collection_client_id: collectionId });
     if (error) throw error;
     const row = data[0];
     if (!row) throw new Error('Could not share this collection.');
-    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!sameAccount(generation)) throw new Error('Your account changed.');
     set((state) => ({
       collections: state.collections.map((c) => c.id === collectionId ? { ...c, sharedId: row.shared_id } : c),
     }));
@@ -1210,15 +1573,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Deletes the group: its codes die, members keep a personal copy, and the owner's copy is a
   // plain collection again.
   stopSharing: async (sharedId) => {
+    const generation = accountGeneration;
     if (sharedRole(sharedId) !== 'owner') throw new Error('Only the owner can stop sharing.');
     const { data: group, error } = await db.from('shared_collections').delete().eq('id', sharedId).select('id');
     if (error) throw error;
     if (group.length !== 1) throw new Error('Could not stop sharing this collection.');
-    set((state) => ({
+    setFor(generation, (state) => ({
       collections: state.collections.map((c) => c.sharedId === sharedId ? { ...c, sharedId: undefined } : c),
       sharedCollections: Object.fromEntries(Object.entries(state.sharedCollections).filter(([key]) => key !== sharedId)),
       sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
     }));
+    saveSnapshot(generation);
   },
 
   mintInvite: async (sharedId) => {
@@ -1230,27 +1595,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Returns the joined collection's client_id. Joining twice only syncs.
   joinSharedCollection: async (code) => {
+    const generation = accountGeneration;
+    await requireSynced();
+    if (!sameAccount(generation)) throw new Error('Your account changed.');
     const { data, error } = await db.rpc('join_shared_collection', {
       p_code: normalizeInviteCode(code),
       p_version: get().bibleVersion,
     });
     if (error) throw error;
-    await get().refresh();
+    // What the group's screen needs, in one wave; mastered verses load behind.
+    await Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]);
+    saveSnapshot(generation);
+    void get().fetchMasteredVerses().then(() => saveSnapshot(generation));
     return data;
-  },
-
-  // Makes the user's copy match the group; refetches only when the server changed something.
-  syncSharedCollection: async (sharedId) => {
-    const { data, error } = await db.rpc('sync_shared_collection', {
-      p_shared: sharedId,
-      p_version: get().bibleVersion,
-    });
-    if (error) throw error;
-    const changed = data[0]?.changed ?? false;
-    if (changed) {
-      await Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]);
-    }
-    return changed;
   },
 
   // Never throws: a failure is kept on the entry for the screen's retry.
@@ -1263,7 +1620,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.from('shared_collection_verses').select('book, chapter, verse_start, verse_end')
           .eq('shared_collection_id', sharedId).order('added_at'),
       ]);
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       if (progress.error) throw progress.error;
       if (references.error) throw references.error;
       const entry: SharedProgress = {
@@ -1285,7 +1642,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => ({ sharedProgress: { ...state.sharedProgress, [sharedId]: entry } }));
       return true;
     } catch (e) {
-      if (generation !== accountGeneration) return false;
+      if (!sameAccount(generation)) return false;
       console.error('[STORE] Failed to fetch shared progress:', e);
       set((state) => {
         const prior = state.sharedProgress[sharedId] ?? { members: [], references: [], cells: [], fetchedAt: 0, failed: true };
@@ -1299,23 +1656,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   // role the owner changed since the last refresh) and the user's own copies. A failed sync throws
   // after the reads, unless they show the membership gone: then the departed-group notice is the
   // message and it returns false. A failed grid read shows on the entry.
-  openSharedCollection: async (sharedId) => {
-    let changed = false;
+  openSharedCollection: async (sharedId, { pull = false } = {}) => {
+    const generation = accountGeneration;
     let failure: unknown = null;
     try {
-      changed = await get().syncSharedCollection(sharedId);
+      // The sync inserts the group's new references in the account translation.
+      await requireSynced();
+      await syncSharedCopy(sharedId);
     } catch (e) {
       failure = e;
     }
-    // A sync that changed something has already refetched. One that didn't still reloads: the
-    // server applies a removed reference, a removal or a dissolve to this copy without the sync.
-    // After a failed sync the membership may be gone, so the grid waits for the reload to say.
+    if (!sameAccount(generation)) return false;
+    // One wave after the sync, changed or not: the server applies a removed reference, a removal or
+    // a dissolve to this copy without the sync. A pull reads the mastered list too. After a failed
+    // sync the membership may be gone, so the grid waits for the reload to say.
     await Promise.all([
       failure ? null : get().fetchSharedProgress(sharedId),
-      changed || Promise.all([get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections()]),
+      get().fetchCollections(), get().fetchVerses(), get().fetchSharedCollections(),
+      pull && get().fetchMasteredVerses(),
     ]);
+    if (!sameAccount(generation)) return false;
+    saveSnapshot(generation);
     if (!get().collections.some((c) => c.sharedId === sharedId)) {
-      set((state) => ({
+      setFor(generation, (state) => ({
         sharedProgress: Object.fromEntries(Object.entries(state.sharedProgress).filter(([key]) => key !== sharedId)),
       }));
       return false;
@@ -1331,11 +1694,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const generation = accountGeneration;
     const userId = await getCurrentUserId();
     const { error } = await supabase.rpc('leave_shared_collection', { p_shared: sharedId });
-    if (generation !== accountGeneration) return;
+    if (!sameAccount(generation)) return;
     if (error) throw error;
     await withKnownGroups(userId, async (known) => (known ?? []).filter((g) => g.id !== sharedId))
       .catch((e) => console.error('[STORE] Failed to forget a left shared collection:', e));
-    if (generation !== accountGeneration) return;
+    if (!sameAccount(generation)) return;
     const gone = new Set(get().collections.filter((c) => c.sharedId === sharedId).map((c) => c.id));
     set((state) => ({
       collections: state.collections.filter((c) => !gone.has(c.id)),
@@ -1345,6 +1708,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     // The server applied the delete rule; a verse may now be soft-deleted or gone.
     await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
+    saveSnapshot(generation);
   },
 
   removeSharedMember: async (sharedId, userId) => {
@@ -1368,23 +1732,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   copyVerseToCollection: async (verseId, collectionId) => {
     // A shared collection holds the group's references: the copy adds one, and sync links the verse.
+    // Only a shared copy inserts a row in the translation, so only it waits for the profile (rule 3).
+    // A personal copy links the existing row (supabase/migrations/*_collection_management.sql).
+    const generation = accountGeneration;
     const sharedId = sharedIdOf(collectionId);
     if (sharedId) {
+      await requireSynced();
+      if (!sameAccount(generation)) return;
       const verse = get().verses.find((v) => v.id === verseId);
       if (!verse) throw new Error('Failed to copy verse');
       await addSharedVerse(sharedId, collectionId, verse);
+      saveSnapshot(generation);
       return;
     }
-    const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
-    if (!session || generation !== accountGeneration) return;
+    if (!session || !sameAccount(generation)) return;
     const { data, error } = await supabase.rpc('copy_verse_to_collection', {
       verse_client_id: verseId,
       collection_client_id: collectionId,
     }).select('added_at,user_verses!inner(*)').single()
       .setHeader('Authorization', `Bearer ${session.access_token}`)
       .overrideTypes<VerseMembershipRow, { merge: false }>();
-    if (generation !== accountGeneration) return;
+    if (!sameAccount(generation)) return;
     if (error) throw error;
 
     const copy = parseVerseMembership(data.user_verses, collectionId, data.added_at);
@@ -1392,17 +1761,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       ? state
       : { verses: [copy, ...state.verses] }
     );
+    saveSnapshot(generation);
   },
 
   addVerse: async (verse, collectionId) => {
+    const generation = accountGeneration;
+    // The translation it's added in comes from the server's profile, not a saved library's paint.
+    await requireSynced();
     const sharedId = sharedIdOf(collectionId);
-    if (sharedId) return addSharedVerse(sharedId, collectionId, verse);
+    if (sharedId) {
+      const added = await addSharedVerse(sharedId, collectionId, verse);
+      saveSnapshot(generation);
+      return added;
+    }
     // One transaction on the server (supabase/migrations/*_add_verse.sql): My Verses is made on
     // first use, an unknown collection is an error, and the reference's held or best removed row
     // is reused and linked; or nothing changes.
-    const generation = accountGeneration;
     const session = await getCollectionWriteSession(generation);
-    if (!session || generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!session || !sameAccount(generation)) throw new Error('Your account changed.');
     const { data: row, error } = await db.rpc('add_verse', {
       p_book: verse.book,
       p_chapter: verse.chapter,
@@ -1412,7 +1788,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       p_collection_client_id: collectionId,
       p_keep_restored_version: mayBeMissing(verse),
     }).setHeader('Authorization', `Bearer ${session.access_token}`);
-    if (generation !== accountGeneration) throw new Error('Your account changed.');
+    if (!sameAccount(generation)) throw new Error('Your account changed.');
     if (error) {
       console.error('[STORE] Failed to add verse:', error);
       throw error;
@@ -1426,103 +1802,103 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => state.verses.some(isThisMembership)
       ? state
       : { verses: [resultVerse, ...state.verses] });
+    saveSnapshot(generation);
 
     return get().verses.find(isThisMembership) ?? resultVerse;
   },
 
   deleteVerse: async (id: string, collectionId: string): Promise<{ wasMastered: boolean }> => {
+    const generation = accountGeneration;
     // Get verse info
     const verse = get().verses.find((v) => v.id === id);
     const isMastered = verse?.progress?.hard?.completed === true;
 
-    // Save for rollback
-    const previousVerses = get().verses;
+    // Rule 2: while the server hasn't answered, every read leaves this entry out. Success keeps it
+    // gone; failure puts back only it, where it was. Rule 1: neither touches another account.
+    const removing = (v: SavedVerse) => v.id === id && v.collectionId === collectionId;
+    const key = entryKey({ id, collectionId });
+    const at = get().verses.findIndex(removing);
+    const removed = get().verses.filter(removing);
+    const settle = (deleted: boolean) => {
+      if (!sameAccount(generation)) return;
+      pendingVerseDeletes.delete(key);
+      setFor(generation, (state) => {
+        if (deleted) return { verses: state.verses.filter((v) => !removing(v)) };
+        if (state.verses.some(removing)) return {};
+        const verses = state.verses.slice();
+        verses.splice(Math.min(at, verses.length), 0, ...removed);
+        return { verses };
+      });
+    };
 
-    // Optimistic update - remove from local state immediately
-    set((state) => ({
-      verses: state.verses.filter((v) => !(v.id === id && v.collectionId === collectionId)),
-      // Don't remove from masteredVerses - mastery is permanent
-    }));
+    return confirming(generation, async () => {
+      // Optimistic update - remove from local state immediately
+      pendingVerseDeletes.add(key);
+      set((state) => ({
+        verses: state.verses.filter((v) => !removing(v)),
+        // Don't remove from masteredVerses - mastery is permanent
+      }));
 
-    // Shared: the reference leaves the group, and a trigger applies the same rule to every
-    // member's copy, this one included (docs/features/shared-collections.md#sync).
-    const sharedId = sharedIdOf(collectionId);
-    if (sharedId) {
-      try {
-        if (!verse) throw new Error('Verse not found');
-        const { data, error } = await db.from('shared_collection_verses').delete()
-          .eq('shared_collection_id', sharedId)
-          .eq('book', verse.book)
-          .eq('chapter', verse.chapter)
-          .eq('verse_start', verse.verseStart)
-          .eq('verse_end', verse.verseEnd)
-          .select('book');
-        if (error) throw error;
-        if (data.length === 0) throw new Error('Only the owner and editors can remove verses here.');
+      // Shared: the reference leaves the group, and a trigger applies the same rule to every
+      // member's copy, this one included (docs/features/shared-collections.md#sync).
+      const sharedId = sharedIdOf(collectionId);
+      if (sharedId) {
+        try {
+          if (!verse) throw new Error('Verse not found');
+          const { data, error } = await db.from('shared_collection_verses').delete()
+            .eq('shared_collection_id', sharedId)
+            .eq('book', verse.book)
+            .eq('chapter', verse.chapter)
+            .eq('verse_start', verse.verseStart)
+            .eq('verse_end', verse.verseEnd)
+            .select('book');
+          if (error) throw error;
+          if (data.length === 0) throw new Error('Only the owner and editors can remove verses here.');
+        } catch (error) {
+          settle(false);
+          throw error;
+        }
+        settle(true);
         await Promise.all([
           get().fetchVerses(), get().fetchMasteredVerses(), get().fetchSharedCollections(), refetchLoadedProgress(sharedId),
         ]);
+        saveSnapshot(generation);
         return { wasMastered: isMastered };
-      } catch (error) {
-        set({ verses: previousVerses });
-        throw error;
       }
-    }
 
-    // One transaction on the server: the verse leaves, and if no other collection holds it, it is
-    // soft-deleted when mastered and deleted otherwise (supabase/migrations/*_delete_verse.sql).
-    const { error } = await supabase.rpc('delete_verse', { verse_client_id: id, collection_client_id: collectionId });
-    if (error) {
-      console.error('[STORE] Failed to delete verse:', error);
-      set({ verses: previousVerses });
-      throw new Error('Failed to delete verse');
-    }
-    return { wasMastered: isMastered };
+      // One transaction on the server: the verse leaves, and if no other collection holds it, it is
+      // soft-deleted when mastered and deleted otherwise (supabase/migrations/*_delete_verse.sql).
+      const { error } = await supabase.rpc('delete_verse', { verse_client_id: id, collection_client_id: collectionId });
+      settle(!error);
+      if (error) {
+        console.error('[STORE] Failed to delete verse:', error);
+        throw new Error('Failed to delete verse');
+      }
+      return { wasMastered: isMastered };
+    });
   },
 
   updateVerseProgress: async (id, difficulty, accuracy, fullSession = false) => {
-    // Multi-device note: writes to Supabase are last-write-wins. Two
-    // devices reviewing the same verse against their own stale local
-    // `nextDueAt` can each treat the review as on-time and double-bump
-    // passCount, OR clobber each other and lose an increment. Spec
-    // accepts this as drift-by-1 for personal use (review-system.md
-    // "Concurrent updates from two devices"). If realtime sync is added
-    // later, reconcile passCount via lastReviewedAt comparison.
     // A soft-deleted-but-mastered verse is in `masteredVerses` only, and
     // the setup screen and study session reach it through findVerse too.
     const verse = findVerse(get(), id);
     if (!verse) return;
-
-    const currentBest = verse.progress[difficulty]?.bestAccuracy;
-    const isNewBest = currentBest === null || accuracy > currentBest;
+    const generation = accountGeneration;
     const isQualifyingReview = difficulty === 'hard' && accuracy >= 90 && fullSession;
     const nowIso = new Date().toISOString();
 
-    // Build the UPDATE shape. `last_practiced_at` always present so any
-    // session completion (full or partial, new-best or not) floats this
-    // verse to the top of the "Recent" sort. `progress` only included
-    // when something actually changed.
-    const updateShape: { last_practiced_at: string; progress?: VerseProgress } = {
-      last_practiced_at: nowIso,
-    };
-
-    let newProgress: VerseProgress = verse.progress;
-    let justBecameMastered = false;
-
-    if (isNewBest || isQualifyingReview) {
-      newProgress = { ...verse.progress };
-
+    // The session's result on top of `base`. Null when nothing but the practice time changes.
+    const next = (base: VerseProgress): VerseProgress | null => {
+      const currentBest = base[difficulty]?.bestAccuracy;
+      const isNewBest = currentBest === null || accuracy > currentBest;
+      if (!isNewBest && !isQualifyingReview) return null;
+      const progress = { ...base };
       if (isNewBest) {
-        newProgress[difficulty] = {
-          bestAccuracy: accuracy,
-          completed: accuracy >= 90,
-        };
+        progress[difficulty] = { bestAccuracy: accuracy, completed: accuracy >= 90 };
       }
-
       if (isQualifyingReview) {
-        const prevEngraved = newProgress.engraved ?? DEFAULT_PROGRESS.engraved!;
-        newProgress.engraved = computeNextSrState(
-          prevEngraved,
+        progress.engraved = computeNextSrState(
+          progress.engraved ?? DEFAULT_PROGRESS.engraved!,
           accuracy,
           difficulty,
           fullSession,
@@ -1530,93 +1906,112 @@ export const useAppStore = create<AppState>((set, get) => ({
           get().reviewMaxIntervalDays,
         );
       }
+      return progress;
+    };
 
-      updateShape.progress = newProgress;
-      justBecameMastered = !!(newProgress.hard?.completed && !verse.progress.hard?.completed);
-    }
-
-    // Update on server
-    const { error } = await supabase
-      .from('user_verses')
-      .update(updateShape)
-      .eq('client_id', id);
-
-    if (error) {
-      console.error('[STORE] Failed to update progress:', error);
-      throw new Error('Failed to save progress');
-    }
-
-    // Optimistic Zustand update mirrors both progress and timestamp on
-    // every entry for this verse (junction-row shape: a verse in N
-    // collections has N entries in `verses[]`, all sharing one client_id).
-    set((state) => {
-      const updatedVerses = state.verses.map((v) =>
-        v.id === id ? { ...v, progress: newProgress, lastPracticedAt: nowIso } : v,
-      );
-
-      let updatedMastered = state.masteredVerses;
-      if (justBecameMastered) {
-        const masteredVerse: SavedVerse = {
-          ...verse,
-          progress: newProgress,
-          lastPracticedAt: nowIso,
-          collectionId: MASTERED_COLLECTION_ID,
-        };
-        updatedMastered = [masteredVerse, ...state.masteredVerses];
-      } else {
-        updatedMastered = state.masteredVerses.map((v) =>
-          v.id === id ? { ...v, progress: newProgress, lastPracticedAt: nowIso } : v,
-        );
+    // The save lands only on the row it was computed from (save_verse_progress): another device's
+    // newer progress, or a snapshot's stale copy, is refused, and the result is recomputed once
+    // from the row the server hands back. An unknown base is refused the same way.
+    let base: { progress: VerseProgress; updatedAt?: string } = verse;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const progress = next(base.progress);
+      // Untyped client: the generated types make the nullable arguments required strings.
+      const { data, error } = await supabase.rpc('save_verse_progress', {
+        p_client_id: id,
+        p_expected_updated_at: base.updatedAt ?? null,
+        p_progress: progress,
+        p_last_practiced_at: nowIso,
+      });
+      // Another account now: this result, and any retry, belong to the one that left.
+      if (!sameAccount(generation)) return;
+      const row: ProgressGuardRow | undefined = data?.[0];
+      if (error || !row) {
+        console.error('[STORE] Failed to update progress:', error ?? 'verse not found');
+        throw new Error('Failed to save progress');
+      }
+      if (!row.applied) {
+        base = { progress: parseProgress(row.progress), updatedAt: row.updated_at };
+        continue;
       }
 
-      return { verses: updatedVerses, masteredVerses: updatedMastered };
-    });
+      const newProgress = progress ?? base.progress;
+      const saved = { progress: newProgress, lastPracticedAt: nowIso, updatedAt: row.updated_at };
+      const mastered = newProgress.hard?.completed === true;
+      // Every entry for this verse (junction-row shape: a verse in N collections has N entries).
+      set((state) => ({
+        lastSessionAt: Date.now(),
+        verses: state.verses.map((v) => v.id === id ? { ...v, ...saved } : v),
+        masteredVerses: !mastered
+          // Reset elsewhere: the server's row (the retry's base) is no longer mastered.
+          ? state.masteredVerses.filter((v) => v.id !== id)
+          : !state.masteredVerses.some((v) => v.id === id)
+            ? [{ ...verse, ...saved, collectionId: MASTERED_COLLECTION_ID }, ...state.masteredVerses]
+            : state.masteredVerses.map((v) => v.id === id ? { ...v, ...saved } : v),
+      }));
+      saveSnapshot(generation);
 
-    // A shared card's emblem reads `get_shared_status`, so a square that just turned mastered or
-    // engraved refetches it.
-    const engravedNow = newProgress.engraved?.completed === true && verse.progress.engraved?.completed !== true;
-    if ((justBecameMastered || engravedNow) && inSharedCollection(get(), id)) await get().fetchSharedCollections();
+      // A shared card's emblem reads `get_shared_status`, so a square that just turned mastered or
+      // engraved refetches it.
+      const justBecameMastered = mastered && !base.progress.hard?.completed;
+      const engravedNow = newProgress.engraved?.completed === true && base.progress.engraved?.completed !== true;
+      if ((justBecameMastered || engravedNow) && inSharedCollection(get(), id)) await get().fetchSharedCollections();
+      return;
+    }
+    console.error('[STORE] Progress changed again during the save:', id);
+    throw new Error('Failed to save progress');
   },
 
   resetVerseProgress: async (id: string) => {
-    // Check if verse was mastered before reset
-    const verse = get().verses.find((v) => v.id === id);
-    const wasMastered = verse?.progress?.hard?.completed === true;
+    const generation = accountGeneration;
+    return confirming(generation, async () => {
+      // Check if verse was mastered before reset
+      const verse = get().verses.find((v) => v.id === id);
+      const wasMastered = verse?.progress?.hard?.completed === true;
 
-    // Save for rollback
-    const previousVerses = get().verses;
-    const previousMastered = get().masteredVerses;
+      // Save for rollback: only this verse's entries, as they were.
+      const previousEntries = new Map(get().verses.filter((v) => v.id === id).map((v) => [v.collectionId, v]));
+      const previousMastered = get().masteredVerses.find((v) => v.id === id);
 
-    // Optimistic update — also clear lastPracticedAt so the reset verse
-    // drops to the bottom of the "Recent" sort.
-    set((state) => ({
-      verses: state.verses.map((v) =>
-        v.id === id ? { ...v, progress: DEFAULT_PROGRESS, lastPracticedAt: undefined } : v
-      ),
-      // Remove from mastered if it was mastered
-      masteredVerses: wasMastered
-        ? state.masteredVerses.filter((v) => v.id !== id)
-        : state.masteredVerses,
-    }));
+      // Optimistic update — also clear lastPracticedAt so the reset verse
+      // drops to the bottom of the "Recent" sort.
+      set((state) => ({
+        verses: state.verses.map((v) =>
+          v.id === id ? { ...v, progress: DEFAULT_PROGRESS, lastPracticedAt: undefined } : v
+        ),
+        // Remove from mastered if it was mastered
+        masteredVerses: wasMastered
+          ? state.masteredVerses.filter((v) => v.id !== id)
+          : state.masteredVerses,
+      }));
 
-    try {
-      // Update on server
-      const { error } = await supabase
-        .from('user_verses')
-        .update({ progress: DEFAULT_PROGRESS, last_practiced_at: null })
-        .eq('client_id', id);
+      try {
+        // Update on server
+        const { error } = await supabase
+          .from('user_verses')
+          .update({ progress: DEFAULT_PROGRESS, last_practiced_at: null })
+          .eq('client_id', id);
 
-      if (error) {
-        console.error('[STORE] Failed to reset progress:', error);
-        throw new Error('Failed to reset progress');
+        if (error) {
+          console.error('[STORE] Failed to reset progress:', error);
+          throw new Error('Failed to reset progress');
+        }
+      } catch (error) {
+        // Rollback on failure: only entries still showing this reset, and never one deleted since
+        // (rule 2: a pending delete stays out, a finished one is already gone from the list).
+        setFor(generation, (state) => ({
+          verses: state.verses.map((v) => {
+            const before = v.id === id && v.progress === DEFAULT_PROGRESS && previousEntries.get(v.collectionId);
+            return before ? { ...v, progress: before.progress, lastPracticedAt: before.lastPracticedAt } : v;
+          }),
+          masteredVerses: wasMastered && previousMastered && !state.masteredVerses.some((v) => v.id === id)
+            ? [...state.masteredVerses, previousMastered]
+            : state.masteredVerses,
+        }));
+        throw error;
       }
-    } catch (error) {
-      // Rollback on failure
-      set({ verses: previousVerses, masteredVerses: previousMastered });
-      throw error;
-    }
-    // A mastered square went back to Open: the shared card's emblem may no longer hold.
-    if (wasMastered && inSharedCollection(get(), id)) await get().fetchSharedCollections();
+      // A mastered square went back to Open: the shared card's emblem may no longer hold.
+      if (wasMastered && sameAccount(generation) && inSharedCollection(get(), id)) await get().fetchSharedCollections();
+    });
   },
 
   setVerseStudyPrefs: (id, chunkSize, difficulty) => {
@@ -1648,6 +2043,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clear: () => {
     accountGeneration++;
+    accountUserId = null;
+    accountLoad = Promise.resolve();
+    applied = new Set();
+    localRead = null;
+    painted = null;
+    pendingWrites = 0;
+    pendingVerseDeletes = new Set();
     requestedTranslation = null;
     set({
       collections: [],
@@ -1666,6 +2068,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Zustand keeps unspecified keys. AsyncStorage copies are never touched here.
 
       hydrated: false,
+      hydratedFrom: null,
+      synced: false,
+      profileLoaded: false,
+      welcomeSeen: false,
+      lastSessionAt: null,
       collectionsLoading: true,
       collectionOrderSaving: false,
       versesLoading: true,
@@ -1675,6 +2082,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 }));
 
+/** Settled once the device settings are applied; never rejects. */
+export const settingsRead = readSettings();
+
 // ============ SELECTORS ============
 
 import { useMemo } from 'react';
@@ -1683,6 +2093,17 @@ import { useShallow } from 'zustand/shallow';
 export const useCollections = () => useAppStore((state) => state.collections);
 export const useVerses = () => useAppStore((state) => state.verses);
 export const useHydrated = () => useAppStore((state) => state.hydrated);
+export const useSynced = () => useAppStore((state) => state.synced);
+
+/**
+ * For a decision a saved library could get wrong (what a delete loses, whether to ask for a name):
+ * waits for the server's library, and says so when it can't be read.
+ */
+export async function librarySynced(): Promise<boolean> {
+  if (await useAppStore.getState().whenSynced()) return true;
+  showErrorToast("Couldn't load your library. Check your connection and try again.");
+  return false;
+}
 export const useCuratedSaverCount = (catalogId: string) => useAppStore((state) => state.curatedSaverCounts[catalogId]);
 
 /**

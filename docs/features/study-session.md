@@ -25,9 +25,8 @@ persisted until the session saves.
 ## Setup screen
 
 `StudySetupScreen` reads the verse from the store with `useVerse`, so it opens
-without a fetch. Verse text then loads through `getVerseText` in
-`lib/api/bible.ts`, keyed on `verse?.id`, because saving prefs swaps the verse
-object and re-running would flash the loader.
+without a fetch. Verse text loads through `getVerseText`, keyed on
+`verse?.id`: saving prefs swaps the verse object and would flash the loader.
 
 - **Difficulty:** Easy ("All words"), Medium ("Some hidden"), Hard ("No words").
 - **Verses per chunk:** shown only for multi-verse passages. A value pill opens
@@ -60,8 +59,8 @@ Restore runs once per screen open, behind `defaultsApplied`:
 
 1. Once the store is hydrated, `findVerse` (store) reads the verse from `verses`,
    then `masteredVerses`, like `useVerse`, so a removed mastered verse opens.
-2. If `text` or `verses` is missing, `getVerseText` fetches them. Read rules:
-   `docs/architecture/bible-api-and-caching.md`.
+2. Text in memory (`peekVerseText`) seeds the first frame, with no loader;
+   else `getVerseText` fetches it ([rules](../architecture/bible-api-and-caching.md)).
 3. `sessionSeed` is drawn as 0 or 1, and `parseVerseIntoChunks` builds the chunks.
 
 A missing verse or a failed text fetch shows a message and Close.
@@ -78,7 +77,7 @@ and otherwise groups consecutive verses by `chunkSize`. Each `Chunk` has:
   verse number prefixed to each verse's first word.
 
 Keyed text (`verse.verses`) is the source. A verse the translation omits gets no
-chunk. `getVerseText` in `lib/api/bible.ts` throws on a range without keyed verses.
+chunk. `getVerseText` throws on a range without keyed verses.
 
 **`chunk.text` is the ground truth for scoring (invariant 4).** Inside a session,
 scoring compares the transcription against `chunks[i].text`, the plain verse. It
@@ -183,8 +182,8 @@ effort!" at 65 or more, and "Keep Practicing" below that. A help icon opens
 
 ### Retry
 
-After a chunk completes, Retry starts another recording for that chunk as the
-result card fades. The recording attempt owns the retry state. A successful
+Retry starts another recording for a completed chunk on finger-down (a swipe
+starting on Retry records) as the result card fades. The attempt owns the retry state. A successful
 retry replaces only that chunk's practice result, so its scored result stands.
 Discarding, leaving the chunk or failing restores the previous result and
 controls. Retry is hidden on single-chunk sessions. The result card shows retry
@@ -212,8 +211,8 @@ the score is already saved, and leaves without the results page.
 
 **Early exit.** The X in the header calls `saveAndExit`. With some chunks complete
 but not all, it calls `updateVerseProgress` with `calculatePartialScore` and no
-`fullSession` flag, logs an attempt, and leaves at once. Failures only reach the
-console. Otherwise it just leaves. Exiting discards an in-flight recording or
+`fullSession` flag, logs an attempt, and leaves at once. A failed save
+shows the save-error toast after it leaves. Otherwise it just leaves. Exiting discards an in-flight recording or
 analysis. A late transcript cannot update the session or save a second attempt.
 
 **Session attempts.** A session writes at most one `session_attempts` row, from
@@ -239,7 +238,8 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - `npm run sim -- flow practice-removed-mastered`: reader-a's mastered John 3:16, removed from My Verses, still starts a session; the flow puts it back.
 - `npm run sim -- shot "/session?id=x" --as reader-a`: Close and "This verse is no longer in your library."
 - `npm run sim -- shot "/dev-result-card?expected=<text>&transcript=<text>"` (URL-encoded; `app/dev-result-card.tsx`), light and dark. KJV Romans 6:23 both sides: 100%, "Perfect!". Without "eternal": 95%, "Great!", "eternal" underlined.
-- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. The mic stays circular with a loading ring during permission, then becomes a slimmer pill with the waveform and actions once capture starts. One recording starts on the double tap. Discard returns the mic to the same chunk.
+- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. A ring shows until capture starts, then the pill with waveform and actions. The double tap records once.
+- `npm run sim -- flow mic-denied-again`: deny the prompt, tap the mic again: one "Permission required".
 - Real device, Medium, multi-verse: tap the eye, re-hide, recite, submit. The card shows the real score and "Revealed — this chunk won't count", and the final score treats those words as missing.
 
 ## Decisions

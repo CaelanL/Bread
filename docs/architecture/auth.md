@@ -1,15 +1,15 @@
 # Auth
 
 Auth is Supabase Auth. Users sign in with email and password. A
-Google method and an anonymous fallback exist in code, but no screen
-offers them. Sessions persist across app restarts via AsyncStorage
+Google method exists in code, but no screen offers it. Nothing signs
+in anonymously. Sessions persist across app restarts via AsyncStorage
 (Supabase manages this transparently).
 
 ## Files
 
 | File | Role |
 |---|---|
-| `lib/api/client.ts` | Supabase client setup (anon key, AsyncStorage on native), `ensureAuth`, `getAuthToken` |
+| `lib/api/client.ts` | Supabase client setup (anon key, AsyncStorage on native), `sessionUserId`, `getAuthToken` |
 | `lib/auth/context.tsx` | `AuthProvider` + `useAuth()` hook — exposes session state and sign-in/up methods, handles auth deep links |
 | `lib/auth/index.ts` | Re-exports |
 | `lib/auth/dev-sign-in.ts` | `canDevSignIn` guard for the dev route |
@@ -69,17 +69,6 @@ The link must be opened on a device with the app installed. Signed-in
 users can also change their password from Settings, which calls
 `updatePassword` too.
 
-### Anonymous sign-in
-
-`ensureAuth()` in `lib/api/client.ts` calls
-`supabase.auth.signInAnonymously()` if no session exists. No screen
-offers it. It's a fallback inside store, storage and sync helpers
-that call `ensureAuth()` first, and the auth gate keeps those screens
-behind a session, so a real user shouldn't end up anonymous.
-
-If one did, `AuthProvider` treats any session as authenticated for
-routing. An anonymous session is a real user row in `auth.users`.
-
 ### Account deletion
 
 ```
@@ -111,10 +100,10 @@ signOut() → unregisterDeviceToken() — this device's push token row
   → supabase.auth.signOut()
   → AsyncStorage tokens removed
   → AuthProvider session cleared, isAuthenticated goes false
-  → effect in app/_layout.tsx:
+  → SIGNED_OUT → setAccount(null) (lib/auth/account.ts):
       useAppStore.getState().clear() — Zustand user data wiped
       (device prefs survive, see docs/architecture/sync-and-storage.md)
-      usePrefsStore.getState().clear() — local notification cache wiped
+      usePrefsStore.getState().clear() and that account's prefs cache removed
   → Auth gating redirects to /(auth)/sign-in
 ```
 
@@ -125,10 +114,45 @@ then opens a route, so `npm run sim` can reach signed-in screens
 without taps:
 `com.biblemem://dev-sign-in?next=/settings&as=reader-b`.
 
+`latency=<ms>` and `perf=1` turn on the timing harness for this and later launches
+(`lib/api/dev-timing.ts`, see sync-and-storage.md); every dev sign-in resets them.
+
 `canDevSignIn` guards it: the build must be a dev build (`__DEV__`)
 and `EXPO_PUBLIC_SUPABASE_URL` must point at `127.0.0.1` or
 `localhost`. Otherwise the route just goes home. The auth gate lets
 this route through without a session, like `reset-password`.
+
+## Accounts start from the session
+
+`AuthProvider` calls `setAccount(userId | null)` (`lib/auth/account.ts`) with the
+`getSession()` result before it stops loading, and again on every `onAuthStateChange`
+except `INITIAL_SESSION` (the `getSession()` result covers it).
+So the library load starts when the stored session is read, before the tree mounts.
+
+- Same id as now: nothing (`INITIAL_SESSION`, `TOKEN_REFRESHED`).
+- A new id: if another account was active (a deep link or dev sign-in with no sign-out),
+  clear the store and the prefs store first; their generation check drops the old
+  account's late replies. Then `hydrate(userId)`, the UX flags, and the prefs
+  (`hydrate(userId)`, then one `syncForegroundState`).
+- `null`: clear both stores and remove the previous account's prefs cache and saved
+  library. A launch with no session was never anyone, so it clears nothing.
+
+### Launch
+
+At mount `AuthProvider` reads the stored session's key (`AUTH_STORAGE_KEY`, set
+explicitly to supabase-js's default `sb-<first label of the host>-auth-token`; a different
+key would sign everyone out) for its user id, and calls `setAccount(id, { provisional:
+true })`: that account's saved library paints, nothing starts on the network, and
+`RootLayoutNav` shows it instead of the spinner. When `getSession()` settles,
+`afterRestore` (`lib/auth/after-restore.ts`) decides:
+
+- a session → `setAccount(id)` starts the wave, and the saved library paints before loading
+  ends;
+- the token refresh couldn't reach the server (`isAuthRetryableFetchError`) → stay on the
+  saved library, still loading: writes fail visibly, supabase-js keeps the session and
+  retries, and its `TOKEN_REFRESHED` starts the account. With nothing saved, the app opens
+  empty after `SPLASH_FAILSAFE_MS` ([launch splash](navigation-and-routing.md#launch-splash));
+- anything else (a refused refresh) → signed out: the saved library is removed, Sign In.
 
 ## Auth gating
 
@@ -144,6 +168,7 @@ const storage = Platform.OS === "web" ? undefined : AsyncStorage;
 createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage,                      // undefined means localStorage on web
+    storageKey: AUTH_STORAGE_KEY, // supabase-js's default, named (see Launch)
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,    // we handle deep links ourselves
@@ -179,16 +204,13 @@ before first and last names became the first name.
 
 ## Where the user ID is read
 
-Components use `useAuth().user`. Code in `lib/` reads it from
-Supabase:
-
-```ts
-const { data: { user } } = await supabase.auth.getUser();
-```
-
-`lib/store/index.ts` and `lib/storage/index.ts` call
-`ensureAuth()` first (`getCurrentUserId` in each). `lib/api/analytics.ts`
-and `lib/notifications/api.ts` don't. RLS on every user-owned table
+Components use `useAuth().user`. Code in `lib/` calls `sessionUserId()`
+(`lib/api/client.ts`), which reads the stored session: no network round
+trip, and null when signed out, never an anonymous sign-in. The store's
+`getCurrentUserId` throws `Not authenticated` on null; `lib/api/analytics.ts`
+and `lib/notifications/api.ts` return their "not signed in" value. Don't use
+`supabase.auth.getUser()`: it's a round trip to Supabase Auth, and every other
+Supabase request waits behind it. RLS on every user-owned table
 enforces `auth.uid() = user_id`, so even if a mistake bypasses the
 check, the database refuses the write.
 
@@ -201,9 +223,9 @@ check, the database refuses the write.
    `docs/architecture/edge-functions.md`.
 3. **`reset-password` route must remain accessible without auth.**
    Don't add it to the auth gate's "redirect if not authed" list.
-4. **`useAppStore.clear()` must run on sign-out.** Otherwise
-   the next user signing in inherits the previous user's
-   collections/verses in memory until hydration completes.
+4. **`useAppStore.clear()` must run on sign-out and on any switch to
+   another account.** `setAccount` does both. Otherwise the next user
+   inherits the previous user's collections and verses.
 5. **Device prefs survive sign-out by design.** `colorMode`, for
    one, is a device preference, not a user preference. Don't include
    them in `clear()`.
@@ -212,10 +234,6 @@ check, the database refuses the write.
 
 ## Sharp edges
 
-- **Anonymous sessions can orphan data.** If a user ever got an
-  anonymous session and then signed up with email, the two
-  `auth.users` rows are unrelated — the anon user's data doesn't
-  migrate.
 - **Bible version is not synced to Supabase.** Sign in on a new
   device, you get ESV until you change it. Documented in
   `docs/architecture/bible-versions.md`.
@@ -230,6 +248,8 @@ check, the database refuses the write.
   Bea L.", and the name is back after a relaunch and fresh sign-in. Needs a fresh seed.
 - `npm run sim -- flow sign-in-out`: reader-b signs in through the form, Settings shows
   `reader-b@example.test`, Sign Out returns to the Sign In screen.
+- `npm run sim -- flow account-switch-link`: dev sign-in as reader-a, then reader-c with no
+  sign-out; reader-c's "Romans 8" shows and reader-a's "Psalms" never does.
 
 ## Decisions
 

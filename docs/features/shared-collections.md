@@ -50,10 +50,9 @@ so the members table's own policy doesn't recurse.
 Column grants back the policies: nobody can move a membership to another account or
 another group or change `owner_id`. `anon` has nothing.
 
-Members never read each other's `user_verses`. Cross-user reads go through definer
-functions in `private` behind invoker wrappers in `public` (PostgREST exposes only
-`public`). They return per-member booleans
-per reference, never a member's progress itself, study prefs or timestamps. A removed
+Members never read each other's `user_verses`. Cross-user reads (the wrappers below)
+return per-member booleans per reference, never a member's progress itself, study prefs or
+timestamps. A removed
 member reads nothing again.
 
 ## Functions
@@ -80,8 +79,8 @@ Codes are normalized on input (upper case, no spaces or dashes): 8 characters fr
 The last two count squares through `private.member_squares`
 ([group-progress.md](group-progress.md#squares)).
 
-Every wrapper calls a `SECURITY DEFINER` body in `private` that checks the caller and
-passes `auth.uid()` on. The `private` helpers that write take the user they act for, so
+Every wrapper in `public` (PostgREST exposes only `public`) calls a `SECURITY DEFINER` body
+in `private` that checks the caller and passes `auth.uid()` on. The `private` helpers that write take the user they act for, so
 clients can't execute them; only the definer bodies and the triggers call them.
 
 ## Caps
@@ -141,18 +140,19 @@ adds a reference sees whether members already practiced or mastered it. The join
 
 ## In the app
 
-State and actions live in the store ([sync-and-storage.md](../architecture/sync-and-storage.md#shape)):
+State and actions: the store ([shape](../architecture/sync-and-storage.md#shape)):
 `Collection.sharedId` is `shared_collection_id`; `sharedCollections` (role, counts, squares per
 group) is read on hydrate and refresh. Failures throw for a toast, nothing queued;
-`sharedErrorMessage` (`lib/shared/invite-code.ts`) shows `22023` text as is.
+`sharedErrorMessage` (`lib/shared/invite-code.ts`) shows `22023` text as is. Name steps and
+confirms wait for the server's library ([`synced`](../architecture/sync-and-storage.md#synced)), never a saved one.
 
 - **Share**: Share… on a collection you own, or New shared collection on the Library's + menu
   ([library.md](library.md#sharing-from-the-library)), opens `app/share/[id].tsx`: a name
   (`DisplayNameForm`) once, then `shareCollection` and the panel. At 20 groups a new share toasts
-  (`shareHitsCap`). From that tap there's a code, but until someone joins it acts personal
+  (`shareHitsCap`). Until someone joins it acts personal
   ([group progress](group-progress.md#collection-screen)); the panel says "Not shared yet".
 - **Share panel** (`SharePanel`, also the bar's person-plus): members, roles;
-  `?view=members` shows only the members. It opens at full size (stand-ins until loaded).
+  `?view=members` shows only the members. It opens at full size.
   The owner also gets the code, copy icon, days left, Share, New code (confirmed, old code
   dies), the [member actions](group-progress.md#whos-where) and Stop sharing. Share sends
   `inviteMessage`: app link, App Store link, code. Members get Leave.
@@ -160,8 +160,9 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   codes die, every copy is personal again.
 - **Join**: `app/join/[code].tsx` (link) and `app/join/index.tsx` (typed) show `JoinInvite`:
   inviter, name, counts, the privacy line with the account translation, and Join (a name if
-  needed, `joinSharedCollection`, then the copy with one `dismissTo`). A member sees Open; a bad
-  code shows its message. A signed-out link's code is kept through
+  needed; `joinSharedCollection`: the RPC, one wave of collections, verses and groups,
+  mastered behind; the copy, one `dismissTo`). A member sees Open; a bad
+  code, its message. A signed-out link's code is kept through
   sign-in, email confirmation or an app kill, then opens over the Library; so does an install
   [handoff](../architecture/navigation-and-routing.md#invite-handoff).
 - **Inside**: [group-progress.md](group-progress.md). Only the owner and editors see + and
@@ -174,8 +175,8 @@ group) is read on hydrate and refresh. Failures throw for a toast, nothing queue
   Members keep their own copy."; one `delete_collection` call dissolves the group and deletes
   the owner's copy, atomically. Confirms: `member-actions.ts`.
 - **Gone groups**: each fetch keeps the account's groups in AsyncStorage; one gone by the next
-  toasts once: "You were removed from <name>." or "<name> is now your own copy." (dissolved).
-  Not for groups you left or own.
+  toasts once: "You were removed from <name>." or "<name> is now your own copy." (dissolved),
+  not for groups you left or own.
 
 ## Seed users
 
@@ -186,13 +187,11 @@ code `BREAD828`, and the groups in [group-progress.md](group-progress.md#browser
 ## Sharp edges
 
 - Leaving on another device reads as "You were removed" on this one.
-- A shared reference a member's translation leaves out still gets a copy in their
-  translation with no text, the same as `addVerse`.
+- A reference a member's translation leaves out still gets a copy in it, with no
+  text, as `addVerse` does.
 - A member who removed a mastered copy through an old client still shows Mastered,
   since squares read soft-deleted rows.
-- Dissolve restores a member's copy that an old client soft-deleted while they were
-  still a member, since it runs a full sync.
-- New `user_collections` columns need adding to the insert and update column grants.
+- Dissolve restores a member's copy an old client soft-deleted (it runs a full sync).
 
 ## Browser checks
 
@@ -218,3 +217,4 @@ card personal, Stop sharing alone and with members, the old code dead).
 - 2026-11-12 · Stop sharing deletes the group, members or not · The dissolve keeps copies and kills codes; no migration.
 - 2026-11-11 · Shared collections need a display name, and My Verses and the virtual collections can't be shared · Every member has a name in the grid; sharing My Verses would share everything.
 - 2026-11-12 · No Leave or Delete until the role loads · A guess shows the wrong confirm; the store refuses it anyway.
+- 2026-11-14 · Join waits for one wave, not a full `refresh()` · Join opens at once.

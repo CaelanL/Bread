@@ -1,4 +1,5 @@
 import { getAuthToken, getSupabaseUrl } from "./client";
+import { timedFetch } from "./dev-timing";
 import {
   getChapterFromSession,
   setChapterInSession,
@@ -33,6 +34,13 @@ export interface BibleVerse {
 export interface VerseTextResult {
   text: string; // Combined text (for plain display)
   verses: Record<string, string>; // Keyed data (for annotated display)
+}
+
+/** The `bible` function's 429: the day's limit is spent. */
+export class DailyLimitError extends Error {
+  constructor(resetsAt?: string) {
+    super(`Daily limit reached. Resets at ${resetsAt || "midnight UTC"}`);
+  }
 }
 
 export interface ChapterResponse {
@@ -79,6 +87,26 @@ function shareInFlight<T>(key: string, load: () => Promise<T>): Promise<T> {
   return request;
 }
 
+// Reads someone is waiting on (a card, Setup, Home's Verse of the Month) go ahead of the verse text
+// preload: it starts no read while one of these is in flight (`whenForegroundIdle`).
+let foregroundReads = 0;
+let idleWaiters: (() => void)[] = [];
+
+/** Holds the preload back until `work` settles. Every exported read here is held already. */
+export function foregroundRead<T>(work: Promise<T>): Promise<T> {
+  foregroundReads++;
+  return work.finally(() => {
+    if (--foregroundReads > 0) return;
+    const waiting = idleWaiters;
+    idleWaiters = [];
+    for (const resolve of waiting) resolve();
+  });
+}
+
+export function whenForegroundIdle(): Promise<void> {
+  return foregroundReads === 0 ? Promise.resolve() : new Promise((resolve) => idleWaiters.push(resolve));
+}
+
 /**
  * Fetch a verse from the Bible API
  *
@@ -90,6 +118,10 @@ export function fetchVerse(
   reference: string,
   version: BibleVersion = "ESV"
 ): Promise<BibleVerse> {
+  return foregroundRead(sharedVerse(reference, version));
+}
+
+function sharedVerse(reference: string, version: BibleVersion): Promise<BibleVerse> {
   return shareInFlight(`verse:${version}:${reference}`, () => loadVerse(reference, version));
 }
 
@@ -157,7 +189,7 @@ async function loadVerse(
     version,
   });
 
-  const response = await fetch(`${baseUrl}/functions/v1/bible?${params}`, {
+  const response = await timedFetch(`${baseUrl}/functions/v1/bible?${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -169,9 +201,7 @@ async function loadVerse(
     const error = await response.json().catch(() => ({}));
 
     if (response.status === 429) {
-      throw new Error(
-        `Daily limit reached. Resets at ${error.resetsAt || "midnight UTC"}`
-      );
+      throw new DailyLimitError(error.resetsAt);
     }
 
     throw new Error(error.error || "Failed to fetch verse");
@@ -232,7 +262,7 @@ export function fetchChapter(
   chapter: number,
   version: BibleVersion = "ESV"
 ): Promise<ChapterResponse> {
-  return shareInFlight(`chapter:${version}:${book}:${chapter}`, () => loadChapter(book, chapter, version));
+  return foregroundRead(shareInFlight(`chapter:${version}:${book}:${chapter}`, () => loadChapter(book, chapter, version)));
 }
 
 async function loadChapter(
@@ -269,7 +299,7 @@ async function loadChapter(
     chapter: "true", // Signal to API this is a chapter request
   });
 
-  const response = await fetch(`${baseUrl}/functions/v1/bible?${params}`, {
+  const response = await timedFetch(`${baseUrl}/functions/v1/bible?${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -281,9 +311,7 @@ async function loadChapter(
     const error = await response.json().catch(() => ({}));
 
     if (response.status === 429) {
-      throw new Error(
-        `Daily limit reached. Resets at ${error.resetsAt || "midnight UTC"}`
-      );
+      throw new DailyLimitError(error.resetsAt);
     }
 
     throw new Error(error.error || "Failed to fetch chapter");
@@ -308,7 +336,16 @@ async function loadChapter(
  * @param verse - The saved verse (may or may not have text/verses)
  * @returns Object with both text (combined) and verses (keyed)
  */
-export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> {
+export function getVerseText(verse: SavedVerse): Promise<VerseTextResult> {
+  return foregroundRead(readVerseText(verse));
+}
+
+/** `getVerseText` for the preload: it doesn't hold the preload back. */
+export function warmVerseText(verse: SavedVerse): Promise<VerseTextResult> {
+  return readVerseText(verse);
+}
+
+async function readVerseText(verse: SavedVerse): Promise<VerseTextResult> {
   // If both formats already available, return them
   if (verse.text && verse.verses) {
     return { text: verse.text, verses: verse.verses };
@@ -344,7 +381,7 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
       : `${verse.book} ${verse.chapter}:${verse.verseStart}-${verse.verseEnd}`;
 
   // Fetch from API (which checks verse_cache internally, then external API)
-  const result = await fetchVerse(reference, verse.version);
+  const result = await sharedVerse(reference, verse.version);
 
   // Handle single verse
   if (verse.verseStart === verse.verseEnd) {
@@ -400,6 +437,25 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
   );
 
   return { text, verses: keyed };
+}
+
+/**
+ * The verse's text if this session already holds it, read synchronously (no KJV bundle, no
+ * network), so a screen can show it on its first frame. Null means call `getVerseText`.
+ */
+export function peekVerseText(verse: SavedVerse): VerseTextResult | null {
+  const { book, chapter, verseStart, verseEnd, version } = verse;
+  const text = getSavedVerseFromSession(book, chapter, verseStart, verseEnd, version);
+  const keyed = getSavedVerseKeyedFromSession(book, chapter, verseStart, verseEnd, version);
+  if (text && keyed) return { text, verses: keyed };
+  // Read some other way this session (a chapter, another range): assembled per verse, as fetchVerse does.
+  const verses: Record<string, string> = {};
+  for (let v = verseStart; v <= verseEnd; v++) {
+    const verseText = getVerseFromSession(book, chapter, v, version);
+    if (!verseText) return null;
+    verses[v.toString()] = verseText;
+  }
+  return { text: Object.values(verses).join(" "), verses };
 }
 
 /**

@@ -26,7 +26,8 @@ Inside the action:
 1. `last_practiced_at` is always written.
 2. If the score beats `progress[difficulty].bestAccuracy`, that difficulty becomes `{ bestAccuracy: score, completed: score >= 90 }`. A lower score never clears `completed`.
 3. If the session is a **qualifying review**, `computeNextSrState` produces the new `progress.engraved`.
-4. The row is updated first. Zustand changes only after the write succeeds. On failure the action throws and local state stays as it was.
+4. The save goes through `save_verse_progress` with the row's `updated_at` as last read (kept as the server's string: microseconds matter). It applies only if the row hasn't changed since; otherwise it changes nothing and returns the current row, steps 2–3 are recomputed from that row, and it saves once more. A second refusal, or no row, throws `Failed to save progress`. So another device's progress, or a saved library's stale copy, is never overwritten.
+5. Zustand changes only after the write succeeds, with the new `updated_at`. On failure the action throws and local state stays as it was.
 
 A verse is **mastered** when `progress.hard.completed` is true. Mastery is permanent until the user resets the verse. A mastered verse joins `masteredVerses` when it first gets there.
 
@@ -151,13 +152,13 @@ Review state lives in the `progress` column, so it follows the row. Delete rules
 
 ## Tests
 
-`lib/store/__tests__/review.test.ts`, run by `npm test`, covers `nextDueAfterDays` (DST included), `computeNextSrState`, the due helpers and `formatTimeUntilDue`. The store action has no unit test.
+`lib/store/__tests__/review.test.ts`, run by `npm test`, covers `nextDueAfterDays` (DST included), `computeNextSrState`, the due helpers and `formatTimeUntilDue`. `tests/progress-guard-store.test.mjs` covers the guard's retry, and `supabase/tests/progress-guard.test.sql` the function.
 
 ## Sharp edges
 
 - **A partial session can master a verse.** The best-score branch of `updateVerseProgress` doesn't check `fullSession`. Leaving a long passage early with a partial score of 90 or more on Hard sets `hard.completed`. The verse enters Mastered as due, with no pass counted. Partial scores set `completed` on Easy and Medium the same way.
 - **A failed save behaves differently by path.** A failed full-session write shows a toast. A failed early-exit write only logs to the console. Neither retries. Quitting right after the results appear can lose the write. See `docs/architecture/sync-and-storage.md`.
-- **Two devices can drift by one.** Writes are last-write-wins and each device checks its own copy of `nextDueAt`. Two reviews can both count, or one can overwrite the other.
+- **Any other write to the row costs a retry.** Study prefs, a reset or a translation move bump `updated_at`, so the next progress save is refused once and recomputed (one extra round trip).
 - **The pill and the push can disagree.** `useDueCounts` includes soft-deleted mastered verses. `loadDueVerses` filters `deleted_at` out. The pill can show verses that the digest never mentions.
 - **Reset on a soft-deleted mastered verse leaves stale state.** See `docs/features/library.md`.
 - **Unused code.** `dueVersesFor` and `lockedVersesFor` have no callers in the app. `dueCount` in `app/(tabs)/(library)/[id].tsx` is computed and never rendered. Don't assume a change to them reaches a screen.

@@ -516,6 +516,11 @@ isOneToOne: false
 "reorder_collections":
 { Args: { "collection_ids": (string)[] }; Returns: undefined
                            },
+"save_verse_progress":
+{ Args: { "p_client_id": string,"p_expected_updated_at": string,"p_last_practiced_at": string,"p_progress": Json }; Returns: {
+              "applied": boolean,"last_practiced_at": string,"progress": Json,"updated_at": string
+            }[]
+                           },
 "share_collection":
 { Args: { "p_collection_client_id": string }; Returns: {
               "code": string,"shared_id": string

@@ -1,1 +1,1 @@
-export { AuthProvider, useAuth } from './context';
+export { AuthProvider, SPLASH_FAILSAFE_MS, useAuth } from './context';

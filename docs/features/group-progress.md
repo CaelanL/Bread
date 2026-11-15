@@ -25,13 +25,17 @@ means every square is.
 is in the group (`hasOtherMembers` in `lib/shared/progress.ts`, `member_count > 1`); before that a
 shared collection looks like a personal one, and a personal collection looks as it always did.
 
-- **What syncs when**: each visit runs `openSharedCollection` once (sync, then the grid, the group
-  row and your own copies, which a removed reference, a removal or a dissolve changes without
-  sync; a copy no longer shared drops its grid), and pull to refresh runs it again. When the reload
+- **What syncs when**: each visit runs `openSharedCollection` once (sync, then one parallel wave:
+  the grid, the group row and your own copies, which a removed reference, a removal or a dissolve
+  changes without sync; a copy no longer shared drops its grid). Pull to refresh runs
+  `openSharedCollection(id, { pull: true })`: the same, with the mastered list in the wave, and no
+  `refresh()` first, so each library read runs once. When the reload
   shows you were removed, the sync's error is dropped: the "You were removed" notice is the one
   message, and the screen goes back to the Library (a dissolved copy stays open, now personal). An add or remove by you, and the owner's role or member changes,
   refetch the grid if it's loaded. The Library list reads `get_shared_status`, plus `get_shared_members`
-  once per group you joined, for the owner's name (`profiles` is private to each user).
+  once per group you joined, for the owner's name (`profiles` is private to each user). It waits
+  for those names, so none pops in; a name read that fails keeps the name already shown, so a
+  refetch never blanks a card's subtitle. The removal notice runs after the fetch returns.
 - **The grid** (`sharedProgress[group]`): `get_shared_members`, `get_shared_progress` and the
   group's `shared_collection_verses`, turned into squares by `lib/shared/progress.ts` (pure,
   `progress.test.ts`). Your own squares come from your verses in this collection, so they move the
@@ -82,8 +86,8 @@ your verses), nothing new.
   role. The owner taps another member for Make editor / Make member and Remove (`manageMember`
   in `components/shared/member-actions.ts`, the store's `setSharedMemberRole` and
   `removeSharedMember`), here and on the panel. Invite and Leave stay on the panel.
-- **Reads**: each visit reads the grid once (`fetchSharedProgress`); pull to refresh runs the
-  collection screen's refresh, sync and grid read. A failed read keeps the last grid with
+- **Reads**: each visit reads the grid once (`fetchSharedProgress`); pull to refresh is the
+  collection screen's pull (above). A failed read keeps the last grid with
   "Couldn't refresh. Retry"; with none yet it shows "Couldn't load details." and Retry.
 
 ## Library cards
@@ -151,3 +155,4 @@ Who's where at `"/(tabs)/(library)/shared/seed-romans-8" --as reader-c` and
 - 2026-11-12 · Before anyone joins, the owner's collection header shows the code where the people line goes · Caelan's pass 2: the code must be findable inside the collection, not only from Share again.
 - 2026-11-12 · A joined group's owner name comes from `get_shared_members`, one read per joined group on each Library load (20 at most) · No schema change while the branch's migration is on testers' databases. If it ever costs, add the owner's name to `get_shared_status`.
 - 2026-11-12 · Mastered and engraved move off the card's subtitle to a badge on the icon's corner, with a gold wash on engraved cards (a green wash on mastered cards was tried and dropped: it read as a status banner); the subtitle keeps "N verses" or "<owner> · M members", and no card says "by everyone" · Caelan's pass 4 (C25): one place for status, the same on shared and personal cards. Replaces the subtitle check of the decision above; the engraved square stays.
+- 2026-11-14 · Pull on a shared collection or Who's where is the sync, then one parallel wave, not `refresh()` then `openSharedCollection` · The old order read every library list twice, one after the other.
