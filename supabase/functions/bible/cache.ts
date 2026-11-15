@@ -9,6 +9,11 @@ import { getAdminClient } from "../_shared/auth.ts";
 
 const MAX_VERSES_PER_VERSION = 500;
 
+// Which revision of the adapters' parsing wrote a row. Reads take only this
+// revision, so a row from older parsing is a miss and the upsert overwrites
+// it. Bump it whenever an adapter's output changes.
+const TEXT_REV = 1;
+
 /**
  * Get cached chapter (all verses for a book+chapter)
  * Returns null if ANY verse is missing
@@ -35,6 +40,7 @@ export async function getCachedChapter(
     .eq("book", book)
     .eq("chapter", chapter)
     .eq("version", version)
+    .eq("text_rev", TEXT_REV)
     .order("verse", { ascending: true });
 
   if (error || !data) {
@@ -112,6 +118,7 @@ export async function cacheChapter(
     verse: parseInt(verseNum, 10),
     version,
     text,
+    text_rev: TEXT_REV,
     last_used_at: new Date().toISOString(),
   }));
 
@@ -181,6 +188,7 @@ export async function getCachedVerse(
     .eq("chapter", chapter)
     .eq("verse", verse)
     .eq("version", version)
+    .eq("text_rev", TEXT_REV)
     .single();
 
   if (error || !data) {
@@ -219,6 +227,7 @@ export async function getCachedVerseRange(
     .eq("book", book)
     .eq("chapter", chapter)
     .eq("version", version)
+    .eq("text_rev", TEXT_REV)
     .gte("verse", verseStart)
     .lte("verse", verseEnd)
     .order("verse", { ascending: true });
@@ -267,6 +276,7 @@ export async function getCachedVerseRangeKeyed(
     .eq("book", book)
     .eq("chapter", chapter)
     .eq("version", version)
+    .eq("text_rev", TEXT_REV)
     .gte("verse", verseStart)
     .lte("verse", verseEnd)
     .order("verse", { ascending: true });
@@ -341,6 +351,7 @@ export async function cacheVerse(
       verse,
       version,
       text,
+      text_rev: TEXT_REV,
       last_used_at: new Date().toISOString(),
     },
     { onConflict: "book,chapter,verse,version" }
