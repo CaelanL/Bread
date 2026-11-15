@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { verifyJwt } from "../_shared/auth.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { SONIOX_ASYNC_MODEL } from "../_shared/soniox.ts";
 import {
   badRequest,
   serverError,
@@ -290,7 +291,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         file_id: fileId,
-        model: "stt-async-v6",
+        model: SONIOX_ASYNC_MODEL,
         language_hints: ["en"],
         context: {
           general: [

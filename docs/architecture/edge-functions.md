@@ -79,7 +79,7 @@ POST /functions/v1/process-recording
    while Soniox works (keeps the client socket alive past its ~60s
    idle timeout; leading whitespace is valid JSON so response.json()
    on any client parses unchanged)
-4. Upload audio to Soniox async API (model stt-async-v6)
+4. Upload audio to Soniox async API (`SONIOX_ASYNC_MODEL`)
    - actualVerse passed as context for accuracy
 5. Poll Soniox until transcription completes (first poll after
    150ms, every 250ms for 10s, then every 1s). Every Soniox call goes
@@ -142,7 +142,7 @@ POST /functions/v1/transcription-token
   Headers: Authorization: Bearer <supabase JWT>
   Body: none
 
-200 → { apiKey, expiresAt, websocketUrl, model: "stt-rt-v6" }
+200 → { apiKey, expiresAt, websocketUrl, model: SONIOX_RT_MODEL }
 403 → { error: "LIVE_DISABLED" }   ← the kill switch
 500 → Soniox not configured or the mint failed
 ```
@@ -320,3 +320,4 @@ Also:
 - 2026-11-14 · Supabase CLI 3.1.0 for the local stack · 2.122's local function server booted a fresh worker for every request, and parallel workers raced on the shared Deno npm cache, so several `bible` calls at once answered 503 BOOT_ERROR locally. On 3.1, 30 parallel calls all answer 200. Prod was never affected.
 - 2026-11-14 · `process-recording` deletes its Soniox file and transcription after every job, success or failure · Soniox keeps them 30 days and caps an organization at 1,000 files, so above about 33 batch recordings a day every one would fail. Not awaited, so the score doesn't wait.
 - 2026-11-14 · Retry a Soniox 429 inside the deadline, then answer a "busy" `error` · The limit is per organization. Old clients show `error` after "Recording failed:", so the text says what to do.
+- 2026-11-14 · One Soniox generation for both paths, `SONIOX_GENERATION` in `_shared/soniox.ts` · Going back to v5 until Soniox retires it (2026-12-15, then routed to v6) is one line. On the grading audit's synthetic voice v6 missed about twice as often as v5 (`docs/grading-audit.md`).

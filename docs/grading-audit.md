@@ -362,7 +362,7 @@ Not grading, but it fails recordings.
 - **Fix (C1-C3):** `deleteAtSoniox` removes the transcription and file in a `finally`;
   `sonioxFetch` retries a 429 with jitter inside the 90 s deadline, then the function answers a
   "busy" error; `lib/transcription/live-session.ts` sends the key as the `soniox-api-key` websocket
-  protocol. Both model strings are v6. Details: `docs/architecture/edge-functions.md`.
+  protocol. Both paths take the model from `SONIOX_GENERATION` (v6). Details: `docs/architecture/edge-functions.md`.
 
 ## RC9. Card wording, fixed
 

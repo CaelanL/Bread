@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { verifyJwt } from "../_shared/auth.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { SONIOX_RT_MODEL } from "../_shared/soniox.ts";
 import { badRequest, serverError, unauthorized } from "../_shared/errors.ts";
 
 const SONIOX_API_KEY = Deno.env.get("SONIOX_API_KEY");
@@ -73,7 +74,7 @@ serve(async (req) => {
         apiKey: minted.api_key,
         expiresAt: minted.expires_at ?? null,
         websocketUrl: "wss://stt-rt.soniox.com/transcribe-websocket",
-        model: "stt-rt-v6",
+        model: SONIOX_RT_MODEL,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

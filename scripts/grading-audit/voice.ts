@@ -200,13 +200,16 @@ async function transcribeDirect(audio: Buffer, text: string, model = 'stt-async-
         file_id: fileId,
         model,
         language_hints: ['en'],
-        context: {
-          general: [
-            { key: 'domain', value: 'Bible' },
-            { key: 'topic', value: 'Bible verse memory recitation attempt' },
-          ],
-          text,
-        },
+        // `--no-context` measures what the verse as context is worth.
+        ...(process.argv.includes('--no-context') ? {} : {
+          context: {
+            general: [
+              { key: 'domain', value: 'Bible' },
+              { key: 'topic', value: 'Bible verse memory recitation attempt' },
+            ],
+            text,
+          },
+        }),
       }),
     });
     if (!job.ok) throw new Error(`soniox job ${job.status}`);
