@@ -33,6 +33,12 @@ test('a failed start blocked by Codex\'s sandbox is reported, never ok', () => {
   assert.match(r.out, /This needs the Codex allow rule for the DB commands; ask /)
 })
 
+test('a Postgres build newer than the folder\'s data is reported with the destroy fix', () => {
+  const r = doctor({ KIT_DB_START_ERROR: 'failed: PostgreSQL data was initialized by stock PostgreSQL build 17.11.0.006, but stock PostgreSQL build 17.11.0.018 was requested; keep this data by pinning' })
+  assert.equal(r.status, 1, r.out)
+  assert.match(r.out, /not fixed {2}Database data matches the locked Postgres: .*run `npm run db:destroy`, then `npm run db:start`/)
+})
+
 test('"invalid locale settings" from a failed start is reported, with no empty note', () => {
   const r = doctor({ LANG: 'en_US.UTF-8', KIT_DB_START_ERROR: 'initdb: error: invalid locale settings' })
   assert.equal(r.status, 1, r.out)

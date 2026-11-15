@@ -299,3 +299,4 @@ Also:
 - 2025-12-23 · Quota check removed from `process-recording`, usage still recorded · Limits can come back on the server without an app update.
 - 2026-08-24 · `process-recording` streams heartbeat spaces every 10s · Long recordings tripped the client's ~60s idle timeout. Leading whitespace is valid JSON, so old clients parse unchanged.
 - 2026-08-25 · Live transcription gated by a server-side kill switch, batch path kept · A secret flip needs no deploy or store release, and any failure falls back to batch.
+- 2026-11-14 · Supabase CLI 3.1.0 for the local stack · 2.122's local function server booted a fresh worker for every request, and parallel workers raced on the shared Deno npm cache, so several `bible` calls at once answered 503 BOOT_ERROR locally. On 3.1, 30 parallel calls all answer 200. Prod was never affected.
