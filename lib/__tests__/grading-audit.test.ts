@@ -13,9 +13,10 @@
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { audit, clipId, KJV_FIXTURE, KJV_FIXTURE_MISSES, loadSource, refText, replay } from '../../scripts/grading-audit/run';
+import { audit, clipId, KJV_FIXTURES, loadSource, missesFile, refText, replay } from '../../scripts/grading-audit/run';
 import { PASSES } from '../../scripts/grading-audit/variations';
 import { alignTranscription } from '../align';
 import { calculateChunkScore, calculateFinalScore, parseVerseIntoChunks } from '../study-chunks';
@@ -58,16 +59,18 @@ describe('grading audit — holds today on every KJV verse', () => {
     });
   }
 
-  // The misses file lists the clips under 100 when it was written: the todos below plus engine
-  // mishearings (dropped first word, names, archaic forms modernised). Drop a clip from it once
-  // a fix makes it pass.
-  it('no engine transcript of a computer-voice recitation newly scores under 100', () => {
-    const known = new Set<string>(JSON.parse(readFileSync(KJV_FIXTURE_MISSES, 'utf8')));
-    const results = replay(KJV_FIXTURE, alignTranscription);
-    assert.ok(results.length > 0);
-    const newly = results.filter((r) => r.verdict.score < 100 && !known.has(clipId(r.clip)));
-    assert.deepEqual(newly.map((r) => `${clipId(r.clip)} ${r.verdict.score}%`), []);
-  });
+  // Each misses file pins the clips under 100 to their score when it was written: engine
+  // mishearings (dropped first word, names, archaic forms modernised) and any todo below. A clip
+  // newly under 100, or under its pin, fails. Rewrite the pins with `run.ts --replay <f> --pin`.
+  for (const fixture of KJV_FIXTURES) {
+    it(`no engine transcript in ${basename(fixture)} newly scores under 100 or under its pin`, () => {
+      const pins: Record<string, number> = JSON.parse(readFileSync(missesFile(fixture), 'utf8'));
+      const results = replay(fixture, alignTranscription);
+      assert.ok(results.length > 0);
+      const worse = results.filter((r) => r.verdict.score < (pins[clipId(r.clip)] ?? 100));
+      assert.deepEqual(worse.map((r) => `${clipId(r.clip)} ${r.verdict.score}% (pinned ${pins[clipId(r.clip)] ?? 100})`), []);
+    });
+  }
 });
 
 const TODO = 'known bug, fails until fixed';
