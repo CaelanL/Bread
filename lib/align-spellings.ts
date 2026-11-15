@@ -63,8 +63,16 @@ const BROAD = `
   plaistered>plastered jubile>jubilee forbad>forbade sara>sarah juda>judah sion>zion instructer>instructor
 `;
 
+// Odd spellings and names the engine wrote in the voice tests (Caelan, 2026-11-15). "hazel" is
+// also a KJV word (Genesis 30:37), in by Caelan's call. "enquired" already folds to "inquired".
+const VOICE = `
+  unseamly>unseemly balam>balaam baala>baalah puteth>putteth fignedly>feignedly enquied>inquired
+  eziongebar>eziongeber hazel>hazael knopes>knops hought>houghed mercys>mercies itai>ittai
+  lee>leah farefore>therefore
+`;
+
 export const SPELLINGS = new Map(
-  [BRITISH, ARCHAIC, NAMES, BROAD]
+  [BRITISH, ARCHAIC, NAMES, BROAD, VOICE]
     .join(' ')
     .split(/\s+/)
     .filter(Boolean)
