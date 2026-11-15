@@ -22,7 +22,7 @@ import Animated, {
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Motion, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import type { RecordingState } from '@/lib/transcription/recording-controls';
+import type { PressSource, RecordingState } from '@/lib/transcription/recording-controls';
 import { Waveform } from './Waveform';
 
 export const RECORDING_BAR_HEIGHT = 72;
@@ -34,7 +34,7 @@ interface RecordingBarProps {
   phase: RecordingState['phase'];
   showMic: boolean;
   waveformLevels: SharedValue<number[]>;
-  onStart: () => void;
+  onStart: (source: PressSource) => void;
   onCancel: () => void;
   onSubmit: () => void;
 }
@@ -217,7 +217,8 @@ export function RecordingBar({
               accessibilityRole="button"
               accessibilityLabel="Start recording"
               testID="mic-button"
-              onPress={onStart}
+              onPressIn={() => onStart('pressIn')}
+              onPress={() => onStart('press')}
               disabled={!canStart}
               style={({ pressed }) => [styles.mic, pressed && styles.pressed]}
             >

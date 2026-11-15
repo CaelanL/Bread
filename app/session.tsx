@@ -17,23 +17,26 @@ import {
   isResultsPage,
   maskDisplayWords,
 } from '@/lib/study-chunks';
-import { getAuthToken } from '@/lib/api/client';
 import { showErrorToast } from '@/lib/toast';
 import {
+  LiveStandby,
   startLiveTranscription,
   base64ToUint8Array,
 } from '@/lib/transcription/live-session';
 import {
   createRecordingControls,
-  removeAbandonedRecordings,
+  warmSession,
+  type WarmState,
+  type PressSource,
   type RecordingState,
 } from '@/lib/transcription/recording-controls';
 import {
-  useAudioRecorder,
   AudioStudioModule,
-  type AudioDataEvent,
+  type AudioRecording,
+  type RecordingConfig,
+  type StartRecordingResult,
 } from '@siteed/audio-studio';
-import { LegacyEventEmitter } from 'expo-modules-core';
+import { LegacyEventEmitter, type PermissionResponse } from 'expo-modules-core';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
@@ -41,6 +44,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Dimensions,
   FlatList,
   Pressable,
@@ -56,6 +60,53 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Recording cap: at 5 minutes the recording auto-submits exactly as if
 // the user tapped done, so they still see how far they got.
 const MAX_RECORDING_MS = 300_000;
+
+interface MicTiming {
+  down?: number;
+  call?: number;
+  resolved?: number;
+  firstAudio?: number;
+  renders: number;
+  // What native held for this tap: none, in-flight or prepared
+  warm?: WarmState;
+  // The tap asked for mic permission (the first-run prompt, or a read that hadn't settled)
+  asked?: boolean;
+}
+
+// Dev builds of the patched recorder report ms from the native start call to each step
+type NativeRecording = AudioRecording & { breadTimings?: Record<string, number> };
+
+// Recording calls the native module directly, not through the library's
+// recorder hook, which re-renders this whole screen as recording starts and
+// stops and once a second while it runs. PCM arrives through the screen's
+// AudioData listener, so the options carry no callbacks.
+// On web the module is a factory for its recorder, as in the library's hook.
+const recorderModule = () => (process.env.EXPO_OS === 'web' ? AudioStudioModule({}) : AudioStudioModule);
+
+const RECORDING_OPTIONS: RecordingConfig = {
+  sampleRate: 16000,
+  channels: 1,
+  encoding: 'pcm_16bit',
+  // 50ms pieces reach Soniox sooner; the waveform takes two 25ms bars from each
+  interval: 50,
+  // m4a for the batch-fallback upload (frozen contract); no WAV.
+  // 64 kbps, not lower: a rejected encoder setting leaves no m4a at all.
+  output: {
+    primary: { enabled: false },
+    compressed: { enabled: true, format: 'aac', bitrate: 64000 },
+  },
+  // With Bread's native patch, stop leaves the session active for the next chunk
+  keepSessionActive: true,
+  // An AirPods disconnect pauses capture, and the attempt ends as interrupted
+  deviceDisconnectionBehavior: 'pause',
+  ios: {
+    audioSession: {
+      category: 'PlayAndRecord',
+      mode: 'Default',
+      categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth'],
+    },
+  },
+};
 
 export default function StudySessionScreen() {
   const { id, difficulty, chunkSize: chunkSizeParam } = useLocalSearchParams<{
@@ -77,31 +128,116 @@ export default function StudySessionScreen() {
   const { currentIndex, setCurrentIndex } = session;
 
   const [recordingState, setRecordingState] = useState<RecordingState>({ phase: 'idle' });
-  const [recorder] = useState(() => createRecordingControls(setRecordingState));
+  // Read at open so a tap with permission granted goes straight to native start.
+  // The first-run prompt still comes from requestPermissionsAsync on the tap.
+  const micPermissionRef = useRef(false);
+  const [recorder] = useState(() => createRecordingControls(
+    setRecordingState,
+    warmSession(AudioStudioModule, RECORDING_OPTIONS, () => micPermissionRef.current),
+  ));
   const transcribing = recordingState.phase === 'submitting';
   const closingRef = useRef(false);
   // Per-chunk visibility override driven by the header reveal/hide button.
   // Cosmetic only; scoring always uses chunk.text. Absence = mode default.
   const [hideModes, setHideModes] = useState<Map<number, HideMode>>(new Map());
 
-  const { startRecording, stopRecording } = useAudioRecorder();
   // Bar levels live in a shared value so the waveform animates on the
-  // UI thread without re-rendering this screen (10x/sec while recording)
+  // UI thread without re-rendering this screen (20x/sec while recording)
   const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
   // Meter ballistics state: fast attack, slow release (kills ripple)
   const smoothedLevelRef = useRef(0);
-
-  // Warm the auth session so the first mic press doesn't pay a lazy
-  // token refresh serially in front of the Soniox key mint
-  useEffect(() => {
-    getAuthToken().catch(() => {});
+  // Dev-only tap-to-capture timing, in ms from touch-down (or from the native
+  // call when there was no touch-down, as with VoiceOver), and the screen's
+  // renders from touch-down to stop. One line per attempt, logged once stop resolves,
+  // with native step timings, audio piece sizes and the m4a's bitrate.
+  const micTimingRef = useRef<MicTiming>({ renders: 0 });
+  const micAudioRef = useRef({ events: 0, bytes: 0 });
+  const stampMic = useCallback((mark: 'down' | 'call' | 'resolved' | 'firstAudio') => {
+    if (!__DEV__) return;
+    // A new touch or native call starts a fresh attempt's record
+    if (mark === 'down') micTimingRef.current = { renders: 0 };
+    if (mark === 'call' && micTimingRef.current.call !== undefined) micTimingRef.current = { renders: 0 };
+    micTimingRef.current[mark] = performance.now();
   }, []);
-
-  useEffect(() => () => { void recorder.cancel(); }, [recorder]);
-
-  useEffect(() => {
-    void removeAbandonedRecordings(FileSystem);
+  const logMic = useCallback((stopped: Promise<NativeRecording>) => {
+    if (!__DEV__) return;
+    const { down, call, resolved, firstAudio, renders, warm, asked } = micTimingRef.current;
+    micTimingRef.current = { renders: 0 };
+    if (call === undefined) return;
+    const from = down ?? call;
+    const ms = (t?: number) => (t === undefined ? '?' : `${Math.round(t - from)}ms`);
+    const line = `[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)} · ${renders} renders · warm at tap: ${warm ?? '?'}${asked ? ' · asked permission' : ''}`;
+    stopped.then((recording) => {
+      const { events, bytes } = micAudioRef.current;
+      const seconds = recording.durationMs / 1000;
+      const native = Object.entries(recording.breadTimings ?? {})
+        .sort(([, a], [, b]) => a - b)
+        .map(([step, t]) => `${step} ${t}`)
+        .join(' ');
+      const m4a = recording.compression?.size;
+      // eslint-disable-next-line no-console -- dev-only measurement
+      console.log(`${line} · native ${native || 'n/a'} ms · ${events} pieces, ${Math.round(bytes / Math.max(events, 1))} B each, ${Math.round(bytes / seconds)} B/s · m4a ${m4a === undefined ? '?' : Math.round(m4a / 1000)} KB over ${seconds.toFixed(1)} s`);
+    }, () => {});
   }, []);
+  useEffect(() => {
+    if (__DEV__) micTimingRef.current.renders++;
+  });
+
+  // Mint a Soniox key and open a spare socket on open, so a tap streams into
+  // an open connection. Closed in the background and on leaving.
+  const [live] = useState(() => new LiveStandby());
+  useEffect(() => {
+    live.warm();
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'background') live.sleep();
+      else if (state === 'active') live.warm();
+    });
+    return () => {
+      appState.remove();
+      live.dispose();
+    };
+  }, [live]);
+
+  // Sweeps leftover recordings, then warms the recorder up (patched binaries,
+  // permission granted). Released in the background and on leaving.
+  useEffect(() => {
+    // Dev-only: when the permission read and the warm-up settle, in ms after open
+    const openedAt = performance.now();
+    let permissionLog = 'not read';
+    const since = () => `${Math.round(performance.now() - openedAt)}ms`;
+    // On web this read can prompt, so web asks on the tap instead
+    const permissionRead = process.env.EXPO_OS === 'web'
+      ? Promise.resolve()
+      : AudioStudioModule.getPermissionsAsync()
+        .then(({ status, granted }: PermissionResponse) => {
+          micPermissionRef.current = granted;
+          permissionLog = `${status} at ${since()}`;
+        })
+        .catch(() => {});
+    void recorder.open(FileSystem, permissionRead).then((warmUp) => {
+      // eslint-disable-next-line no-console -- dev-only measurement
+      if (__DEV__) console.log(`[MIC] screen open: permission ${permissionLog} · warm-up ${warmUp} at ${since()}`);
+    });
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'background') recorder.sleep();
+      else if (state === 'active') recorder.wake();
+    });
+    return () => {
+      appState.remove();
+      void recorder.cancel();
+      recorder.sleep();
+    };
+  }, [recorder]);
+
+  // A call, Siri or an AirPods disconnect mid-recording discards the attempt.
+  // Native also reports these while idle; interrupt() ignores those.
+  useEffect(() => {
+    const emitter = new LegacyEventEmitter(AudioStudioModule);
+    const subscription = emitter.addListener<{ isPaused?: boolean }>('onRecordingInterrupted', (event) => {
+      if (event.isPaused && recorder.interrupt()) showErrorToast('Recording interrupted');
+    });
+    return () => subscription.remove();
+  }, [recorder]);
 
   const handleSubmit = useCallback(async () => {
     if (!recorder.isRecording()) return;
@@ -136,10 +272,9 @@ export default function StudySessionScreen() {
   }, [recorder, recordingState]);
 
   // Waveform level computed from the PCM chunks directly (RMS → dBFS),
-  // instead of the library's analysis events — enableProcessing would
-  // make the hook dispatch a state update per 50ms event, re-rendering
-  // this whole screen twice a tick. Four bars per 100ms chunk (25ms
-  // windows) go straight into the shared value; no React render at all.
+  // instead of the library's analysis events, which would re-render this
+  // screen on every event. Two bars per 50ms chunk (25ms windows) go
+  // straight into the shared value; no React render at all.
   const computeBarLevel = useCallback((pcm: Uint8Array, start: number, end: number) => {
     let sumSquares = 0;
     let count = 0;
@@ -157,90 +292,92 @@ export default function StudySessionScreen() {
     return Math.max(0, Math.min(1, (dB - minDb) / (maxDb - minDb)));
   }, []);
 
-  // Live feed subscribes to the native stream directly rather than via
-  // the hook's onAudioStream: the hook nulls its callback when
-  // stopRecording resolves, and the recorder's trailing PCM chunk
-  // (emitted inside native stop) can be processed after that resolve —
-  // on iOS the resolve is an Immediate-priority task and the chunk is
-  // Normal; on Android the chunk hops through the main thread first.
-  // This listener outlives the stop, and the session's 50ms flush
-  // grace covers that lag.
+  // One screen-lifetime listener decodes each PCM chunk once for the
+  // waveform and the live feed. It outlives native stop because the
+  // recorder's trailing chunk (emitted inside native stop) can be processed
+  // after stopRecording resolves — on iOS the resolve is an
+  // Immediate-priority task and the chunk is Normal; on Android the chunk
+  // hops through the main thread first. The session's 50ms flush grace
+  // covers that lag.
   useEffect(() => {
     // Same emitter + event the library's own hook listens on (its
     // addAudioEventListener isn't exported from the package root)
     const emitter = new LegacyEventEmitter(AudioStudioModule);
     const subscription = emitter.addListener<{ encoded?: string }>('AudioData', (event) => {
       if (!event.encoded) return;
-      recorder.feedAudio(base64ToUint8Array(event.encoded));
-    });
-    return () => subscription.remove();
-  }, [recorder]);
-
-  const handleAudioStream = useCallback(async (event: AudioDataEvent) => {
-    if (typeof event.data !== 'string') return;
-    const pcm = base64ToUint8Array(event.data);
-    if (recorder.isRecording()) {
-      const quarter = (pcm.length >> 3) << 1; // even byte boundary
-      const bars: number[] = [];
-      for (let q = 0; q < 4; q++) {
-        const start = q * quarter;
-        const end = q === 3 ? pcm.length : (q + 1) * quarter;
-        const level = computeBarLevel(pcm, start, end);
-        if (level !== null) {
-          // Fast attack / slow release: peaks land instantly, but the
-          // level decays smoothly instead of flickering bar-to-bar
-          const prev = smoothedLevelRef.current;
-          const alpha = level > prev ? 0.75 : 0.25;
-          const smoothed = prev + alpha * (level - prev);
-          smoothedLevelRef.current = smoothed;
-          bars.push(smoothed);
+      if (__DEV__ && micTimingRef.current.call !== undefined && micTimingRef.current.firstAudio === undefined) {
+        stampMic('firstAudio');
+      }
+      const pcm = base64ToUint8Array(event.encoded);
+      if (__DEV__) {
+        micAudioRef.current.events++;
+        micAudioRef.current.bytes += pcm.length;
+      }
+      if (recorder.isRecording()) {
+        const half = (pcm.length >> 2) << 1; // even byte boundary
+        const bars: number[] = [];
+        for (let q = 0; q < 2; q++) {
+          const start = q * half;
+          const end = q === 1 ? pcm.length : half;
+          const level = computeBarLevel(pcm, start, end);
+          if (level !== null) {
+            // Fast attack / slow release: peaks land instantly, but the
+            // level decays smoothly instead of flickering bar-to-bar
+            const prev = smoothedLevelRef.current;
+            const alpha = level > prev ? 0.75 : 0.25;
+            const smoothed = prev + alpha * (level - prev);
+            smoothedLevelRef.current = smoothed;
+            bars.push(smoothed);
+          }
+        }
+        if (bars.length > 0) {
+          waveformLevels.value = [...waveformLevels.value.slice(bars.length), ...bars];
         }
       }
-      if (bars.length > 0) {
-        waveformLevels.value = [...waveformLevels.value.slice(bars.length), ...bars];
-      }
-    }
-  }, [computeBarLevel, recorder, waveformLevels]);
+      recorder.feedAudio(pcm);
+    });
+    return () => subscription.remove();
+  }, [computeBarLevel, recorder, stampMic, waveformLevels]);
 
-  const handleMicPress = useCallback(async (index: number, isRetry: boolean) => {
+  const handleMicPress = useCallback(async (index: number, isRetry: boolean, source: PressSource) => {
+    if (source === 'pressIn') stampMic('down');
     const chunk = session.chunks[index];
     if (!chunk || index !== session.currentIndex || closingRef.current) return;
 
+    const wasActive = recorder.canDiscard();
+    const warmAtTap = recorder.warmState();
     try {
-      const result = await recorder.start(index, isRetry, {
+      const starting = recorder.start(index, isRetry, {
+        hasPermission: () => micPermissionRef.current,
         async requestPermission() {
-          if (process.env.EXPO_OS === 'ios') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          }
-          return (await AudioStudioModule.requestPermissionsAsync()).granted;
+          if (__DEV__) micTimingRef.current.asked = true;
+          const { granted }: PermissionResponse = await AudioStudioModule.requestPermissionsAsync();
+          micPermissionRef.current = granted;
+          return granted;
         },
-        openLive: () => startLiveTranscription(chunk.text),
+        openLive: () => startLiveTranscription(chunk.text, live),
         start() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
-          return startRecording({
-            sampleRate: 16000,
-            channels: 1,
-            encoding: 'pcm_16bit',
-            interval: 100,
-            // m4a for the batch-fallback upload (frozen contract); no WAV
-            output: {
-              primary: { enabled: false },
-              compressed: { enabled: true, format: 'aac' },
-            },
-            ios: {
-              audioSession: {
-                category: 'PlayAndRecord',
-                mode: 'Default',
-                categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth'],
-              },
-            },
-            onAudioStream: handleAudioStream,
-          });
+          stampMic('call');
+          if (__DEV__) micTimingRef.current.warm = warmAtTap;
+          micAudioRef.current = { events: 0, bytes: 0 };
+          const started: Promise<StartRecordingResult> = recorderModule().startRecording(RECORDING_OPTIONS);
+          if (__DEV__) started.then(() => stampMic('resolved'), () => {});
+          return started;
         },
-        stop: stopRecording,
+        stop(): Promise<AudioRecording> {
+          const stopped: Promise<NativeRecording> = recorderModule().stopRecording();
+          logMic(stopped);
+          return stopped;
+        },
         remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
-      });
+      }, source);
+      // After the native call has left, and only when this tap began an attempt
+      if (process.env.EXPO_OS === 'ios' && !wasActive && recorder.canDiscard()) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      const result = await starting;
       if (result === 'denied') {
         Alert.alert('Permission required', 'Please allow microphone access to record.');
       }
@@ -249,7 +386,7 @@ export default function StudySessionScreen() {
       // The usual cause is the mic held by a call or another app; the error doesn't say which.
       Alert.alert("Couldn't start recording", "If you're on a call or another app is using the microphone, close it and try again.");
     }
-  }, [handleAudioStream, recorder, session.chunks, session.currentIndex, startRecording, stopRecording, waveformLevels]);
+  }, [live, logMic, recorder, session.chunks, session.currentIndex, stampMic, waveformLevels]);
 
   const handleCancel = useCallback(() => {
     if (!recorder.canDiscard()) return;
@@ -450,7 +587,8 @@ export default function StudySessionScreen() {
               {canRetry && (
                 <Pressable
                   style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
-                  onPress={() => handleMicPress(index, true)}
+                  onPressIn={() => handleMicPress(index, true, 'pressIn')}
+                  onPress={() => handleMicPress(index, true, 'press')}
                   accessibilityLabel="Retry"
                   testID="retry-button"
                 >
@@ -531,7 +669,7 @@ export default function StudySessionScreen() {
         phase={recordingState.phase}
         showMic={currentIndex < session.chunks.length && !session.completedChunks.has(currentIndex)}
         waveformLevels={waveformLevels}
-        onStart={() => handleMicPress(currentIndex, false)}
+        onStart={(source) => handleMicPress(currentIndex, false, source)}
         onCancel={handleCancel}
         onSubmit={handleSubmit}
       />
