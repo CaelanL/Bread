@@ -111,6 +111,13 @@ const localChecks = [
       : ''),
   },
   {
+    // A CLI upgrade can lock a newer Postgres build than the one this folder's data was made with.
+    name: 'Database data matches the locked Postgres',
+    detect: () => (/PostgreSQL data was initialized by .* but .* was requested/.test(process.env.KIT_DB_START_ERROR ?? '')
+      ? 'this folder\'s database was made by an older Postgres build than supabase.lock asks for. To recreate it (deletes local data; the seed comes back), run `npm run db:destroy`, then `npm run db:start`.'
+      : ''),
+  },
+  {
     name: 'Packages installed',
     detect: () => (existsSync(bin) ? '' : 'node_modules/.bin/supabase is missing: run `npm ci`.'),
     fix: () => run('npm', ['ci'], { stdio: 'inherit' }),

@@ -22,6 +22,8 @@ How a change gets from a branch to phones. Three things reach prod, on three clo
 - A lock in the git common dir lets one release run at a time across worktrees.
 - Settings live in `kit` in `package.json`: `prodProjectRef`, `deployFunctions`, `deploy`, `restoredMigrations`.
 - Prod access uses `SUPABASE_ACCESS_TOKEN`, from the environment or from `.envrc` through direnv.
+- The release, doctor and migration-check scripts use the CLI's `--linked`, `--local` and `--project-ref` flags. CLI 3.x still accepts them but warns on stderr that v4 removes them for `--remote`, so moving to CLI 4 means changing the scripts first.
+- A CLI bump also runs `npx supabase stack update`, so `supabase/supabase.lock` (the local service versions) matches, or the doctor fails. When the new lock asks for a newer Postgres build, each folder's existing local database refuses to start; the doctor says to run `npm run db:destroy`, then `npm run db:start`.
 
 ## The deploy workflow
 
