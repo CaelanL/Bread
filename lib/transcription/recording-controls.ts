@@ -72,17 +72,35 @@ export function warmSession(module: RecorderModule, options: object, hasPermissi
 let preparing = false;
 // A warm-up asked for during a prepare, run once that prepare settles: the
 // prepare may be followed natively by a release sent while it was in flight.
-let warmAfterPrepare: (() => void) | undefined;
+let warmAfterPrepare: (() => unknown) | undefined;
 // A release asked for while an attempt owns native runs after that attempt's
 // stop: sent earlier, it would reach native first and leave the session active.
 let pendingRelease: WarmSession | undefined;
+// The open screen's warm-up, run when an attempt hands native back, so the
+// next tap starts prepared too
+let warmAfterTake: (() => unknown) | undefined;
+
+// What native holds for the next tap, for the dev timing log
+export type WarmState = 'none' | 'in-flight' | 'prepared';
+let warmState: WarmState = 'none';
+
+// Why a warm-up did or didn't prepare, for the dev timing log
+export type WarmUpResult =
+  | 'prepared'
+  | 'failed'
+  | 'not patched'
+  | 'screen away'
+  | 'no permission'
+  | 'after the take'
+  | 'after the prepare in flight';
 
 function releaseNative(attempt: Attempt) {
   if (nativeOwner !== attempt) return;
   nativeOwner = undefined;
   const session = pendingRelease;
   pendingRelease = undefined;
-  void session?.release().catch(() => {});
+  if (session) void session.release().catch(() => {});
+  else warmAfterTake?.();
 }
 
 async function removeRecording(attempt: Attempt, recording: RecordingFile | undefined) {
@@ -144,21 +162,31 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
 
   // Native prepare would show the permission prompt, so only with permission granted.
   // A tap during the prepare queues behind it natively and uses the prepared state.
-  function warmUp() {
-    if (!warm || !opened || away || !warm.hasPermission()) return;
+  async function warmUp(): Promise<WarmUpResult> {
+    if (!warm) return 'not patched';
+    if (!opened || away) return 'screen away';
+    if (!warm.hasPermission()) return 'no permission';
     pendingRelease = undefined;
-    if (nativeOwner) return;
+    if (nativeOwner) return 'after the take';
     if (preparing) {
       warmAfterPrepare = warmUp;
-      return;
+      return 'after the prepare in flight';
     }
     preparing = true;
-    void warm.prepare().catch(() => {}).finally(() => {
+    warmState = 'in-flight';
+    try {
+      await warm.prepare();
+      if (warmState === 'in-flight') warmState = 'prepared';
+      return 'prepared';
+    } catch {
+      if (warmState === 'in-flight') warmState = 'none';
+      return 'failed';
+    } finally {
       preparing = false;
       const again = warmAfterPrepare;
       warmAfterPrepare = undefined;
-      again?.();
-    });
+      void again?.();
+    }
   }
 
   async function cancel() {
@@ -182,11 +210,13 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
 
   return {
     // Screen open: sweep leftovers first, then warm up once permission is known.
+    // Each take's end warms up again while the screen is open.
     async open(fs: RecordingFolders, permissionRead: Promise<unknown>) {
       away = false;
       await Promise.all([removeAbandonedRecordings(fs), permissionRead]);
       opened = true;
-      warmUp();
+      warmAfterTake = warmUp;
+      return warmUp();
     },
 
     // Backgrounding and leaving. A recording keeps the session until its stop.
@@ -194,14 +224,19 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
       away = true;
       if (!warm) return;
       if (nativeOwner) pendingRelease = warm;
-      else void warm.release().catch(() => {});
+      else {
+        warmState = 'none';
+        void warm.release().catch(() => {});
+      }
     },
 
     wake() {
       if (!away) return;
       away = false;
-      warmUp();
+      void warmUp();
     },
+
+    warmState: () => warmState,
 
     // A call, Siri or an AirPods disconnect paused native capture. Ends the
     // attempt with nothing scored; true only when this ended one.
@@ -222,6 +257,8 @@ export function createRecordingControls(onChange: (state: RecordingState) => voi
       if (current || nativeOwner) return;
       const attempt: Attempt = { index, isRetry, capture, phase: 'starting', cancelled: false };
       current = nativeOwner = attempt;
+      // This attempt's native start uses up anything prepared or being prepared
+      warmState = 'none';
       unsettled.add(attempt);
       let recording: RecordingFile | undefined;
 

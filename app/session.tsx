@@ -26,6 +26,7 @@ import {
 import {
   createRecordingControls,
   warmSession,
+  type WarmState,
   type PressSource,
   type RecordingState,
 } from '@/lib/transcription/recording-controls';
@@ -66,6 +67,10 @@ interface MicTiming {
   resolved?: number;
   firstAudio?: number;
   renders: number;
+  // What native held for this tap: none, in-flight or prepared
+  warm?: WarmState;
+  // The tap asked for mic permission (the first-run prompt, or a read that hadn't settled)
+  asked?: boolean;
 }
 
 // Dev builds of the patched recorder report ms from the native start call to each step
@@ -156,12 +161,12 @@ export default function StudySessionScreen() {
   }, []);
   const logMic = useCallback((stopped: Promise<NativeRecording>) => {
     if (!__DEV__) return;
-    const { down, call, resolved, firstAudio, renders } = micTimingRef.current;
+    const { down, call, resolved, firstAudio, renders, warm, asked } = micTimingRef.current;
     micTimingRef.current = { renders: 0 };
     if (call === undefined) return;
     const from = down ?? call;
     const ms = (t?: number) => (t === undefined ? '?' : `${Math.round(t - from)}ms`);
-    const line = `[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)} · ${renders} renders`;
+    const line = `[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)} · ${renders} renders · warm at tap: ${warm ?? '?'}${asked ? ' · asked permission' : ''}`;
     stopped.then((recording) => {
       const { events, bytes } = micAudioRef.current;
       const seconds = recording.durationMs / 1000;
@@ -196,13 +201,23 @@ export default function StudySessionScreen() {
   // Sweeps leftover recordings, then warms the recorder up (patched binaries,
   // permission granted). Released in the background and on leaving.
   useEffect(() => {
+    // Dev-only: when the permission read and the warm-up settle, in ms after open
+    const openedAt = performance.now();
+    let permissionLog = 'not read';
+    const since = () => `${Math.round(performance.now() - openedAt)}ms`;
     // On web this read can prompt, so web asks on the tap instead
     const permissionRead = process.env.EXPO_OS === 'web'
       ? Promise.resolve()
       : AudioStudioModule.getPermissionsAsync()
-        .then(({ granted }: PermissionResponse) => { micPermissionRef.current = granted; })
+        .then(({ status, granted }: PermissionResponse) => {
+          micPermissionRef.current = granted;
+          permissionLog = `${status} at ${since()}`;
+        })
         .catch(() => {});
-    void recorder.open(FileSystem, permissionRead);
+    void recorder.open(FileSystem, permissionRead).then((warmUp) => {
+      // eslint-disable-next-line no-console -- dev-only measurement
+      if (__DEV__) console.log(`[MIC] screen open: permission ${permissionLog} · warm-up ${warmUp} at ${since()}`);
+    });
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'background') recorder.sleep();
       else if (state === 'active') recorder.wake();
@@ -330,10 +345,12 @@ export default function StudySessionScreen() {
     if (!chunk || index !== session.currentIndex || closingRef.current) return;
 
     const wasActive = recorder.canDiscard();
+    const warmAtTap = recorder.warmState();
     try {
       const starting = recorder.start(index, isRetry, {
         hasPermission: () => micPermissionRef.current,
         async requestPermission() {
+          if (__DEV__) micTimingRef.current.asked = true;
           const { granted }: PermissionResponse = await AudioStudioModule.requestPermissionsAsync();
           micPermissionRef.current = granted;
           return granted;
@@ -343,6 +360,7 @@ export default function StudySessionScreen() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
           stampMic('call');
+          if (__DEV__) micTimingRef.current.warm = warmAtTap;
           micAudioRef.current = { events: 0, bytes: 0 };
           const started: Promise<StartRecordingResult> = recorderModule().startRecording(RECORDING_OPTIONS);
           if (__DEV__) started.then(() => stampMic('resolved'), () => {});

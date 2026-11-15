@@ -578,26 +578,29 @@ test('the recorder warms up only after the leftover sweep and once permission is
 });
 
 test('no warm-up while an attempt owns the recorder or a prepare is in flight', async () => {
-  const { calls, module, holdPrepare } = recorderModule();
+  const { calls, module } = recorderModule();
   const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
   const { capture } = audio();
   await recorder.start(0, false, capture);
-  await recorder.open(noLeftovers(), Promise.resolve());
+  assert.equal(await recorder.open(noLeftovers(), Promise.resolve()), 'after the take');
   assert.deepEqual(calls, []);
   await recorder.cancel();
-
-  const prepare = deferred<void>();
-  holdPrepare(prepare.promise);
-  const first = createRecordingControls(() => {}, warmSession(module, {}, () => true));
-  const second = createRecordingControls(() => {}, warmSession(module, {}, () => true));
-  await first.open(noLeftovers(), Promise.resolve());
-  await second.open(noLeftovers(), Promise.resolve());
-  assert.deepEqual(calls, ['prepare']);
-  prepare.resolve();
   await settle();
+  recorder.sleep();
+
+  const held = recorderModule();
+  const prepare = deferred<void>();
+  held.holdPrepare(prepare.promise);
+  const first = createRecordingControls(() => {}, warmSession(held.module, {}, () => true));
+  const second = createRecordingControls(() => {}, warmSession(held.module, {}, () => true));
+  void first.open(noLeftovers(), Promise.resolve());
+  await settle();
+  assert.equal(await second.open(noLeftovers(), Promise.resolve()), 'after the prepare in flight');
+  assert.deepEqual(held.calls, ['prepare']);
   first.sleep();
   second.sleep();
-  recorder.sleep();
+  prepare.resolve();
+  await settle();
 });
 
 test('leaving during native start releases the session only after the late stop', async () => {
@@ -641,7 +644,8 @@ test('a return during an in-flight prepare prepares again after it', async () =>
   const prepare = deferred<void>();
   holdPrepare(prepare.promise);
   const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
-  await recorder.open(noLeftovers(), Promise.resolve());
+  void recorder.open(noLeftovers(), Promise.resolve());
+  await settle();
   recorder.sleep();
   recorder.wake();
   assert.deepEqual(calls, ['prepare', 'release']);
@@ -655,13 +659,59 @@ test('a return during an in-flight prepare prepares again after it', async () =>
   const leftPrepare = deferred<void>();
   left.holdPrepare(leftPrepare.promise);
   const leaving = createRecordingControls(() => {}, warmSession(left.module, {}, () => true));
-  await leaving.open(noLeftovers(), Promise.resolve());
+  void leaving.open(noLeftovers(), Promise.resolve());
+  await settle();
   leaving.sleep();
   leaving.wake();
   leaving.sleep();
   leftPrepare.resolve();
   await settle();
   assert.deepEqual(left.calls, ['prepare', 'release', 'release']);
+});
+
+test('the end of each take prepares again while the screen is open, but not after leaving', async () => {
+  const { calls, module } = recorderModule();
+  const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  await recorder.open(noLeftovers(), Promise.resolve());
+  const { capture } = audio();
+  const granted = { ...capture, hasPermission: () => true };
+  await recorder.start(0, false, granted);
+  await recorder.submit(async () => {
+    assert.deepEqual(calls, ['prepare', 'prepare'], 'prepared again before scoring settles');
+  });
+  await settle();
+  await recorder.start(0, true, granted);
+  await recorder.cancel();
+  await settle();
+  assert.deepEqual(calls, ['prepare', 'prepare', 'prepare']);
+  await recorder.start(1, false, granted);
+  const leaving = recorder.cancel();
+  recorder.sleep();
+  await leaving;
+  await settle();
+  assert.deepEqual(calls, ['prepare', 'prepare', 'prepare', 'release']);
+});
+
+test('the warm state says whether a tap finds the recorder prepared', async () => {
+  const { module, holdPrepare } = recorderModule();
+  const prepare = deferred<void>();
+  holdPrepare(prepare.promise);
+  const recorder = createRecordingControls(() => {}, warmSession(module, {}, () => true));
+  assert.equal(recorder.warmState(), 'none');
+  const opening = recorder.open(noLeftovers(), Promise.resolve());
+  await settle();
+  assert.equal(recorder.warmState(), 'in-flight');
+  prepare.resolve();
+  assert.equal(await opening, 'prepared');
+  assert.equal(recorder.warmState(), 'prepared');
+  const { capture } = audio();
+  await recorder.start(0, false, { ...capture, hasPermission: () => true });
+  assert.equal(recorder.warmState(), 'none');
+  await recorder.cancel();
+  await settle();
+  assert.equal(recorder.warmState(), 'prepared');
+  recorder.sleep();
+  assert.equal(recorder.warmState(), 'none');
 });
 
 test('without the native patch nothing is prepared or released', async () => {
