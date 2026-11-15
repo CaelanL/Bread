@@ -36,7 +36,7 @@ export const OUT_DIR = join(__dirname, '../../.expo/grading-audit');
 // v5 (the audit's), and the same clips remade and sent to batch v6 and, 150 of them, live v6.
 // Each has a misses file pinning the clips under 100 to their score (`{ clipId: score }`).
 export const KJV_FIXTURE = join(__dirname, 'fixtures/say-kjv.json');
-export const KJV_FIXTURES = ['say-kjv'].map((name) => join(__dirname, `fixtures/${name}.json`));
+export const KJV_FIXTURES = ['say-kjv', 'say-kjv-v6', 'say-kjv-rt-v6'].map((name) => join(__dirname, `fixtures/${name}.json`));
 export const missesFile = (fixture: string) => fixture.replace(/\.json$/, '-misses.json');
 type Align = (expected: string, transcript: string) => AlignmentWord[];
 

@@ -147,18 +147,18 @@ the same is correct, and the card shows the verse's word. Rulings:
   "O" is "oh".
 - `SPELLINGS` in `lib/align-spellings.ts` gives British, KJV-era and name
   spellings one key. Other words (ye, spake, hath) stay wrong.
-- `FILLERS` (um, erm, uh-huh and friends) drop from the transcript only. "Ah",
-  "er" and "err" are scripture.
+- `FILLERS` (um, erm, uh-huh) drop from the transcript only. "Ah", "er" and
+  "err" are scripture.
 - `joinCompounds` matches split and joined words ("for as much", "forasmuch").
   Digits never join, so `72` doesn't match `7 2`.
-- `alignSubstitution` re-diffs an unmatched stretch and skips stray transcript
-  words, so a slip or restart costs only its own words.
+- `alignSubstitution` re-diffs an unmatched stretch and skips stray words, so
+  a slip or restart costs only its own words.
 
 Numbers become one unit before `diffArrays` runs, keyed by value and kind, so `72`
-matches `seventy-two`, never `70` or `72nd`. Parsing also reads `an hundred`,
-`600 thousand`, fractions (`3-1/4`) and `-fold`, and a span stops at
-punctuation. "five and twenty" is 25 only when the other side says 25
-(`mergeContextNumbers`). `threescore` and "six six six" fail closed.
+matches `seventy-two`, never `70` or `72nd`. It also reads `an hundred`,
+`600 thousand`, fractions (`3-1/4`) and `-fold`; a span stops at
+punctuation. "five and twenty" or "an hundred and thirty and seven"
+count only if the other side has 25 or 137 (`mergeContextNumbers`). `threescore` and "six six six" fail closed.
 
 ## Scoring
 

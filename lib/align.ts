@@ -479,9 +479,46 @@ function mergeContextNumbers(units: ComparisonUnit[], other: ComparisonUnit[]): 
       i += 2;
       continue;
     }
+    const chain = numberChain(units, i, keys);
+    if (chain) {
+      out.push(chain.unit);
+      i = chain.end - 1;
+      continue;
+    }
     out.push(units[i]);
   }
   return out;
+}
+
+// The KJV's added-up numbers, "an hundred and thirty and seven" (137) or "an hundred twenty and
+// three" (123): numbers in a row, "and" between some of them, each fitting under the last place
+// of the one before ("twenty ten" is not 30), none across punctuation ("seventy, two" is not 72).
+// Read as their sum only when the other side has it, longest first.
+const MAX_CHAIN = 4;
+
+const lastPlace = (n: number) => {
+  let place = 1;
+  while (n % (place * 10) === 0) place *= 10;
+  return place;
+};
+
+function numberChain(units: ComparisonUnit[], start: number, keys: Set<string>): { unit: ComparisonUnit; end: number } | undefined {
+  const parts: number[] = [];
+  const ends: number[] = [];
+  let j = start;
+  while (parts.length < MAX_CHAIN) {
+    const at = parts.length && units[j]?.key === 'and' ? j + 1 : j;
+    const value = unitValue(units[at]);
+    if (!value || (parts.length && (value >= lastPlace(parts[parts.length - 1]) || /[,.;:!?]$/.test(units[j - 1].tokens.at(-1)!.raw)))) break;
+    parts.push(value);
+    j = at + 1;
+    ends.push(j);
+  }
+  for (let n = parts.length; n >= 2; n--) {
+    const key = `number:cardinal:${parts.slice(0, n).reduce((a, b) => a + b, 0)}`;
+    if (keys.has(key)) return { unit: { key, tokens: unitTokens(units.slice(start, ends[n - 1])) }, end: ends[n - 1] };
+  }
+  return undefined;
 }
 
 function unitTokens(units: ComparisonUnit[]): Token[] {

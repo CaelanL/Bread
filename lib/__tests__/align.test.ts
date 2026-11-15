@@ -179,6 +179,7 @@ describe('alignTranscription — spelling and character normalization', () => {
     ['Israél', 'Israel'], // precomposed accent
     ['Israe\u0301l', 'Israel'], // combining accent
     ['the rosé', 'the rose'],
+    ['an instructer of every artificer', 'an instructor of every artificer'],
     ['for his name’s saké', 'for his name’s sake'],
     ['Judæa', 'Judea'], // ligature, then the name list
     ['him…and', 'him and'], // ellipsis joins two words
@@ -244,6 +245,10 @@ describe('alignTranscription — number grammar', () => {
     ['were an hundred thousand and fourscore thousand and six thousand and four hundred,', 'were 100,000 and fourscore thousand and 6,400,', true],
     ['four and twenty, six on each hand', '4 and 20, 6 on each hand', true],
     ['an hundred and twenty years', '120 years', true],
+    ['were an hundred and thirty and seven years', 'were 137 years', true],
+    ['Beth-lehem, an hundred twenty and three.', 'Beth-lehem, 123.', true],
+    ['were an hundred and thirty and seven years', 'were 138 years', false],
+    ['thirty and seven', '36', false],
     ['an hundred and twenty years', 'a hundred and twenty years', true],
     ['an hundred and twenty years', 'and hundred and twenty years', true],
     ['slew a thousand men', 'slew 1,000 men', true],

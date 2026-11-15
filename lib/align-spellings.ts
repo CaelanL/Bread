@@ -60,7 +60,7 @@ const NAMES = `
 // Older spellings and names said the same way (Caelan, 2026-11-14).
 const BROAD = `
   hungred>hungered rereward>rearward nought>naught bason>basin basons>basins plaister>plaster
-  plaistered>plastered jubile>jubilee forbad>forbade sara>sarah juda>judah sion>zion
+  plaistered>plastered jubile>jubilee forbad>forbade sara>sarah juda>judah sion>zion instructer>instructor
 `;
 
 export const SPELLINGS = new Map(
