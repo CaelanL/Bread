@@ -10,7 +10,7 @@
  */
 
 import { BibleAdapter, VerseResult, ChapterResult } from "./types.ts";
-import { parseApiBibleHtml } from "./apibible-parse.ts";
+import { parseApiBibleHtml, parseApiBibleVerse } from "./apibible-parse.ts";
 
 const API_BIBLE_KEY = Deno.env.get("API_BIBLE_KEY");
 const API_BIBLE_BASE = "https://rest.api.bible/v1";
@@ -175,7 +175,7 @@ export const apiBibleAdapter: BibleAdapter = {
 
     const verse = ref.match(/:(\d+)$/)?.[1];
     const content = await fetchContent(version, `passages/${passageId}`);
-    const text = verse ? parseApiBibleHtml(content)[verse] : undefined;
+    const text = verse ? parseApiBibleVerse(content, verse) : undefined;
 
     if (!text) {
       throw new Error(`Verse not found: ${ref}`);

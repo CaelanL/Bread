@@ -189,8 +189,8 @@ a Hebrew letter and one word in any spelling (NKJV's "ס Samek"), is
 dropped. NLT prints a dash rule after a verse, then a manuscript note or
 an alternate ending inside the same verse span (Mark 16:8, John 7:52):
 the verse ends at the rule. NIV has no text for Habakkuk 3:1. NLT's merged rows (`data-number="20-21"`) are keyed under the
-first number, so a range never asks for the same words twice and the
-second number has no text.
+first number; a single verse on the second gets the merged text
+(`parseApiBibleVerse`).
 
 ## End-to-end flows
 
@@ -417,7 +417,7 @@ Also:
 - 2026-08-15 · Session `verseCache` holds single-verse text only, and `fetchVerse` always returns keyed `verses` · Combined range text under the start verse put a whole passage in chunk 1 (Psalm 103).
 - 2026-11-14 · One parser per adapter, in a pure file tested from `lib/__tests__/` · Titles, stanza letters and "Psalm N" only reached the single-verse path because it parsed differently. `npm test` already globs there; a new test glob would change `package.json` and the native fingerprint.
 - 2026-11-14 · An omitted single verse answers not found and isn't cached · Crossway answered with its neighbours, cached under the omitted number. `isAvailableIn` reads a failure as not available, and adding it fails visibly instead of making an empty chunk.
-- 2026-11-14 · NLT's merged rows are keyed under the first number · Keying them under both would make a range repeat the words.
+- 2026-11-14 · NLT's merged rows key under the first number · Under both, a range would repeat the words.
 - 2026-11-14 · A cached range is answered from one keyed read · Two reads could race, and a range answered with `verses: {}` fell to the sentence splitter.
 - 2026-11-14 · Rows carry `text_rev`, and the ESV, NIV, NLT and NKJV rows were cleared in the same migration · Migrations apply before functions deploy, so an old function could refill a cleared row with old text in that gap; the new function reads only its own revision. Schema: `docs/architecture/data-model.md`.
 - 2026-11-14 · The daily limit counts only server cache misses (it used to count every request, "for fairness") · Only a miss spends the external API's budget; a hit costs our own database and stores nothing new. Old clients get the same responses, with a 429 only on a miss.

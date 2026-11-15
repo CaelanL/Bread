@@ -61,3 +61,14 @@ export function parseApiBibleHtml(html: string): Record<string, string> {
   });
   return verses;
 }
+
+// One verse from a passage. NLT merges some rows ("20-21"), so a verse inside a merged row gets
+// that row's text: it is the translation's text for both numbers.
+export function parseApiBibleVerse(html: string, verse: string): string | undefined {
+  const verses = parseApiBibleHtml(html);
+  if (verses[verse]) return verses[verse];
+  for (const [, first, last] of html.matchAll(/data-number="(\d+)-(\d+)"/g)) {
+    if (Number(first) <= Number(verse) && Number(verse) <= Number(last)) return verses[first];
+  }
+  return undefined;
+}

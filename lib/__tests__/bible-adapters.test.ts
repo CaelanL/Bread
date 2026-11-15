@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { cleanApiBibleText, parseApiBibleHtml } from '../../supabase/functions/bible/adapters/apibible-parse';
+import { cleanApiBibleText, parseApiBibleHtml, parseApiBibleVerse } from '../../supabase/functions/bible/adapters/apibible-parse';
 import { esvChapterQuery, parseEsvPassage } from '../../supabase/functions/bible/adapters/esv-parse';
 import { VERSE_COUNTS } from '../../supabase/functions/bible/verse-counts';
 
@@ -104,6 +104,14 @@ describe('API.Bible parser', () => {
       '20': 'The children of Reuben, forty and six thousand.',
       '22': 'Of the children of Simeon.',
     });
+  });
+
+  it('serves a verse inside a merged row the merged text, and nothing else', () => {
+    const html = `<p class="p"><span data-number="20-21" data-sid="NUM 1:20-21" class="v">20-21</span>The children of Reuben, forty and six thousand.</p>`;
+    assert.equal(parseApiBibleVerse(html, '21'), 'The children of Reuben, forty and six thousand.');
+    assert.equal(parseApiBibleVerse(html, '20'), 'The children of Reuben, forty and six thousand.');
+    assert.equal(parseApiBibleVerse(html, '22'), undefined);
+    assert.equal(parseApiBibleVerse(`<p class="p">${v('10')}Take heed.</p><p class="p">${v('12')}How think ye?</p>`, '11'), undefined);
   });
 
   it('keeps a verse that sits in a heading element', () => {
