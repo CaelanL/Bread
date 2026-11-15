@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { authHeaders, functionUrl, popularPassages, signIn } from './local';
-import { KJV_FIXTURE, loadSource, OUT_DIR, refText, type Clip, type VerseMap } from './run';
+import { clipId, KJV_FIXTURE, loadSource, OUT_DIR, refText, type Clip, type VerseMap } from './run';
 import { PASSES } from './variations';
 
 const FIRST_WAVE = 200;
@@ -181,11 +181,12 @@ function sonioxKey(): string {
   return key;
 }
 
-async function transcribeDirect(audio: Buffer, text: string): Promise<string> {
+async function transcribeDirect(audio: Buffer, text: string, model = 'stt-async-v6'): Promise<string> {
   const headers = { Authorization: `Bearer ${sonioxKey()}` };
+  const signal = () => AbortSignal.timeout(60_000); // a hung request stalled a whole run
   const form = new FormData();
   form.append('file', new Blob([new Uint8Array(audio)]), 'recording.m4a');
-  const upload = await fetch(`${SONIOX}/files`, { method: 'POST', headers, body: form });
+  const upload = await fetch(`${SONIOX}/files`, { method: 'POST', headers, body: form, signal: signal() });
   if (!upload.ok) throw new Error(`soniox upload ${upload.status}`);
   const fileId: string = (await upload.json()).id;
   let txId: string | undefined;
@@ -193,41 +194,44 @@ async function transcribeDirect(audio: Buffer, text: string): Promise<string> {
     const job = await fetch(`${SONIOX}/transcriptions`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
+      signal: signal(),
       // Same body as transcribeWithSoniox in supabase/functions/process-recording/index.ts.
       body: JSON.stringify({
         file_id: fileId,
-        model: 'stt-async-v5',
+        model,
         language_hints: ['en'],
-        context: {
-          general: [
-            { key: 'domain', value: 'Bible' },
-            { key: 'topic', value: 'Bible verse memory recitation attempt' },
-          ],
-          text,
-        },
+        // `--no-context` measures what the verse as context is worth.
+        ...(process.argv.includes('--no-context') ? {} : {
+          context: {
+            general: [
+              { key: 'domain', value: 'Bible' },
+              { key: 'topic', value: 'Bible verse memory recitation attempt' },
+            ],
+            text,
+          },
+        }),
       }),
     });
     if (!job.ok) throw new Error(`soniox job ${job.status}`);
     txId = (await job.json()).id as string;
     for (let i = 0; ; i++) {
-      const poll = await fetch(`${SONIOX}/transcriptions/${txId}`, { headers });
+      const poll = await fetch(`${SONIOX}/transcriptions/${txId}`, { headers, signal: signal() });
       if (!poll.ok) throw new Error(`soniox poll ${poll.status}`);
       const status = await poll.json();
       if (status.status === 'completed') break;
       if (status.status === 'error' || i > 180) throw new Error(`soniox ${status.status}`);
       await new Promise((r) => setTimeout(r, 1000));
     }
-    const { text: transcript } = await (await fetch(`${SONIOX}/transcriptions/${txId}/transcript`, { headers })).json();
+    const { text: transcript } = await (await fetch(`${SONIOX}/transcriptions/${txId}/transcript`, { headers, signal: signal() })).json();
     return transcript ?? '';
   } finally {
-    if (txId) await fetch(`${SONIOX}/transcriptions/${txId}`, { method: 'DELETE', headers });
-    await fetch(`${SONIOX}/files/${fileId}`, { method: 'DELETE', headers });
+    if (txId) await fetch(`${SONIOX}/transcriptions/${txId}`, { method: 'DELETE', headers, signal: signal() });
+    await fetch(`${SONIOX}/files/${fileId}`, { method: 'DELETE', headers, signal: signal() });
   }
 }
 
 async function transcribe(token: string, text: string, voice: string, rate: number, dir: string): Promise<string> {
-  const file = join(dir, `clip-${Date.now()}-${Math.random().toString(36).slice(2)}.m4a`);
-  execFileSync('say', ['-v', voice, '-r', String(rate), '-o', file, '--file-format=m4af', '--data-format=aac', `[[slnc 300]] ${text}`]);
+  const file = sayFile(text, voice, rate, dir, false);
   if (!process.argv.includes('--via-function')) {
     try {
       return await transcribeDirect(readFileSync(file), text);
@@ -248,7 +252,178 @@ async function transcribe(token: string, text: string, voice: string, rate: numb
   return body.cleanedTranscription;
 }
 
+// ---------- replay: the same clips again on another model ----------
+// `say` is deterministic, so a fixture's clips can be remade from ref, voice and rate (with the
+// 300 ms lead-in) and sent to another model. Batch goes straight to Soniox like `run`; `--live`
+// streams 16 kHz PCM over the websocket at real-time pace with the start frame
+// and the key protocol lib/transcription/live-session.ts sends (`--via-token` mints the key through the local
+// transcription-token, as the app does, and takes the model it answers). Resumable: clips already
+// in --out are skipped.
+//   npx tsx scripts/grading-audit/voice.ts replay <fixture> --model stt-async-v6 --out <file> [--max N]
+//   npx tsx scripts/grading-audit/voice.ts replay <fixture> --live --model stt-rt-v6 --out <file> [--via-token]
+const LIVE_CLIPS = 150;
+const LIVE_PICK = /\d|hundred|thousand|score\b|(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b|fold\b|honour|favour|labour|neighbour|savour|saviour|sepulchre|marvell|valour|colour|counsell|shew|vail|intreat|enquir|stedfast|brasen|subtil|ancle|asswage|\bfor ever\b|\bto (day|morrow)\b|\bany thing\b|\bevery (one|thing)\b|forasmuch|nevertheless|withal|inasmuch|insomuch|altogether|\b[A-Z][a-z]*ae[a-z]*|\b[A-Z][a-z]*s'|\b[A-Z][a-z]+-[a-z]+|\bSion\b|\bJuda\b|\bSara\b/;
+
+// 120 clips spread over the number, spelling, compound and name clips, 30 over the rest.
+export function liveSubset(clips: Clip[]): Clip[] {
+  const kjv = loadSource('KJV');
+  const spread = (list: Clip[], n: number) =>
+    Array.from({ length: Math.min(n, list.length) }, (_, i) => list[Math.floor((i * list.length) / Math.min(n, list.length))]);
+  const risky = clips.filter((c) => LIVE_PICK.test(refText(kjv, c.ref)));
+  const picked = new Set([...spread(risky, 120), ...spread(clips.filter((c) => !risky.includes(c)), LIVE_CLIPS - 120)]);
+  return clips.filter((c) => picked.has(c));
+}
+
+function sayFile(text: string, voice: string, rate: number, dir: string, pcm: boolean): string {
+  const file = join(dir, `clip-${Date.now()}-${Math.random().toString(36).slice(2)}.${pcm ? 'wav' : 'm4a'}`);
+  const format = pcm ? ['--file-format=WAVE', '--data-format=LEI16@16000'] : ['--file-format=m4af', '--data-format=aac'];
+  execFileSync('say', ['-v', voice, '-r', String(rate), '-o', file, ...format, `[[slnc 300]] ${text}`]);
+  return file;
+}
+
+function wavData(wav: Buffer): Buffer {
+  for (let at = 12; at + 8 <= wav.length; at += 8 + wav.readUInt32LE(at + 4)) {
+    if (wav.toString('ascii', at, at + 4) === 'data') return wav.subarray(at + 8, at + 8 + wav.readUInt32LE(at + 4));
+  }
+  throw new Error('no data chunk in wav');
+}
+
+interface LiveKey {
+  apiKey: string;
+  websocketUrl: string;
+  model: string;
+}
+
+// The same temporary key transcription-token mints, straight from Soniox.
+async function mintDirect(model: string): Promise<LiveKey> {
+  const res = await fetch(`${SONIOX}/auth/temporary-api-key`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${sonioxKey()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usage_type: 'transcribe_websocket', expires_in_seconds: 60, max_session_duration_seconds: 315 }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`soniox mint ${res.status}`);
+  return { apiKey: (await res.json()).api_key, websocketUrl: 'wss://stt-rt.soniox.com/transcribe-websocket', model };
+}
+
+async function mintLiveKey(token: string): Promise<LiveKey> {
+  const res = await fetch(functionUrl('transcription-token'), { method: 'POST', headers: authHeaders(token) });
+  if (!res.ok) throw new Error(`transcription-token ${res.status}`);
+  return res.json();
+}
+
+// 100 ms chunks at real-time pace, then the empty end-of-audio frame; the final tokens joined.
+async function transcribeLive(pcm: Buffer, text: string, key: LiveKey): Promise<string> {
+  const ws = new WebSocket(key.websocketUrl, ['soniox-api-key', key.apiKey]);
+  const finals: string[] = [];
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error('live timeout'));
+    }, pcm.length / 32 + 30_000);
+    const done = (error?: Error) => {
+      clearTimeout(timeout);
+      ws.close();
+      if (error) reject(error);
+      else resolve(finals.join(''));
+    };
+    ws.onopen = async () => {
+      ws.send(JSON.stringify({
+        model: key.model,
+        audio_format: 'pcm_s16le',
+        sample_rate: 16000,
+        num_channels: 1,
+        language_hints: ['en'],
+        context: {
+          general: [
+            { key: 'domain', value: 'Bible' },
+            { key: 'topic', value: 'Bible verse memory recitation attempt' },
+          ],
+          text,
+        },
+      }));
+      for (let i = 0; i < pcm.length && ws.readyState === WebSocket.OPEN; i += 3200) {
+        ws.send(pcm.subarray(i, i + 3200));
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (ws.readyState === WebSocket.OPEN) ws.send('');
+    };
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(String(event.data));
+      if (msg.error_code) return done(new Error(`soniox live ${msg.error_code}: ${msg.error_message}`));
+      for (const t of msg.tokens ?? []) if (t.is_final && t.text !== '<fin>' && t.text !== '<end>') finals.push(t.text);
+      if (msg.finished) done();
+    };
+    ws.onerror = () => done(new Error('socket error'));
+  });
+}
+
+async function replayFixture() {
+  const fixture = process.argv[3];
+  const model = arg('model');
+  const out = arg('out');
+  const live = process.argv.includes('--live');
+  const viaToken = process.argv.includes('--via-token');
+  if (!fixture || !out || (!model && !viaToken)) throw new Error('Usage: voice.ts replay <fixture> --model <m> --out <file> [--live [--via-token]] [--max N]');
+  const all: Clip[] = JSON.parse(readFileSync(fixture, 'utf8'));
+  const clips = live ? liveSubset(all) : all;
+  const done: Clip[] = existsSync(out) ? JSON.parse(readFileSync(out, 'utf8')) : [];
+  const have = new Set(done.map(clipId));
+  const max = Math.min(clips.length, arg('max') ? Number(arg('max')) : clips.length);
+  const todo = clips.filter((c) => !have.has(clipId(c))).slice(0, Math.max(0, max - done.length));
+  const kjv = loadSource('KJV');
+  const token = viaToken ? await signIn('reader-a@example.test') : '';
+  const dir = mkdtempSync(join(tmpdir(), 'bread-replay-'));
+  let calls = 0;
+  let backoffs = 0;
+  try {
+    // Same pacing as `run`: 3 at a time, at most 10 a minute, 2 minutes after a 429.
+    for (let b = 0; b < todo.length && backoffs < 3; b += 3) {
+      const started = Date.now();
+      let limited = false;
+      const results = await Promise.all(todo.slice(b, b + 3).map(async (clip) => {
+        const text = refText(kjv, clip.ref);
+        const file = sayFile(text, clip.voice, clip.rate, dir, live);
+        try {
+          calls++;
+          const transcript = live
+            ? await transcribeLive(wavData(readFileSync(file)), text, viaToken ? await mintLiveKey(token) : await mintDirect(model!))
+            : await transcribeDirect(readFileSync(file), text, model);
+          return { ...clip, transcript };
+        } catch (e) {
+          console.log(`skip ${clipId(clip)}: ${e instanceof Error ? e.message : e}`);
+          if (String(e).includes('429')) limited = true;
+          return null;
+        } finally {
+          rmSync(file, { force: true });
+        }
+      }));
+      for (const r of results) if (r) done.push(r);
+      const order = new Map(all.map((c, i) => [clipId(c), i]));
+      done.sort((x, y) => order.get(clipId(x))! - order.get(clipId(y))!);
+      writeFileSync(out, `${JSON.stringify(done, null, 1)}\n`);
+      console.log(`${done.length}/${max} (${calls} Soniox transcriptions this run)`);
+      if (limited) {
+        backoffs++;
+        if (backoffs < 3) await new Promise((r) => setTimeout(r, 120_000));
+      } else {
+        backoffs = 0;
+        if (!live) await new Promise((r) => setTimeout(r, Math.max(0, 18_000 - (Date.now() - started))));
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  console.log(`${done.length} clips in ${out}, ${done.filter((c) => !c.transcript.trim()).length} empty; ${calls} Soniox transcriptions this run`);
+}
+
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > 0 ? process.argv[i + 1] : undefined;
+}
+
 async function main() {
+  if (process.argv[2] === 'replay') return replayFixture();
   const planned = licensedVersion ? licensedPlan(licensedVersion) : plan();
   if (process.argv[2] === 'plan') {
     for (const p of planned) console.log(`${p.version} ${p.ref} (${p.why})`);
@@ -312,7 +487,9 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

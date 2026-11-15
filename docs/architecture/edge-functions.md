@@ -26,7 +26,9 @@ supabase/functions/
 │   └── adapters/
 │       ├── types.ts     ← BibleAdapter contract
 │       ├── esv.ts       ← Crossway ESV API
-│       └── apibible.ts  ← API.Bible for NLT/NIV/NKJV
+│       ├── esv-parse.ts ← its pure parser (tested from lib/__tests__/)
+│       ├── apibible.ts  ← API.Bible for NLT/NIV/NKJV
+│       └── apibible-parse.ts ← its pure parser
 ├── process-recording/
 │   └── index.ts         ← Soniox upload, polling, optional GPT cleaning
 ├── transcription-token/
@@ -55,7 +57,9 @@ here:
 - Returns `{ reference, version, text?, verses?, cached }`, always with
   `Cache-Control: no-store`
 - Errors: 401 (auth), 400 (bad ref/version), 429 (rate limit), 500
-  (upstream)
+  (upstream, including a verse the translation omits)
+- One parser per adapter serves the verse and chapter paths; a cached
+  range is answered from one keyed read; cache rows carry `text_rev`
 
 ## `process-recording`
 
@@ -75,10 +79,17 @@ POST /functions/v1/process-recording
    while Soniox works (keeps the client socket alive past its ~60s
    idle timeout; leading whitespace is valid JSON so response.json()
    on any client parses unchanged)
-4. Upload audio to Soniox async API (model stt-async-v5)
+4. Upload audio to Soniox async API (`SONIOX_ASYNC_MODEL`)
    - actualVerse passed as context for accuracy
 5. Poll Soniox until transcription completes (first poll after
-   150ms, every 250ms for 10s, then every 1s, up to a 90s deadline)
+   150ms, every 250ms for 10s, then every 1s). Every Soniox call goes
+   through `sonioxFetch`, which retries a 429 with jittered backoff;
+   the whole job has a 90s deadline (`SONIOX_DEADLINE_MS`), and a 429
+   past it answers { error: "Transcription is busy right now. Try
+   again in a moment." }
+   - finally: delete the transcription and the file at Soniox
+     (`deleteAtSoniox`, not awaited, kept alive by
+     EdgeRuntime.waitUntil)
 6. Record usage_daily.transcribe_seconds without blocking the
    response (EdgeRuntime.waitUntil). Analytics only — the quota gate
    was removed; nothing returns 429 anymore
@@ -131,7 +142,7 @@ POST /functions/v1/transcription-token
   Headers: Authorization: Bearer <supabase JWT>
   Body: none
 
-200 → { apiKey, expiresAt, websocketUrl, model: "stt-rt-v5" }
+200 → { apiKey, expiresAt, websocketUrl, model: SONIOX_RT_MODEL }
 403 → { error: "LIVE_DISABLED" }   ← the kill switch
 500 → Soniox not configured or the mint failed
 ```
@@ -149,6 +160,9 @@ POST /functions/v1/transcription-token
 - The client treats *any* non-200 as "use batch" — this endpoint can
   never break recitation scoring.
 - Old clients never call it; purely additive.
+- The model comes from this response, so changing it moves every
+  client at once. The client sends `apiKey` as the `soniox-api-key`
+  WebSocket protocol, not in the start frame.
 
 ## `send-notifications`
 
@@ -275,7 +289,7 @@ Also:
 - **GPT cleaning code path is dead code that still exists.** Easy
   to accidentally re-enable by flipping a flag without thinking
   through the consequences.
-- **Soniox polling can take up to ~90 seconds.** The response
+- **Soniox work can take up to ~90 seconds.** The response
   heartbeat keeps clients alive through it, but the Supabase
   runtime wall-clock (~150s) still bounds the whole request.
 - **`usage_daily` increments aren't atomic.** `incrementUsage` and
@@ -287,7 +301,7 @@ Also:
   mic while transcribing.
 - **No retry logic on external API failures.** If ESV / API.Bible
   / Soniox returns 5xx, the function returns 500 to the client
-  with no automatic retry.
+  with no automatic retry. Only a Soniox 429 is retried.
 - **`evaluate_count` column is legacy** (from when scoring was an
   OpenAI call). Still in the schema; don't read it.
 - **No version-aware verse counts** — adapters log a warning when
@@ -304,3 +318,6 @@ Also:
 - 2026-08-24 · `process-recording` streams heartbeat spaces every 10s · Long recordings tripped the client's ~60s idle timeout. Leading whitespace is valid JSON, so old clients parse unchanged.
 - 2026-08-25 · Live transcription gated by a server-side kill switch, batch path kept · A secret flip needs no deploy or store release, and any failure falls back to batch.
 - 2026-11-14 · Supabase CLI 3.1.0 for the local stack · 2.122's local function server booted a fresh worker for every request, and parallel workers raced on the shared Deno npm cache, so several `bible` calls at once answered 503 BOOT_ERROR locally. On 3.1, 30 parallel calls all answer 200. Prod was never affected.
+- 2026-11-14 · `process-recording` deletes its Soniox file and transcription after every job, success or failure · Soniox keeps them 30 days and caps an organization at 1,000 files, so above about 33 batch recordings a day every one would fail. Not awaited, so the score doesn't wait.
+- 2026-11-14 · Retry a Soniox 429 inside the deadline, then answer a "busy" `error` · The limit is per organization. Old clients show `error` after "Recording failed:", so the text says what to do.
+- 2026-11-15 · One Soniox generation for both paths, `SONIOX_GENERATION` in `_shared/soniox.ts`: v5 until we move to v6 on purpose before 2026-12-15 · Batch serves every client, and 2.0.0 phones keep the old aligner, on which v6 missed 102 of 457 audit clips against v5's 71. Soniox routes v5 to v6 from 2026-12-15 with no deploy.

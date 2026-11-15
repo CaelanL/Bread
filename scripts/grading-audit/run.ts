@@ -3,7 +3,7 @@
 //
 //   npx tsx scripts/grading-audit/run.ts [--source KJV|ESV|...] [--pass <prefix>] [--chunk-size 1|3|all]
 //                            [--examples N] [--limit N] [--aligner <file>] [--check-chunks]
-//                            [--replay <transcripts.json> [--as-printed]]
+//                            [--replay <transcripts.json> [--as-printed] [--pin]]
 //   npx tsx scripts/grading-audit/run.ts --card (--ref "John 3:16" | --expected "<text>") --transcript "<text>" [--aligner <file>]
 //
 // Chunk size 1 (the default) skips `reference:verse-numbers-in-chunk`, which needs multi-verse
@@ -32,10 +32,12 @@ import { toDigits } from './numbers';
 import { asPrinted, PASSES, type ChunkRef, type Pass } from './variations';
 
 export const OUT_DIR = join(__dirname, '../../.expo/grading-audit');
-// Engine transcripts of KJV computer-voice recitations (voice.ts), committed as a fixture,
-// and the clips in it that score under 100 today (`clipId` each).
+// Engine transcripts of KJV computer-voice recitations (voice.ts), committed as fixtures: batch
+// v5 (the audit's), and the same clips remade and sent to batch v6 and, 150 of them, live v6.
+// Each has a misses file pinning the clips under 100 to their score (`{ clipId: score }`).
 export const KJV_FIXTURE = join(__dirname, 'fixtures/say-kjv.json');
-export const KJV_FIXTURE_MISSES = join(__dirname, 'fixtures/say-kjv-misses.json');
+export const KJV_FIXTURES = ['say-kjv', 'say-kjv-v6', 'say-kjv-rt-v6'].map((name) => join(__dirname, `fixtures/${name}.json`));
+export const missesFile = (fixture: string) => fixture.replace(/\.json$/, '-misses.json');
 type Align = (expected: string, transcript: string) => AlignmentWord[];
 
 // ---------- verse sources ----------
@@ -387,6 +389,17 @@ async function main() {
     }
     console.log(`\n${bad.length}/${results.length} clips under 100, ${bad.filter((r) => r.verdict.score < 90).length} under 90, ${bad.filter((r) => r.firstWordsDropped).length} only the opening word(s) dropped (voice artifact), ${bad.filter((r) => r.verdict.sameWord).length} same-word, ${bad.filter((r) => r.verdict.lookAlike).length} look-alike, ${bad.filter((r) => r.verdict.sameNumber).length} same-number, ${bad.filter((r) => r.verdict.repeated >= 2).length} with 2+ words both missing and added`);
     writeFileSync(join(OUT_DIR, `replay-${tag}.json`), JSON.stringify(results, null, 2));
+    // --pin rewrites the misses file from these scores. Pins only shrink or go up: it refuses when
+    // a clip is newly under 100 or lower than its pin.
+    if (process.argv.includes('--pin')) {
+      const file = missesFile(replayFile);
+      const old: Record<string, number> | null = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
+      const worse = old ? bad.filter((r) => !(clipId(r.clip) in old) || r.verdict.score < old[clipId(r.clip)]) : [];
+      if (worse.length) throw new Error(`Not pinned, worse than the pins: ${worse.map((r) => `${clipId(r.clip)} ${r.verdict.score}%`).join(', ')}`);
+      const pins = Object.fromEntries(bad.map((r) => [clipId(r.clip), r.verdict.score]).sort(([a], [b]) => String(a).localeCompare(String(b))));
+      writeFileSync(file, `${JSON.stringify(pins, null, 1)}\n`);
+      console.log(`pinned ${bad.length} clips in ${file}${old ? ` (was ${Object.keys(old).length})` : ''}`);
+    }
     return;
   }
 

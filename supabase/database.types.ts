@@ -329,14 +329,14 @@ isOneToOne: false
                   ]
                 },"verse_cache": {
                   Row: {
-                    "book": string,"chapter": number,"created_at": string,"id": string,"last_used_at": string,"text": string,"verse": number,"version": string
+                    "book": string,"chapter": number,"created_at": string,"id": string,"last_used_at": string,"text": string,"text_rev": number | null,"verse": number,"version": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "book": string,"chapter": number,"created_at"?: string,"id"?: string,"last_used_at"?: string,"text": string,"verse": number,"version": string
+                    "book": string,"chapter": number,"created_at"?: string,"id"?: string,"last_used_at"?: string,"text": string,"text_rev"?: number | null,"verse": number,"version": string
                   }
                   Update: {
-                    "book"?: string,"chapter"?: number,"created_at"?: string,"id"?: string,"last_used_at"?: string,"text"?: string,"verse"?: number,"version"?: string
+                    "book"?: string,"chapter"?: number,"created_at"?: string,"id"?: string,"last_used_at"?: string,"text"?: string,"text_rev"?: number | null,"verse"?: number,"version"?: string
                   }
                   Relationships: [
                     

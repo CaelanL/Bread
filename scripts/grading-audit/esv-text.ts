@@ -12,7 +12,7 @@ import { engineStyle } from './variations';
 
 // Single verses that open with a psalm title or a Psalm 119 stanza letter on the single-verse path.
 const TITLED = ['Psalms 46:1', 'Psalms 23:1', 'Psalms 119:105', 'Psalms 51:1'];
-// Verses the ESV omits; the single-verse path returns their neighbours.
+// Verses the ESV omits; the single-verse path must answer an error, never their neighbours.
 const OMITTED = ['Matthew 18:11', 'Mark 9:44'];
 // Ranges in one-chapter books; the range path returns verse 1 or nothing.
 const ONE_CHAPTER = ['Jude 1:24-25', 'Philemon 1:1-7'];
@@ -43,15 +43,11 @@ async function main() {
   }
 
   for (const ref of OMITTED) {
-    const single = await esv(`ref=${encodeURIComponent(ref)}`);
+    const { status, body } = await getBible(`ref=${encodeURIComponent(ref)}&version=ESV`);
     const { chapter, start } = parse(ref);
     const verses = await chapterVerses(chapter);
-    const neighbours = [verses[String(start - 1)], verses[String(start + 1)]].join(' ');
-    const v = judge(alignTranscription, single.text ?? '', engineStyle(neighbours));
-    console.log(
-      `${ref}: chapter has this verse: ${String(start) in verses}; single fetch returned ${single.text?.split(/\s+/).length ?? 0} words, ` +
-        `matching verses ${start - 1} and ${start + 1} at ${v.score}%`,
-    );
+    const answer = status === 200 ? `returned ${body.text?.split(/\s+/).length ?? 0} words` : `answered ${status} ${body.error ?? ''}`;
+    console.log(`${ref}: chapter has this verse: ${String(start) in verses}; single fetch ${answer}`);
   }
 
   for (const ref of ONE_CHAPTER) {

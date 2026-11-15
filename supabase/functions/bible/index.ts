@@ -241,7 +241,7 @@ async function handle(req: Request): Promise<Response> {
     console.log(`[BIBLE] Fetching single verse from API: ${ref} (${version})`);
     const result = await fetchCounted(() => adapter.fetchVerse(ref, version));
     if (result instanceof Response) return result;
-    await afterResponse(cacheVerse(parsed.book, parsed.chapter, verseStart, version, result.text));
+    if (!result.merged) await afterResponse(cacheVerse(parsed.book, parsed.chapter, verseStart, version, result.text));
 
     return jsonResponse({
       reference: ref,

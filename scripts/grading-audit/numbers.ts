@@ -211,7 +211,37 @@ export function findNumberSpans(rawWords: string[]): NumberSpan[] {
     spans.push({ start: wordOfAtom[i], end: wordOfAtom[parsed.end - 1] + 1, digits, forms: parsed.forms });
     i = parsed.end;
   }
-  return spans;
+  return addUp(spans, rawWords);
+}
+
+// The KJV adds numbers with "and" and lets a final scale word cover the sum: "an hundred and forty
+// and four thousand" is 144,000, "fifty and nine thousand and three hundred" 59,300. The same rule
+// as `numberChain` in lib/align.ts; an engine writing the total in digits is what the harness checks.
+function addUp(spans: NumberSpan[], words: string[]): NumberSpan[] {
+  const value = (span: NumberSpan) => (/^[\d,]+$/.test(span.digits) ? Number(span.digits.replace(/,/g, '')) : undefined);
+  const lastPlace = (n: number) => {
+    let place = 1;
+    while (n % (place * 10) === 0) place *= 10;
+    return place;
+  };
+  const out: NumberSpan[] = [];
+  for (const span of spans) {
+    const prev = out[out.length - 1];
+    const a = prev && value(prev);
+    const b = value(span);
+    const joined = prev && span.start === prev.end + 1 && /^and$/i.test(words[prev.end]) && !/[^A-Za-z]$/.test(words[prev.end - 1]) &&
+      !/^(hundred|thousand|million)/i.test(words[span.end] ?? ''); // "seven and thirty thousand": the parser left the scale out
+    if (a && b && joined) {
+      const scale = [1_000_000, 1000].find((s) => b >= s && Math.floor(b / s) < lastPlace(a) && a < s);
+      const total = scale ? (a + Math.floor(b / scale)) * scale + (b % scale) : b < lastPlace(a) ? a + b : undefined;
+      if (total) {
+        out[out.length - 1] = { start: prev.start, end: span.end, digits: total >= 1000 ? total.toLocaleString('en-US') : String(total), forms: new Set([...prev.forms, ...span.forms]) };
+        continue;
+      }
+    }
+    out.push(span);
+  }
+  return out;
 }
 
 // Rewrite the spans selected by `pick` as digits, keeping the last word's trailing punctuation.
@@ -249,9 +279,18 @@ function underThousand(n: number): string[] {
 
 // Digits in a verse ("2,172", "603,550") as a reader says them: "two thousand one hundred
 // seventy-two". Integers only; ordinals ("2nd") and anything else stay as they are.
+const DENOMINATORS: Record<string, string> = { '2': 'half', '3': 'third', '4': 'fourth', '8': 'eighth', '10': 'tenth' };
+
 export function digitsToWords(text: string): { text: string; changed: boolean } {
   let changed = false;
-  const out = text.replace(/(?<!:)(\b\d{1,3}(,\d{3})+\b|\b\d+\b(?![,.:]?\d|st|nd|rd|th))/g, (m) => {
+  // Fractions as said: "87-1/2" is "87 and a half", "8-3/4" is "8 and three fourths".
+  const fractions = text.replace(/\b(?:(\d+)[- ])?(\d)\/(\d+)\b/g, (m, whole: string | undefined, num: string, den: string) => {
+    const name = DENOMINATORS[den];
+    if (!name) return m;
+    const part = num === '1' && den === '2' ? (whole ? 'a half' : 'one half') : `${underThousand(Number(num)).join(' ')} ${name}${num === '1' ? '' : 's'}`;
+    return whole ? `${whole} and ${part}` : part;
+  });
+  const out = fractions.replace(/(?<!:)(\b\d{1,3}(,\d{3})+\b|\b\d+\b(?![,.:]?\d|st|nd|rd|th))/g, (m) => {
     const n = Number(m.replace(/,/g, ''));
     if (!Number.isSafeInteger(n) || n === 0 || n >= 1_000_000_000) return m;
     changed = true;
@@ -261,5 +300,5 @@ export function digitsToWords(text: string): { text: string; changed: boolean } 
     parts.push(...underThousand(n % 1000));
     return parts.join(' ');
   });
-  return { text: out, changed };
+  return { text: out, changed: changed || fractions !== text };
 }

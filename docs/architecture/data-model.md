@@ -11,7 +11,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `usage_daily` | per-user | Free/Supporter rate-limit counters |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
-| `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits, see `docs/architecture/bible-api-and-caching.md` |
+| `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits ([caching](bible-api-and-caching.md)) |
 | `app_config` | shared | Key/value settings for the stats cron (`stats_min_words`, `stats_cron_schedule`) |
 | `user_collections` | per-user | Editable, soft-deleted; IDs unique per user |
 | `curated_collection_savers` | global | [All-time contribution ledger and access rules](../features/home.md#community-saves) |
@@ -143,10 +143,12 @@ A verse can be in many collections; see `delete_verse` for leaving the last.
 
 ### `verse_cache`
 
-Migration: `004_verse_level_cache.sql`
+Migrations: `004_verse_level_cache.sql`, `20261114200000_verse_cache_text_rev.sql`
+(adds `text_rev`, clears the licensed rows once).
 
-One row per verse: `book`, `chapter`, `verse`, `version`, `text` (the
-actual verse text), and `last_used_at`, bumped on every read for LRU.
+One row per verse: `book`, `chapter`, `verse`, `version`, `text`,
+`last_used_at` (bumped on every read for LRU) and `text_rev` (nullable,
+the parsing revision that wrote the row).
 
 Unique: `(book, chapter, verse, version)`. Indexed for chapter lookups,
 LRU and per-version counts.
@@ -156,8 +158,8 @@ policies and revoked `anon` and `authenticated`, the same for
 `app_config` and the `verse_cache_stats` view (now `security_invoker`).
 Edge functions reach them with the service role, which bypasses both.
 
-Licensing limits, eviction and its known gaps are in
-`docs/architecture/bible-api-and-caching.md`.
+Licensing limits, eviction, `text_rev` and the known gaps:
+[bible-api-and-caching.md](bible-api-and-caching.md). Tests: `supabase/tests/verse-cache.test.sql`.
 
 `getCacheStats` in `cache.ts` reads the view `verse_cache_stats`
 (per-version count + min/max `last_used_at`).
@@ -187,8 +189,6 @@ RLS: SELECT/INSERT of your own rows. **No UPDATE, no DELETE policy**:
 append-only by design. Rows go only with the account (`delete_own_account()`
 or the cascade).
 
-**No FK to `user_verses`.** See Decisions.
-
 ### `usage_daily`, `transcription_locks`, `subscriptions`
 
 `usage_daily` (migration 001): per-user per-day counters used by the
@@ -202,7 +202,7 @@ service role only (clients' grants revoked). No code acquires a lock, so the tab
 minutes.
 
 `subscriptions` (migration 001): one row per user. `tier` is `free` or
-`supporter`. `expires_at` is nullable (never-expires when NULL). Read
+`supporter`. A NULL `expires_at` never expires. Read
 by the edge function via `getUserTier()` to apply rate limits.
 
 ### `verse_of_month`, `popular_ranges`, `user_stats`
@@ -370,8 +370,6 @@ also re-dates new files to sort after prod's newest. See
 
 ## Sharp edges
 
-- `get_votm_mastery_count` has no definition: see
-  `docs/features/home.md`.
 - `search_path` is unset on most invoker functions, which Supabase
   Security Advisor flags (low risk).
 - `get_tier_and_usage`, the RPC behind `getTierAndUsage` in

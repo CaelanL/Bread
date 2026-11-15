@@ -112,7 +112,8 @@ synchronously, so audio can be fed from the first callback. Its `state` runs
    a failed mint. A failure before Soniox's first good message drops the key.
 2. **Buffer.** PCM captured while Soniox connects is held in memory, so capture
    never waits on the connection.
-3. **Open.** The key goes in the protocols list (`['soniox-api-key', key]`). The
+3. **Open.** The key goes in the protocols list (`['soniox-api-key', key]`), on v5
+   and v6 alike; a key only in the start frame (2.0.0) is refused from 2027-01-15. The
    first frame is JSON config: model, `pcm_s16le`, sample rate, channels,
    `language_hints`, and the verse as context. The backlog then flushes as chunks.
 4. **Stream.** Tokens with `is_final` accumulate. `<fin>` and `<end>` are dropped.
@@ -128,7 +129,7 @@ socket and rejects any pending `finish`.
 |---|---|
 | Token endpoint not 200, including 403 `LIVE_DISABLED` | No key |
 | Mint throws (offline, no session) | No key |
-| Socket error, or close while connecting or streaming | Stream is gone |
+| Socket refused, error, or close while connecting or streaming | Stream is gone |
 | Soniox `error_code` message | Stream is gone |
 | Buffer passes `MAX_BUFFER_SECONDS` of audio | Connect stalled |
 | Socket still connecting at `finish` | Batch has the file; no wait |
@@ -149,6 +150,9 @@ arrive as `{ error }` (`docs/architecture/edge-functions.md`), so the client che
 that `transcription` is a string rather than trusting `response.ok`. Cleaning is
 off, so `cleanedTranscription` is the raw text.
 
+The function deletes its Soniox copies after each job. A Soniox 429 past the
+90 s deadline answers a "busy, try again" error.
+
 Silent audio gives an empty transcript and a score of 0. Unlike live failures, batch
 failures are shown: the error throws out of the seam, and `handleSubmit` shows
 "Recording failed". The chunk stays incomplete and time studied doesn't grow.
@@ -166,10 +170,7 @@ failures are shown: the error throws out of the seam, and `handleSubmit` shows
 | Finalize wait | 1.5 s | `FINALIZE_TIMEOUT_MS` in `score-recording.ts` | Then batch |
 | Batch file | 64 kbps AAC | `handleMicPress` | Lower risks a rejected encoder and no m4a |
 | Heartbeat | 10 s | `process-recording` | Beats the phone's ~60 s socket idle timeout |
-| Soniox poll deadline | 90 s | `process-recording` | Bounds the batch wait |
-
-The upload has no client timeout: the heartbeat removes the silent window and the poll
-deadline bounds the work.
+| Soniox deadline | 90 s | `process-recording` | Bounds the batch wait, 429 back-off included |
 
 ### The 5-minute cap
 
@@ -204,8 +205,7 @@ then `db:stop` and `db:start`.
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
   the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
   any of them can clip the last word, which raises `missing` with no error.
-- **Naming.** Two functions are called `processRecording`; `cleanedTranscription`
-  is raw text.
+- **Naming.** Two functions are called `processRecording`.
 
 ## Browser checks
 
@@ -236,6 +236,6 @@ Recording needs a person and a real device (more in native-recorder.md). Local r
 - 2026-08-24 · `usage_daily` stays batch-only, with per-user attribution on minted keys · The meter is in no UI and its quota is off.
 - 2026-09-02 · Feed live audio from a screen-lifetime subscription and keep the attempt's live session through the seam · The trailing PCM chunk can land after `stopRecording` resolves, which clipped the last word.
 - 2026-11-12 · Delete each file once its attempt settles, sweep exact-name leftovers, no owned folder · Every take was kept forever. A folder adds a step before native start; the sweep covers it.
-- 2026-11-14 · Finger-down start, native start before the ring, one key per screen (300 s TTL, protocol auth), 1.5 s finalize, 64 kbps, 50 ms pieces, no recorder hook · Faster capture, fallback and upload. Soniox refuses `api_key` in the config from 15 January 2027.
+- 2026-11-14 · Finger-down start, native start before the ring, one key per screen (300 s TTL, protocol auth), 1.5 s finalize, 64 kbps, 50 ms pieces, no recorder hook · Faster capture, fallback and upload.
 - 2026-11-14 · Spare socket from screen open, config only at the tap · Tested: Soniox bills and caps sessions from config; a pause after config is billed.
 - 2026-11-14 · Warm audio session, interrupted attempts discarded · Activation was most of tap-to-capture (native-recorder.md).

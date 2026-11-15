@@ -269,7 +269,14 @@ class LiveSession implements LiveTranscriptionSession {
       return;
     }
     if (this.state !== 'connecting') return; // aborted during mint
-    this.attach(openSocket(key), key, false);
+    let ws: WebSocket;
+    try {
+      ws = openSocket(key);
+    } catch (e) {
+      this.fail(`socket refused: ${e instanceof Error ? e.message : e}`);
+      return;
+    }
+    this.attach(ws, key, false);
   }
 
   private attach(ws: WebSocket, key: LiveKey, open: boolean): void {
