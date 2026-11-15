@@ -247,6 +247,11 @@ describe('alignTranscription — number grammar', () => {
     ['four and twenty, six on each hand', '4 and 20, 6 on each hand', true],
     ['an hundred and twenty years', '120 years', true],
     ['were an hundred and thirty and seven years', 'were 137 years', true],
+    // F5: the scale word covers the sum (Revelation 7:4, Numbers 25:9, Numbers 1:23)
+    ['and there were sealed an hundred and forty and four thousand of all the tribes', 'and there were sealed 144,000 of all the tribes', true],
+    ['And those that died in the plague were twenty and four thousand.', 'And those that died in the plague were 24,000.', true],
+    ['were fifty and nine thousand and three hundred.', 'were 59,300.', true],
+    ['an hundred and forty and four thousand', '145,000', false],
     ['two hundred men', '2 hundred men', true], // F1
     ['2 hundred men', 'two hundred men', true],
     ['two hundred men', '3 hundred men', false],

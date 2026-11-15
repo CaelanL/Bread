@@ -516,19 +516,27 @@ const lastPlace = (n: number) => {
 };
 
 function numberChain(units: ComparisonUnit[], start: number, keys: Set<string>, digitKeys: Set<string>): { unit: ComparisonUnit; end: number } | undefined {
-  const parts: number[] = [];
+  const totals: number[] = [];
   const ends: number[] = [];
+  let sum = 0;
+  let last = 0;
   let j = start;
-  while (parts.length < MAX_CHAIN) {
-    const at = parts.length && units[j]?.key === 'and' ? j + 1 : j;
+  while (totals.length < MAX_CHAIN) {
+    const at = totals.length && units[j]?.key === 'and' ? j + 1 : j;
     const value = unitValue(units[at]);
-    if (!value || (parts.length && (value >= lastPlace(parts[parts.length - 1]) || crossesPunct(units.slice(j - 1, at))))) break;
-    parts.push(value);
+    if (!value || (totals.length && crossesPunct(units.slice(j - 1, at)))) break;
+    // The KJV's scale word covers the sum before it: "an hundred and forty and four thousand" is
+    // 144,000, "fifty and nine thousand and three hundred" 59,300.
+    const scale = totals.length ? [1_000_000, 1000].find((s) => value >= s && Math.floor(value / s) < lastPlace(last) && sum < s) : undefined;
+    if (totals.length && value >= lastPlace(last) && !scale) break;
     j = at + 1;
     ends.push(j);
+    sum = scale ? (sum + Math.floor(value / scale)) * scale + (value % scale) : sum + value;
+    last = scale ? sum : value;
+    totals.push(sum);
   }
-  for (let n = parts.length; n >= 2; n--) {
-    const key = `number:cardinal:${parts.slice(0, n).reduce((a, b) => a + b, 0)}`;
+  for (let n = totals.length; n >= 2; n--) {
+    const key = `number:cardinal:${totals[n - 1]}`;
     const tokens = unitTokens(units.slice(start, ends[n - 1]));
     // Digits on either side: "300,000 and 7" is how an engine writes "three hundred thousand and seven".
     if (digitKeys.has(key) || (keys.has(key) && tokens.some((t) => /\d/.test(t.raw)))) return { unit: { key, tokens }, end: ends[n - 1] };
