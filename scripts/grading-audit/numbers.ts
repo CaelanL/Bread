@@ -249,9 +249,18 @@ function underThousand(n: number): string[] {
 
 // Digits in a verse ("2,172", "603,550") as a reader says them: "two thousand one hundred
 // seventy-two". Integers only; ordinals ("2nd") and anything else stay as they are.
+const DENOMINATORS: Record<string, string> = { '2': 'half', '3': 'third', '4': 'fourth', '8': 'eighth', '10': 'tenth' };
+
 export function digitsToWords(text: string): { text: string; changed: boolean } {
   let changed = false;
-  const out = text.replace(/(?<!:)(\b\d{1,3}(,\d{3})+\b|\b\d+\b(?![,.:]?\d|st|nd|rd|th))/g, (m) => {
+  // Fractions as said: "87-1/2" is "87 and a half", "8-3/4" is "8 and three fourths".
+  const fractions = text.replace(/\b(?:(\d+)[- ])?(\d)\/(\d+)\b/g, (m, whole: string | undefined, num: string, den: string) => {
+    const name = DENOMINATORS[den];
+    if (!name) return m;
+    const part = num === '1' && den === '2' ? (whole ? 'a half' : 'one half') : `${underThousand(Number(num)).join(' ')} ${name}${num === '1' ? '' : 's'}`;
+    return whole ? `${whole} and ${part}` : part;
+  });
+  const out = fractions.replace(/(?<!:)(\b\d{1,3}(,\d{3})+\b|\b\d+\b(?![,.:]?\d|st|nd|rd|th))/g, (m) => {
     const n = Number(m.replace(/,/g, ''));
     if (!Number.isSafeInteger(n) || n === 0 || n >= 1_000_000_000) return m;
     changed = true;
@@ -261,5 +270,5 @@ export function digitsToWords(text: string): { text: string; changed: boolean } 
     parts.push(...underThousand(n % 1000));
     return parts.join(' ');
   });
-  return { text: out, changed };
+  return { text: out, changed: changed || fractions !== text };
 }

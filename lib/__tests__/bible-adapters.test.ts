@@ -83,11 +83,12 @@ describe('API.Bible parser', () => {
   });
 
   it('drops a Psalm 119 stanza heading, with or without its Hebrew letter', () => {
-    const html = `<p class="q1">${v('8')}I will keep thy statutes.</p><p class="qa">ב Beth</p><p class="q1">${v('9')}Wherewithal shall a young man cleanse his way?</p><p class="qa">GIMEL</p><p class="q1">${v('17')}Deal bountifully.</p>`;
+    const html = `<p class="q1">${v('8')}I will keep thy statutes.</p><p class="qa">ב Beth</p><p class="q1">${v('9')}Wherewithal shall a young man cleanse his way?</p><p class="qa">GIMEL</p><p class="q1">${v('17')}Deal bountifully.</p><p class="qa">ס <span class="sc">SAMEK</span></p><p class="q1">${v('113')}I hate vain thoughts.</p>`;
     assert.deepEqual(parseApiBibleHtml(html), {
       '8': 'I will keep thy statutes.',
       '9': 'Wherewithal shall a young man cleanse his way?',
       '17': 'Deal bountifully.',
+      '113': 'I hate vain thoughts.',
     });
   });
 
@@ -113,6 +114,12 @@ describe('API.Bible parser', () => {
   it('drops a bracketed manuscript note after a verse', () => {
     const html = `<p class="p">${v('52')}Search, and look.</p><p class="m">[The earliest manuscripts do not have verses 53 to 11.]</p><p class="p">${v('53')}And every man went unto his own house.</p>`;
     assert.deepEqual(parseApiBibleHtml(html), { '52': 'Search, and look.', '53': 'And every man went unto his own house.' });
+  });
+
+  it('ends a verse at the dash rule before a note or an alternate ending', () => {
+    const html = `<p class="p">${v('8')}And they went out quickly. ----------</p><p class="pc">[<span class="it">The most ancient manuscripts end here.</span>]</p><p class="pc">[<span class="it">Shorter Ending</span>]</p><p class="p">Then they told it briefly.</p><p class="pc">[<span class="it">Longer Ending</span>]</p><p class="p">${v('9')}Now when Jesus was risen early.</p>`;
+    assert.deepEqual(parseApiBibleHtml(html), { '8': 'And they went out quickly.', '9': 'Now when Jesus was risen early.' });
+    assert.equal(cleanApiBibleText('Search, and look. [ <span class="it">The earliest manuscripts.</span>]'), 'Search, and look.');
   });
 
   it('leaves an omitted verse absent', () => {

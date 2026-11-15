@@ -12,8 +12,9 @@
  */
 
 // Psalm 119 stanza headings ("א Aleph"), dropped when a block holds only one.
+// A Hebrew letter and one word is a heading in any spelling ("ס Samek").
 const STANZA =
-  /^[א-ת]?\s*(Aleph|Alef|Beth|Bet|Gimel|Daleth|Dalet|He|Waw|Vav|Zayin|Heth|Het|Teth|Tet|Yodh|Yod|Kaph|Kaf|Lamedh|Lamed|Mem|Nun|Samekh|Ayin|Pe|Tsadhe|Tsadi|Qoph|Qof|Resh|Sin|Shin|Sin and Shin|Taw|Tav)?\s*$/i;
+  /^[א-ת]\s*[A-Za-z]*$|^[א-ת]?\s*(Aleph|Alef|Beth|Bet|Gimel|Daleth|Dalet|He|Waw|Vav|Zayin|Heth|Het|Teth|Tet|Yodh|Yod|Kaph|Kaf|Lamedh|Lamed|Mem|Nun|Samekh|Ayin|Pe|Tsadhe|Tsadi|Qoph|Qof|Resh|Sin|Shin|Sin and Shin|Taw|Tav)?\s*$/i;
 
 const ENTITIES: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘", rdquo: "”",
@@ -36,7 +37,7 @@ function decodeEntities(text: string): string {
 // are dropped.
 export function cleanApiBibleText(html: string): string {
   return decodeEntities(html.replace(/<[^>]*>/g, " "))
-    .replace(/\[[A-Za-z][^[\]]*\]/g, " ")
+    .replace(/\[\s*[A-Za-z][^[\]]*\]/g, " ")
     .replace(/\s+/g, " ")
     .replace(/ ([,.;:!?’”)\]])/g, "$1")
     .trim();
@@ -53,7 +54,9 @@ export function parseApiBibleHtml(html: string): Record<string, string> {
   const markers = [...withoutStanzas.matchAll(/<span\b[^>]*\bdata-number="(\d+)(?:-\d+)?"[^>]*>[^<]*<\/span>/g)];
   markers.forEach((marker, i) => {
     const end = i + 1 < markers.length ? markers[i + 1].index : withoutStanzas.length;
-    const text = cleanApiBibleText(withoutStanzas.slice(marker.index + marker[0].length, end));
+    // NLT prints a dash rule after a verse, then a manuscript note or an
+    // alternate ending (Mark 16:8): none of it is the verse.
+    const text = cleanApiBibleText(withoutStanzas.slice(marker.index + marker[0].length, end).split(/-{4,}/)[0]);
     if (text) verses[marker[1]] = verses[marker[1]] ? `${verses[marker[1]]} ${text}` : text;
   });
   return verses;
