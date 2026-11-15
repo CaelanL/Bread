@@ -4,7 +4,7 @@ import { calculateChunkScore, type AlignmentWord } from '@/lib/study-chunks';
 import type { LiveTranscriptionSession } from './live-session';
 
 // Measured finalize latency is ~70–90ms. The file takes over if it stalls.
-const FINALIZE_TIMEOUT_MS = 3000;
+const FINALIZE_TIMEOUT_MS = 1500;
 
 export interface ChunkResult {
   score: number;
