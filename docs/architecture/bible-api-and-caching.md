@@ -51,7 +51,9 @@ No eviction — relies on app restart. No TTL. The session cache is
 why opening the same verse twice in a session never hits the network.
 `peekVerseText(verse)` reads it synchronously (no KJV bundle, no
 network), so verse cards and the study session show text already in
-memory on their first frame, with no loader.
+memory on their first frame, with no loader. A card's failed read is tried
+again when pull to refresh replaces its verse, with the failure text kept
+until the answer (`hooks/use-verse-preview.ts`).
 
 ### Preloading verse text
 

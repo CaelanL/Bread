@@ -41,6 +41,7 @@ test('account translation sync and switch', async (t) => {
   let identityRows = null;
   const requests = [];
   let heldProfile;
+  let heldLinks;
   let failLinks = false;
   let deleteBlocked = false;
   let failUser = false;
@@ -76,6 +77,7 @@ test('account translation sync and switch', async (t) => {
       return json(identityRows ?? [verse('esv-row', 'ESV', true), verse('niv-row', 'NIV', false)]);
     }
     if (url.pathname.startsWith('/rest/v1/rpc/')) return json([]);
+    if (url.pathname === '/rest/v1/verse_collections' && method === 'GET' && heldLinks) await heldLinks.promise;
     if (url.pathname === '/rest/v1/verse_collections' && url.searchParams.get('select') === 'collection_id,added_at') {
       return failLinks ? json({ message: 'unavailable' }, 503) : json([]);
     }
@@ -296,5 +298,30 @@ test('account translation sync and switch', async (t) => {
     const afterLastDelete = requests.slice(requests.lastIndexOf('DELETE /rest/v1/user_verses') + 1);
     assert.ok(afterLastDelete.includes('GET /rest/v1/user_verses mastered'), 'mastered read again after the failed collapse');
     assert.ok(afterLastDelete.includes('GET /rest/v1/verse_collections'), 'verses read again after the failed collapse');
+  });
+
+  await t.test('F35: a translation change tells which verses stayed, but not after a switch during its reread', async (scenario) => {
+    const { Alert } = await import('react-native');
+    const alerts = [];
+    scenario.mock.method(Alert, 'alert', (...args) => alerts.push(args));
+    // Matthew 17:21 isn't in the ESV, so the change keeps it in the NIV.
+    const omitted = (id) => ({ ...verse(id, 'NIV', false), book: 'Matthew', chapter: 17, verse_start: 21, verse_end: 21 });
+    const change = async (id, during) => {
+      useAppStore.setState({ bibleVersion: 'NIV' });
+      profile = 'NIV';
+      identityRows = [omitted(id)];
+      heldLinks = Promise.withResolvers();
+      requests.length = 0;
+      const changing = state().setBibleVersion('ESV');
+      for (let i = 0; i < 1000 && !requests.includes('GET /rest/v1/verse_collections'); i++) await new Promise((resolve) => setTimeout(resolve, 1));
+      during();
+      heldLinks.resolve();
+      heldLinks = undefined;
+      await changing;
+    };
+    await change('kept-1', () => {});
+    assert.equal(alerts.length, 1, 'the same account is told');
+    await change('kept-2', () => state().clear());
+    assert.equal(alerts.length, 1, 'nothing shown after the account changed');
   });
 });

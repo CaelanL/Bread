@@ -8,10 +8,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
-import { getVerseText, peekVerseText } from '@/lib/api/bible';
+import { useVersePreview } from '@/hooks/use-verse-preview';
 import type { MemberState } from '@/lib/shared/progress';
 import { formatVerseReference, type Difficulty, type SavedVerse } from '@/lib/storage';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -49,27 +49,8 @@ export function SwipeableVerseCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  // Text already in memory shows on the first frame, with no loader.
-  const [text, setText] = useState<string>(() => verse.text || peekVerseText(verse)?.text || '');
-  const [loading, setLoading] = useState(!text);
   const hideText = useAppStore((state) => state.hideVerseText);
-
-  // Keyed on the verse, not the object: a study prefs save swaps the object and would flash the loader.
-  useEffect(() => {
-    if (verse.text || hideText) return;
-    const inMemory = peekVerseText(verse);
-    if (inMemory) {
-      setText(inMemory.text);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    getVerseText(verse)
-      .then(({ text }) => setText(text))
-      .catch(() => setText('Failed to load verse text'))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verse.id, verse.version, hideText]);
+  const { text, loading } = useVersePreview(verse, hideText);
 
   // Get highest completed difficulty (90%+)
   const getHighestDifficulty = (): Difficulty | null => {

@@ -61,10 +61,12 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   // Replies for the next progress saves, ahead of the default (applied as sent).
   const progressReplies = [];
   const requests = [];
+  const sent = [];
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(input);
     requests.push(url.pathname);
     const method = init.method ?? 'GET';
+    sent.push(method + ' ' + url.pathname);
     const bearer = new Headers(init.headers).get('Authorization');
     const account = Object.keys(tokens).find((key) => bearer === 'Bearer ' + tokens[key]);
     const object = new Headers(init.headers).get('Accept')?.includes('vnd.pgrst.object');
@@ -606,11 +608,11 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     assert.deepEqual(store().verses.map((v) => v.id), ['A-verse', 'A-two']);
   });
 
-  const writePaths = ['/rest/v1/rpc/copy_verse_to_collection', '/rest/v1/rpc/join_shared_collection', '/rest/v1/rpc/share_collection',
-    '/rest/v1/rpc/add_verse', '/rest/v1/rpc/sync_shared_collection'];
+  const writePaths = ['/rest/v1/rpc/join_shared_collection', '/rest/v1/rpc/share_collection', '/rest/v1/rpc/add_verse',
+    '/rest/v1/rpc/sync_shared_collection', '/rest/v1/rpc/import_curated_collection', '/functions/v1/bible', '/rest/v1/rpc/copy_verse_to_collection'];
   const writesSent = () => requests.filter((path) => writePaths.includes(path));
 
-  await t.test('rule 3: copy, join, share and add wait for the profile before writing', async () => {
+  await t.test('rule 3: join, share, add and a curated import wait for the profile before writing', async () => {
     setAccount(null);
     await signIn('A');
     const profileRead = hold('/rest/v1/profiles');
@@ -618,16 +620,84 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     await profileRead.sent;
     requests.length = 0;
     const actions = [
-      store().copyVerseToCollection('A-verse', 'psalms'),
       store().joinSharedCollection('ABCD-EFGH'),
       store().shareCollection('psalms'),
       store().addVerse({ book: 'John', chapter: 1, verseStart: 1, verseEnd: 1 }, 'my-verses'),
+      store().importCuratedCollection('hope'),
     ];
     await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.deepEqual(writesSent(), [], 'nothing written on the saved translation and name');
+    assert.deepEqual(writesSent(), [], 'nothing written, or read in a translation, on the saved profile');
     profileRead.reply(Response.json([{ translation: 'ESV', display_name: 'A L.', first_name: 'A', last_name: 'L', welcome_v2_seen_at: null }]));
     await Promise.allSettled(actions);
-    assert.deepEqual(writesSent().sort(), writePaths.slice(0, 4).sort());
+    for (const path of writePaths.slice(0, 3)) assert.ok(writesSent().includes(path), path);
+    assert.ok(writesSent().includes('/functions/v1/bible'), 'the import checks its passages once the translation is known');
+  });
+
+  await t.test('F38: a copy into a personal collection links the existing row, so it does not wait for the profile', async () => {
+    setAccount(null);
+    await signIn('A');
+    const profileRead = hold('/rest/v1/profiles');
+    setAccount('A');
+    await profileRead.sent;
+    requests.length = 0;
+    const copying = store().copyVerseToCollection('A-verse', 'psalms').catch(() => {});
+    await until(() => writesSent().includes('/rest/v1/rpc/copy_verse_to_collection'));
+    profileRead.reply(Response.json([{ translation: 'ESV', display_name: 'A L.', first_name: 'A', last_name: 'L', welcome_v2_seen_at: null }]));
+    await Promise.allSettled([copying]);
+  });
+
+  // Each write pins its account before its first wait: a switch during the session lookup sends nothing.
+  for (const [name, start, write] of [
+    ['setName', () => store().setName('Late', 'A'), 'POST /rest/v1/profiles'],
+    ['setBibleVersion', () => store().setBibleVersion('NIV'), 'POST /rest/v1/profiles'],
+    ['addCollection', () => store().addCollection('Late A'), 'POST /rest/v1/user_collections'],
+  ]) {
+    await t.test(`F36: ${name} started for A sends nothing once B is signed in`, async (scenario) => {
+      await startSynced('A');
+      const session = await supabase.auth.getSession();
+      const lookup = Promise.withResolvers();
+      let asked = false;
+      scenario.mock.method(supabase.auth, 'getSession', () => { asked = true; return lookup.promise; }, { times: 1 });
+      const running = start();
+      await until(() => asked);
+      // B's start queues behind a translation change, so the lookup answers before B is synced.
+      setAccount(null);
+      await signIn('B');
+      setAccount('B');
+      sent.length = 0;
+      lookup.resolve(session);
+      await Promise.allSettled([running]);
+      await until(() => store().synced);
+      assert.deepEqual(sent.filter((request) => request === write), []);
+    });
+  }
+
+  await t.test('F37: a failed reset puts back only its own progress, and no entry deleted during it', async () => {
+    const done = { bestAccuracy: 95, completed: true };
+    const practiced = (collection) => ({ ...membership('A'), user_collections: { client_id: collection },
+      user_verses: { ...membership('A').user_verses, progress: { easy: done } } });
+    verseRows.A = [practiced('my-verses'), practiced('psalms'), membership('A', 'A-two')];
+    await startSynced('A');
+    const reset = hold('/rest/v1/user_verses', null, 'PATCH');
+    const firstDelete = hold('/rest/v1/rpc/delete_verse');
+    const pendingDelete = hold('/rest/v1/rpc/delete_verse');
+    const resetting = store().resetVerseProgress('A-verse');
+    await reset.sent;
+    const deletingTwo = store().deleteVerse('A-two', 'my-verses');
+    await firstDelete.sent;
+    const deletingPsalm = store().deleteVerse('A-verse', 'psalms');
+    await pendingDelete.sent;
+    firstDelete.reply(new Response(null, { status: 204 }));
+    await deletingTwo;
+    reset.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    await assert.rejects(resetting);
+    const entries = () => store().verses.map((v) => v.id + '|' + v.collectionId);
+    assert.deepEqual(entries(), ['A-verse|my-verses'], 'neither the deleted nor the pending entry came back');
+    assert.equal(store().verses[0].progress.easy.completed, true, 'its own progress is back');
+    pendingDelete.reply(new Response(null, { status: 204 }));
+    await deletingPsalm;
+    assert.deepEqual(entries(), ['A-verse|my-verses']);
+    assert.deepEqual(saved('A').verses.map((v) => v.id + '|' + v.collectionId), ['A-verse|my-verses']);
   });
 
   await t.test("F30: opening a shared collection syncs its copy only once the account's translation is known", async () => {

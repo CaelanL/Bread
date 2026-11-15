@@ -1219,8 +1219,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const kept = await queueTranslationWork(async () => {
         // A later choice replaced this one before it ran.
         if (!sameAccount(generation) || requestedTranslation !== version) return [];
-        const userId = await getCurrentUserId();
-        const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: version });
+        const session = await getCollectionWriteSession(generation);
+        if (!session) return [];
+        const userId = session.user.id;
+        const { error } = await supabase.from('profiles').upsert({ user_id: userId, translation: version })
+          .setHeader('Authorization', `Bearer ${session.access_token}`);
         if (error) throw error;
         saved = true;
         requestedTranslation = null;
@@ -1234,6 +1237,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!sameAccount(generation)) return;
       await Promise.all([get().fetchVerses(), get().fetchMasteredVerses()]);
       saveSnapshot(generation);
+      if (!sameAccount(generation)) return;
       await tellKeptVerses(kept, version);
     } catch (e) {
       console.error('[STORE] Failed to change translation:', e);
@@ -1258,10 +1262,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const generation = accountGeneration;
     set(next);
     try {
-      const userId = await getCurrentUserId();
+      const session = await getCollectionWriteSession(generation);
+      if (!session) return;
       const { error } = await supabase.from('profiles').upsert({
-        user_id: userId, display_name: next.displayName, first_name: firstName, last_name: lastName,
-      });
+        user_id: session.user.id, display_name: next.displayName, first_name: firstName, last_name: lastName,
+      }).setHeader('Authorization', `Bearer ${session.access_token}`);
       if (error) throw error;
       saveSnapshot(generation);
     } catch (e) {
@@ -1289,18 +1294,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addCollection: async (name, iconKey) => {
     const generation = accountGeneration;
-    const userId = await getCurrentUserId();
+    const session = await getCollectionWriteSession(generation);
+    if (!session) throw new Error('Your account changed.');
     const clientId = `collection-${Date.now()}`;
     const createdAt = new Date();
 
     const { error } = await supabase.from('user_collections').insert({
-      user_id: userId,
+      user_id: session.user.id,
       client_id: clientId,
       name,
       is_default: false,
       ...(iconKey ? { icon_key: iconKey } : {}),
       created_at: createdAt.toISOString(),
-    });
+    }).setHeader('Authorization', `Bearer ${session.access_token}`);
 
     if (error) {
       console.error('[STORE] Failed to create collection:', error);
@@ -1726,11 +1732,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   copyVerseToCollection: async (verseId, collectionId) => {
     // A shared collection holds the group's references: the copy adds one, and sync links the verse.
+    // Only a shared copy inserts a row in the translation, so only it waits for the profile (rule 3).
+    // A personal copy links the existing row (supabase/migrations/*_collection_management.sql).
     const generation = accountGeneration;
-    await requireSynced();
-    if (!sameAccount(generation)) return;
     const sharedId = sharedIdOf(collectionId);
     if (sharedId) {
+      await requireSynced();
+      if (!sameAccount(generation)) return;
       const verse = get().verses.find((v) => v.id === verseId);
       if (!verse) throw new Error('Failed to copy verse');
       await addSharedVerse(sharedId, collectionId, verse);
@@ -1960,9 +1968,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const verse = get().verses.find((v) => v.id === id);
       const wasMastered = verse?.progress?.hard?.completed === true;
 
-      // Save for rollback
-      const previousVerses = get().verses;
-      const previousMastered = get().masteredVerses;
+      // Save for rollback: only this verse's entries, as they were.
+      const previousEntries = new Map(get().verses.filter((v) => v.id === id).map((v) => [v.collectionId, v]));
+      const previousMastered = get().masteredVerses.find((v) => v.id === id);
 
       // Optimistic update — also clear lastPracticedAt so the reset verse
       // drops to the bottom of the "Recent" sort.
@@ -1988,8 +1996,17 @@ export const useAppStore = create<AppState>((set, get) => ({
           throw new Error('Failed to reset progress');
         }
       } catch (error) {
-        // Rollback on failure
-        setFor(generation, { verses: previousVerses, masteredVerses: previousMastered });
+        // Rollback on failure: only entries still showing this reset, and never one deleted since
+        // (rule 2: a pending delete stays out, a finished one is already gone from the list).
+        setFor(generation, (state) => ({
+          verses: state.verses.map((v) => {
+            const before = v.id === id && v.progress === DEFAULT_PROGRESS && previousEntries.get(v.collectionId);
+            return before ? { ...v, progress: before.progress, lastPracticedAt: before.lastPracticedAt } : v;
+          }),
+          masteredVerses: wasMastered && previousMastered && !state.masteredVerses.some((v) => v.id === id)
+            ? [...state.masteredVerses, previousMastered]
+            : state.masteredVerses,
+        }));
         throw error;
       }
       // A mastered square went back to Open: the shared card's emblem may no longer hold.
