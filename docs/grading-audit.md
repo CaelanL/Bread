@@ -92,7 +92,7 @@ the first match: first words dropped, a number, a capitalized name, a near spell
 | Run | Clips | Under 100 | Under 90 | Digits | Spelling | Names | First word | Other |
 |---|---|---|---|---|---|---|---|---|
 | v5 batch | 457 | 71 → 31 | 32 → 11 | 20 → 3 | 37 → 17 | 5 → 4 | 3 → 3 | 6 → 4 |
-| v6 batch | 457 | 102 → 56 | 52 → 24 | 29 → 7 | 34 → 18 | 20 → 15 | 2 → 2 | 17 → 14 |
+| v6 batch | 457 | 102 → 56 | 52 → 24 | 29 → 7 | 34 → 17 | 20 → 15 | 2 → 2 | 17 → 15 |
 | v5 live | 150 | 16 → 9 | 5 → 3 | 0 → 0 | 13 → 7 | 1 → 0 | 0 → 0 | 2 → 2 |
 | v6 live | 150 | 40 → 24 | 26 → 12 | 11 → 3 | 13 → 8 | 8 → 6 | 0 → 0 | 8 → 7 |
 
@@ -107,9 +107,9 @@ the verse's own word ("Hazel" for "Hazael", "Lee", "Baala", "Itai", "hought", "f
 (`numberChain` in `lib/align.ts`).
 Context doesn't explain the gap. The request is the same shape on both models (`general` and
 `text`; Soniox documents one context format, with an optional `terms` list neither uses), and v6
-leans on it: rerun on the 61 clips v6 missed, v6 with the verse as context missed 58 again (23
-under 90), v6 without it missed 60 (52 under 90), and v5 with it missed 21 of the same clips
-(`voice.ts replay --no-context`).
+leans on it: rerun on the 61 clips v6 missed before the voice-test spellings, v6 with the verse
+as context missed 58 again (23 under 90), v6 without it missed 60 (52 under 90), and v5 with it
+missed 21 of the same clips (`voice.ts replay --no-context`).
 Pins: `say-kjv-misses.json` 42, `say-kjv-v6-misses.json` 56, `say-kjv-rt-v6-misses.json` 24.
 
 ## Ranked
@@ -538,3 +538,8 @@ translation, or `session_attempts` for an account around the review date with 3-
 - 2026-11-14 · API.Bible checks use the `capture-raw.ts` chapter set (about 25 calls a
   translation), not the 270-chapter sample · The free plan's 5,000 calls a month are shared with
   prod; the set covers every structure the audit found.
+- 2026-11-15 · The voice-test spellings: a hard-coded list in `lib/align-spellings.ts` of same-word
+  spellings and name variants taken from voice-test misses (unseamly, Balam, Baala, Hazel), with
+  no sound-alike rule; D3 stands for real words that sound alike. Hazel/Hazael is in although
+  "hazel" is a KJV word (Genesis 30:37) · Caelan's call: a name the engine spells oddly was said
+  right.
