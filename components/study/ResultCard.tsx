@@ -1,7 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import type { AlignmentWord } from '@/lib/study-chunks';
+import { isPerfect, type AlignmentWord } from '@/lib/study-chunks';
 import React, { useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated';
@@ -160,8 +160,9 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
   const status = getStatus(score);
   const statusConfig = STATUS_CONFIG[status];
   const statusColors = getStatusColors(status, isDark);
-  // A card with visible mistakes isn't perfect: 90-99 passes as "Great!".
-  const label = status === 'success' && score < 100 ? 'Great!' : statusConfig.label;
+  // A card with visible mistakes isn't perfect, even when the score rounds to 100.
+  const perfect = alignment ? isPerfect(alignment) : score === 100;
+  const label = status === 'success' && !perfect ? 'Great!' : statusConfig.label;
 
   return (
     <Animated.View

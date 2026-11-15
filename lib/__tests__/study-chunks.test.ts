@@ -19,7 +19,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDifficulty, calculateFinalScore, parseVerseIntoChunks, type AlignmentWord } from '../study-chunks';
+import { applyDifficulty, calculateChunkScore, calculateFinalScore, isPerfect, parseVerseIntoChunks, type AlignmentWord } from '../study-chunks';
 import type { SavedVerse } from '../storage';
 
 // Structurally faithful Psalm 103:1-14 ESV shapes (poetry newlines kept)
@@ -145,4 +145,23 @@ describe('calculateFinalScore around the 90% pass line', () => {
   for (const [name, chunks, expected] of cases) {
     it(name, () => assert.equal(score(...chunks), expected));
   }
+});
+
+describe('isPerfect — the card says "Perfect!" only with nothing marked', () => {
+  const correct = (n: number): AlignmentWord[] => Array.from({ length: n }, () => ({ word: 'and', status: 'correct' as const }));
+
+  it('a long chunk with one missing word rounds to 100 but is not perfect', () => {
+    const alignment = [...correct(250), { word: 'eternal', status: 'missing' as const, expected: 'eternal' }];
+    assert.equal(calculateChunkScore(alignment), 100);
+    assert.equal(isPerfect(alignment), false);
+  });
+
+  it('a close or added word is marked too', () => {
+    assert.equal(isPerfect([...correct(3), { word: 'hath', status: 'close' as const, expected: 'hath' }]), false);
+    assert.equal(isPerfect([...correct(3), { word: 'um', status: 'added' as const }]), false);
+  });
+
+  it('every word correct is perfect', () => {
+    assert.equal(isPerfect(correct(5)), true);
+  });
 });

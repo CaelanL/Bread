@@ -176,9 +176,9 @@ In `lib/study-chunks.ts`, each of these rounds, and an empty alignment scores 0:
 `processRecording` in the hook gets a transcript (see
 `docs/features/transcription.md`), aligns it locally, scores it, and stores it.
 
-`ResultCard` shows "% match" with "Perfect!" at 100, "Great!" at 90 to 99, "Good
-effort!" at 65 or more, and "Keep Practicing" below that. A help icon opens
-`AlignmentHelpModal`.
+`ResultCard` shows "% match" with "Perfect!" when nothing is marked (`isPerfect`),
+"Great!" for other passes, "Good effort!" at 65+, "Keep Practicing" below. A help
+icon opens `AlignmentHelpModal`.
 
 ### Retry
 

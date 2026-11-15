@@ -294,6 +294,14 @@ export function parseVerseIntoChunks(
 // ============================================================================
 
 /**
+ * Nothing on the card is marked: no missing, added or close word. A long chunk can round to
+ * 100 with one word missing, so the card's "Perfect!" reads this, not the score.
+ */
+export function isPerfect(alignment: AlignmentWord[]): boolean {
+  return alignment.every((word) => word.status === 'correct');
+}
+
+/**
  * Calculate score from a single alignment result
  */
 export function calculateChunkScore(alignment: AlignmentWord[]): number {
