@@ -181,7 +181,7 @@ function sonioxKey(): string {
   return key;
 }
 
-async function transcribeDirect(audio: Buffer, text: string, model = 'stt-async-v5'): Promise<string> {
+async function transcribeDirect(audio: Buffer, text: string, model = 'stt-async-v6'): Promise<string> {
   const headers = { Authorization: `Bearer ${sonioxKey()}` };
   const signal = () => AbortSignal.timeout(60_000); // a hung request stalled a whole run
   const form = new FormData();
