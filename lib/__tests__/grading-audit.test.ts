@@ -73,9 +73,7 @@ describe('grading audit — holds today on every KJV verse', () => {
   }
 });
 
-const TODO = 'known bug, fails until fixed';
-
-describe('grading audit — known bugs (todo until fixed)', () => {
+describe('grading audit — bugs found by the audit', () => {
   it('F1: a restart inside a number shows the said number words as missing and added', () => {
     const alignment = alignTranscription(
       'And Eber lived after he begat Peleg four hundred and thirty years',
@@ -126,7 +124,7 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assertPerfect('Nevertheless the people be strong', 'Never the less the people be strong');
   });
 
-  it('F7: a translation\'s omitted verse becomes an empty chunk that can never pass', { todo: TODO }, () => {
+  it('F7: a translation\'s omitted verse becomes an empty chunk that can never pass', () => {
     const verse = {
       id: 'omitted',
       book: 'Matthew',
@@ -161,7 +159,7 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assertPerfect('Beth‐lehem', 'Bethlehem');
   });
 
-  it('F12: the legacy splitter (no keyed verses) drops or repeats words', { todo: TODO }, () => {
+  it('F12: the legacy splitter (no keyed verses) drops or repeats words', () => {
     const verses = { '1': 'In the beginning. God created.', '2': 'And the earth.' };
     const verse = {
       id: 'legacy', book: 'Genesis', chapter: 1, verseStart: 1, verseEnd: 2, version: 'KJV',

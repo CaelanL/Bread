@@ -180,25 +180,21 @@ function annotateVerseRangeKeyed(
   return parts.join(' ');
 }
 
-/**
- * Annotate a full verse range (for when all verses are in one chunk)
- * DEPRECATED: Use annotateVerseRangeKeyed when keyed data is available
- */
-function annotateVerseRange(fullText: string, startVerse: number, totalVerses: number): string {
-  const parts: string[] = [];
-  for (let i = 0; i < totalVerses; i++) {
-    const verseText = getVerseText(fullText, i, totalVerses);
-    parts.push(annotateWithVerseNum(verseText, startVerse + i));
+// The range's verse numbers that have text, in order.
+function verseNumbers(verse: SavedVerse): number[] {
+  const numbers: number[] = [];
+  for (let v = verse.verseStart; v <= verse.verseEnd; v++) {
+    if (verse.verses?.[v]) numbers.push(v);
   }
-  return parts.join(' ');
+  return numbers;
 }
 
 /**
  * Parse a saved verse into chunks for study.
  * Each chunk gets a stable ID for FlatList keys.
  *
- * Uses keyed verse data (verse.verses) when available for correct alignment.
- * Falls back to deprecated sentence splitting for old cached data.
+ * Uses keyed verse data (verse.verses). A verse the translation omits gets no
+ * chunk. Without keyed data the whole range is one chunk.
  *
  * @param verse - The saved verse to parse
  * @param difficulty - Difficulty level for display masking
@@ -231,8 +227,8 @@ export function parseVerseIntoChunks(
     }];
   }
 
-  // If chunkSize >= totalVerses, return all verses as one chunk
-  if (chunkSize >= totalVerses) {
+  // If chunkSize >= totalVerses, or the range has no keyed verses, return all verses as one chunk
+  if (chunkSize >= totalVerses || !hasKeyedData) {
     const chunkId = `${verse.id}:${verse.verseStart}-${verse.verseEnd}`;
 
     if (hasKeyedData) {
@@ -242,7 +238,7 @@ export function parseVerseIntoChunks(
         verse.verseStart,
         verse.verseEnd
       );
-      const combinedText = Object.values(verse.verses!).join(' ');
+      const combinedText = verseNumbers(verse).map((v) => verse.verses![v]).join(' ');
       return [{
         id: chunkId,
         verseNum: verse.verseStart,
@@ -252,8 +248,7 @@ export function parseVerseIntoChunks(
       }];
     }
 
-    // Fallback: use deprecated sentence splitting
-    const annotatedText = annotateVerseRange(text, verse.verseStart, totalVerses);
+    const annotatedText = annotateWithVerseNum(text, verse.verseStart);
     return [{
       id: chunkId,
       verseNum: verse.verseStart,
@@ -263,22 +258,9 @@ export function parseVerseIntoChunks(
     }];
   }
 
-  // Get individual verse texts
-  const verseTexts: { verseNum: number; text: string }[] = [];
-
-  if (hasKeyedData) {
-    // Use keyed data - correct!
-    for (let v = verse.verseStart; v <= verse.verseEnd; v++) {
-      const verseText = verse.verses![v.toString()] || '';
-      verseTexts.push({ verseNum: v, text: verseText });
-    }
-  } else {
-    // Fallback: deprecated sentence splitting
-    for (let v = verse.verseStart; v <= verse.verseEnd; v++) {
-      const verseText = getVerseText(text, v - verse.verseStart, totalVerses);
-      verseTexts.push({ verseNum: v, text: verseText });
-    }
-  }
+  // Without keyed verses there is no safe way to split the range, so it stays
+  // one chunk (above). A verse the translation omits is skipped.
+  const verseTexts = verseNumbers(verse).map((v) => ({ verseNum: v, text: verse.verses![v] }));
 
   // Group verses into chunks based on chunkSize
   const chunks: Chunk[] = [];

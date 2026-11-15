@@ -375,22 +375,10 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
   const keyed = result.verses || {};
   const text = result.text;
 
-  // If the response has no keyed verses, return an EMPTY keyed map —
-  // parseVerseIntoChunks then falls back to sentence splitting, which
-  // is imperfect but functional. Never fabricate { start: wholeText }:
-  // that puts the entire passage in the first chunk and leaves the
-  // remaining chunks empty.
+  // A range without keyed verses can't be split into chunks safely, and an
+  // old cache could answer one. Treat it as a failed fetch.
   if (Object.keys(keyed).length === 0) {
-    console.warn("[BIBLE] Range response without verses field - no keyed data");
-    setSavedVerseInSession(
-      verse.book,
-      verse.chapter,
-      verse.verseStart,
-      verse.verseEnd,
-      verse.version,
-      text
-    );
-    return { text, verses: {} };
+    throw new Error(`No verses returned for ${reference}`);
   }
 
   // Cache both formats

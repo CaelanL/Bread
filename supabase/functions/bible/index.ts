@@ -29,7 +29,6 @@ import { normalizeReference } from "./normalize.ts";
 import {
   getCachedVerse,
   cacheVerse,
-  getCachedVerseRange,
   getCachedVerseRangeKeyed,
   getCachedChapter,
   cacheChapter,
@@ -167,42 +166,22 @@ serve(async (req) => {
     if (parsed.verse) {
       const verseEnd = parsed.verseEnd || parsed.verse;
 
-      // Check cache
-      let cachedText: string | null = null;
-      if (parsed.verseEnd) {
-        cachedText = await getCachedVerseRange(
-          parsed.book,
-          parsed.chapter,
-          parsed.verse,
-          verseEnd,
-          version
-        );
-      } else {
-        cachedText = await getCachedVerse(
-          parsed.book,
-          parsed.chapter,
-          parsed.verse,
-          version
-        );
-      }
+      // Check cache. A range is answered from one keyed read, so its text and
+      // verses always come from the same rows.
+      const cachedVerses = parsed.verseEnd
+        ? await getCachedVerseRangeKeyed(parsed.book, parsed.chapter, parsed.verse, verseEnd, version)
+        : null;
+      const cachedText = parsed.verseEnd
+        ? cachedVerses && Object.values(cachedVerses).join(" ")
+        : await getCachedVerse(parsed.book, parsed.chapter, parsed.verse, version);
 
       if (cachedText) {
-        // Also get keyed data for new clients
-        const cachedVerses = parsed.verseEnd
-          ? await getCachedVerseRangeKeyed(
-              parsed.book,
-              parsed.chapter,
-              parsed.verse,
-              verseEnd,
-              version
-            )
-          : { [parsed.verse.toString()]: cachedText };
         console.log(`[BIBLE] DB cache hit: ${ref} (${version})`);
         return jsonResponse({
           reference: ref,
           version,
           text: cachedText,
-          verses: cachedVerses || {},
+          verses: cachedVerses ?? { [parsed.verse.toString()]: cachedText },
           cached: true,
         });
       }
