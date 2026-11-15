@@ -2,7 +2,7 @@
 -- Uses the seed logins. All writes roll back.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(29);
 
 select set_config('test.reader_a', (select id::text from auth.users where email = 'reader-a@example.test'), true);
 select set_config('test.reader_b', (select id::text from auth.users where email = 'reader-b@example.test'), true);
@@ -53,16 +53,42 @@ select is((select count(*)::int from public.verse_collections vc join public.use
 set local role authenticated;
 select set_config('request.jwt.claim.sub', current_setting('test.reader_b'), true);
 
--- Known bugs, fixed by their own requests. Each fix removes its todo.
-select todo_start('known bug: stats leak');
+-- The stats functions answer only for the caller.
 select is(public.get_current_streak(current_setting('test.reader_a')::uuid, 0), 0, 'Reader B cannot read reader A''s streak');
 select is(public.get_total_time_studied(current_setting('test.reader_a')::uuid), 0::bigint, 'Reader B cannot read reader A''s study time');
-select todo_end();
+insert into public.user_verses (user_id, client_id, book, chapter, verse_start, verse_end, version)
+values (current_setting('test.reader_b')::uuid, 'b-own', 'John', 1, 1, 1, 'ESV');
+select throws_ok(
+  format($$insert into public.verse_collections (verse_id, collection_id)
+    select v.id, %L from public.user_verses v where v.client_id = 'b-own'$$,
+    current_setting('test.a_collection')),
+  '42501', null, 'Reader B cannot put their own verse in reader A''s collection');
 
-select todo_start('known bug: cron functions open to clients');
+-- Old clients pass their own id and keep getting their own numbers (the seed's 5-day streak).
+select set_config('request.jwt.claim.sub', current_setting('test.reader_a'), true);
+select is(public.get_current_streak(current_setting('test.reader_a')::uuid, 0), 5, 'Reader A reads their own streak');
+select ok(public.get_total_time_studied(current_setting('test.reader_a')::uuid) > 0, 'Reader A reads their own study time');
+reset role;
+
 select ok(not has_function_privilege('authenticated', 'public.update_popular_ranges()', 'EXECUTE'), 'Clients cannot run update_popular_ranges');
 select ok(not has_function_privilege('authenticated', 'public.update_user_stats()', 'EXECUTE'), 'Clients cannot run update_user_stats');
-select todo_end();
+select ok(not has_function_privilege('anon', 'public.delete_own_account()', 'EXECUTE'), 'Anonymous calls cannot reach delete_own_account');
+select ok(not has_function_privilege('anon', 'public.get_current_streak(uuid,integer)', 'EXECUTE'), 'Anonymous calls cannot read streaks');
+select is(
+  array(
+    select sig from unnest(array[
+      'public.cleanup_stale_transcription_locks()', 'public.cleanup_expired_verse_cache()',
+      'public.get_verse_cache_count(text)', 'public.evict_lru_verses(text,integer,integer)',
+      'public.upsert_verses(text,integer,text,jsonb)'
+    ]) as sig
+    where to_regprocedure(sig) is not null
+      and (has_function_privilege('anon', sig, 'EXECUTE') or has_function_privilege('authenticated', sig, 'EXECUTE'))
+  ),
+  array[]::text[],
+  'clients cannot run the legacy cache and lock functions'
+);
+select is((select confdeltype from pg_constraint where conname = 'session_attempts_user_id_fkey'), 'c'::"char",
+  'a user''s attempts go with them');
 
 select * from finish();
 rollback;

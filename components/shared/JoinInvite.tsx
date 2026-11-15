@@ -6,7 +6,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useUxFlagsStore } from '@/lib/notifications';
 import { normalizeInviteCode, sharedErrorMessage } from '@/lib/shared/invite-code';
 import { previewInvite, type InvitePreview } from '@/lib/shared/invites';
-import { useAppStore, useHydrated } from '@/lib/store';
+import { librarySynced, useAppStore, useHydrated } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -46,14 +46,20 @@ export function JoinInvite({ code: raw }: { code: string }) {
     else router.replace('/(tabs)/(library)');
   };
 
-  // Joining twice only syncs, so "Open" for an existing member runs the same call.
+  // Joining twice only syncs, so "Open" for an existing member runs the same call. The name and
+  // translation come from the server's library, not a saved one, so the tap waits for it.
   const join = async () => {
+    setJoining(true);
+    if (!(await librarySynced())) {
+      setJoining(false);
+      return;
+    }
     if (useAppStore.getState().displayName === null) {
+      setJoining(false);
       setStep('name');
       return;
     }
     setStep('invite');
-    setJoining(true);
     try {
       const collectionId = await useAppStore.getState().joinSharedCollection(code);
       // One navigation: dismissAll then push resolves the push against the modal still on top,

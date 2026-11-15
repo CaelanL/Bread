@@ -1,7 +1,7 @@
 import { getAdminClient, getUserTier } from "./auth.ts";
 import { rateLimited } from "./errors.ts";
 
-type UsageType = "transcribe_seconds" | "evaluate_count" | "bible_fetch_count";
+type UsageType = "transcribe_seconds" | "evaluate_count";
 type Tier = "free" | "supporter";
 
 /**
@@ -11,12 +11,10 @@ const LIMITS = {
   free: {
     transcribe_seconds: 300, // 5 minutes/day
     evaluate_count: 20, // 20 evaluations/day
-    bible_fetch_count: 100, // 100 fetches/day
   },
   supporter: {
     transcribe_seconds: 3600, // 1 hour/day
     evaluate_count: 500, // 500 evaluations/day
-    bible_fetch_count: 10000, // 10k fetches/day
   },
 };
 
@@ -203,24 +201,6 @@ export async function checkAndIncrementEvaluateUsage(
   }
 
   await incrementUsage(userId, "evaluate_count", 1);
-  return { allowed: true, used: used + 1, limit };
-}
-
-/**
- * Check and increment bible fetch usage
- */
-export async function checkAndIncrementBibleUsage(
-  userId: string
-): Promise<UsageResult> {
-  const tier = await getUserTier(userId);
-  const limit = LIMITS[tier].bible_fetch_count;
-  const used = await getCurrentUsage(userId, "bible_fetch_count");
-
-  if (used >= limit) {
-    return { allowed: false, used, limit };
-  }
-
-  await incrementUsage(userId, "bible_fetch_count", 1);
   return { allowed: true, used: used + 1, limit };
 }
 

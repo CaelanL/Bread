@@ -25,9 +25,8 @@ animation state plus `hideModes`. Nothing is persisted until the session saves.
 ## Setup screen
 
 `StudySetupScreen` reads the verse from the store with `useVerse`, so it opens
-without a fetch. Verse text then loads through `getVerseText` in
-`lib/api/bible.ts`, keyed on `verse?.id`, because saving prefs swaps the verse
-object and re-running would flash the loader.
+without a fetch. Verse text loads through `getVerseText`, keyed on
+`verse?.id`: saving prefs swaps the verse object, and a rerun would flash the loader.
 
 - **Difficulty:** Easy ("All words"), Medium ("Some hidden"), Hard ("No words").
 - **Verses per chunk:** shown only for multi-verse passages. A value pill opens
@@ -60,8 +59,8 @@ Restore runs once per screen open, behind `defaultsApplied`:
 
 1. Once the store is hydrated, `findVerse` (store) reads the verse from `verses`,
    then `masteredVerses`, like `useVerse`, so a removed mastered verse opens.
-2. If `text` or `verses` is missing, `getVerseText` fetches them. Read rules:
-   `docs/architecture/bible-api-and-caching.md`.
+2. Text in memory (`peekVerseText`) seeds the first frame, with no loader;
+   else `getVerseText` fetches it ([rules](../architecture/bible-api-and-caching.md)).
 3. `sessionSeed` is drawn as 0 or 1, and `parseVerseIntoChunks` builds the chunks.
 
 A missing verse or a failed text fetch shows a message and Close.
@@ -211,8 +210,8 @@ the score is already saved, and leaves without the results page.
 
 **Early exit.** The X in the header calls `saveAndExit`. With some chunks complete
 but not all, it calls `updateVerseProgress` with `calculatePartialScore` and no
-`fullSession` flag, logs an attempt, and leaves at once. Failures only reach the
-console. Otherwise it just leaves. Exiting discards an in-flight recording or
+`fullSession` flag, logs an attempt, and leaves at once. A failed save
+shows the save-error toast after it leaves. Otherwise it just leaves. Exiting discards an in-flight recording or
 analysis. A late transcript cannot update the session or save a second attempt.
 
 **Session attempts.** A session writes at most one `session_attempts` row, from

@@ -43,6 +43,8 @@ delete from public.user_verses where id = current_setting('test.a_verse')::uuid;
 reset role;
 select is((select count(*)::int from public.user_verses where id = current_setting('test.a_verse')::uuid), 1,
   'Reader B and anonymous clients cannot delete reader A''s verse');
+-- Out of every collection first: a verse still in one is refused (verse-delete-guard.test.sql).
+delete from public.verse_collections where verse_id = current_setting('test.a_verse')::uuid;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', current_setting('test.reader_a'), true);
 select lives_ok(format($$delete from public.user_verses where id = %L$$, current_setting('test.a_verse')),

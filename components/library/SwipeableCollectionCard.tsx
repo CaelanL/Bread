@@ -56,6 +56,8 @@ export interface CollectionReorder {
 interface SwipeableCollectionCardProps {
   collection: Collection & { verseCount: number };
   index: number;
+  /** Fade in with the list's first paint; false for a saved library's paint and cards added later. */
+  animateIn?: boolean;
   onPress: () => void;
   onRename: () => void;
   onReorder: () => void;
@@ -77,6 +79,7 @@ interface SwipeableCollectionCardProps {
 export function SwipeableCollectionCard({
   collection,
   index,
+  animateIn = true,
   onPress,
   onRename,
   onReorder,
@@ -220,7 +223,8 @@ export function SwipeableCollectionCard({
 
   return (
     <Animated.View
-      entering={reorder ? undefined : FadeInDown.delay(index * Motion.staggerMs).duration(Motion.expandMs)}
+      entering={reorder || !animateIn ? undefined
+        : FadeInDown.delay(Math.min(index * Motion.staggerMs, Motion.staggerCapMs)).duration(Motion.expandMs)}
       onLayout={(event) => { rowHeight.value = event.nativeEvent.layout.height; }}
       style={[styles.container, reorder && dragStyle]}
     >

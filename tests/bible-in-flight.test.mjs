@@ -37,7 +37,7 @@ test('identical Bible reads in progress share one request', { timeout: 15000 }, 
     return Response.json({ reference: ref, version, text: Object.values(verses).join(' '), verses, cached: false });
   });
   const { supabase } = await import('../lib/api/client.ts');
-  const { fetchVerse, fetchChapter, clearSessionCache } = await import('../lib/api/bible.ts');
+  const { fetchVerse, fetchChapter, clearSessionCache, foregroundRead, warmVerseText, whenForegroundIdle } = await import('../lib/api/bible.ts');
   assert.ok((await supabase.auth.signInWithPassword({ email: 'A@example.test', password: 'test' })).data.session);
   t.after(() => supabase.auth.stopAutoRefresh());
   const reset = () => { requests.length = 0; gate = Promise.withResolvers(); fail = false; clearSessionCache(); };
@@ -93,5 +93,29 @@ test('identical Bible reads in progress share one request', { timeout: 15000 }, 
     clearSessionCache();
     await fetchVerse('Psalms 23:1', 'ESV');
     assert.equal(requests.length, 2);
+  });
+
+  await t.test('the preload waits while a read someone is waiting on is in flight, and not for its own', async () => {
+    reset();
+    const verse = { book: 'John', chapter: 1, verseStart: 1, verseEnd: 1, version: 'ESV' };
+    const warm = warmVerseText(verse);
+    let idle = false;
+    void whenForegroundIdle().then(() => { idle = true; });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(idle, true);
+
+    const home = Promise.withResolvers();
+    const held = foregroundRead(home.promise);
+    const card = fetchVerse('John 1:2', 'ESV');
+    idle = false;
+    void whenForegroundIdle().then(() => { idle = true; });
+    gate.resolve();
+    await Promise.all([warm, card]);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(idle, false, 'Home is still loading');
+    home.resolve();
+    await held;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(idle, true);
   });
 });

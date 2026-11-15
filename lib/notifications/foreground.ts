@@ -34,13 +34,23 @@ function deviceTimezone(): string {
   }
 }
 
-export async function syncForegroundState(): Promise<void> {
+// The status the last sync acted on, so a quick return only touches the token row when it
+// changed. Set only once the register or unregister worked, so a failed one is tried again.
+let lastStatus: string | null = null;
+
+/**
+ * `resumed: false` is a quick return (under RESUME_AWAY_MS): the permission is still read, and the
+ * token registered or removed if it changed (e.g. turned on in iOS Settings), but no heartbeat.
+ */
+export async function syncForegroundState({ resumed = true } = {}): Promise<void> {
   const status = await getPermissionStatus();
+  if (!resumed && status === lastStatus) return;
 
   if (status === 'denied') {
     // User revoked externally. Belt-and-suspenders alongside server-
     // side DeviceNotRegistered: delete the row, clear local cache.
     await unregisterDeviceToken();
+    lastStatus = status;
   } else if (status === 'granted' || status === 'provisional') {
     // UPSERT token as the signed-in user, every time.
     const token = await registerDeviceToken();
@@ -51,13 +61,16 @@ export async function syncForegroundState(): Promise<void> {
     // the cron can match them. Idempotent — initializeDefaults is only
     // called when prefs is null in the store.
     if (token) {
+      lastStatus = status;
       const prefs = usePrefsStore.getState().prefs;
       if (!prefs) {
         await usePrefsStore.getState().initializeDefaults(deviceTimezone());
       }
     }
+  } else {
+    // 'undetermined' → user hasn't been asked yet; nothing to sync.
+    lastStatus = status;
   }
-  // 'undetermined' → user hasn't been asked yet; nothing to sync.
 
   // TZ resync: only meaningful when we have a prefs row (compares
   // current device TZ against stored).
@@ -66,13 +79,14 @@ export async function syncForegroundState(): Promise<void> {
     const tz = deviceTimezone();
     if (tz !== prefs.timezone) {
       const ok = await updateTimezone(tz);
-      if (ok) {
+      // Unless the prefs changed meanwhile (another account, or an edit).
+      if (ok && usePrefsStore.getState().prefs === prefs) {
         await usePrefsStore.getState().setPrefs({ ...prefs, timezone: tz });
       }
     }
   }
 
-  // Heartbeat: always fire (server filters on user_id; no-row → no-op).
+  // Heartbeat on a real resume (server filters on user_id; no-row → no-op).
   // Tied to the in-progress 24h-active gate.
-  await updateLastForegroundedAt();
+  if (resumed) await updateLastForegroundedAt();
 }

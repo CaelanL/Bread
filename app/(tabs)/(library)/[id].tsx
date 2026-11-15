@@ -23,7 +23,7 @@ import { referenceKey } from '@/lib/store/translation';
 import { type SavedVerse, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { filterVerses } from '@/lib/search';
-import { useAppStore, useCollection, useCollectionSort, useHydrated, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
+import { librarySynced, useAppStore, useCollection, useCollectionSort, useHydrated, useSynced, useInProgressVerses, useMasteredVerses, useSharedCollection, useSharedOwnerName, useVerses, useVersesByCollection } from '@/lib/store';
 import { cycleSort, getSortLabel, sortVerses } from '@/lib/store/library-sort';
 import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
@@ -62,6 +62,15 @@ export default function CollectionScreen() {
   const inProgressVerses = useInProgressVerses();
   const allVerses = useVerses();
   const hydrated = useHydrated();
+  // An id the saved library doesn't know (made on another device) waits for the server's, which
+  // retries once and toasts if it can't be read; then the screen shows it as missing.
+  const synced = useSynced();
+  const [syncFailed, setSyncFailed] = useState(false);
+  const known = synced || !!collection || syncFailed;
+  const unknownId = !synced && !collection;
+  useEffect(() => {
+    if (unknownId) void librarySynced().then((ok) => setSyncFailed(!ok));
+  }, [unknownId]);
   const deleteVerse = useAppStore((s) => s.deleteVerse);
   const refresh = useAppStore((s) => s.refresh);
   const shared = useSharedCollection(id || '');
@@ -115,6 +124,12 @@ export default function CollectionScreen() {
       ? inProgressVerses
       : collectionVerses;
 
+  // Opening a collection warms its verses' text ahead of the launch preload, once per visit.
+  useEffect(() => {
+    if (hydrated) useAppStore.getState().preloadVerseText(verses);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, hydrated]);
+
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
@@ -139,9 +154,9 @@ export default function CollectionScreen() {
     if ((navigation.getState()?.index ?? 0) > 0) router.back();
     else router.replace('/(tabs)/(library)');
   }, [navigation]);
-  const syncShared = useCallback(async (target: string) => {
+  const syncShared = useCallback(async (target: string, pull = false) => {
     try {
-      const shared = await useAppStore.getState().openSharedCollection(target);
+      const shared = await useAppStore.getState().openSharedCollection(target, { pull });
       // Removed or left elsewhere: the copy is gone (a dissolved copy stays, now personal).
       if (!shared && !useAppStore.getState().collections.some((c) => c.id === id)) backToLibrary();
     } catch {
@@ -156,8 +171,8 @@ export default function CollectionScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refresh();
-    if (sharedId) await syncShared(sharedId);
+    if (sharedId) await syncShared(sharedId, true);
+    else await refresh();
     setRefreshing(false);
   };
 
@@ -187,8 +202,7 @@ export default function CollectionScreen() {
 
   const stopSharing = () => {
     if (!collection || !sharedId) return;
-    confirmStopSharing(sharedId, collection.name, sharedProgress?.fetchedAt ? sharedProgress.members : null,
-      shared?.memberCount ?? 1, user?.id);
+    confirmStopSharing(sharedId, collection.name, null, user?.id);
   };
 
   const handleVersePress = (verse: SavedVerse) => {
@@ -314,7 +328,7 @@ export default function CollectionScreen() {
   } : undefined;
   const progress = grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null;
   const symbol = (collection?.icon as SymbolViewProps['name']) || (collection?.isDefault ? 'heart.fill' : collectionIcon.symbol);
-  const name = collection?.name ?? (hydrated ? 'Collection' : '');
+  const name = collection?.name ?? (known ? 'Collection' : '');
 
   const menuItems = [
     ...(withOthers ? [{ label: 'Details', icon: 'info.circle', onPress: showGrid }] : []),
@@ -390,7 +404,7 @@ export default function CollectionScreen() {
         ItemSeparatorComponent={divider}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
-        ListEmptyComponent={hydrated ? renderEmptyState : <VerseCardSkeleton count={3} />}
+        ListEmptyComponent={hydrated && known ? renderEmptyState : <VerseCardSkeleton count={3} />}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
         }

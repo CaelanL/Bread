@@ -17,6 +17,8 @@ export const Motion = {
   exitMs: 150,
   expandMs: 200,
   staggerMs: 100,
+  // A list's whole cascade ends by here, however long the list.
+  staggerCapMs: 200,
   spinnerMs: 900,
   sweepMs: 900,
   pulseMs: 1200,

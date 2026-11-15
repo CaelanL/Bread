@@ -10,7 +10,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { supabase } from '@/lib/api/client';
+import { sessionUserId } from '@/lib/api/client';
 import { deleteDeviceToken, upsertDeviceToken } from './api';
 import { getPermissionStatus } from './permissions';
 
@@ -19,11 +19,6 @@ const CACHED_TOKEN_KEY = 'notifications_cached_expo_token';
 // Bumped by unregisterDeviceToken, so a registration already in flight
 // when sign-out deletes the row doesn't put it back.
 let unregisterCount = 0;
-
-async function sessionUserId(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.user.id ?? null;
-}
 
 /**
  * Register or refresh the device token. Idempotent — UPSERT on the

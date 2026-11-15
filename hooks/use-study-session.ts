@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { type SavedVerse, type Difficulty as StorageDifficulty } from '@/lib/storage';
 import { findVerse, useAppStore, useHydrated } from '@/lib/store';
-import { getVerseText } from '@/lib/api/bible';
+import { getVerseText, peekVerseText } from '@/lib/api/bible';
 import {
   type Chunk,
   type Difficulty,
@@ -64,31 +64,48 @@ interface UseStudySessionReturn {
   flatListRef: React.RefObject<FlatList | null>;
 }
 
+function sessionFromMemory(verseId: string, difficulty: Difficulty, chunkSize: number) {
+  const state = useAppStore.getState();
+  const found = state.hydrated ? findVerse(state, verseId) : undefined;
+  const inMemory = found && peekVerseText(found);
+  if (!inMemory) return null;
+  const verse = { ...found, text: inMemory.text, verses: inMemory.verses };
+  const seed = Math.floor(Math.random() * 2);
+  return { verse, seed, chunks: parseVerseIntoChunks(verse, difficulty, chunkSize, seed) };
+}
+
 export function useStudySession({
   verseId,
   difficulty,
   chunkSize,
 }: UseStudySessionOptions): UseStudySessionReturn {
-  const [verse, setVerse] = useState<SavedVerse | null>(null);
-  const [loading, setLoading] = useState(true);
+  // With the verse and its text already in memory, the first frame shows it, with no loader.
+  const [initial] = useState(() => sessionFromMemory(verseId, difficulty, chunkSize));
+  const [verse, setVerse] = useState<SavedVerse | null>(initial?.verse ?? null);
+  const [loading, setLoading] = useState(!initial);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [chunks, setChunks] = useState<Chunk[]>([]);
+  const [chunks, setChunks] = useState<Chunk[]>(initial?.chunks ?? []);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [chunkResults, setChunkResults] = useState<ChunkResults>(new Map());
   const [showResults, setShowResults] = useState(false);
   const [totalRecordingDurationMs, setTotalRecordingDurationMs] = useState(0);
-  const [sessionSeed, setSessionSeed] = useState(0);
+  const [sessionSeed, setSessionSeed] = useState(initial?.seed ?? 0);
 
   const flatListRef = useRef<FlatList>(null);
   const peekedChunksRef = useRef<ReadonlySet<number>>(new Set());
   const savedAttemptRef = useRef(false);
 
   const hydrated = useHydrated();
+  // What the chunks were built for, so a seeded first frame isn't rebuilt (masks stay frozen).
+  const loadedFor = useRef(initial ? `${verseId}|${difficulty}|${chunkSize}` : null);
 
   // Load once the store has the library. The store, not a refetch, so a mastered verse
   // removed from every collection opens here just as it does on the setup screen.
   useEffect(() => {
     if (!hydrated) return;
+    const key = `${verseId}|${difficulty}|${chunkSize}`;
+    if (loadedFor.current === key) return;
+    loadedFor.current = key;
     async function loadVerse() {
       const found = findVerse(useAppStore.getState(), verseId);
       if (!found) {
@@ -241,11 +258,14 @@ export function useStudySession({
 
       // Fire-and-forget: the Supabase round-trip must not block dismissal
       // (awaiting it here froze the X button for the full network latency).
-      // Errors were already non-blocking, so visibility is unchanged.
+      // A failure toasts; the toast is mounted at the root, so it shows after dismissal.
       useAppStore
         .getState()
         .updateVerseProgress(verseId, difficulty as StorageDifficulty, partialScore)
-        .catch((e) => console.error('[STUDY] Failed to update progress:', e));
+        .catch((e) => {
+          console.error('[STUDY] Failed to update progress:', e);
+          showErrorToast('Failed to save your progress.');
+        });
 
       // Log session attempt (fire-and-forget)
       const wordCount = verse.text ? verse.text.split(/\s+/).filter(Boolean).length : undefined;

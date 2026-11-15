@@ -1,23 +1,25 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, router, usePathname, useSegments, useRootNavigationState } from 'expo-router';
+import { SplashScreen, Stack, router, usePathname, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import 'react-native-reanimated';
 import { useEffect, useRef } from 'react';
-import { View, ActivityIndicator, AppState, type AppStateStatus } from 'react-native';
+import { View, ActivityIndicator, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import { AuthProvider, useAuth } from '@/lib/auth';
+import { AuthProvider, SPLASH_FAILSAFE_MS, useAuth } from '@/lib/auth';
 import { NetworkProvider } from '@/lib/network';
 import { NoInternetOverlay } from '@/components/ui/NoInternetOverlay';
 import { ErrorToast } from '@/components/ui/ErrorToast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Q1ExplainerCard } from '@/components/notifications/Q1ExplainerCard';
 import { clearSessionCache, getSessionCacheStats } from '@/lib/api/bible';
-import { useAppStore } from '@/lib/store';
+import { perfMark } from '@/lib/api/dev-timing';
+import { returnTracker } from '@/lib/resume';
+import { settingsRead, useAppStore } from '@/lib/store';
 import { claimInstallHandoff, clearPendingJoin, forgetInstallHandoff, readPendingJoin, stashPendingJoin } from '@/lib/shared/pending-join';
 import { claimWelcome, markWelcomeShown, peekWelcome } from '@/lib/welcome';
 import {
@@ -25,9 +27,15 @@ import {
   registerDeepLinkHandler,
   replayColdStartTap,
   syncForegroundState,
-  usePrefsStore,
   useUxFlagsStore,
 } from '@/lib/notifications';
+
+perfMark('root');
+
+// The splash stays up until the first frame has the color mode and either the session or a saved
+// library to show (RootLayoutNav), so nothing flashes light or empty. Hidden regardless after the failsafe.
+SplashScreen.preventAutoHideAsync().catch(() => { /* no splash module (web) */ });
+setTimeout(() => SplashScreen.hide(), SPLASH_FAILSAFE_MS);
 
 // Foreground notification handler — suppress everything while the app
 // is foregrounded. Per the design doc: "I don't really care for
@@ -49,6 +57,23 @@ if (__DEV__) {
   installNotifDevTools();
 }
 
+// The launch's profile read says whether the walkthrough was already seen, so a seen account
+// makes no claim. With no profile read (offline), no claim this launch. A saved library's paint
+// comes before the profile read, so this waits for the server's.
+function claimAfterLoad(userId: string): Promise<boolean> {
+  return new Promise<void>((resolve) => {
+    if (useAppStore.getState().hydratedFrom === 'server') return resolve();
+    const unsubscribe = useAppStore.subscribe(({ hydratedFrom }) => {
+      if (hydratedFrom !== 'server') return;
+      unsubscribe();
+      resolve();
+    });
+  }).then(() => {
+    const { profileLoaded, welcomeSeen } = useAppStore.getState();
+    return profileLoaded && claimWelcome(userId, welcomeSeen);
+  });
+}
+
 export const unstable_settings = {
   anchor: '(tabs)',
 };
@@ -60,6 +85,9 @@ function RootLayoutNav() {
   const segments = useSegments();
   const pathname = usePathname();
   const navigationState = useRootNavigationState();
+  // The stored user's saved library painted while the session restores (offline, or a slow token
+  // refresh): show it rather than the spinner. Writes still wait for the session and fail visibly.
+  const painted = useAppStore((state) => state.hydrated);
 
   // Handle navigation based on auth state
   useEffect(() => {
@@ -108,7 +136,7 @@ function RootLayoutNav() {
       .then(async (invite) => {
         if (settled) return;
         if (!invite) {
-          const welcome = sawInvite.current ? await peekWelcome(userId) : await claimWelcome(userId);
+          const welcome = sawInvite.current ? await peekWelcome(userId) : await claimAfterLoad(userId);
           if (settled) return;
           settled = true;
           if (welcome) {
@@ -133,59 +161,12 @@ function RootLayoutNav() {
     };
   }, [userId, navigationState?.key, inTabs, sessionRestored]);
 
-  // Hydrate store and run migration when authenticated. Sequenced as
-  // an inline async so a fast sign-out → sign-in cycle can't race the
-  // clear against the next hydrate (would briefly surface the previous
-  // user's prefs to Settings UI).
+  // Foreground sync on every return: a quick one only checks the permission; the heartbeat waits
+  // for RESUME_AWAY_MS away. Idempotent + best-effort.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (isAuthenticated) {
-        useAppStore.getState().hydrate().catch((e) => {
-          console.error('[App] Store hydration error:', e);
-        });
-
-        // Hydrate UX flags (Q1 dismissed, settings visited) so the
-        // explainer card and badge resolve their initial state without
-        // a flicker.
-        useUxFlagsStore.getState().hydrate().catch(() => { /* best-effort */ });
-
-        // Hydrate notification prefs (cache → server), then foreground
-        // sync once (registers token if granted, resyncs TZ, fires
-        // last-foregrounded heartbeat).
-        try {
-          await usePrefsStore.getState().hydrate();
-          if (cancelled) return;
-          await syncForegroundState();
-        } catch (e) {
-          console.error('[App] Notification hydration', e);
-        }
-      } else {
-        useAppStore.getState().clear();
-
-        // Clear local notification cache. signOut deletes this device's
-        // token row; otherwise the next sign-in here takes it over.
-        try {
-          await usePrefsStore.getState().clear();
-        } catch {
-          // best-effort
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isAuthenticated]);
-
-  // Run foreground-sync each time the app comes back to active.
-  // Idempotent + best-effort.
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (next) => {
-      const prev = appStateRef.current;
-      appStateRef.current = next;
-      if (prev.match(/inactive|background/) && next === 'active' && isAuthenticated) {
-        syncForegroundState().catch(() => { /* best-effort */ });
-      }
-    });
+    const sub = AppState.addEventListener('change', returnTracker((resumed) => {
+      if (isAuthenticated) syncForegroundState({ resumed }).catch(() => { /* best-effort */ });
+    }));
     return () => sub.remove();
   }, [isAuthenticated]);
 
@@ -206,11 +187,16 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated, navigationState?.key]);
 
+  const ready = !isLoading || painted;
+  useEffect(() => {
+    if (ready) settingsRead.then(() => SplashScreen.hide());
+  }, [ready]);
+
   const colors = Colors[colorScheme ?? 'light'];
   const darkScreen = colorScheme === 'dark' || segments[0] === '(auth)' || segments[0] === 'reset-password';
 
   // Show loading spinner while checking auth
-  if (isLoading) {
+  if (isLoading && !painted) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />

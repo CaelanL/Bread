@@ -22,7 +22,7 @@ fetchVerse / fetchChapter   (lib/api/bible.ts)
         │ miss (KJV stops here: bundled JSON)
         ▼
 GET /functions/v1/bible
-   (auth → rate-limit → DB cache → adapter)
+   (auth → DB cache → on a miss: limit → adapter)
         │
         ▼
 ┌──────────────────────────────────────┐
@@ -49,11 +49,38 @@ cleared on restart:
 
 No eviction — relies on app restart. No TTL. The session cache is
 why opening the same verse twice in a session never hits the network.
+`peekVerseText(verse)` reads it synchronously (no KJV bundle, no
+network), so verse cards and the study session show text already in
+memory on their first frame, with no loader. A card's failed read is tried
+again when pull to refresh replaces its verse, with the failure text kept
+until the answer (`hooks/use-verse-preview.ts`).
+
+### Preloading verse text
+
+The store warms the session cache through `warmVerseText`
+(`preloadVerseText` in `lib/store/index.ts`; picker
+`lib/store/preload.ts`, tested in `preload.test.ts`):
+
+- At launch, once the first load and alignment settle and after
+  `InteractionManager.runAfterInteractions`: every verse once, most
+  recently practiced first (never practiced last), then newest.
+- Opening a collection (`[id].tsx`, Mastered and In Progress too) puts
+  its verses at the front of the queue.
+- `PRELOAD_CONCURRENCY` (3) at a time. KJV is skipped (bundled, no
+  request). With Hide verses on nothing preloads; the text loads at
+  Setup, which always loads its own verse.
+- The queue stops on an account change and on the first 429
+  (`DailyLimitError`), so warming never spends the rest of a day's
+  limit. `refresh()` and a translation switch don't preload.
+- A read someone waits on goes first: while any `fetchVerse`,
+  `fetchChapter`, `getVerseText` or Home's Verse of the Month load
+  (`foregroundRead` in `hooks/use-votm.ts`) is in flight, the preload
+  starts no read (`whenForegroundIdle`). Its own in-flight reads finish.
 
 Identical reads still in progress share one promise (`inFlight` in
 `lib/api/bible.ts`), keyed by passage or chapter, reference and
-translation. Store hydrate asks for every collection membership at
-once, so a passage in three collections makes one request, not three.
+translation. A collection's cards and the preload (below) often ask
+for the same passage together, and make one request.
 The entry is removed when the read succeeds or fails, so a failure
 never blocks a retry. `clearSessionCache` doesn't touch in-flight
 entries. Regression tests: `tests/bible-in-flight.test.mjs`.
@@ -148,14 +175,15 @@ fetchVerse("John 3:16", "ESV")
       HIT  → return { text, verses: { 16: text }, cached: true }
       MISS ↓
   GET /functions/v1/bible?ref=John%203%3A16&version=ESV
-    getAuthUser(req)
-    checkAndIncrementBibleUsage(userId)
-    getCachedVerse(book, chapter, verse, version)
-        HIT  → bump last_used_at, return with cached: true
+    verifyJwt(req)                 local signature check
+    validate version and reference
+    getCachedVerses(...)  ∥  readBibleUsage(userId)  (tier ∥ today's row)
+        HIT  → bump last_used_at, return with cached: true (no usage write)
         MISS ↓
-    esvAdapter.fetchVerse("John 3:16", "ESV")
-    cacheVerse(...) → eviction step, then upsert into verse_cache
+    used >= limit → 429
+    esvAdapter.fetchVerse("John 3:16", "ESV")  ∥  countBibleFetch(usage)
     return { reference, version, text, verses: { 16: text }, cached: false }
+    then (EdgeRuntime.waitUntil) cacheVerse(...) → eviction step, upsert
   → session verseCache set per verse
 ```
 
@@ -167,14 +195,14 @@ fetchVerse("John 3:16-18", "ESV")
       HIT  → assemble keyed map and combined text, cached: true
       MISS ↓
   GET /functions/v1/bible?ref=John%203%3A16-18&version=ESV
-    getCachedVerseRange + getCachedVerseRangeKeyed
+    getCachedVerses: one query builds text and keyed verses
         HIT  → return all 3 verses
-        MISS (any verse missing) ↓
+        MISS (any verse missing) ↓ (limit and count as above)
     Strategy: fetch the FULL CHAPTER and extract the range
       esvAdapter.fetchChapter("John 3", "ESV", expectedCount=36)
       Extract verses 16–18 from the chapter result
-      cacheChapter(...) → upsert only those 3 verses
     return { reference, version, text: combined, verses: {16,17,18}, cached: false }
+    then cacheChapter(...) → upsert only those 3 verses
   → session verseCache set per verse
 ```
 
@@ -199,9 +227,9 @@ fetchChapter("John", 3, "ESV")
         Returns null if row count < expectedCount (incomplete)
         HIT  → return all 36 verses
         MISS ↓
-    esvAdapter.fetchChapter("John 3", "ESV", 36)
-    cacheChapter(...) → eviction step, then upsert
+    esvAdapter.fetchChapter("John 3", "ESV", 36)   (limit and count as above)
     return { reference, version, verses: {1..36}, cached: false }
+    then cacheChapter(...) → eviction step, then upsert
   → setChapterInSession also fills verseCache per verse
 ```
 
@@ -232,14 +260,14 @@ get cached under multiple keys, blowing the LRU budget.
 
 ## Rate limiting
 
-`checkAndIncrementBibleUsage(userId)` in
-`supabase/functions/_shared/usage.ts` runs after the request is
-validated and *before* the cache check. This means even cache hits
-count against the quota — by design, so that a single user can't blow
-through external API budget by re-requesting cached verses. Increment
-happens in `usage_daily(user_id, date)`. On 429, the response includes
-`used`, `limit` and a `resetsAt` of next midnight UTC. The tier limits
-are in `docs/architecture/edge-functions.md`.
+Only a server cache miss counts. `readBibleUsage` and
+`countBibleFetch` (`supabase/functions/bible/usage.ts`) read the tier
+and today's `usage_daily(user_id, date)` row alongside the cache read.
+A hit answers with no usage write. A miss over the limit answers 429;
+otherwise it counts one (on the row already read) while the external
+fetch runs. A chapter or range miss counts one. On 429, the response
+includes `used`, `limit` and a `resetsAt` of next midnight UTC. The
+tier limits are in `docs/architecture/edge-functions.md`.
 
 ## Response shape
 
@@ -252,6 +280,10 @@ type BibleResponse = {
   cached: boolean;        // true on session-cache, DB-cache and KJV bundle hits
 };
 ```
+
+Every response, errors included, carries `Cache-Control: no-store`,
+so licensed text never lands in an HTTP cache (`noStore` in
+`supabase/functions/bible/index.ts`).
 
 Single verses still include `verses: { [n]: text }` for
 consistency. Ranges always provide both `text` (combined) and
@@ -336,9 +368,6 @@ Also:
 - **Adapter responses must be normalized to
   `{ verses: { [n]: text } }` before caching.** Single verses get
   wrapped as `{ [n]: text }`. Ranges keep the full keyed map.
-- **Rate limit fires *before* the cache check.** Cache hits still
-  count. Don't move the rate limit after the cache check to "save
-  quota" — that defeats per-user fairness.
 - **Eviction belongs at insert time, not lazily.** Keep it in the
   insert path. Its known gaps are under Sharp edges.
 - **Verse-count validation is the only completeness signal.** Use
@@ -368,3 +397,5 @@ Also:
 - 2025-12-19 · `user_verses.text` dropped, text kept only in `verse_cache` and memory · ESV/NLT licensing limits stored text to 500 verses per version.
 - 2026-04-27 · Serve KJV from a bundled JSON and remove it from the adapter map and `BIBLE_IDS` · It's public domain, works offline, and costs no API quota.
 - 2026-08-15 · Session `verseCache` holds single-verse text only, and `fetchVerse` always returns keyed `verses` · Combined range text under the start verse put a whole passage in chunk 1 (Psalm 103).
+- 2026-11-14 · The daily limit counts only server cache misses (it used to count every request, "for fairness") · Only a miss spends the external API's budget; a hit costs our own database and stores nothing new. Old clients get the same responses, with a 429 only on a miss.
+- 2026-11-14 · Launch preload after first paint, 3 at a time, none with Hide verses on, stopping on a 429 (it was every verse at once at hydrate) · Previews still load for people who show them, without crowding the first paint or spending a day's limit.

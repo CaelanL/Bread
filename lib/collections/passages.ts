@@ -62,13 +62,6 @@ export async function validateCollectionPassages(
   version: BibleVersion,
   readVerse: ReadVerse,
 ): Promise<void> {
-  // Limit simultaneous provider requests when a collection has not been previewed.
-  const batchSize = 4;
-  for (let offset = 0; offset < passages.length; offset += batchSize) {
-    await Promise.all(
-      passages.slice(offset, offset + batchSize).map((passage) =>
-        readCollectionPassage(passage, version, readVerse)
-      ),
-    );
-  }
+  // All at once: a server cache hit costs no daily read, and the curated passages are usually cached.
+  await Promise.all(passages.map((passage) => readCollectionPassage(passage, version, readVerse)));
 }

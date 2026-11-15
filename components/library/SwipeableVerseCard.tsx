@@ -1,4 +1,4 @@
-import { useAppStore } from '@/lib/store';
+import { librarySynced, useAppStore } from '@/lib/store';
 import * as Haptics from 'expo-haptics';
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
 import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
@@ -8,10 +8,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
-import { getVerseText } from '@/lib/api/bible';
+import { useVersePreview } from '@/hooks/use-verse-preview';
 import type { MemberState } from '@/lib/shared/progress';
 import { formatVerseReference, type Difficulty, type SavedVerse } from '@/lib/storage';
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -49,20 +49,8 @@ export function SwipeableVerseCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  // Text loading state (for verses without cached text)
-  const [text, setText] = useState<string>(verse.text || '');
-  const [loading, setLoading] = useState(!verse.text);
   const hideText = useAppStore((state) => state.hideVerseText);
-
-  useEffect(() => {
-    if (!verse.text && !hideText) {
-      setLoading(true);
-      getVerseText(verse)
-        .then(({ text }) => setText(text))
-        .catch(() => setText('Failed to load verse text'))
-        .finally(() => setLoading(false));
-    }
-  }, [verse, hideText]);
+  const { text, loading } = useVersePreview(verse, hideText);
 
   // Get highest completed difficulty (90%+)
   const getHighestDifficulty = (): Difficulty | null => {
@@ -105,7 +93,13 @@ export function SwipeableVerseCard({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const handleDelete = () => {
+  // The alert is chosen after the server's library is in, from the props as they are then.
+  const latest = useRef({ verse, collectionCount, sharedMemberCount });
+  latest.current = { verse, collectionCount, sharedMemberCount };
+
+  const handleDelete = async () => {
+    if (!(await librarySynced())) return closeSwipe();
+    const { verse, collectionCount, sharedMemberCount } = latest.current;
     const isMastered = verse.progress?.hard?.completed === true;
     const inOtherCollections = collectionCount > 1;
 

@@ -8,11 +8,12 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
 import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
 import { hasOtherMembers, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
+import { perfMark } from '@/lib/api/dev-timing';
 import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useSharedOwnerName, useVersesByCollection } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -27,6 +28,7 @@ import Animated, { FadeInDown, useSharedValue } from 'react-native-reanimated';
 function CollectionCard({
   collection,
   index,
+  animateIn,
   onPress,
   onRename,
   onReorder,
@@ -36,6 +38,7 @@ function CollectionCard({
 }: {
   collection: Collection;
   index: number;
+  animateIn: boolean;
   onPress: () => void;
   onRename: () => void;
   onReorder: () => void;
@@ -71,6 +74,7 @@ function CollectionCard({
     <SwipeableCollectionCard
       collection={{ ...collection, verseCount }}
       index={index}
+      animateIn={animateIn}
       onPress={onPress}
       onRename={onRename}
       onReorder={onReorder}
@@ -98,6 +102,9 @@ export default function LibraryScreen() {
     ? allCollections
     : allCollections.filter((c) => c.id !== IN_PROGRESS_COLLECTION_ID);
   const hydrated = useHydrated();
+  useEffect(() => {
+    if (hydrated && collections.length > 0) perfMark('library');
+  }, [hydrated, collections.length]);
   const addCollection = useAppStore((s) => s.addCollection);
   const renameCollection = useAppStore((s) => s.renameCollection);
   const reorderCollections = useAppStore((s) => s.reorderCollections);
@@ -115,6 +122,12 @@ export default function LibraryScreen() {
   // Two quick taps on different cards would push two collections; the first push locks until the
   // Library is focused again.
   const opening = useRef(false);
+  // The cards of the list's first paint, and whether they fade in: not when the saved library
+  // painted them (it should look already there). A card added later appears at once.
+  const firstCards = useRef<{ ids: Set<string>; animate: boolean } | null>(null);
+  if (hydrated && !firstCards.current) {
+    firstCards.current = { ids: new Set(collections.map((c) => c.id)), animate: useAppStore.getState().hydratedFrom !== 'snapshot' };
+  }
   useFocusEffect(useCallback(() => {
     opening.current = false;
     return () => {
@@ -211,6 +224,7 @@ export default function LibraryScreen() {
                     key={collection.id}
                     collection={collection}
                     index={index}
+                    animateIn={!!firstCards.current?.animate && firstCards.current.ids.has(collection.id)}
                     onPress={() => handleCollectionPress(collection)}
                     onRename={() => setNameDialog({ collection })}
                     onReorder={() => setEditing(true)}

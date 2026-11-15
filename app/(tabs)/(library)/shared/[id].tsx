@@ -19,7 +19,7 @@ import {
   type MemberState,
 } from '@/lib/shared/progress';
 import { formatVerseReference } from '@/lib/storage';
-import { useAppStore, useCollection, useHydrated, useSharedCollection, useVersesByCollection } from '@/lib/store';
+import { useAppStore, useCollection, useSharedCollection, useSynced, useVersesByCollection } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -40,7 +40,8 @@ export default function WhoIsWhereScreen() {
   const collection = useCollection(id || '');
   const shared = useSharedCollection(id || '');
   const sharedId = collection?.sharedId;
-  const hydrated = useHydrated();
+  // "Not shared" and "not in your Library" wait for the server's library: a saved one may be out of date.
+  const synced = useSynced();
   const isOwner = shared?.role === 'owner';
   const ownVerses = useVersesByCollection(id || '');
   const { sharedProgress, grid } = useSharedGrid(sharedId, ownVerses);
@@ -66,13 +67,12 @@ export default function WhoIsWhereScreen() {
     void useAppStore.getState().fetchSharedProgress(sharedId);
   }, [sharedId]);
 
-  // The same as pulling on the collection screen: refresh, sync the copy, read the grid.
+  // The same as pulling on the collection screen: sync the copy, then the library and the grid at once.
   const onRefresh = async () => {
     setRefreshing(true);
-    await useAppStore.getState().refresh();
     if (sharedId) {
       try {
-        await useAppStore.getState().openSharedCollection(sharedId);
+        await useAppStore.getState().openSharedCollection(sharedId, { pull: true });
       } catch {
         showErrorToast("Couldn't update this shared collection. Pull to refresh to try again.");
       }
@@ -139,7 +139,7 @@ export default function WhoIsWhereScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />}
       >
         <LargeTitle title="Details" subtitle={collection?.name} />
-        {hydrated && !sharedId ? (
+        {synced && !sharedId ? (
           <Text style={[styles.message, { color: colors.icon }]}>
             {collection ? "This collection isn't shared." : "This collection isn't in your Library."}
           </Text>
