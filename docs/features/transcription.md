@@ -230,7 +230,7 @@ Recording needs a person and a real device (more in native-recorder.md). Local r
 - 2026-08-24 · Dual-path, with no mid-recording handoff between live and batch · The file always exists; a handoff adds a stitching seam for no gain.
 - 2026-08-24 · Flat 300 s cap that auto-submits with a toast; keys capped at 315 s · The reader still sees how far they got, and the client timer fires first. A word-count formula wasn't worth building.
 - 2026-08-24 · Heartbeat stream from `process-recording`, no client timeout · The phone killed silent sockets at about 60 s while the server finished fine. Leading whitespace keeps older clients parsing.
-- 2026-08-24 · `@siteed/audio-studio` pinned to exactly `3.2.0` · It gives file and PCM from one mic session, which `expo-audio` can't on SDK 54. Later versions need SDK 57, so the pin and the SDK move together.
+- 2026-08-24 · `@siteed/audio-studio` pinned to exactly `3.2.0` · It gives file and PCM from one mic session, which `expo-audio` can't on SDK 54. It is patched (see `native-recorder.md`), so it stays pinned.
 - 2026-08-24 · m4a-only recorder output · The file is only for batch, which expects m4a; WAV fills the cache.
 - 2026-08-24 · Buffer and flush PCM during the live connection · Capture starts without waiting on Soniox, and no audio is lost.
 - 2026-08-24 · No incremental scoring · Alignment is local and fast; the transcript is the only wait.

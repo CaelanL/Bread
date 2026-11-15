@@ -59,6 +59,8 @@ All in `ios/` unless noted. Each change carries a `Bread:` comment.
 | No disconnect handling while idle | `handleDeviceDisconnection` | A route change with nothing recording could start the mic |
 | No `compression.data` in audio events | `buildCompressionInfo` | It read and base64-encoded the m4a on the audio thread; Bread never reads it. Size bookkeeping stays |
 | One sample-rate converter per recording | `resampleAudioBuffer` | A converter per buffer reset the filter at every edge. The buffer goes in once per call, then `.noDataNow` |
+| No tap with an invalid input format (0 channels or 0 Hz); prepare and start fail instead | `installTapWithHardwareFormat` and its callers | Port of upstream audiolab #417 (3.2.1): a fresh permission grant or a Bluetooth handoff could report that format, and the synthetic fallback tap crashed |
+| Dev timings | `breadMark`, `#if DEBUG` | Debug builds return `breadTimings` from `stopRecording`: ms from the start call to `queue`, the path (`prepared`, `warm`, `cold`), `category`, `bufferHint`, `active`, `tap`, `m4aPrepared`, `record`, `engine`, `firstBuffer`. Release builds compile none of it |
 | `breadPatch` constant (1) | `AudioStudioModule` | The JS gate |
 | `keepSessionActive` in the TS types | `src/`, `build/types/` | No casts |
 | No "Adding recording interruption listener" log | `events.{js,ts}` | Noise |
@@ -87,10 +89,13 @@ Needs a person and a phone with a patched dev build.
   and the next tap records from the iPhone. Mid-recording, and Siri or a call
   mid-recording: "Recording interrupted", no score, and the next tap records.
 - No `<UUID>.m4a` in the app's `Documents` after leaving, including without recording.
+- The `[MIC]` line after each take: `native` names the slow step. Audio pieces are about
+  3,200 B (100 ms) or 1,600 B (50 ms); note which. `B/s` is about 32,000, and `m4a` is
+  about 64 kbps (higher means the bitrate setting didn't take).
 
 ## Decisions
 
-- 2026-11-14 · Patch 3.2.0 rather than upgrade · Later versions need SDK 57.
+- 2026-11-14 · Patch 3.2.0 rather than upgrade · 3.2.1 and 4.0.0-beta.0 declare `expo >=52` like 3.2.0, so the SDK doesn't block an upgrade, but 3.2.1's only fix Bread needs (#417) is ported and 4.0 is a beta. Upgrading means re-porting this patch.
 - 2026-11-14 · Warm at screen open, held until leaving or backgrounding, no idle release · Caelan accepted ducking and call mode while the screen is open; an idle release would undo the warm-up for anyone reading longer before tapping.
 - 2026-11-14 · `keepSessionActive` is opt-in, and the JS gate is a native constant · The library behaves like upstream unless Bread asks, and the gate holds even if the patch fails to apply on EAS.
 - 2026-11-14 · AirPods disconnect pauses, and the attempt is discarded · The library's fallback restarts the engine but never the m4a recorder, so the backup file would miss the rest of the recitation.

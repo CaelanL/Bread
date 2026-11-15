@@ -68,6 +68,9 @@ interface MicTiming {
   renders: number;
 }
 
+// Dev builds of the patched recorder report ms from the native start call to each step
+type NativeRecording = AudioRecording & { breadTimings?: Record<string, number> };
+
 // Recording calls the native module directly, not through the library's
 // recorder hook, which re-renders this whole screen as recording starts and
 // stops and once a second while it runs. PCM arrives through the screen's
@@ -140,8 +143,10 @@ export default function StudySessionScreen() {
   const smoothedLevelRef = useRef(0);
   // Dev-only tap-to-capture timing, in ms from touch-down (or from the native
   // call when there was no touch-down, as with VoiceOver), and the screen's
-  // renders from touch-down to stop. One line per attempt, logged at stop.
+  // renders from touch-down to stop. One line per attempt, logged once stop resolves,
+  // with native step timings, audio piece sizes and the m4a's bitrate.
   const micTimingRef = useRef<MicTiming>({ renders: 0 });
+  const micAudioRef = useRef({ events: 0, bytes: 0 });
   const stampMic = useCallback((mark: 'down' | 'call' | 'resolved' | 'firstAudio') => {
     if (!__DEV__) return;
     // A new touch or native call starts a fresh attempt's record
@@ -149,15 +154,25 @@ export default function StudySessionScreen() {
     if (mark === 'call' && micTimingRef.current.call !== undefined) micTimingRef.current = { renders: 0 };
     micTimingRef.current[mark] = performance.now();
   }, []);
-  const logMic = useCallback(() => {
+  const logMic = useCallback((stopped: Promise<NativeRecording>) => {
     if (!__DEV__) return;
     const { down, call, resolved, firstAudio, renders } = micTimingRef.current;
+    micTimingRef.current = { renders: 0 };
     if (call === undefined) return;
     const from = down ?? call;
     const ms = (t?: number) => (t === undefined ? '?' : `${Math.round(t - from)}ms`);
-    // eslint-disable-next-line no-console -- dev-only measurement
-    console.log(`[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)} · ${renders} renders`);
-    micTimingRef.current = { renders: 0 };
+    const line = `[MIC] ${down === undefined ? 'no touch-down, from call' : `down→call ${ms(call)}`} →resolve ${ms(resolved)} →first audio ${ms(firstAudio)} · ${renders} renders`;
+    stopped.then((recording) => {
+      const { events, bytes } = micAudioRef.current;
+      const seconds = recording.durationMs / 1000;
+      const native = Object.entries(recording.breadTimings ?? {})
+        .sort(([, a], [, b]) => a - b)
+        .map(([step, t]) => `${step} ${t}`)
+        .join(' ');
+      const m4a = recording.compression?.size;
+      // eslint-disable-next-line no-console -- dev-only measurement
+      console.log(`${line} · native ${native || 'n/a'} ms · ${events} pieces, ${Math.round(bytes / Math.max(events, 1))} B each, ${Math.round(bytes / seconds)} B/s · m4a ${m4a === undefined ? '?' : Math.round((m4a * 8) / seconds / 1000)} kbps`);
+    }, () => {});
   }, []);
   useEffect(() => {
     if (__DEV__) micTimingRef.current.renders++;
@@ -279,6 +294,10 @@ export default function StudySessionScreen() {
         stampMic('firstAudio');
       }
       const pcm = base64ToUint8Array(event.encoded);
+      if (__DEV__) {
+        micAudioRef.current.events++;
+        micAudioRef.current.bytes += pcm.length;
+      }
       if (recorder.isRecording()) {
         const half = (pcm.length >> 2) << 1; // even byte boundary
         const bars: number[] = [];
@@ -324,13 +343,15 @@ export default function StudySessionScreen() {
           waveformLevels.value = new Array(WAVEFORM_SAMPLES).fill(0);
           smoothedLevelRef.current = 0;
           stampMic('call');
+          micAudioRef.current = { events: 0, bytes: 0 };
           const started: Promise<StartRecordingResult> = recorderModule().startRecording(RECORDING_OPTIONS);
           if (__DEV__) started.then(() => stampMic('resolved'), () => {});
           return started;
         },
         stop(): Promise<AudioRecording> {
-          logMic();
-          return recorderModule().stopRecording();
+          const stopped: Promise<NativeRecording> = recorderModule().stopRecording();
+          logMic(stopped);
+          return stopped;
         },
         remove: (uri) => FileSystem.deleteAsync(uri, { idempotent: true }),
       }, source);
