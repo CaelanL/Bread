@@ -1,4 +1,5 @@
 import { diffArrays } from 'diff';
+import { SPELLINGS } from './align-spellings';
 import type { AlignmentWord } from './study-chunks';
 
 interface Token {
@@ -107,15 +108,27 @@ const NUMBER_WORDS = new Set([
 // when each group includes the optional "and".
 const MAX_NUMBER_TOKENS = 23;
 
+const APOSTROPHES = '’‘\'ʼʹ′`´‛＇';
+const HYPHENS = '\\-‐‑‒−﹣－';
+// A run of punctuation between two letters that isn't only apostrophes and hyphens.
+const WORD_JOINER = new RegExp(`(?<=\\p{L}\\p{M}*)([^\\p{L}\\p{M}\\p{N}\\s]*[^\\p{L}\\p{M}\\p{N}\\s${APOSTROPHES}${HYPHENS}][^\\p{L}\\p{M}\\p{N}\\s]*)(?=\\p{L})`, 'gu');
+const DOUBLE_POSSESSIVE = new RegExp(`([^s]s)[${APOSTROPHES}]s(?=\\W*$)`);
+const APOSTROPHE_OR_HYPHEN = new RegExp(`[${APOSTROPHES}${HYPHENS}]`, 'g');
+
 /**
  * Tokenize a string into an array of tokens with raw and normalized forms.
  * - raw: original word with punctuation and casing
- * - normalized: lowercase, leading/trailing punctuation stripped, internal apostrophes/hyphens kept
+ * - normalized: see `normalize`
+ *
+ * Invisible characters (soft hyphen, zero-width joiners, BOM) are dropped; a zero-width space separates. Punctuation between two letters
+ * splits them ("shepherd;I", "said,“Let", "him…and", "and/or"), unless it is only apostrophes or
+ * hyphens, which `normalize` owns. Digits are left alone, so "3-1/4", "2,172" and "1:1" stay whole.
  */
 function tokenize(text: string): Token[] {
-  return normalizeThousandsSpacing(text)
-    .replace(/([—–])/g, '$1 ') // em/en dash joins two words ("world—and") — split them
-    .split(/\s+/)
+  return normalizeThousandsSpacing(text.replace(/[­​-‍⁠﻿]/g, ''))
+    .replace(/([—–…])/g, '$1 ') // em/en dash or ellipsis joins two words ("world—and") — split them
+    .replace(WORD_JOINER, '$1 ')
+    .split(/[\s\u200B]+/) // \s misses the zero-width space
     .filter(w => w.length > 0)
     .map(raw => ({ raw, normalized: normalize(raw) }))
     .filter(t => t.normalized.length > 0); // drop punctuation-only tokens (e.g. a bare "—")
@@ -127,8 +140,9 @@ function normalizeThousandsSpacing(text: string): string {
 
 /**
  * Normalize a single word:
- * - lowercase
- * - drop apostrophes (curly or straight) and hyphens: possessive vs
+ * - lowercase, accents and ligatures folded ("Judæa" = "Judaea", "rosé" = "rose")
+ * - "Moses's" said like "Moses'"
+ * - drop apostrophes (curly, straight or look-alike) and hyphens: possessive vs
  *   plural ("eagle's"/"eagles") and hyphenation ("Beth-lehem"/
  *   "Bethlehem") are acoustically identical, so ASR output can't be
  *   penalized for the difference
@@ -137,17 +151,28 @@ function normalizeThousandsSpacing(text: string): string {
  */
 function normalize(word: string): string {
   const n = word
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/[’‘'-]/g, '')
+    .replace(/æ/g, 'ae')
+    .replace(/œ/g, 'oe')
+    .replace(DOUBLE_POSSESSIVE, '$1')
+    .replace(APOSTROPHE_OR_HYPHEN, '')
     .replace(/^[^\w]+/, '')
     .replace(/[^\w]+$/, '');
   return n === 'o' ? 'oh' : n;
 }
 
+// How a word compares: spellings of one word fold to one key (lib/align-spellings.ts).
+const spelling = (word: string) => SPELLINGS.get(word) ?? word;
+
 // Hesitation sounds an ASR may transcribe. Dropped from the TRANSCRIPT
 // side only, and deliberately excludes tokens that occur in scripture:
-// "Ah" (Jer 1:6 etc.) and "Er" (a name, Gen 38).
-const FILLERS = new Set(['um', 'umm', 'uh', 'uhh', 'hmm', 'hm', 'mm', 'mmm', 'mhm']);
+// "Ah" (Jer 1:6 etc.), "Er" (a name, Gen 38) and "err".
+const FILLERS = new Set([
+  'um', 'umm', 'ummm', 'uhm', 'uh', 'uhh', 'uhhh', 'hmm', 'hmmm', 'hm', 'mm', 'mmm', 'mhm',
+  'erm', 'ehm', 'mmhmm', 'uhhuh',
+]);
 
 function tokenNumberParts(token: Token): string[] {
   const cleaned = token.raw
@@ -214,6 +239,19 @@ function parseCardinalWords(words: string[]): number | null {
   if (words.length === 1 && words[0] === 'zero') return 0;
   if (words.length === 0 || words.includes('zero')) return null;
 
+  // Colloquial hundreds with no scale word: "twelve hundred and sixty" = 1,260.
+  if (!words.some((w) => SCALES[w])) {
+    const h = words.indexOf('hundred');
+    const lead = h > 0 ? parseUnderHundred(words.slice(0, h)) : null;
+    if (lead !== null && lead > 10 && lead % 10 !== 0) {
+      let rest = words.slice(h + 1);
+      if (rest.length === 0) return lead * 100;
+      if (rest[0] === 'and') rest = rest.slice(1);
+      const remainder = parseUnderHundred(rest);
+      return remainder !== null && remainder > 0 ? lead * 100 + remainder : null;
+    }
+  }
+
   let total = 0;
   let groupStart = 0;
   let previousScale = Number.POSITIVE_INFINITY;
@@ -238,7 +276,7 @@ function parseCardinalWords(words: string[]): number | null {
   if (tail[0] === 'and') {
     if (!sawScale) return null;
     tail = tail.slice(1);
-    const remainder = parseUnderHundred(tail);
+    const remainder = parseUnderThousand(tail); // "three thousand and two hundred" = 3,200
     return remainder !== null && remainder > 0 ? total + remainder : null;
   }
 
@@ -263,31 +301,141 @@ function parseWordNumber(words: string[]): Omit<ParsedNumber, 'consumed'> | null
   return value === null ? null : { value, kind: 'cardinal' };
 }
 
+// Words that continue a number: a span right before one is cut short ("three hundred thousand
+// and seven thousand" is 300,000 "and" 7,000, not 300,007 "thousand").
+const CONTINUES = new Set(['hundred', 'thousand', 'million', 'billion', 'score']);
+
+function trailingPunct(token: Token): boolean {
+  return /[,;:.!?)\]]["'’”]*$/.test(token.raw);
+}
+
+const FRACTION_WORDS: Record<string, number> = {
+  half: 2, halves: 2, third: 3, thirds: 3, fourth: 4, fourths: 4, quarter: 4, quarters: 4,
+};
+
+interface Fraction {
+  numerator: number;
+  denominator: number;
+  consumed: number;
+}
+
+function digitFraction(part: string): Omit<Fraction, 'consumed'> | null {
+  const match = part.match(/^(\d)\/(\d)$/);
+  if (!match || Number(match[1]) === 0 || Number(match[1]) >= Number(match[2])) return null;
+  return { numerator: Number(match[1]), denominator: Number(match[2]) };
+}
+
+// "1/4", "one fourth", "a quarter", "three quarters", "a half". After a whole number and "and"
+// (`afterAnd`) only: "a third", "a fourth", which elsewhere are ordinals ("a third time").
+function parseFraction(tokens: Token[], start: number, afterAnd: boolean): Fraction | null {
+  const parts = tokenNumberParts(tokens[start]);
+  const digits = parts.length === 1 ? digitFraction(parts[0]) : null;
+  if (digits) return { ...digits, consumed: 1 };
+  if (parts.length !== 1 || !tokens[start + 1] || trailingPunct(tokens[start])) return null;
+  const numerator = parts[0] === 'a' || parts[0] === 'an' ? 1 : SMALL_NUMBERS[parts[0]] ?? (/^\d$/.test(parts[0]) ? Number(parts[0]) : undefined);
+  const next = tokenNumberParts(tokens[start + 1]);
+  const denominator = next.length === 1 ? FRACTION_WORDS[next[0]] : undefined;
+  if (!numerator || numerator > 9 || !denominator || numerator >= denominator) return null;
+  if (!afterAnd && numerator === 1 && parts[0] !== 'one' && (denominator === 3 || next[0] === 'fourth')) return null;
+  return { numerator, denominator, consumed: 2 };
+}
+
+function fractionNumber(whole: number, fraction: Omit<Fraction, 'consumed'>, consumed: number): ParsedNumber {
+  return { value: whole + fraction.numerator / fraction.denominator, kind: 'cardinal', consumed };
+}
+
+// A whole number may go on as a mixed number: "3-1/4", "3 1/4", "three and one fourth".
+function withFraction(tokens: Token[], start: number, whole: ParsedNumber): ParsedNumber {
+  if (whole.kind !== 'cardinal') return whole;
+  const last = tokens[start + whole.consumed - 1];
+  const and = tokens[start + whole.consumed];
+  if (trailingPunct(last)) return whole;
+  const next = and ? tokenNumberParts(and) : [];
+  const digits = next.length === 1 ? digitFraction(next[0]) : null;
+  if (digits && /^\d/.test(last.raw)) return fractionNumber(whole.value, digits, whole.consumed + 1);
+  if (next.length !== 1 || next[0] !== 'and' || trailingPunct(and) || !tokens[start + whole.consumed + 1]) return whole;
+  const fraction = parseFraction(tokens, start + whole.consumed + 1, true);
+  return fraction ? fractionNumber(whole.value, fraction, whole.consumed + 1 + fraction.consumed) : whole;
+}
+
 function parseLongestNumber(tokens: Token[], start: number): ParsedNumber | null {
+  const fraction = parseFraction(tokens, start, false);
+  if (fraction) return fractionNumber(0, fraction, fraction.consumed);
+  const whole = parseWholeNumber(tokens, start);
+  return whole && withFraction(tokens, start, whole);
+}
+
+function parseWholeNumber(tokens: Token[], start: number): ParsedNumber | null {
   const firstParts = tokenNumberParts(tokens[start]);
+  const mixed = firstParts.length === 2 ? digitFraction(firstParts[1]) : null; // "3-1/4"
+  const mixedWhole = mixed ? parseDigitNumber(firstParts[0]) : null;
+  if (mixed && mixedWhole?.kind === 'cardinal') return fractionNumber(mixedWhole.value, mixed, 1);
   if (firstParts.length === 1) {
     const digit = parseDigitNumber(firstParts[0]);
+    // A digit and a larger scale word ("600 thousand", "12 hundred") is one number.
+    if (digit && digit.kind === 'cardinal' && !trailingPunct(tokens[start]) && tokens[start + 1]) {
+      const next = tokenNumberParts(tokens[start + 1]);
+      if (next.length === 1 && SCALES[next[0]] && SCALES[next[0]] > digit.value) {
+        return { value: digit.value * SCALES[next[0]], kind: 'cardinal', consumed: 2 };
+      }
+      if (next.length === 1 && next[0] === 'hundred' && digit.value > 10 && digit.value < 100 && digit.value % 10 !== 0) {
+        return { value: digit.value * 100, kind: 'cardinal', consumed: 2 };
+      }
+    }
     if (digit) return { ...digit, consumed: 1 };
   }
 
-  let best: ParsedNumber | null = null;
+  const candidates: ParsedNumber[] = [];
   const words: string[] = [];
   const maxEnd = Math.min(tokens.length, start + MAX_NUMBER_TOKENS);
 
   for (let end = start; end < maxEnd; end++) {
-    const parts = tokenNumberParts(tokens[end]);
+    let parts = tokenNumberParts(tokens[end]);
+    // "an hundred", "a thousand" read as "one", at the start or after "and" or a scale word. The
+    // engine writes "and hundred" for "an hundred", so a number may start with that "and" too.
+    const article = parts[0] === 'a' || parts[0] === 'an' || (end === start && parts[0] === 'and');
+    if ((end === start || words.at(-1) === 'and' || SCALES[words.at(-1) ?? '']) && parts.length === 1 && article && tokens[end + 1] && !trailingPunct(tokens[end])) {
+      const next = tokenNumberParts(tokens[end + 1]);
+      if (next.length >= 1 && (next[0] === 'hundred' || SCALES[next[0]])) parts = ['one'];
+    }
     if (parts.length === 0 || parts.some((part) => !NUMBER_WORDS.has(part))) break;
     words.push(...parts);
     const parsed = parseWordNumber(words);
-    if (parsed) best = { ...parsed, consumed: end - start + 1 };
+    if (parsed) candidates.push({ ...parsed, consumed: end - start + 1 });
+    if (trailingPunct(tokens[end])) break; // a number ends at punctuation ("twenty, six" is two numbers)
   }
 
-  return best;
+  // The longest span not cut short right before a word that continues it.
+  for (let k = candidates.length - 1; k >= 0; k--) {
+    const after = tokens[start + candidates[k].consumed];
+    const afterParts = after ? tokenNumberParts(after) : [];
+    if (!(afterParts.length && CONTINUES.has(afterParts[0]))) return candidates[k];
+  }
+  return candidates.at(-1) ?? null;
+}
+
+// "hundredfold", "100-fold" and "an hundred fold" share one key.
+const FOLD_WORDS: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, ten: 10, thirty: 30, sixty: 60, hundred: 100, thousand: 1000 };
+
+function foldValue(tokens: Token[], i: number): { value: number; consumed: number } | null {
+  if ((tokens[i].normalized === 'a' || tokens[i].normalized === 'an') && tokens[i + 1]) {
+    const inner = foldValue(tokens, i + 1);
+    if (inner && inner.value >= 100) return { value: inner.value, consumed: inner.consumed + 1 };
+  }
+  const match = tokens[i].normalized.match(/^(\w+?)fold$/); // hyphens already dropped: "100-fold" -> "100fold"
+  const value = match ? (/^\d+$/.test(match[1]) ? Number(match[1]) : FOLD_WORDS[match[1]]) : undefined;
+  return value ? { value, consumed: 1 } : null;
 }
 
 function toComparisonUnits(tokens: Token[]): ComparisonUnit[] {
   const units: ComparisonUnit[] = [];
   for (let i = 0; i < tokens.length;) {
+    const fold = foldValue(tokens, i);
+    if (fold) {
+      units.push({ key: `fold:${fold.value}`, tokens: tokens.slice(i, i + fold.consumed) });
+      i += fold.consumed;
+      continue;
+    }
     const number = parseLongestNumber(tokens, i);
     if (number) {
       units.push({
@@ -296,11 +444,44 @@ function toComparisonUnits(tokens: Token[]): ComparisonUnit[] {
       });
       i += number.consumed;
     } else {
-      units.push({ key: tokens[i].normalized, tokens: [tokens[i]] });
+      units.push({ key: spelling(tokens[i].normalized), tokens: [tokens[i]] });
       i++;
     }
   }
   return units;
+}
+
+const unitValue = (unit: ComparisonUnit | undefined, kind = 'cardinal') =>
+  unit?.key.startsWith(`number:${kind}:`) ? Number(unit.key.slice(`number:${kind}:`.length)) : undefined;
+
+// Spans that read as one number only when the other side says that number: "100 fold" or "seven
+// fold" when the other side has the -fold word ("one fold" stays a sheepfold), and the KJV's
+// "five and twenty" (25) or "seven and twentieth" when the other side has 25 or 27th. Elsewhere
+// they stay separate, so "four and twenty, six" still matches "4 and 20, 6".
+function mergeContextNumbers(units: ComparisonUnit[], other: ComparisonUnit[]): ComparisonUnit[] {
+  const keys = new Set(other.map((unit) => unit.key));
+  const out: ComparisonUnit[] = [];
+  for (let i = 0; i < units.length; i++) {
+    const value = unitValue(units[i]) ?? FOLD_WORDS[units[i].key];
+    const fold = `fold:${value}`;
+    if (value && units[i + 1]?.key === 'fold' && keys.has(fold)) {
+      out.push({ key: fold, tokens: [...units[i].tokens, ...units[i + 1].tokens] });
+      i++;
+      continue;
+    }
+    const unit = unitValue(units[i]);
+    const tensUnit = units[i + 2];
+    const kind = unitValue(tensUnit) !== undefined ? 'cardinal' : 'ordinal';
+    const tens = unitValue(tensUnit, kind);
+    const key = `number:${kind}:${(unit ?? 0) + (tens ?? 0)}`;
+    if (unit && unit <= 9 && units[i].tokens.length === 1 && units[i + 1]?.key === 'and' && tens && tens >= 20 && tens % 10 === 0 && tens < 100 && keys.has(key)) {
+      out.push({ key, tokens: [...units[i].tokens, ...units[i + 1].tokens, ...tensUnit.tokens] });
+      i += 2;
+      continue;
+    }
+    out.push(units[i]);
+  }
+  return out;
 }
 
 function unitTokens(units: ComparisonUnit[]): Token[] {
@@ -335,8 +516,10 @@ export function alignTranscription(
   const transcribedTokens = tokenize(cleanedTranscription).filter(
     t => !FILLERS.has(t.normalized)
   );
-  const expectedUnits = toComparisonUnits(expectedTokens);
-  const transcribedUnits = toComparisonUnits(transcribedTokens);
+  const expectedWords = toComparisonUnits(expectedTokens);
+  const transcribedWords = toComparisonUnits(transcribedTokens);
+  const expectedUnits = mergeContextNumbers(expectedWords, transcribedWords);
+  const transcribedUnits = mergeContextNumbers(transcribedWords, expectedWords);
 
   // Numeric spans become one comparison unit before the diff, so formatting
   // differences ("seventy-two" vs "72") match without hiding real value

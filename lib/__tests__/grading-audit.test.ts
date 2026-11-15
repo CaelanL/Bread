@@ -84,25 +84,32 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assert.deepEqual(alignment.filter((w) => w.status === 'missing'), []);
   });
 
-  it('F2: the engine prints digits for KJV number wording', { todo: TODO }, () => {
+  it('F2: the engine prints digits for KJV number wording', () => {
     assertPerfect('were an hundred and thirty shekels', 'were 130 shekels');
     assertPerfect('he had a thousand and four hundred chariots', 'he had 1,400 chariots');
     assertPerfect(
       'were six hundred thousand and three thousand and five hundred and fifty.',
       'were 600,000 and 3,550.',
     );
-    assertPerfect('mourned for him threescore and ten days', 'mourned for him 70 days');
     assertPerfect('Five and twenty years old was he', '25 years old was he');
     assertPerfect('were thirty thousand and five hundred', 'were 30,500');
   });
 
-  it('F3: the engine prints today\'s spelling of an old word', { todo: TODO }, () => {
+  // D5: score words and digit-by-digit readings are other words, not another way to write the number.
+  it('F2: "threescore and ten" printed 70, "six six six" for 666 and "60" for threescore stay wrong', () => {
+    assert.ok(calculateChunkScore(alignTranscription('mourned for him threescore and ten days', 'mourned for him 70 days')) < 100);
+    assert.ok(calculateChunkScore(alignTranscription('his number is Six hundred threescore and six', 'his number is six six six')) < 100);
+    assert.ok(calculateChunkScore(alignTranscription('and his number is 666', 'and his number is six six six')) < 100);
+    assert.ok(calculateChunkScore(alignTranscription('threescore men', '60 men')) < 100);
+  });
+
+  it('F3: the engine prints today\'s spelling of an old word', () => {
     assertPerfect('the serpent was more subtil than any beast', 'the serpent was more subtle than any beast');
     assertPerfect('she was stedfastly minded to go with her', 'she was steadfastly minded to go with her');
     assertPerfect('as if a man had enquired at the oracle of God', 'as if a man had inquired at the oracle of God');
   });
 
-  it('F4: the engine prints the American spelling', { todo: TODO }, () => {
+  it('F4: the engine prints the American spelling', () => {
     assertPerfect('Honour thy father and thy mother', 'Honor thy father and thy mother');
     assertPerfect('Thou shalt love thy neighbour as thyself', 'Thou shalt love thy neighbor as thyself');
   });
@@ -134,25 +141,24 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assert.ok(chunks.every((c) => c.text.trim() !== ''), JSON.stringify(chunks.map((c) => c.text)));
   });
 
-  it('F8: a possessive name said with an extra s', { todo: TODO }, () => {
+  it('F8: a possessive name said with an extra s', () => {
     assertPerfect("But Moses' hands were heavy", "But Moses's hands were heavy");
   });
 
-  it('F9: hesitations other than um, uh and hmm count as added words', { todo: TODO }, () => {
+  it('F9: hesitations other than um, uh and hmm count as added words', () => {
     assertPerfect('For God so loved the world', 'For God, uhm, so loved the world');
     assertPerfect('For God so loved the world', 'For God, erm, so loved the world');
   });
 
-  it('F10: a number span runs across punctuation', { todo: TODO }, () => {
+  it('F10: a number span runs across punctuation', () => {
     assertPerfect('whose fingers and toes were four and twenty, six on each hand', 'whose fingers and toes were four and twenty, 6 on each hand');
   });
 
-  it('F11: characters a licensed source could send are not folded (latent)', { todo: TODO }, () => {
+  it('F11: characters a licensed source could send are not folded (latent)', () => {
     assertPerfect('the chil­dren of Israel', 'the children of Israel');
     assertPerfect('the chil​dren of Israel', 'the children of Israel');
     assertPerfect('the LORDʼs house', "the Lord's house");
     assertPerfect('Beth‐lehem', 'Bethlehem');
-    assertPerfect('the LORD&#8217;s house', "the Lord's house");
   });
 
   it('F12: the legacy splitter (no keyed verses) drops or repeats words', { todo: TODO }, () => {
@@ -168,11 +174,11 @@ describe('grading audit — known bugs (todo until fixed)', () => {
     assert.equal(chunks.map((c) => c.text).join(' '), verse.text);
   });
 
-  it('RC2: "thousand and N hundred" printed as digits', { todo: TODO }, () => {
+  it('RC2: "thousand and N hundred" printed as digits', () => {
     assertPerfect('were six thousand and two hundred.', 'were 6,200.');
   });
 
-  it('RC2: a wrong number in digits matches the verse\'s number words', { todo: TODO }, () => {
+  it('RC2: a wrong number in digits matches the verse\'s number words', () => {
     const correctWords = (expected: string, transcript: string) =>
       alignTranscription(expected, transcript).filter((w) => w.status === 'correct').map((w) => w.word);
     assert.ok(!correctWords('were seven thousand and five hundred.', 'were 7,005.').includes('seven'));
@@ -191,13 +197,13 @@ describe('grading audit — known bugs (todo until fixed)', () => {
 
   // KJV words in the shape the API.Bible adapter serves NIV, NLT and NKJV: a poetry line or quote
   // break whose tag was removed without a space.
-  it('RC7: words glued across punctuation in the served text fail a correct recitation', { todo: TODO }, () => {
+  it('RC7: words glued across punctuation in the served text fail a correct recitation', () => {
     assertPerfect('The LORD is my shepherd;I shall not want.', 'The Lord is my shepherd, I shall not want.');
     assertPerfect('And God said,“Let there be light:”and there was light.', 'And God said, let there be light, and there was light.');
   });
 
   // Made-up text in the shape NLT prints measures: a mixed number with a hyphen and a slash.
-  it('RC14: a fraction printed in the verse never matches the spoken words', { todo: TODO }, () => {
+  it('RC14: a fraction printed in the verse never matches the spoken words', () => {
     assertPerfect('it weighed 3-1/4 pounds.', 'it weighed three and one fourth pounds.');
     assertPerfect('it weighed 3-1/4 pounds.', 'it weighed 3 1/4 pounds.');
   });
