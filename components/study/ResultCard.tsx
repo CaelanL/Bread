@@ -161,6 +161,8 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
   const status = getStatus(score);
   const statusConfig = STATUS_CONFIG[status];
   const statusColors = getStatusColors(status, isDark);
+  // A card with visible mistakes isn't perfect: 90-99 passes as "Great!".
+  const label = status === 'success' && score < 100 ? 'Great!' : statusConfig.label;
 
   return (
     <Animated.View
@@ -201,7 +203,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
           <View style={styles.statusRow}>
             <IconSymbol name={statusConfig.icon as any} size={18} color={statusColors.text} />
             <Text style={[styles.statusLabel, { color: statusColors.text }]}>
-              {statusConfig.label}
+              {label}
             </Text>
           </View>
           <View style={styles.headerRight}>
