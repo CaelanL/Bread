@@ -39,8 +39,8 @@ A call, Siri, or an AirPods disconnect mid-recording pauses native capture
 (`deviceDisconnectionBehavior: 'pause'`). The screen's `onRecordingInterrupted` listener
 calls `recorder.interrupt()`, which cancels a starting or recording attempt (no score,
 file deleted) and returns true once; the screen then shows the toast "Recording
-interrupted". Native sends `isPaused: true` events while idle and repeats them (one
-interruption observer per past prepare), so anything but a live attempt is ignored.
+interrupted". Native sends `isPaused: true` events while idle, so anything but a live attempt is
+ignored.
 
 ## The patch
 
@@ -56,6 +56,7 @@ All in `ios/` unless noted. Each change carries a `Bread:` comment.
 | No leading `setActive(false)` | `prepareRecording` | `setCategory` and `setActive(true)` reconfigure in place |
 | m4a recorder starts before the engine; `prepareToRecord()` or `record()` false fails the prepare or start | `prepareRecording`, `startRecording` | The backup file never starts after live audio, and a start with no m4a shows "Couldn't start recording" instead of losing the batch fallback |
 | `cleanupPreparation` runs before `isPrepared` clears | `stopRecording` | Its guard read the cleared flag, so it never ran |
+| One interruption observer, registered at init | `prepareRecording` | Prepare added another each time, so one interruption reached JS once per past prepare |
 | No disconnect handling while idle | `handleDeviceDisconnection` | A route change with nothing recording could start the mic |
 | No `compression.data` in audio events | `buildCompressionInfo` | It read and base64-encoded the m4a on the audio thread; Bread never reads it. Size bookkeeping stays |
 | One sample-rate converter per recording | `resampleAudioBuffer` | A converter per buffer reset the filter at every edge. The buffer goes in once per call, then `.noDataNow` |
