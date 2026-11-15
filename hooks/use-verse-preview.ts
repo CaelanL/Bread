@@ -28,13 +28,15 @@ export function useVersePreview(verse: SavedVerse, hideText: boolean) {
     const attempt = { key, failed: false };
     read.current = attempt;
     if (!retry) setLoading(true);
+    // Only the latest read answers: one for a translation changed since is dropped.
+    const latest = () => read.current === attempt;
     getVerseText(verse)
-      .then(({ text }) => setText(text))
+      .then(({ text }) => { if (latest()) setText(text); })
       .catch(() => {
         attempt.failed = true;
-        setText('Failed to load verse text');
+        if (latest()) setText('Failed to load verse text');
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (latest()) setLoading(false); });
   }, [verse, hideText]);
 
   return { text, loading };

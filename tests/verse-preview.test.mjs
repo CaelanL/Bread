@@ -61,4 +61,16 @@ test("a verse card's preview: no loader flash, and a failed read retried on pull
   shown = verse();
   assert.deepEqual(render(shown), { text: 'For God so loved the world', loading: false });
   assert.equal(globalThis.reads.length, 2);
+
+  // F39: the translation changes while a read is out; the old translation's late answer is dropped.
+  shown = { ...verse(), id: 'v2' };
+  render(shown);
+  shown = { ...shown, version: 'NIV' };
+  assert.deepEqual(render(shown), { text: 'For God so loved the world', loading: true });
+  assert.equal(globalThis.reads.length, 4);
+  globalThis.reads[3].resolve({ text: 'NIV text' });
+  await settle();
+  globalThis.reads[2].resolve({ text: 'ESV text' });
+  await settle();
+  assert.deepEqual(render(shown), { text: 'NIV text', loading: false });
 });
