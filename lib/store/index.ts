@@ -280,9 +280,9 @@ function isBibleVersion(value: unknown): value is BibleVersion {
   return BIBLE_VERSIONS.some((version) => version.value === value);
 }
 
-type VerseIdentityRow = Pick<VerseRow, 'id' | 'client_id' | 'book' | 'chapter' | 'verse_start' | 'verse_end' | 'version' | 'progress' | 'deleted_at'>;
-type HeldVerse = VerseRecord & { clientId: string };
-const VERSE_IDENTITY_COLUMNS = 'id, client_id, book, chapter, verse_start, verse_end, version, progress, deleted_at';
+type VerseIdentityRow = Pick<VerseRow, 'id' | 'client_id' | 'book' | 'chapter' | 'verse_start' | 'verse_end' | 'version' | 'progress' | 'deleted_at' | 'updated_at'>;
+type HeldVerse = VerseRecord & { clientId: string; updatedAt: string };
+const VERSE_IDENTITY_COLUMNS = 'id, client_id, book, chapter, verse_start, verse_end, version, progress, deleted_at, updated_at';
 
 function toRecord(row: VerseIdentityRow): HeldVerse {
   return {
@@ -295,6 +295,7 @@ function toRecord(row: VerseIdentityRow): HeldVerse {
     version: row.version,
     progress: parseProgress(row.progress),
     deleted: row.deleted_at !== null,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -322,14 +323,9 @@ function reportSyncFailure(generation: number) {
 // The winner takes the losers' collections, then the losers are deleted for good, so a
 // reset or removed winner is never replaced by its twin. session_attempts has no foreign
 // key to user_verses, so their history stays.
-// A delete that RLS filters out returns no error, so the deleted ids are counted.
-async function hardDeleteVerses(ids: string[]) {
-  const { data, error } = await supabase.from('user_verses').delete().in('id', ids).select('id');
-  if (error) throw error;
-  if (data.length !== ids.length) throw new Error(`Deleted ${data.length} of ${ids.length} verses`);
-}
-
-async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
+// Each loser is deleted only while it is the row that was read (same `updated_at`): progress saved
+// on it since (this device or another) makes the delete remove nothing. Returns the losers deleted.
+async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]): Promise<HeldVerse[]> {
   const loserIds = losers.map(({ id }) => id);
   const { data: links, error } = await supabase
     .from('verse_collections')
@@ -346,7 +342,14 @@ async function collapseVerse(winner: HeldVerse, losers: HeldVerse[]) {
     if (linkError) throw linkError;
   }
 
-  await hardDeleteVerses(loserIds);
+  const deleted: HeldVerse[] = [];
+  for (const loser of losers) {
+    const { data, error: deleteError } = await supabase.from('user_verses').delete()
+      .eq('id', loser.id).eq('updated_at', loser.updatedAt).select('id');
+    if (deleteError) throw deleteError;
+    if (data.length > 0) deleted.push(loser);
+  }
+  return deleted;
 }
 
 async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promise<boolean> {
@@ -369,19 +372,24 @@ async function isAvailableIn(verse: HeldVerse, translation: BibleVersion): Promi
  * when the caller already has them.
  */
 async function alignVerses(userId: string, translation: BibleVersion, rows?: VerseIdentityRow[]): Promise<{ kept: HeldVerse[]; changed: boolean }> {
-  let records = rows?.map(toRecord);
-  if (!records) {
-    const { data, error } = await supabase.from('user_verses').select(VERSE_IDENTITY_COLUMNS).eq('user_id', userId);
-    if (error) throw error;
-    records = data.map(toRecord);
-  }
+  let records = (rows ?? await readVerseIdentities(userId)).map(toRecord);
 
+  // A loser that changed since `records` was read stays; the rows are read again and the
+  // collapse picked again from them, once. Still changing after that is an error, retried by the
+  // next hydrate or pull to refresh.
   const merged = new Set<string>();
-  for (const { winner, losers } of planCollapse(records, translation)) {
-    await collapseVerse(winner, losers);
-    for (const { id } of losers) merged.add(id);
+  for (let attempt = 0; ; attempt++) {
+    let changedSince = false;
+    for (const { winner, losers } of planCollapse(records, translation)) {
+      const deleted = await collapseVerse(winner, losers);
+      for (const { id } of deleted) merged.add(id);
+      if (deleted.length < losers.length) changedSince = true;
+    }
+    records = records.filter(({ id }) => !merged.has(id));
+    if (!changedSince) break;
+    if (attempt === 1) throw new Error('Verses changed during the translation sync');
+    records = (await readVerseIdentities(userId)).map(toRecord);
   }
-  records = records.filter(({ id }) => !merged.has(id));
 
   const kept = new Set<string>();
   const available = new Map<string, boolean>();
@@ -1742,6 +1750,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const at = get().verses.findIndex(removing);
     const removed = get().verses.filter(removing);
     const restore = () => set((state) => {
+      // A read during the delete may have put it back already.
+      if (state.verses.some(removing)) return {};
       const verses = state.verses.slice();
       verses.splice(Math.min(at, verses.length), 0, ...removed);
       return { verses };
@@ -1855,9 +1865,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => ({
         lastSessionAt: Date.now(),
         verses: state.verses.map((v) => v.id === id ? { ...v, ...saved } : v),
-        masteredVerses: mastered && !state.masteredVerses.some((v) => v.id === id)
-          ? [{ ...verse, ...saved, collectionId: MASTERED_COLLECTION_ID }, ...state.masteredVerses]
-          : state.masteredVerses.map((v) => v.id === id ? { ...v, ...saved } : v),
+        masteredVerses: !mastered
+          // Reset elsewhere: the server's row (the retry's base) is no longer mastered.
+          ? state.masteredVerses.filter((v) => v.id !== id)
+          : !state.masteredVerses.some((v) => v.id === id)
+            ? [{ ...verse, ...saved, collectionId: MASTERED_COLLECTION_ID }, ...state.masteredVerses]
+            : state.masteredVerses.map((v) => v.id === id ? { ...v, ...saved } : v),
       }));
       saveSnapshot(generation);
 

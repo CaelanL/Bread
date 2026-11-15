@@ -59,7 +59,8 @@ test("a launch whose snapshot paint finishes after a sign-in as another account 
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(input);
     if (url.pathname === '/auth/v1/token') {
-      const id = JSON.parse(init.body).email[0];
+      const body = JSON.parse(init.body);
+      const id = body.email?.[0] ?? body.refresh_token.slice(2);
       return Response.json({ access_token: tokens[id], refresh_token: 'r-' + id, token_type: 'bearer', expires_in: 3600, expires_at: 4102444800, user: { id } });
     }
     if (url.pathname.startsWith('/rest/v1/rpc/')) return Response.json([]);
@@ -101,4 +102,17 @@ test("a launch whose snapshot paint finishes after a sign-in as another account 
   const sessions = globalThis.published.filter(([name]) => name === 'session').map(([, value]) => value?.user.id ?? null);
   assert.equal(sessions.at(-1), 'B');
   assert.equal(globalThis.published.some(([name, value]) => name === 'restoredUserId' && value === 'A'), false);
+
+  // Relaunch as A, and A's own token refresh lands during the paint: still a restored session.
+  globalThis.unmount();
+  assert.ifError((await supabase.auth.signInWithPassword({ email: 'A@example.test', password: 'test' })).error);
+  globalThis.published.length = 0;
+  const secondRead = Promise.withResolvers();
+  globalThis.heldKeys.set('library_snapshot:A', secondRead);
+  AuthProvider({ children: null });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ifError((await supabase.auth.refreshSession()).error);
+  globalThis.heldKeys.delete('library_snapshot:A');
+  secondRead.resolve();
+  await until(() => globalThis.published.some(([name, value]) => name === 'restoredUserId' && value === 'A'));
 });

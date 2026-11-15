@@ -58,6 +58,8 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   const verseRows = { A: [membership('A')], B: [membership('B')] };
   // The server's mastered rows, kept up to date by progress saves.
   const masteredRows = { A: [], B: [] };
+  // Replies for the next progress saves, ahead of the default (applied as sent).
+  const progressReplies = [];
   const requests = [];
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
     const url = new URL(input);
@@ -79,6 +81,7 @@ test('the saved library: synced, snapshot read and write', async (t) => {
       return entry.response.promise;
     }
     if (offline) throw new TypeError('Network request failed');
+    if (url.pathname === '/rest/v1/rpc/save_verse_progress' && progressReplies.length) return Response.json(progressReplies.shift());
     if (url.pathname === '/rest/v1/rpc/save_verse_progress') {
       const body = JSON.parse(init.body);
       if (body.p_progress?.hard?.completed) {
@@ -519,5 +522,29 @@ test('the saved library: synced, snapshot read and write', async (t) => {
     await store().openSharedCollection('g1', { pull: true });
     assert.ok(store().verses.some((v) => v.id === 'A-from-group'));
     assert.ok(saved('A').verses.some((v) => v.id === 'A-from-group'));
+  });
+  await t.test('a failed delete adds nothing back that a read during it already put back', async () => {
+    verseRows.A = [membership('A'), membership('A', 'A-two')];
+    await startSynced('A');
+    const remove = hold('/rest/v1/rpc/delete_verse');
+    const deleting = store().deleteVerse('A-verse', 'my-verses');
+    await remove.sent;
+    await store().fetchVerses();
+    remove.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    await assert.rejects(deleting);
+    assert.deepEqual(store().verses.map((v) => v.id), ['A-verse', 'A-two']);
+  });
+
+  await t.test('a save retried from a reset on another device takes the verse out of Mastered, in memory and on disk', async () => {
+    const done = { bestAccuracy: 95, completed: true };
+    useAppStore.setState((state) => ({
+      verses: state.verses.map((v) => v.id === 'A-verse' ? { ...v, progress: { easy: done, medium: done, hard: done } } : v),
+      masteredVerses: [{ ...state.verses[0], collectionId: 'mastered', progress: { easy: done, medium: done, hard: done } }],
+    }));
+    progressReplies.push([{ applied: false, progress: { easy, medium: easy, hard: easy }, last_practiced_at: null, updated_at: '2026-11-14T00:00:04.000001+00:00' }]);
+    await store().updateVerseProgress('A-verse', 'easy', 70);
+    assert.equal(store().verses[0].progress.hard.completed, false);
+    assert.deepEqual(store().masteredVerses.map((v) => v.id), []);
+    assert.deepEqual(saved('A').masteredVerses, []);
   });
 });

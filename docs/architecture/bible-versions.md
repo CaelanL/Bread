@@ -205,6 +205,9 @@ rate limit), and there is no version-aware verse-count override.
   translations of one reference (only old clients make them) and one round trip of overlap.
   It could already happen during pull to refresh; since the one-wave load, alignment runs
   after first paint, so it can also happen in the first second after launch.
+- Each loser is deleted only with the `updated_at` the sync read. A loser saved since (a session
+  during the launch's profile read, or another device) deletes nothing; `alignVerses` reads the
+  rows again and picks the collapse once more, then fails like above if they're still changing.
 
 ## Browser checks
 

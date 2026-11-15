@@ -171,7 +171,7 @@ test('accounts start from the auth session, keyed by user id', async (t) => {
     assert.equal(storage.get('notifications_prefs_cache:B'), bCache);
   });
 
-  await t.test("B's failed patch rolls back B's cache only, once A is the account", async () => {
+  await t.test("B's failed patch rolls back nothing once A is the account", async () => {
     const update = hold('/rest/v1/notification_preferences', 'PATCH');
     const patching = usePrefsStore.getState().patch({ reviewsHour: 7 });
     assert.equal(await update.sent, 'B');
@@ -183,6 +183,16 @@ test('accounts start from the auth session, keyed by user id', async (t) => {
     assert.equal(await patching, false);
     assert.equal(usePrefsStore.getState().prefs.masterEnabled, true, "A's prefs stay");
     assert.equal(storage.get('notifications_prefs_cache:A'), aCache);
-    assert.equal(JSON.parse(storage.get('notifications_prefs_cache:B')).reviewsHour, 9, "B's cache is rolled back to B's own prefs");
+  });
+
+  await t.test("a patch that fails after its account signed out writes no cache back", async () => {
+    const update = hold('/rest/v1/notification_preferences', 'PATCH');
+    const patching = usePrefsStore.getState().patch({ reviewsHour: 8 });
+    assert.equal(await update.sent, 'A');
+    setAccount(null);
+    await until(() => !storage.has('notifications_prefs_cache:A'));
+    update.reply(Response.json({ message: 'nope' }, { status: 400 }));
+    assert.equal(await patching, false);
+    assert.equal(storage.has('notifications_prefs_cache:A'), false);
   });
 });

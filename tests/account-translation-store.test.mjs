@@ -33,8 +33,8 @@ test('account translation sync and switch', async (t) => {
     medium: { bestAccuracy: mastered ? 95 : null, completed: mastered },
     hard: { bestAccuracy: mastered ? 95 : null, completed: mastered },
   });
-  const verse = (id, version, mastered) => ({ id, client_id: id, book: 'John', chapter: 3, verse_start: 16, verse_end: 16,
-    version, progress: progress(mastered), deleted_at: null });
+  const verse = (id, version, mastered, updatedAt = '2026-11-10T00:00:00.000001+00:00') => ({ id, client_id: id, book: 'John',
+    chapter: 3, verse_start: 16, verse_end: 16, version, progress: progress(mastered), deleted_at: null, updated_at: updatedAt });
   let profile = 'NIV';
   let profileName = null;
   let noProfile = false;
@@ -81,8 +81,11 @@ test('account translation sync and switch', async (t) => {
     }
     if (method === 'DELETE' && url.pathname === '/rest/v1/user_verses') {
       writes.push([method, url.pathname, url.searchParams.get('id')]);
-      const ids = url.searchParams.get('id').replace(/^in\.\(|\)$/g, '').split(',');
-      return json(deleteBlocked ? [] : ids.map((id) => ({ id })));
+      // Deletes only the row as it was read: one saved since has a newer updated_at.
+      const id = url.searchParams.get('id').replace(/^eq\./, '');
+      const current = (identityRows ?? []).find((row) => row.id === id);
+      const changed = current && url.searchParams.has('updated_at') && 'eq.' + current.updated_at !== url.searchParams.get('updated_at');
+      return json(deleteBlocked || changed ? [] : [{ id }]);
     }
     if (method !== 'GET') {
       writes.push([method, url.pathname, url.searchParams.get('id')]);
@@ -118,7 +121,29 @@ test('account translation sync and switch', async (t) => {
     toasts.length = 0;
     await state().refresh();
     assert.deepEqual(toasts, []);
-    assert.deepEqual(writes.filter(([method]) => method === 'DELETE'), [['DELETE', '/rest/v1/user_verses', 'in.(niv-row)']]);
+    assert.deepEqual(writes.filter(([method]) => method === 'DELETE'), [['DELETE', '/rest/v1/user_verses', 'eq.niv-row']]);
+  });
+
+  await t.test('a twin saved after the sync read it is never deleted as the loser: the collapse is picked again from fresh rows', async () => {
+    profile = 'ESV';
+    const behind = { easy: { bestAccuracy: 50, completed: false }, medium: { bestAccuracy: null, completed: false }, hard: { bestAccuracy: null, completed: false } };
+    // When the sync reads them, the ESV twin is ahead.
+    identityRows = [verse('esv-twin', 'ESV', false), { ...verse('kjv-twin', 'KJV', false), progress: behind }];
+    heldProfile = Promise.withResolvers();
+    writes.length = 0;
+    const syncing = state().refresh();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // Then the KJV twin is mastered (its row is newer) before the profile answers.
+    identityRows = [verse('esv-twin', 'ESV', false), verse('kjv-twin', 'KJV', true, '2026-11-14T00:00:00.000001+00:00')];
+    heldProfile.resolve();
+    heldProfile = undefined;
+    await syncing;
+    const deletes = writes.filter(([method]) => method === 'DELETE').map(([, , id]) => id);
+    assert.deepEqual(deletes, ['eq.kjv-twin', 'eq.esv-twin'], 'the stale delete removed nothing; the mastered twin won the second pick');
+    assert.ok(writes.some(([method, , id]) => method === 'PATCH' && id === 'in.(kjv-twin)'), 'the winner moves to ESV');
+    identityRows = null;
+    profile = 'NIV';
+    await state().refresh();
   });
 
   await t.test('a pick made while the sync is still reading the profile is saved, not dropped', async () => {

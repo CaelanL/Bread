@@ -127,8 +127,10 @@ export const usePrefsStore = create<PrefsState>((set, get) => ({
     await writeCache(owner, next);
     const ok = await apiUpdatePreferences(patch);
     if (!ok) {
-      // Roll back: the store only if it still holds this account, the account's own cache always.
-      if (run === accountRun) set({ prefs: prev });
+      // Roll back only while the store still holds this account. After a switch or sign-out its
+      // cache is left alone: sign-out removed it, and its next hydrate rewrites it from the server.
+      if (run !== accountRun) return false;
+      set({ prefs: prev });
       await writeCache(owner, prev);
       return false;
     }
