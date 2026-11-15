@@ -7,7 +7,8 @@ interface Token {
   normalized: string;
 }
 
-type NumberKind = 'cardinal' | 'ordinal';
+// 'quarter': a fraction said in quarters, equal to fourths only when the other side has digits.
+type NumberKind = 'cardinal' | 'ordinal' | 'quarter';
 
 interface ParsedNumber {
   value: number;
@@ -125,7 +126,7 @@ const APOSTROPHE_OR_HYPHEN = new RegExp(`[${APOSTROPHES}${HYPHENS}]`, 'g');
  * hyphens, which `normalize` owns. Digits are left alone, so "3-1/4", "2,172" and "1:1" stay whole.
  */
 function tokenize(text: string): Token[] {
-  return normalizeThousandsSpacing(text.replace(/[­​-‍⁠﻿]/g, ''))
+  return normalizeThousandsSpacing(text.replace(/[\u00AD\u200C\u200D\u2060\uFEFF]/g, ''))
     .replace(/([—–…])/g, '$1 ') // em/en dash or ellipsis joins two words ("world—and") — split them
     .replace(WORD_JOINER, '$1 ')
     .split(/[\s\u200B]+/) // \s misses the zero-width space
@@ -317,6 +318,7 @@ interface Fraction {
   numerator: number;
   denominator: number;
   consumed: number;
+  quarter?: boolean;
 }
 
 function digitFraction(part: string): Omit<Fraction, 'consumed'> | null {
@@ -337,11 +339,11 @@ function parseFraction(tokens: Token[], start: number, afterAnd: boolean): Fract
   const denominator = next.length === 1 ? FRACTION_WORDS[next[0]] : undefined;
   if (!numerator || numerator > 9 || !denominator || numerator >= denominator) return null;
   if (!afterAnd && numerator === 1 && parts[0] !== 'one' && (denominator === 3 || next[0] === 'fourth')) return null;
-  return { numerator, denominator, consumed: 2 };
+  return { numerator, denominator, consumed: 2, quarter: next[0].startsWith('quarter') };
 }
 
 function fractionNumber(whole: number, fraction: Omit<Fraction, 'consumed'>, consumed: number): ParsedNumber {
-  return { value: whole + fraction.numerator / fraction.denominator, kind: 'cardinal', consumed };
+  return { value: whole + fraction.numerator / fraction.denominator, kind: fraction.quarter ? 'quarter' : 'cardinal', consumed };
 }
 
 // A whole number may go on as a mixed number: "3-1/4", "3 1/4", "three and one fourth".
@@ -372,13 +374,13 @@ function parseWholeNumber(tokens: Token[], start: number): ParsedNumber | null {
   if (mixed && mixedWhole?.kind === 'cardinal') return fractionNumber(mixedWhole.value, mixed, 1);
   if (firstParts.length === 1) {
     const digit = parseDigitNumber(firstParts[0]);
-    // A digit and a larger scale word ("600 thousand", "12 hundred") is one number.
+    // A digit and a larger scale word ("600 thousand", "2 hundred", "12 hundred") is one number.
     if (digit && digit.kind === 'cardinal' && !trailingPunct(tokens[start]) && tokens[start + 1]) {
       const next = tokenNumberParts(tokens[start + 1]);
       if (next.length === 1 && SCALES[next[0]] && SCALES[next[0]] > digit.value) {
         return { value: digit.value * SCALES[next[0]], kind: 'cardinal', consumed: 2 };
       }
-      if (next.length === 1 && next[0] === 'hundred' && digit.value > 10 && digit.value < 100 && digit.value % 10 !== 0) {
+      if (next.length === 1 && next[0] === 'hundred' && digit.value < 100 && (digit.value < 10 || digit.value % 10 !== 0)) {
         return { value: digit.value * 100, kind: 'cardinal', consumed: 2 };
       }
     }
@@ -460,8 +462,16 @@ const unitValue = (unit: ComparisonUnit | undefined, kind = 'cardinal') =>
 // they stay separate, so "four and twenty, six" still matches "4 and 20, 6".
 function mergeContextNumbers(units: ComparisonUnit[], other: ComparisonUnit[]): ComparisonUnit[] {
   const keys = new Set(other.map((unit) => unit.key));
+  // Numbers the other side writes in digits: a different wording said aloud ("twenty five" for
+  // "five and twenty", "a quarter" for "one fourth") is a different reading, not a spelling.
+  const digitKeys = new Set(other.filter((unit) => unit.tokens.some((t) => /\d/.test(t.raw))).map((unit) => unit.key));
   const out: ComparisonUnit[] = [];
   for (let i = 0; i < units.length; i++) {
+    const quarter = units[i].key.startsWith('number:quarter:') && `number:cardinal:${units[i].key.slice('number:quarter:'.length)}`;
+    if (quarter && digitKeys.has(quarter)) {
+      out.push({ key: quarter, tokens: units[i].tokens });
+      continue;
+    }
     const value = unitValue(units[i]) ?? FOLD_WORDS[units[i].key];
     const fold = `fold:${value}`;
     if (value && units[i + 1]?.key === 'fold' && keys.has(fold)) {
@@ -474,12 +484,12 @@ function mergeContextNumbers(units: ComparisonUnit[], other: ComparisonUnit[]): 
     const kind = unitValue(tensUnit) !== undefined ? 'cardinal' : 'ordinal';
     const tens = unitValue(tensUnit, kind);
     const key = `number:${kind}:${(unit ?? 0) + (tens ?? 0)}`;
-    if (unit && unit <= 9 && units[i].tokens.length === 1 && units[i + 1]?.key === 'and' && tens && tens >= 20 && tens % 10 === 0 && tens < 100 && keys.has(key)) {
+    if (unit && unit <= 9 && units[i].tokens.length === 1 && units[i + 1]?.key === 'and' && tens && tens >= 20 && tens % 10 === 0 && tens < 100 && digitKeys.has(key) && !crossesPunct(units.slice(i, i + 2))) {
       out.push({ key, tokens: [...units[i].tokens, ...units[i + 1].tokens, ...tensUnit.tokens] });
       i += 2;
       continue;
     }
-    const chain = numberChain(units, i, keys);
+    const chain = numberChain(units, i, keys, digitKeys);
     if (chain) {
       out.push(chain.unit);
       i = chain.end - 1;
@@ -491,10 +501,13 @@ function mergeContextNumbers(units: ComparisonUnit[], other: ComparisonUnit[]): 
 }
 
 // The KJV's added-up numbers, "an hundred and thirty and seven" (137) or "an hundred twenty and
-// three" (123): numbers in a row, "and" between some of them, each fitting under the last place
+// three" (123), against digits on one side: numbers in a row, "and" between some, each under the last place
 // of the one before ("twenty ten" is not 30), none across punctuation ("seventy, two" is not 72).
 // Read as their sum only when the other side has it, longest first.
 const MAX_CHAIN = 4;
+
+// Punctuation after any of these units ("five; and twenty", 'thirty," and seven').
+const crossesPunct = (between: ComparisonUnit[]) => between.some((unit) => trailingPunct(unit.tokens[unit.tokens.length - 1]));
 
 const lastPlace = (n: number) => {
   let place = 1;
@@ -502,21 +515,23 @@ const lastPlace = (n: number) => {
   return place;
 };
 
-function numberChain(units: ComparisonUnit[], start: number, keys: Set<string>): { unit: ComparisonUnit; end: number } | undefined {
+function numberChain(units: ComparisonUnit[], start: number, keys: Set<string>, digitKeys: Set<string>): { unit: ComparisonUnit; end: number } | undefined {
   const parts: number[] = [];
   const ends: number[] = [];
   let j = start;
   while (parts.length < MAX_CHAIN) {
     const at = parts.length && units[j]?.key === 'and' ? j + 1 : j;
     const value = unitValue(units[at]);
-    if (!value || (parts.length && (value >= lastPlace(parts[parts.length - 1]) || /[,.;:!?]$/.test(units[j - 1].tokens.at(-1)!.raw)))) break;
+    if (!value || (parts.length && (value >= lastPlace(parts[parts.length - 1]) || crossesPunct(units.slice(j - 1, at))))) break;
     parts.push(value);
     j = at + 1;
     ends.push(j);
   }
   for (let n = parts.length; n >= 2; n--) {
     const key = `number:cardinal:${parts.slice(0, n).reduce((a, b) => a + b, 0)}`;
-    if (keys.has(key)) return { unit: { key, tokens: unitTokens(units.slice(start, ends[n - 1])) }, end: ends[n - 1] };
+    const tokens = unitTokens(units.slice(start, ends[n - 1]));
+    // Digits on either side: "300,000 and 7" is how an engine writes "three hundred thousand and seven".
+    if (digitKeys.has(key) || (keys.has(key) && tokens.some((t) => /\d/.test(t.raw)))) return { unit: { key, tokens }, end: ends[n - 1] };
   }
   return undefined;
 }

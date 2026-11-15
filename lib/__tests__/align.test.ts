@@ -179,6 +179,7 @@ describe('alignTranscription — spelling and character normalization', () => {
     ['Israél', 'Israel'], // precomposed accent
     ['Israe\u0301l', 'Israel'], // combining accent
     ['the rosé', 'the rose'],
+    ['O\u200BLORD', 'O LORD'], // F3: a zero-width space between two words
     ['an instructer of every artificer', 'an instructor of every artificer'],
     ['for his name’s saké', 'for his name’s sake'],
     ['Judæa', 'Judea'], // ligature, then the name list
@@ -246,6 +247,18 @@ describe('alignTranscription — number grammar', () => {
     ['four and twenty, six on each hand', '4 and 20, 6 on each hand', true],
     ['an hundred and twenty years', '120 years', true],
     ['were an hundred and thirty and seven years', 'were 137 years', true],
+    ['two hundred men', '2 hundred men', true], // F1
+    ['2 hundred men', 'two hundred men', true],
+    ['two hundred men', '3 hundred men', false],
+    ['25', 'five; and twenty', false], // F2: punctuation ends a number
+    ['37', 'thirty, and seven', false],
+    ['137', 'an hundred and thirty," and seven', false],
+    ['five and twenty', 'twenty five', false], // F4: another wording said aloud
+    ['ten and two', 'twelve', false],
+    ['one fourth part', 'a quarter part', false],
+    ['three fourths', 'three quarters', false],
+    ['a quarter part', '1/4 part', true],
+    ['three quarters', '3/4', true],
     ['Beth-lehem, an hundred twenty and three.', 'Beth-lehem, 123.', true],
     ['were an hundred and thirty and seven years', 'were 138 years', false],
     ['thirty and seven', '36', false],
