@@ -2,57 +2,49 @@
  * ESV API Adapter
  *
  * Handles fetching from the Crossway ESV API.
- * Returns clean JSON with bracketed verse numbers.
+ * Parsing lives in esv-parse.ts.
  */
 
 import { BibleAdapter, VerseResult, ChapterResult } from "./types.ts";
+import { esvChapterQuery, parseEsvPassage } from "./esv-parse.ts";
+import { VERSE_COUNTS } from "../verse-counts.ts";
 
 const ESV_API_KEY = Deno.env.get("ESV_API_KEY");
 const ESV_API_BASE = "https://api.esv.org/v3/passage/text/";
 
-/**
- * Parse ESV chapter response
- * Format: "[1] In the beginning... [2] The earth was..."
- */
-function parseChapter(
-  text: string,
-  expectedCount: number
-): Record<string, string> {
-  const verses: Record<string, string> = {};
-  const pattern = /\[(\d+)\]\s*/g;
+// Verse numbers on for both paths: one parser (esv-parse.ts) serves both, and
+// the numbers let a single verse drop the psalm title or stanza name before
+// it and notice a verse the ESV omits (Crossway answers with its neighbours).
+const PARAMS = {
+  "include-passage-references": "false",
+  "include-verse-numbers": "true",
+  "include-first-verse-numbers": "true",
+  "include-footnotes": "false",
+  "include-footnote-body": "false",
+  "include-headings": "false",
+  "include-short-copyright": "false",
+  "include-selahs": "true",
+  "indent-paragraphs": "0",
+  "indent-poetry": "false",
+};
 
-  const matches: { verseNum: string; startIndex: number }[] = [];
-  let match;
-
-  while ((match = pattern.exec(text)) !== null) {
-    matches.push({ verseNum: match[1], startIndex: match.index });
+async function fetchPassage(q: string): Promise<string> {
+  if (!ESV_API_KEY) {
+    throw new Error("ESV_API_KEY not configured");
   }
 
-  for (let i = 0; i < matches.length; i++) {
-    const { verseNum, startIndex } = matches[i];
-    const textStart = startIndex + `[${verseNum}]`.length;
-    const textEnd =
-      i < matches.length - 1 ? matches[i + 1].startIndex : text.length;
-    // Collapse interior newlines/indentation from poetry formatting
-    const verseText = text.substring(textStart, textEnd).replace(/\s+/g, " ").trim();
-    verses[verseNum] = verseText;
+  const response = await fetch(`${ESV_API_BASE}?${new URLSearchParams({ q, ...PARAMS })}`, {
+    headers: { Authorization: `Token ${ESV_API_KEY}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("ESV API error:", error);
+    throw new Error(`ESV API error: ${response.status}`);
   }
 
-  // Validate
-  const actualCount = Object.keys(verses).length;
-  if (actualCount === 0) {
-    console.error("=== ESV PARSE FAILURE ===");
-    console.error("No verses found. Raw text:", text.substring(0, 2000));
-    throw new Error("ESV parsing failed: no verses extracted");
-  }
-
-  if (actualCount !== expectedCount && expectedCount > 0) {
-    console.warn(
-      `ESV verse count: expected ${expectedCount}, got ${actualCount}`
-    );
-  }
-
-  return verses;
+  const data = await response.json();
+  return data.passages?.[0]?.trim() ?? "";
 }
 
 export const esvAdapter: BibleAdapter = {
@@ -61,37 +53,11 @@ export const esvAdapter: BibleAdapter = {
   supportedVersions: ["ESV"],
 
   async fetchVerse(ref: string, _version: string): Promise<VerseResult> {
-    if (!ESV_API_KEY) {
-      throw new Error("ESV_API_KEY not configured");
-    }
+    const verse = ref.match(/:(\d+)$/)?.[1];
+    const text = verse ? parseEsvPassage(await fetchPassage(ref))[verse] : undefined;
 
-    const params = new URLSearchParams({
-      q: ref,
-      "include-passage-references": "false",
-      "include-verse-numbers": "false",
-      "include-first-verse-numbers": "false",
-      "include-footnotes": "false",
-      "include-footnote-body": "false",
-      "include-headings": "false",
-      "include-short-copyright": "false",
-      "include-selahs": "true",
-      "indent-paragraphs": "0",
-      "indent-poetry": "false",
-    });
-
-    const response = await fetch(`${ESV_API_BASE}?${params}`, {
-      headers: { Authorization: `Token ${ESV_API_KEY}` },
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("ESV API error:", error);
-      throw new Error(`ESV API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const text = data.passages?.[0]?.replace(/\s+/g, " ").trim();
-
+    // Absent: a verse the ESV omits (Matthew 18:11) or one past the end.
+    // Never cached; the function answers it like any failed fetch.
     if (!text) {
       throw new Error("Verse not found");
     }
@@ -104,41 +70,23 @@ export const esvAdapter: BibleAdapter = {
     _version: string,
     expectedVerseCount: number
   ): Promise<ChapterResult> {
-    if (!ESV_API_KEY) {
-      throw new Error("ESV_API_KEY not configured");
-    }
-
-    const params = new URLSearchParams({
-      q: ref,
-      "include-passage-references": "false",
-      "include-verse-numbers": "true",
-      "include-first-verse-numbers": "true",
-      "include-footnotes": "false",
-      "include-footnote-body": "false",
-      "include-headings": "false",
-      "include-short-copyright": "false",
-      "include-selahs": "true",
-      "indent-paragraphs": "0",
-      "indent-poetry": "false",
-    });
-
-    const response = await fetch(`${ESV_API_BASE}?${params}`, {
-      headers: { Authorization: `Token ${ESV_API_KEY}` },
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("ESV API error:", error);
-      throw new Error(`ESV API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const text = data.passages?.[0]?.trim();
+    const counts = VERSE_COUNTS[ref.replace(/ \d+$/, "")] ?? [];
+    const text = await fetchPassage(esvChapterQuery(ref, counts.length, counts[0] ?? 0));
 
     if (!text) {
       throw new Error("Chapter not found");
     }
 
-    return { verses: parseChapter(text, expectedVerseCount) };
+    const verses = parseEsvPassage(text);
+    const actualCount = Object.keys(verses).length;
+    if (actualCount === 0) {
+      console.error("=== ESV PARSE FAILURE ===");
+      throw new Error("ESV parsing failed: no verses extracted");
+    }
+    if (actualCount !== expectedVerseCount && expectedVerseCount > 0) {
+      console.warn(`ESV verse count: expected ${expectedVerseCount}, got ${actualCount}`);
+    }
+
+    return { verses };
   },
 };

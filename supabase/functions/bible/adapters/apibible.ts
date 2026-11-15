@@ -10,6 +10,7 @@
  */
 
 import { BibleAdapter, VerseResult, ChapterResult } from "./types.ts";
+import { parseApiBibleHtml } from "./apibible-parse.ts";
 
 const API_BIBLE_KEY = Deno.env.get("API_BIBLE_KEY");
 const API_BIBLE_BASE = "https://rest.api.bible/v1";
@@ -124,79 +125,43 @@ function toApiBibleRef(ref: string): string {
   return `${bookId}.${chapter}.${verse}`;
 }
 
-/**
- * Clean HTML/text from API.Bible response
- * Removes HTML tags and normalizes whitespace
- */
-function cleanText(content: string): string {
-  return content
-    .replace(/<[^>]*>/g, "") // Remove HTML tags
-    .replace(/\s+/g, " ") // Normalize whitespace
-    .trim();
-}
+// HTML with verse numbers for both paths: one parser (apibible-parse.ts)
+// serves both, and the numbers let a single verse drop the "Psalm N" heading
+// or stanza letter before it.
+const PARAMS = {
+  "content-type": "html",
+  "include-notes": "false",
+  "include-titles": "false",
+  "include-chapter-numbers": "false",
+  "include-verse-numbers": "true",
+  "include-verse-spans": "true",
+};
 
-/**
- * Parse chapter response into verse map
- * Expects content with verse markers like [1] or <span class="v">1</span>
- */
-function parseChapterContent(
-  content: string,
-  expectedCount: number
-): Record<string, string> {
-  const verses: Record<string, string> = {};
-
-  // API.Bible returns HTML with data-usfm attributes or verse spans
-  // Try parsing by verse number patterns
-
-  // Pattern 1: Look for verse number spans or markers
-  // The API returns content with verse markers embedded
-  const versePattern = /(?:<span[^>]*data-number="(\d+)"[^>]*>|<sup[^>]*>(\d+)<\/sup>|\[(\d+)\])/gi;
-
-  let lastIndex = 0;
-  let lastVerseNum: string | null = null;
-  const matches: { verseNum: string; startIndex: number }[] = [];
-  let match;
-
-  // Reset the pattern
-  versePattern.lastIndex = 0;
-
-  while ((match = versePattern.exec(content)) !== null) {
-    const verseNum = match[1] || match[2] || match[3];
-    matches.push({ verseNum, startIndex: match.index });
+async function fetchContent(version: string, path: string): Promise<string> {
+  if (!API_BIBLE_KEY) {
+    throw new Error("API_BIBLE_KEY not configured");
   }
 
-  // Extract text between markers
-  for (let i = 0; i < matches.length; i++) {
-    const { verseNum, startIndex } = matches[i];
-    const textStart = startIndex;
-    const textEnd = i < matches.length - 1 ? matches[i + 1].startIndex : content.length;
+  const bibleId = BIBLE_IDS[version];
+  if (!bibleId) {
+    throw new Error(`Unsupported version for API.Bible: ${version}`);
+  }
 
-    // Get text after the marker
-    let verseText = content.substring(textStart, textEnd);
-    // Remove the marker itself
-    verseText = verseText.replace(/^(?:<span[^>]*data-number="\d+"[^>]*>.*?<\/span>|<sup[^>]*>\d+<\/sup>|\[\d+\])\s*/i, "");
-    verseText = cleanText(verseText);
-
-    if (verseText) {
-      verses[verseNum] = verseText;
+  const response = await fetch(
+    `${API_BIBLE_BASE}/bibles/${bibleId}/${path}?${new URLSearchParams(PARAMS)}`,
+    {
+      headers: { "api-key": API_BIBLE_KEY },
     }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("API.Bible error:", error);
+    throw new Error(`API.Bible error: ${response.status}`);
   }
 
-  // If no verses found with patterns, try a simpler approach
-  if (Object.keys(verses).length === 0) {
-    // Just return the cleaned content as verse 1 if nothing else works
-    const cleaned = cleanText(content);
-    if (cleaned && expectedCount === 1) {
-      verses["1"] = cleaned;
-    }
-  }
-
-  const actualCount = Object.keys(verses).length;
-  if (actualCount !== expectedCount && expectedCount > 0) {
-    console.warn(`API.Bible verse count: expected ${expectedCount}, got ${actualCount}`);
-  }
-
-  return verses;
+  const data = await response.json();
+  return data.data?.content || "";
 }
 
 export const apiBibleAdapter: BibleAdapter = {
@@ -205,42 +170,12 @@ export const apiBibleAdapter: BibleAdapter = {
   supportedVersions: Object.keys(BIBLE_IDS),
 
   async fetchVerse(ref: string, version: string): Promise<VerseResult> {
-    if (!API_BIBLE_KEY) {
-      throw new Error("API_BIBLE_KEY not configured");
-    }
-
-    const bibleId = BIBLE_IDS[version];
-    if (!bibleId) {
-      throw new Error(`Unsupported version for API.Bible: ${version}`);
-    }
-
     const passageId = toApiBibleRef(ref);
     console.log(`API.Bible fetchVerse: "${ref}" → "${passageId}" (${version})`);
 
-    const params = new URLSearchParams({
-      "content-type": "text",
-      "include-notes": "false",
-      "include-titles": "false",
-      "include-chapter-numbers": "false",
-      "include-verse-numbers": "false",
-      "include-verse-spans": "false",
-    });
-
-    const response = await fetch(
-      `${API_BIBLE_BASE}/bibles/${bibleId}/passages/${passageId}?${params}`,
-      {
-        headers: { "api-key": API_BIBLE_KEY },
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("API.Bible error:", error);
-      throw new Error(`API.Bible error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const text = cleanText(data.data?.content || "");
+    const verse = ref.match(/:(\d+)$/)?.[1];
+    const content = await fetchContent(version, `passages/${passageId}`);
+    const text = verse ? parseApiBibleHtml(content)[verse] : undefined;
 
     if (!text) {
       throw new Error(`Verse not found: ${ref}`);
@@ -254,54 +189,22 @@ export const apiBibleAdapter: BibleAdapter = {
     version: string,
     expectedVerseCount: number
   ): Promise<ChapterResult> {
-    if (!API_BIBLE_KEY) {
-      throw new Error("API_BIBLE_KEY not configured");
-    }
-
-    const bibleId = BIBLE_IDS[version];
-    if (!bibleId) {
-      throw new Error(`Unsupported version for API.Bible: ${version}`);
-    }
-
     const chapterId = toApiBibleRef(ref);
     console.log(`API.Bible fetchChapter: "${ref}" → "${chapterId}" (${version})`);
 
-    const params = new URLSearchParams({
-      "content-type": "html",
-      "include-notes": "false",
-      "include-titles": "false",
-      "include-chapter-numbers": "false",
-      "include-verse-numbers": "true",
-      "include-verse-spans": "true",
-    });
-
-    const response = await fetch(
-      `${API_BIBLE_BASE}/bibles/${bibleId}/chapters/${chapterId}?${params}`,
-      {
-        headers: { "api-key": API_BIBLE_KEY },
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("API.Bible error:", error);
-      throw new Error(`API.Bible error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.data?.content || "";
-
+    const content = await fetchContent(version, `chapters/${chapterId}`);
     if (!content) {
       throw new Error(`Chapter not found: ${ref}`);
     }
 
-    const verses = parseChapterContent(content, expectedVerseCount);
-
-    if (Object.keys(verses).length === 0) {
+    const verses = parseApiBibleHtml(content);
+    const actualCount = Object.keys(verses).length;
+    if (actualCount === 0) {
       console.error("=== API.Bible PARSE FAILURE ===");
-      console.error("No verses found. Raw content (first 2000 chars):");
-      console.error(content.substring(0, 2000));
       throw new Error("API.Bible parsing failed: no verses extracted");
+    }
+    if (actualCount !== expectedVerseCount && expectedVerseCount > 0) {
+      console.warn(`API.Bible verse count: expected ${expectedVerseCount}, got ${actualCount}`);
     }
 
     return { verses };
