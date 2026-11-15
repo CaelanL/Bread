@@ -178,19 +178,18 @@ Auth: `api-key: ${API_BIBLE_KEY}`. Bible IDs hardcoded:
 | NIV | `78a9f6124f344018-01` |
 | NKJV | `63097d2a0a2f7db3-01` |
 
-References are converted to USFM codes (e.g. `John 3:16` →
-`JHN.3.16`, `1 Samuel 1:1` → `1SA.1.1`). Both paths ask for HTML
-with verse spans, parsed by `parseApiBibleHtml` in
-`adapters/apibible-parse.ts`. Verses start at `data-number="n"`
-spans. `cleanApiBibleText` turns every tag into a space, so a poetry
-line or quote break never glues two words, decodes HTML entities and
-drops bracketed notes. A block holding only a Psalm 119 stanza name, or
+References are converted to USFM codes (`John 3:16` → `JHN.3.16`).
+A single verse is read from its chapter (NLT tags census table rows
+with wrong verse ids), so both paths parse the same HTML with
+`parseApiBibleHtml` in `adapters/apibible-parse.ts`. Verses start at
+`data-number="n"` spans. `cleanApiBibleText` turns tags into spaces
+(no glued words), decodes entities and drops bracketed notes. A block holding only a Psalm 119 stanza name, or
 a Hebrew letter and one word in any spelling (NKJV's "ס Samek"), is
 dropped. NLT prints a dash rule after a verse, then a manuscript note or
 an alternate ending inside the same verse span (Mark 16:8, John 7:52):
 the verse ends at the rule. NIV has no text for Habakkuk 3:1. NLT's merged rows (`data-number="20-21"`) are keyed under the
-first number; a single verse on the second gets the merged text
-(`parseApiBibleVerse`).
+first number; a single verse on the second gets the merged text,
+uncached (`parseApiBibleVerse`).
 
 ## End-to-end flows
 

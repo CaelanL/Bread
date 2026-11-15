@@ -173,8 +173,10 @@ export const apiBibleAdapter: BibleAdapter = {
     const passageId = toApiBibleRef(ref);
     console.log(`API.Bible fetchVerse: "${ref}" → "${passageId}" (${version})`);
 
+    // Answered from the chapter, so a single verse always matches the chapter
+    // path: NLT's census tables tag a row with the wrong verse id (Numbers 1).
     const verse = ref.match(/:(\d+)$/)?.[1];
-    const content = await fetchContent(version, `passages/${passageId}`);
+    const content = await fetchContent(version, `chapters/${passageId.replace(/\.\d+$/, "")}`);
     const found = verse ? parseApiBibleVerse(content, verse) : undefined;
 
     if (!found) {
