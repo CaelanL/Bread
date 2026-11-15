@@ -126,6 +126,16 @@ describe('API.Bible parser', () => {
     assert.equal(range, 'As the LORD commanded. The children of Reuben. Of the children of Simeon.');
   });
 
+  it('gives a table row to the verse its span names, so the chapter and the single verse agree', () => {
+    const span = (id: string, text: string) => `<span class="verse-span" data-verse-id="NUM.1.${id}">${text}</span>`;
+    const row20 = `<p class="p">${span('20', `<span data-number="20" data-sid="NUM 1:20" class="v">20</span>`)}${span('20', 'The children of Reuben')}${span('20', '.')}</p>`;
+    const table = `<table><tr><td>${span('22', 'Tribe')}</td><td>${span('22', 'Number')}</td></tr></table>`;
+    const row22 = `<p class="p">${span('22', `<span data-number="22" data-sid="NUM 1:22" class="v">22</span>`)}${span('22', 'Of the children of Simeon.')}</p>`;
+    assert.deepEqual(parseApiBibleHtml(row20 + table + row22), { '20': 'The children of Reuben.', '22': 'Tribe Number Of the children of Simeon.' });
+    assert.deepEqual(parseApiBibleVerse(row20, '20'), { text: 'The children of Reuben.', merged: false });
+    assert.deepEqual(parseApiBibleVerse(table + row22, '22'), { text: 'Tribe Number Of the children of Simeon.', merged: false });
+  });
+
   it('keeps a verse that sits in a heading element', () => {
     const html = `<p class="d">${v('1')}A prayer of Habakkuk the prophet upon Shigionoth.</p><p class="q1">${v('2')}O LORD, I have heard thy speech.</p>`;
     assert.deepEqual(parseApiBibleHtml(html), { '1': 'A prayer of Habakkuk the prophet upon Shigionoth.', '2': 'O LORD, I have heard thy speech.' });

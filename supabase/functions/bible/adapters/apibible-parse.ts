@@ -51,13 +51,25 @@ export function parseApiBibleHtml(html: string): Record<string, string> {
   );
 
   const verses: Record<string, string> = {};
+  const add = (verse: string | undefined, html: string) => {
+    const text = cleanApiBibleText(html);
+    if (verse && text) verses[verse] = verses[verse] ? `${verses[verse]} ${text}` : text;
+  };
+  // NLT's census tables open a later verse's span before that verse's marker
+  // (Numbers 1): text goes to the verse its span names, so both paths agree.
+  const byVerseSpan = (html: string, verse?: string) => {
+    const spans = [...html.matchAll(/<span\b[^>]*\bdata-verse-id="[^".]+\.\d+\.(\d+)/g)]
+      .filter((span, i, all) => span[1] !== (i ? all[i - 1][1] : verse));
+    add(verse, html.slice(0, spans[0]?.index ?? html.length));
+    spans.forEach((span, i) => add(span[1], html.slice(span.index, spans[i + 1]?.index ?? html.length)));
+  };
   const markers = [...withoutStanzas.matchAll(/<span\b[^>]*\bdata-number="(\d+)(?:-\d+)?"[^>]*>[^<]*<\/span>/g)];
+  byVerseSpan(withoutStanzas.slice(0, markers[0]?.index ?? 0));
   markers.forEach((marker, i) => {
     const end = i + 1 < markers.length ? markers[i + 1].index : withoutStanzas.length;
     // NLT prints a dash rule after a verse, then a manuscript note or an
     // alternate ending (Mark 16:8): none of it is the verse.
-    const text = cleanApiBibleText(withoutStanzas.slice(marker.index + marker[0].length, end).split(/-{4,}/)[0]);
-    if (text) verses[marker[1]] = verses[marker[1]] ? `${verses[marker[1]]} ${text}` : text;
+    byVerseSpan(withoutStanzas.slice(marker.index + marker[0].length, end).split(/-{4,}/)[0], marker[1]);
   });
   return verses;
 }
