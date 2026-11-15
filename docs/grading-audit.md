@@ -16,13 +16,13 @@ chunk where the same word is both missing and added.
 
 | Command | What it does |
 |---|---|
-| `npm run audit:grading` | Every variation pass over all 31,102 bundled KJV verses, one verse per chunk |
-| `npm run audit:grading -- --pass <prefix>` | Passes whose name starts with the prefix (`source:`, `digits:`, `spelling:`, `compound:`, `homophone:`, `contraction:`, `unicode:`, `speech:`, `reference:`, `live:`) |
-| `npm run audit:grading -- --chunk-size 3` | Multi-verse chunks. `reference:verse-numbers-in-chunk` checks nothing at the default size 1 |
-| `npm run audit:grading -- --check-chunks` | Chunk building at sizes 1, 2, 3, 5 and all, three difficulties, keyed and fallback |
-| `npm run audit:grading -- --replay scripts/grading-audit/fixtures/say-kjv.json` | Replays 457 real Soniox transcripts of computer-voice KJV recitations |
-| `npm run audit:grading -- --replay .expo/grading-audit/voice-NIV.json [--as-printed]` | Replays a licensed voice round, graded against the served text or, with `--as-printed`, the printed text |
-| `npm run audit:grading -- --card --ref "<ref>" --transcript "<text>"` | One result card: `__word__` missing (underlined amber), `~~word~~` added (struck red) |
+| `npx tsx scripts/grading-audit/run.ts` | Every variation pass over all 31,102 bundled KJV verses, one verse per chunk |
+| `npx tsx scripts/grading-audit/run.ts --pass <prefix>` | Passes whose name starts with the prefix (`source:`, `digits:`, `spelling:`, `compound:`, `homophone:`, `contraction:`, `unicode:`, `speech:`, `reference:`, `live:`) |
+| `npx tsx scripts/grading-audit/run.ts --chunk-size 3` | Multi-verse chunks. `reference:verse-numbers-in-chunk` checks nothing at the default size 1 |
+| `npx tsx scripts/grading-audit/run.ts --check-chunks` | Chunk building at sizes 1, 2, 3, 5 and all, three difficulties, keyed and fallback |
+| `npx tsx scripts/grading-audit/run.ts --replay scripts/grading-audit/fixtures/say-kjv.json` | Replays 457 real Soniox transcripts of computer-voice KJV recitations |
+| `npx tsx scripts/grading-audit/run.ts --replay .expo/grading-audit/voice-NIV.json [--as-printed]` | Replays a licensed voice round, graded against the served text or, with `--as-printed`, the printed text |
+| `npx tsx scripts/grading-audit/run.ts --card --ref "<ref>" --transcript "<text>"` | One result card: `__word__` missing (underlined amber), `~~word~~` added (struck red) |
 | `npm run db:reset && npx tsx scripts/grading-audit/esv-text.ts` | ESV verse text from the local `bible` function, checked against the chapter path (RC5) |
 | `npx tsx scripts/grading-audit/fetch-licensed.ts <V> [--chapters all\|sample\|"Psalms 23"]` | Fetches ESV, NIV, NLT or NKJV by chapter into gitignored `.expo/grading-audit/` for `--source`: every chapter, a 270-chapter sample (default), or named chapters. Spends API calls under hard caps; see the file header |
 | `npx tsx scripts/grading-audit/text-scan.ts NIV` | What the fetched text holds that grading trips on: missing and merged verses, glue, labels, notes, characters, contractions, digits |
@@ -101,7 +101,7 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
 - **Card** (real transcript, KJV Ruth 1:18): `...that she was __stedfastly__ ~~steadfastly~~ minded
   to go with her...` 89%.
 - **Cause:** `normalize` in `lib/align.ts` compares letters literally.
-- **Repro:** `npm run audit:grading -- --pass spelling:`; `--replay
+- **Repro:** `npx tsx scripts/grading-audit/run.ts --pass spelling:`; `--replay
   scripts/grading-audit/fixtures/say-kjv.json`; todos F3, F4, F8, F11.
 - **Suggested fix (A1):** a word that differs from the verse's only in how it is written counts as
   correct, and the card shows the verse's spelling (D2, D4): British and American, archaic
@@ -160,7 +160,7 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   hundred", and "600,003 and 550" as matching most of the 603,550 wording (todo RC2).
 - **Not fixable in the aligner:** engine digits with the wrong value (Jeremiah 52:1 "one and
   twenty" printed "120").
-- **Repro:** `npm run audit:grading -- --pass digits:`; todos F2, F10, RC2 (two cases).
+- **Repro:** `npx tsx scripts/grading-audit/run.ts --pass digits:`; todos F2, F10, RC2 (two cases).
 - **Suggested fix (A2):** extend `parseCardinalWords` and `parseLongestNumber` in `lib/align.ts`:
   article forms ("an hundred"), "N thousand and M hundred", an exact-value check so a greedy "and"
   can't make a wrong number match, digit plus scale word ("600 thousand"), stop a span at a comma.
@@ -175,7 +175,7 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   "3 1/4" gets 50%. NIV, NKJV and ESV write fractions in words. Real: not measured.
 - **Cause:** the number grammar in `lib/align.ts` has no fractions, and `tokenize` keeps "3-1/4" as
   one word.
-- **Repro:** `npm run audit:grading -- --source NLT --pass digits:spoken-words`; todo RC14.
+- **Repro:** `npx tsx scripts/grading-audit/run.ts --source NLT --pass digits:spoken-words`; todo RC14.
 - **Suggested fix (with A2, D21):** read "N-a/b" as a number in `parseLongestNumber`, matched by "N
   and a b-ths" (one fourth, a quarter, a half, three quarters) and by "N a/b".
 
@@ -192,7 +192,7 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
 - **Cause:** `alignSubstitution` in `lib/align.ts` walks one way and never skips a stray
   transcript word; `diffArrays` anchors on a repeated short word, so split compounds are never
   rejoined.
-- **Repro:** `npm run audit:grading -- --pass speech:restart-in-number` and `--pass compound:`;
+- **Repro:** `npx tsx scripts/grading-audit/run.ts --pass speech:restart-in-number` and `--pass compound:`;
   todos F1, F5, F6, RC3.
 - **Suggested fix (A3):** join compounds before the diff (spacing is spelling, D2), and rewrite
   `alignSubstitution` to re-diff the region word by word, then greedily skip unmatched transcript
@@ -222,7 +222,7 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   31 at-risk KJV clips and 57 ESV clips.
 - **Harness:** 65 homophone passes, 48,632 KJV cases under 100.
 - **Card:** KJV Matthew 3:17: `And __lo__ ~~low~~ a voice from heaven...` 89%.
-- **Repro:** `npm run audit:grading -- --pass homophone:`.
+- **Repro:** `npx tsx scripts/grading-audit/run.ts --pass homophone:`.
 - **No fix:** no sound-alike map (D3).
 
 ## RC6. Empty chunk for an omitted verse; legacy splitter (F7, F12)
@@ -237,7 +237,7 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   100, 47, 31, 16, 4...
 - **Harness:** keyed chunking clean on 393,606 chunks; the fallback splitter loses words in 1,763
   of 5,924 runs and misattributes 1,126 of 1,189 chapters.
-- **Repro:** `npm run audit:grading -- --check-chunks`; todos F7, F12; `esv-text.ts` for the
+- **Repro:** `npx tsx scripts/grading-audit/run.ts --check-chunks`; todos F7, F12; `esv-text.ts` for the
   one-chapter books.
 - **Suggested fix (B4, B5):** `parseVerseIntoChunks` skips verse numbers absent from
   `verse.verses`; adding a single omitted verse in a translation that lacks it is refused;
@@ -271,8 +271,8 @@ F-numbers are the harness's own finding IDs, used by the todo tests.
   80%, 46:1 85%, 51:1 91%, 90:1 83%), and all three put the stanza letter before Psalm 119:1 (NIV
   84%, NLT 92%, NKJV 94%). NIV and NLT answer 404 for an omitted verse.
 - **Repro:** todo RC7 with KJV words. With text: `npx tsx scripts/grading-audit/fetch-licensed.ts
-  NIV --chapters "Psalms 23"` (one API.Bible call), then `text-scan.ts NIV` and `npm run
-  audit:grading -- --source NIV --pass source:as-printed`. The sample counts above can't be
+  NIV --chapters "Psalms 23"` (one API.Bible call), then `text-scan.ts NIV` and `npx tsx
+  scripts/grading-audit/run.ts --source NIV --pass source:as-printed`. The sample counts above can't be
   re-derived cheaply: the sample costs 270 calls per translation, API.Bible's free plan is 5,000
   calls a month shared with prod, and the script stops at the audit's 900-call cap.
 - **Suggested fix (B3):** in `cleanText` and `parseChapterContent`, turn block tags into a space,
@@ -288,13 +288,13 @@ The reader says something the verse doesn't have, and each costs points (D8, D18
 
 - **Verse numbers said aloud:** 10,364 of 10,364 KJV chunks at chunk size 3, mostly 90-99%. KJV
   Genesis 1:1-3 said "1 In the beginning... 2 And the earth... 3 And God said..." → 94%. Repro:
-  `npm run audit:grading -- --chunk-size 3 --pass reference:verse-numbers`.
+  `npx tsx scripts/grading-audit/run.ts --chunk-size 3 --pass reference:verse-numbers`.
 - **The reference said before or after:** `~~genesis~~ ~~1:1.~~ In the beginning God created the
   heaven and the earth.` 83%. A trailing "amen": `Jesus wept. ~~amen.~~` 67%. Repro: `--pass
   reference:`.
 - **Contractions:** "I'll" for "I will": 6,799 KJV verses under 100 (4,239 under 90), 9,147 ESV.
   The other way, NLT prints contractions in 597 sample verses and NIV in 85; said in full, every
-  one fails. Repro: `npm run audit:grading -- --pass contraction:` (add `--source NLT`).
+  one fails. Repro: `npx tsx scripts/grading-audit/run.ts --pass contraction:` (add `--source NLT`).
 
 ## RC10. Soniox lifecycle
 
@@ -357,7 +357,7 @@ identically on every retry at any pace, on every build (the glue is server-side)
 more of the reader's words both struck and underlined (the current aligner: the same counts).
 About a quarter of all verses in those translations carry a glue point, poetry far more. Card on
 1.3.0: `The LORD is my __shepherd;I__ ~~shepherd,~~ ~~i~~ shall not want.` 70%
-(`npm run audit:grading -- --card --expected "The LORD is my shepherd;I shall not want." --transcript "The Lord is my shepherd, I shall not want." --aligner .expo/grading-audit/old-align.ts`).
+(`npx tsx scripts/grading-audit/run.ts --card --expected "The LORD is my shepherd;I shall not want." --transcript "The Lord is my shepherd, I shall not want." --aligner .expo/grading-audit/old-align.ts`).
 The leading explanation if the reviewer's account was on NIV, NLT or NKJV.
 
 **KJV and ESV: no real transcript of a correct recitation showed it on 1.3.0.** Over 1,453 real
@@ -372,11 +372,11 @@ first:
    (ESV is the account default), or the reader's own habit. Card (KJV John 3:16, "he gave" said
    after "Son", 1.3.0 and current): `...that __he__ __gave__ his only begotten Son, ~~he~~
    ~~gave,~~ that whosoever...` 85%
-   (`npm run audit:grading -- --card --ref "John 3:16" --transcript "For God so loved the world, that his only begotten Son he gave, that whosoever believeth in him should not perish, but have everlasting life." --aligner .expo/grading-audit/old-align.ts`).
+   (`npx tsx scripts/grading-audit/run.ts --card --ref "John 3:16" --transcript "For God so loved the world, that his only begotten Son he gave, that whosoever believeth in him should not perish, but have everlasting life." --aligner .expo/grading-audit/old-align.ts`).
    Not an aligner bug; RC9.
 2. **Digits on 1.3.0**, fixed for standard forms by 0a63382: KJV Matthew 18:22 → `Until __seventy__
    ~~70~~ times __seven.__ ~~7.~~` 70% on 1.3.0, 100% current
-   (`npm run audit:grading -- --card --ref "Matthew 18:22" --transcript "Jesus saith unto him, I say not unto thee, Until 7 times: but, Until 70 times 7." --aligner .expo/grading-audit/old-align.ts`).
+   (`npx tsx scripts/grading-audit/run.ts --card --ref "Matthew 18:22" --transcript "Jesus saith unto him, I say not unto thee, Until 7 times: but, Until 70 times 7." --aligner .expo/grading-audit/old-align.ts`).
    Soniox printed digits for Matthew 18:22 in 0 of 8 clips with the app's context. Low prior.
 3. **1.2.0 apostrophe and hyphen desync** (before 041aa49): the same word struck then underlined,
    one word per apostrophe, never a run, inverted colours. Low prior.

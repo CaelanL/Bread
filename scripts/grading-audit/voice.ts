@@ -14,7 +14,7 @@
 // touches, half a spread of the rest.
 // Each clip starts with 300 ms of silence: `say` starting at sample 0 made Soniox drop the first
 // word (RC11 in docs/grading-audit.md). The first round's clips have no lead-in.
-// Replay them with `npm run audit:grading -- --replay <file>`.
+// Replay them with `npx tsx scripts/grading-audit/run.ts --replay <file>`.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
