@@ -198,9 +198,10 @@ then `db:stop` and `db:start`.
 - **Live usage isn't metered.** `usage_daily.transcribe_seconds` is batch-only
   (`recordTranscriptionUsage` in `process-recording`). Keys carry
   `client_reference_id: user.id` for Soniox attribution. A future quota must count live.
-- **Idle spares count against Soniox's connection limit.** Each open study screen
-  holds one. Over the limit, takes fall back to batch silently. The knob is a limit
-  increase in the Soniox Console.
+- **Soniox caps concurrent sessions, not idle spares.** Each open study screen holds
+  one idle spare; 120 at once on the org key were all accepted. The binding limit is
+  concurrent started sessions (default 10). Over it, takes fall back to batch silently.
+  The knob is a limit increase in the Soniox Console.
 - **A failed upload isn't retried.** That attempt is lost.
 - **Trailing-chunk timing is load-bearing.** The live-feed subscription, keeping
   the attempt's live session through the seam, and `FLUSH_GRACE_MS` work together. Changing
