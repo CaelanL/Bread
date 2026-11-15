@@ -126,6 +126,18 @@ describe('API.Bible parser', () => {
     assert.equal(range, 'As the LORD commanded. The children of Reuben. Of the children of Simeon.');
   });
 
+  it('keeps a table row that carries the next verse id with the verse before its marker', () => {
+    const span = (id: string, html: string) => `<span class="verse-span" data-verse-id="NUM.1.${id}">${html}</span>`;
+    const html =
+      `<p class="p">${span('5', `<span data-number="5" data-sid="NUM 1:5" class="v">5</span>`)}${span('5', 'These are the leaders:')}</p>` +
+      `<table><tr><td>${span('6', 'Bluefield')}</td><td>${span('6', 'Arno son of Tamsin')}</td></tr></table>` +
+      `<p class="p">${span('6', `<span data-number="6" data-sid="NUM 1:6" class="v">6</span>`)}${span('6', 'Greenhill, Pell son of Orrin.')}</p>`;
+    assert.deepEqual(parseApiBibleHtml(html), {
+      '5': 'These are the leaders: Bluefield Arno son of Tamsin',
+      '6': 'Greenhill, Pell son of Orrin.',
+    });
+  });
+
   it('keeps a verse that sits in a heading element', () => {
     const html = `<p class="d">${v('1')}A prayer of Habakkuk the prophet upon Shigionoth.</p><p class="q1">${v('2')}O LORD, I have heard thy speech.</p>`;
     assert.deepEqual(parseApiBibleHtml(html), { '1': 'A prayer of Habakkuk the prophet upon Shigionoth.', '2': 'O LORD, I have heard thy speech.' });
