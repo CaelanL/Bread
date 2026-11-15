@@ -51,7 +51,7 @@ All in `ios/` unless noted. Each change carries a `Bread:` comment.
 | `keepSessionActive` option, default off | `RecordingSettings.swift`, `stopRecording` | Stop skips `setActive(false)` and the engine reset, so it never deactivates or delays the score |
 | `audioSessionActive` flag | `AudioStreamManager` | A prepare on an active session skips `configureAudioSession`, the IO buffer hint and `setActive(true)`. The per-start tap install stays: the hardware format can change with the route |
 | `releaseAudioSession` | `AudioStudioModule`, `AudioStreamManager` | On the lifecycle queue: stops the engine, removes the tap, deletes a prepared m4a, deactivates. A no-op while recording, and otherwise always deactivates: a failed prepare or an engine configuration change clears the flag but leaves the session active. It hops to main first, as prepare and start do in `checkMicrophonePermission`, so it can't overtake an in-flight prepare |
-| Stale prepared state | `handleAudioSessionInterruption`, `handleAudioStateLost` | Interruption began, media-services reset and `AVAudioEngineConfigurationChange` clear the flag and mark a prepared state stale, so the next start prepares again |
+| Stale prepared state | `handleAudioSessionInterruption`, `handleAudioStateLost` | Interruption began, media-services reset and `AVAudioEngineConfigurationChange` clear the flag and mark a prepared state stale. The next start drops it without `setActive(false)` and prepares again in place, so an AirPods switch to call mode after the screen-open prepare doesn't cost an off-and-on cycle |
 | Settings stored after the "already prepared or recording" guard | `prepareRecording` | A stray prepare can't replace a running recording's settings |
 | No leading `setActive(false)` | `prepareRecording` | `setCategory` and `setActive(true)` reconfigure in place |
 | m4a recorder starts before the engine; `prepareToRecord()` or `record()` false fails the prepare or start | `prepareRecording`, `startRecording` | The backup file never starts after live audio, and a start with no m4a shows "Couldn't start recording" instead of losing the batch fallback |
@@ -60,7 +60,7 @@ All in `ios/` unless noted. Each change carries a `Bread:` comment.
 | No `compression.data` in audio events | `buildCompressionInfo` | It read and base64-encoded the m4a on the audio thread; Bread never reads it. Size bookkeeping stays |
 | One sample-rate converter per recording | `resampleAudioBuffer` | A converter per buffer reset the filter at every edge. The buffer goes in once per call, then `.noDataNow` |
 | No tap with an invalid input format (0 channels or 0 Hz); prepare and start fail instead | `installTapWithHardwareFormat` and its callers | Port of upstream audiolab #417 (3.2.1): a fresh permission grant or a Bluetooth handoff could report that format, and the synthetic fallback tap crashed |
-| Dev timings | `breadMark`, `#if DEBUG` | Debug builds return `breadTimings` from `stopRecording`: ms from the start call to `queue`, the path (`prepared`, `warm`, `cold`), `category`, `bufferHint`, `active`, `tap`, `m4aPrepared`, `record`, `engine`, `firstBuffer`. Release builds compile none of it |
+| Dev timings | `breadMark`, `#if DEBUG` | Debug builds return `breadTimings` from `stopRecording`: ms from the start call to `queue`, the path (`prepared`, `stale`, `warm`, `cold`), `category`, `bufferHint`, `active`, `tap`, `m4aPrepared`, `record`, `engine`, `firstBuffer`. Release builds compile none of it |
 | `breadPatch` constant (1) | `AudioStudioModule` | The JS gate |
 | `keepSessionActive` in the TS types | `src/`, `build/types/` | No casts |
 | No "Adding recording interruption listener" log | `events.{js,ts}` | Noise |
@@ -83,6 +83,9 @@ Needs a person and a phone with a patched dev build.
 
 - The first tap after reading for a minute starts as fast as chunk 2 onward
   (`[MIC] →resolve`), with the built-in mic and with AirPods.
+- With AirPods, the first tap's `[MIC] native` names `prepared`. `stale` means the
+  switch to call mode invalidated the screen-open prepare, so the first tap prepared
+  again; `cold` means it wasn't prepared at all.
 - With music playing: it ducks as the study screen opens and returns on leaving and on
   backgrounding. The orange dot is gone within about 1 s of leaving.
 - Pull an AirPod while idle on Library, or on the study screen: no orange dot, no toast,
