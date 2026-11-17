@@ -15,7 +15,7 @@ select ok(not has_function_privilege('anon', 'public.orphaned_feedback_photos()'
 select ok(not has_function_privilege('authenticated', 'public.orphaned_feedback_photos()', 'EXECUTE'), 'signed-in clients cannot list orphaned photos');
 select ok(has_function_privilege('service_role', 'public.orphaned_feedback_photos()', 'EXECUTE'), 'the sweep can list orphaned photos');
 select is((select public from storage.buckets where id = 'feedback-photos'), false, 'the photo bucket is private');
-select is((select file_size_limit from storage.buckets where id = 'feedback-photos'), 5242880::bigint, 'photos are capped at 5 MB');
+select is((select file_size_limit from storage.buckets where id = 'feedback-photos'), 52428800::bigint, 'photos are capped at 50 MB');
 select is((select allowed_mime_types from storage.buckets where id = 'feedback-photos'), array['image/*'], 'the bucket takes images only');
 
 set local role authenticated;
@@ -39,8 +39,8 @@ select throws_ok($$insert into public.feedback_reports (kind, note) values ('gen
 select throws_ok($$insert into public.feedback_reports (kind, note) values ('general', repeat('a', 4001))$$,
   '23514', null, 'notes are bounded');
 select throws_ok($$insert into public.feedback_reports (kind, note, photo_paths)
-  values ('general', 'four', array[current_setting('test.fb_a') || '/1', current_setting('test.fb_a') || '/2', current_setting('test.fb_a') || '/3', current_setting('test.fb_a') || '/4'])$$,
-  '23514', null, 'at most three photos');
+  values ('general', 'six', array[current_setting('test.fb_a') || '/1', current_setting('test.fb_a') || '/2', current_setting('test.fb_a') || '/3', current_setting('test.fb_a') || '/4', current_setting('test.fb_a') || '/5', current_setting('test.fb_a') || '/6'])$$,
+  '23514', null, 'at most five photos');
 select throws_ok($$select * from public.feedback_reports$$, '42501', 'permission denied for table feedback_reports', 'a reader cannot read reports');
 select throws_ok($$update public.feedback_reports set note = 'x'$$, '42501', 'permission denied for table feedback_reports', 'a reader cannot edit reports');
 select throws_ok($$delete from public.feedback_reports$$, '42501', 'permission denied for table feedback_reports', 'a reader cannot delete reports');

@@ -1,5 +1,5 @@
 -- Feedback: grading reports from the result card and general feedback from Settings, with up to
--- three photos. Clients may only insert; reports are read in the dashboard. docs/features/feedback.md.
+-- five photos. Clients may only insert; reports are read in the dashboard. docs/features/feedback.md.
 -- Additive: a new table, bucket, policy, function and cron job, so old clients are unaffected.
 -- The limits match FEEDBACK_LIMITS in lib/feedback/index.ts. Clients set `id`, kept across retries,
 -- so the primary key stops a retry from saving one report twice.
@@ -11,7 +11,7 @@ create table public.feedback_reports (
   label text check (label in ('idea', 'bug', 'other')),
   note text not null check (btrim(note) <> '' and char_length(note) <= 4000),
   details jsonb check (octet_length(details::text) <= 262144),
-  photo_paths text[] not null default '{}' check (cardinality(photo_paths) <= 3),
+  photo_paths text[] not null default '{}' check (cardinality(photo_paths) <= 5),
   app_version text check (char_length(app_version) <= 100),
   update_id text check (char_length(update_id) <= 100),
   os text check (char_length(os) <= 100),
@@ -38,9 +38,9 @@ create policy "Owners send feedback"
     )
   );
 
--- Private photos: 5 MB, images only. Clients upload under <their id>/ and can't read or list.
+-- Private photos: 50 MB, images only. Clients upload under <their id>/ and can't read or list.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('feedback-photos', 'feedback-photos', false, 5242880, array['image/*'])
+values ('feedback-photos', 'feedback-photos', false, 52428800, array['image/*'])
 on conflict (id) do nothing;
 
 create policy "Owners upload feedback photos"

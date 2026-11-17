@@ -62,8 +62,8 @@ test('a reader uploads only into their own folder, cannot read back, and the pho
   assert.ifError((await photos.upload(own, PNG, { contentType: 'image/png' })).error);
   assert.ok((await photos.upload(`${crypto.randomUUID()}/x.png`, PNG, { contentType: 'image/png' })).error, 'another folder is refused');
   assert.ok((await photos.upload(`${userId}/note.txt`, PNG, { contentType: 'text/plain' })).error, 'non-images are refused');
-  const tooBig = new Uint8Array(5 * 1024 * 1024 + 1);
-  assert.ok((await photos.upload(`${userId}/big.png`, tooBig, { contentType: 'image/png' })).error, 'photos over 5 MB are refused');
+  const tooBig = new Uint8Array(50 * 1024 * 1024 + 1);
+  assert.ok((await photos.upload(`${userId}/big.png`, tooBig, { contentType: 'image/png' })).error, 'photos over 50 MB are refused');
 
   const listed = await photos.list(userId);
   assert.deepEqual(listed.data ?? [], [], 'a reader cannot list photos');

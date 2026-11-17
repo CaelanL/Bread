@@ -18,7 +18,7 @@ const LABELS: { value: FeedbackLabel; title: string }[] = [
 ];
 const PHOTO_MB = FEEDBACK_LIMITS.photoBytes / 1024 / 1024;
 
-/** Settings → Send feedback: a required note, an optional label, up to three photos. */
+/** Settings → Send feedback: a required note, an optional label, up to five photos. */
 export default function FeedbackScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const barHeight = useTopBarHeight();
@@ -146,7 +146,7 @@ export default function FeedbackScreen() {
             )}
           </View>
           <Text style={[styles.meta, { color: colors.icon }]}>
-            {photoNotice ?? `Up to ${FEEDBACK_LIMITS.photos} photos, ${PHOTO_MB} MB each.`}
+            {photoNotice ?? `Up to ${FEEDBACK_LIMITS.photos} photos.`}
           </Text>
 
           {error && (

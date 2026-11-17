@@ -2,7 +2,7 @@
 
 Two ways to tell us something. A thumbs-down on a result card reports a grade the reader thinks
 is wrong, with everything about how that recitation was graded. "Send feedback" in Settings sends a
-note with an optional label and up to three photos. Reports are read in the Supabase dashboard
+note with an optional label and up to five photos. Reports are read in the Supabase dashboard
 (`feedback_reports`); there is no admin screen and no alert.
 
 ## Where things live
@@ -67,7 +67,7 @@ The transcript, expected text and app version replay a grade with
 
 "Send feedback" is the first row in Settings, in its own FEEDBACK section above Translation. The
 screen has optional labels Idea, Bug and Other (tap again to clear), the required note, and up to
-three photos from the iOS system photo picker (`expo-image-picker`, `launchImageLibraryAsync`).
+five photos from the iOS system photo picker (`expo-image-picker`, `launchImageLibraryAsync`).
 That picker runs outside the app, so no permission is asked; `app.config.js` turns the plugin's
 photo and camera usage strings off. Photos over the size cap are left out with a note. Send uploads
 the photos, then saves the row; success shows "Thank you" and Done. A failure shows an error and
@@ -87,8 +87,8 @@ upload under their own folder and can't read or list anything, their own photos 
 | Limit | Value | Enforced by |
 |---|---|---|
 | Note | 1 to 4000 characters | table check, `maxLength` |
-| Photos per report | 3 | table check, the picker's `selectionLimit` |
-| Photo size | 5 MB | bucket `file_size_limit`, the screen |
+| Photos per report | 5 | table check, the picker's `selectionLimit` |
+| Photo size | 50 MB | bucket `file_size_limit`, the screen |
 | Photo type | `image/*` | bucket `allowed_mime_types` |
 | `details` | 256 KB | table check |
 
@@ -111,7 +111,7 @@ Photos are gone within a day. The local seed unschedules the job; call it by han
 - `npm run sim -- flow send-feedback`: Settings, Send feedback, Send disabled, Bug, type, Send,
   "Thank you", Done back to Settings. A row lands in the local `feedback_reports`.
 - `tests/feedback-photos.integration.ts` on a local stack: a real upload, refused uploads (another
-  folder, not an image, over 5 MB), no list or download, a send retried after it committed saves one
+  folder, not an image, over 50 MB), no list or download, a send retried after it committed saves one
   row, account delete, sweep, nothing left.
 - Real phone: pick photos and send (no permission prompt); report a real graded recitation and
   check `details.recording` in the dashboard.

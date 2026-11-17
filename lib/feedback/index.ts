@@ -12,7 +12,7 @@ import { saveReport, uploadPhoto } from './save';
 export { newReportId } from './save';
 
 /** The migration enforces the same numbers (table checks and the bucket). */
-export const FEEDBACK_LIMITS = { noteLength: 4000, photos: 3, photoBytes: 5 * 1024 * 1024 } as const;
+export const FEEDBACK_LIMITS = { noteLength: 4000, photos: 5, photoBytes: 50 * 1024 * 1024 } as const;
 
 export type FeedbackLabel = 'idea' | 'bug' | 'other';
 
