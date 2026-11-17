@@ -25,6 +25,11 @@ select lives_ok($$insert into public.feedback_reports (kind, note, details) valu
 select lives_ok($$insert into public.feedback_reports (user_id, kind, label, note, photo_paths)
   values (current_setting('test.fb_a')::uuid, 'general', 'idea', 'More translations', array[current_setting('test.fb_a') || '/one.jpg'])$$,
   'a reader sends feedback with a photo in their own folder');
+select set_config('test.fb_report', gen_random_uuid()::text, true);
+select lives_ok($$insert into public.feedback_reports (id, kind, note) values (current_setting('test.fb_report')::uuid, 'grading', 'first try')$$,
+  'a report can carry the id the app made for it');
+select throws_ok($$insert into public.feedback_reports (id, kind, note) values (current_setting('test.fb_report')::uuid, 'grading', 'retry')$$,
+  '23505', null, 'a retry with the same report id cannot save the report twice');
 select throws_ok($$insert into public.feedback_reports (user_id, kind, note) values (current_setting('test.fb_b')::uuid, 'general', 'forged')$$,
   '42501', 'new row violates row-level security policy for table "feedback_reports"', 'a reader cannot send as another account');
 select throws_ok($$insert into public.feedback_reports (kind, note, photo_paths) values ('general', 'hi', array[current_setting('test.fb_b') || '/x.jpg'])$$,
@@ -57,7 +62,7 @@ select throws_ok($$insert into storage.objects (bucket_id, name) values ('feedba
 select is((select count(*) from storage.objects where bucket_id = 'feedback-photos'), 0::bigint, 'anonymous clients cannot list photos');
 reset role;
 
-select is((select count(*) from public.feedback_reports where user_id = current_setting('test.fb_a')::uuid), 2::bigint, 'both reports landed');
+select is((select count(*) from public.feedback_reports where user_id = current_setting('test.fb_a')::uuid), 3::bigint, 'each report landed once');
 
 -- A deleted account: its rows cascade and its photos turn up for the sweep; a live account's don't.
 select set_config('test.fb_gone', gen_random_uuid()::text, true);

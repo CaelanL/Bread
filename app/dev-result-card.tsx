@@ -8,7 +8,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { alignTranscription } from '@/lib/align';
 import { canDevSignIn } from '@/lib/auth/dev-sign-in';
-import { sendGradingReport } from '@/lib/feedback';
+import { newReportId, sendGradingReport } from '@/lib/feedback';
 import { buildGradingReport } from '@/lib/feedback/grading-report';
 import { calculateChunkScore } from '@/lib/study-chunks';
 
@@ -25,6 +25,7 @@ export default function DevResultCard() {
   const allowed = canDevSignIn(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL);
   const colors = Colors[useColorScheme() ?? 'light'];
   const [reported, setReported] = useState(false);
+  const [reportId] = useState(newReportId);
 
   useEffect(() => {
     if (!allowed) router.replace('/');
@@ -34,7 +35,7 @@ export default function DevResultCard() {
   const alignment = alignTranscription(expected, transcript);
   const result = { score: calculateChunkScore(alignment), transcription: transcript, alignment };
   const report = async (note: string) => {
-    await sendGradingReport(buildGradingReport({
+    await sendGradingReport(reportId, buildGradingReport({
       verse: { book: 'Dev card', chapter: 0, verseStart: 0, verseEnd: 0, version: 'KJV' },
       chunk: { verseNum: 0 },
       difficulty: 'easy',

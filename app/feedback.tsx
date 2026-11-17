@@ -9,7 +9,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, InputText, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { FEEDBACK_LIMITS, sendFeedback, type FeedbackLabel, type FeedbackPhoto } from '@/lib/feedback';
+import { FEEDBACK_LIMITS, newReportId, sendFeedback, type FeedbackLabel, type FeedbackPhoto } from '@/lib/feedback';
 
 const LABELS: { value: FeedbackLabel; title: string }[] = [
   { value: 'idea', title: 'Idea' },
@@ -29,6 +29,8 @@ export default function FeedbackScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
   const [sent, setSent] = useState(false);
+  // One id for this send, kept across retries, so a lost answer can't save it twice.
+  const [reportId] = useState(newReportId);
   const canSend = note.trim().length > 0 && !sending;
 
   // The system photo picker: no photo library permission is asked for.
@@ -50,7 +52,7 @@ export default function FeedbackScreen() {
     setSending(true);
     setError(false);
     try {
-      await sendFeedback({ note, label, photos });
+      await sendFeedback({ id: reportId, note, label, photos });
       setSent(true);
     } catch (e) {
       console.error('[FEEDBACK] Send failed:', e);

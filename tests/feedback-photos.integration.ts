@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { URL } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+import { newReportId, saveReport, uploadPhoto } from '../lib/feedback/save';
 
 // Real Storage API against the local stack: what a reader can do with feedback photos, and that
 // deleting the account and running the sweep removes them. Run on a local stack, with the API
@@ -17,6 +22,22 @@ const cronSecret = readFileSync('supabase/config.toml', 'utf8').match(/^cron_sec
 assert.ok(cronSecret, 'The local cron secret is in supabase/config.toml.');
 
 const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+
+// Clients can't read reports, so count through the local database CLI.
+function countRows(reportId: string): number {
+  const dir = mkdtempSync(join(tmpdir(), 'bread-feedback-'));
+  try {
+    const file = join(dir, 'count.sql');
+    writeFileSync(file, `begin; create extension if not exists pgtap with schema extensions; select plan(1);
+      select diag((select count(*) from public.feedback_reports where id = '${reportId}')::text);
+      select pass('counted'); select * from finish(); rollback;`);
+    const r = spawnSync('node_modules/.bin/supabase', ['test', 'db', '--local', file], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    return Number(`${r.stdout}${r.stderr}`.match(/^# (\d+)$/m)?.[1]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 async function sweep() {
   const response = await fetch(`${url}/functions/v1/delete-feedback-photos`, {
@@ -48,7 +69,14 @@ test('a reader uploads only into their own folder, cannot read back, and the pho
   assert.deepEqual(listed.data ?? [], [], 'a reader cannot list photos');
   assert.ok((await photos.download(own)).error, 'a reader cannot read a photo back');
 
-  assert.ifError((await client.from('feedback_reports').insert({ kind: 'general', label: 'bug', note: 'Integration test', photo_paths: [own] })).error);
+  // A send whose insert committed but whose answer was lost: the retry reuses the id and the path.
+  const reportId = newReportId();
+  const retried = `${userId}/${reportId}-0.png`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await uploadPhoto(client, retried, PNG.buffer, 'image/png');
+    await saveReport(client, { id: reportId, kind: 'general', label: 'bug', note: 'Integration test', photo_paths: [own, retried] });
+  }
+  assert.equal(countRows(reportId), 1, 'a retried send saves one report');
   assert.ok((await client.from('feedback_reports').select('id')).error, 'a reader cannot read reports');
 
   assert.ifError((await client.rpc('delete_own_account')).error);

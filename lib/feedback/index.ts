@@ -7,6 +7,9 @@ import { Platform } from 'react-native';
 
 import { sessionUserId, supabase } from '@/lib/api/client';
 import type { GradingReport } from './grading-report';
+import { saveReport, uploadPhoto } from './save';
+
+export { newReportId } from './save';
 
 /** The migration enforces the same numbers (table checks and the bucket). */
 export const FEEDBACK_LIMITS = { noteLength: 4000, photos: 3, photoBytes: 5 * 1024 * 1024 } as const;
@@ -18,10 +21,8 @@ export interface FeedbackPhoto {
   mimeType?: string;
 }
 
-const PHOTO_BUCKET = 'feedback-photos';
-
-async function insertReport(row: Record<string, unknown>): Promise<void> {
-  const { error } = await supabase.from('feedback_reports').insert({
+function insertReport(row: { id: string } & Record<string, unknown>): Promise<void> {
+  return saveReport(supabase, {
     ...row,
     app_version: Constants.expoConfig?.version ?? null,
     update_id: Updates.updateId ?? null,
@@ -29,15 +30,16 @@ async function insertReport(row: Record<string, unknown>): Promise<void> {
     os_version: String(Platform.Version),
     device_model: Device.modelName ?? null,
   });
-  if (error) throw new Error(error.message);
 }
 
-export function sendGradingReport(details: GradingReport, note: string): Promise<void> {
-  return insertReport({ kind: 'grading', note: note.trim(), details });
+/** `id` stays the same across retries of one result's report. */
+export function sendGradingReport(id: string, details: GradingReport, note: string): Promise<void> {
+  return insertReport({ id, kind: 'grading', note: note.trim(), details });
 }
 
-/** Uploads the photos into the reader's folder, then saves the report. A retry uploads fresh copies. */
-export async function sendFeedback({ note, label, photos }: {
+/** Uploads the photos into the reader's folder, then saves the report. Paths come from `id`, so a retry reuses what landed. */
+export async function sendFeedback({ id, note, label, photos }: {
+  id: string;
   note: string;
   label: FeedbackLabel | null;
   photos: FeedbackPhoto[];
@@ -47,11 +49,9 @@ export async function sendFeedback({ note, label, photos }: {
   const paths: string[] = [];
   for (const photo of photos) {
     const contentType = photo.mimeType ?? 'image/jpeg';
-    const path = `${userId}/${Date.now()}-${paths.length}.${contentType.split('/')[1]}`;
-    const body = await new File(photo.uri).arrayBuffer();
-    const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, body, { contentType });
-    if (error) throw new Error(error.message);
+    const path = `${userId}/${id}-${paths.length}.${contentType.split('/')[1]}`;
+    await uploadPhoto(supabase, path, await new File(photo.uri).arrayBuffer(), contentType);
     paths.push(path);
   }
-  await insertReport({ kind: 'general', label, note: note.trim(), photo_paths: paths });
+  await insertReport({ id, kind: 'general', label, note: note.trim(), photo_paths: paths });
 }

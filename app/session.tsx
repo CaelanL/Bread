@@ -8,7 +8,7 @@ import { SessionFinish } from '@/components/study/SessionFinish';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStudySession } from '@/hooks/use-study-session';
-import { sendGradingReport } from '@/lib/feedback';
+import { newReportId, sendGradingReport } from '@/lib/feedback';
 import { buildGradingReport } from '@/lib/feedback/grading-report';
 import { formatVerseReference } from '@/lib/storage';
 import {
@@ -133,6 +133,8 @@ export default function StudySessionScreen() {
   const [recordingState, setRecordingState] = useState<RecordingState>({ phase: 'idle' });
   // Results already reported. A new recording is a new result, so it can be reported again.
   const [reportedResults, setReportedResults] = useState<ReadonlySet<ChunkResult>>(new Set());
+  // One report id per result, kept across retries, so a lost answer can't save it twice.
+  const reportIds = useRef(new WeakMap<ChunkResult, string>());
   // Read at open so a tap with permission granted goes straight to native start.
   // The first-run prompt still comes from requestPermissionsAsync on the tap.
   const micPermissionRef = useRef(false);
@@ -582,7 +584,8 @@ export default function StudySessionScreen() {
                   result: display,
                   shown: isRetryResult ? 'retry' : isPeeked ? 'peeked' : 'scored',
                 });
-                await sendGradingReport(report, note);
+                if (!reportIds.current.has(display)) reportIds.current.set(display, newReportId());
+                await sendGradingReport(reportIds.current.get(display)!, report, note);
                 setReportedResults((prev) => new Set(prev).add(display));
               }}
             />

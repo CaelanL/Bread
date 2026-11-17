@@ -1,7 +1,8 @@
 -- Feedback: grading reports from the result card and general feedback from Settings, with up to
 -- three photos. Clients may only insert; reports are read in the dashboard. docs/features/feedback.md.
 -- Additive: a new table, bucket, policy, function and cron job, so old clients are unaffected.
--- The limits match lib/feedback/limits.ts.
+-- The limits match FEEDBACK_LIMITS in lib/feedback/index.ts. Clients set `id`, kept across retries,
+-- so the primary key stops a retry from saving one report twice.
 
 create table public.feedback_reports (
   id uuid primary key default gen_random_uuid(),
