@@ -14,6 +14,7 @@ note with an optional label and up to three photos. Reports are read in the Supa
 | Sent state per result, sending | `app/session.tsx` (`reportedResults`) |
 | Payload builder | `lib/feedback/grading-report.ts` (`buildGradingReport`), test beside it |
 | Writes and limits | `lib/feedback/index.ts` (`sendGradingReport`, `sendFeedback`, `FEEDBACK_LIMITS`) |
+| Retry-safe insert and upload | `lib/feedback/save.ts` (`newReportId`, `saveReport`, `uploadPhoto`) |
 | Settings screen | `app/feedback.tsx`, from the "Send feedback" row at the top of `app/(tabs)/settings.tsx` |
 | Schema, bucket, sweep lookup, cron | `supabase/migrations/20261117142523_feedback.sql` |
 | Photo sweep | `supabase/functions/delete-feedback-photos/` |
@@ -27,6 +28,11 @@ the note has text. A sent report closes the sheet and the button becomes "Sent, 
 result. The screen keeps the set of reported result objects, so a card that unmounts stays sent, and
 a new recording (a retry) is a new result that can be reported again. A failed send shows an error in
 the sheet and keeps the note. Nothing is queued (invariant 10).
+
+**One report per result.** The app makes the report's `id` (`newReportId`, `lib/feedback/save.ts`)
+the first time a result is reported and reuses it on every retry (`reportIds` in `app/session.tsx`).
+If an insert committed but its answer was lost, the retry hits the primary key (`23505`), which
+`saveReport` counts as sent, so the card shows "Sent, thank you" and there is still one row.
 
 The report covers what the card shows: the retry if there is one, then a revealed chunk's
 recitation, then the scored result. `details` is `buildGradingReport`'s output:
@@ -65,7 +71,8 @@ three photos from the iOS system photo picker (`expo-image-picker`, `launchImage
 That picker runs outside the app, so no permission is asked; `app.config.js` turns the plugin's
 photo and camera usage strings off. Photos over the size cap are left out with a note. Send uploads
 the photos, then saves the row; success shows "Thank you" and Done. A failure shows an error and
-keeps the note, label and photos; a retry uploads fresh copies.
+keeps the note, label and photos. The screen makes one `id` per send, and photo paths come from
+it, so a retry skips photos that already landed (`409`) and a committed row (`23505`).
 
 ## Storage and access
 
@@ -74,7 +81,7 @@ keeps the note, label and photos; a retry uploads fresh copies.
 cascades with the account. Clients can insert their own rows only, with photo paths in their own
 folder; no select, update or delete. Anonymous clients get nothing.
 
-Photos live in the private `feedback-photos` bucket at `<user id>/<time>-<n>.<ext>`. Clients can
+Photos live in the private `feedback-photos` bucket at `<user id>/<report id>-<n>.<ext>`. Clients can
 upload under their own folder and can't read or list anything, their own photos included.
 
 | Limit | Value | Enforced by |
@@ -104,7 +111,8 @@ Photos are gone within a day. The local seed unschedules the job; call it by han
 - `npm run sim -- flow send-feedback`: Settings, Send feedback, Send disabled, Bug, type, Send,
   "Thank you", Done back to Settings. A row lands in the local `feedback_reports`.
 - `tests/feedback-photos.integration.ts` on a local stack: a real upload, refused uploads (another
-  folder, not an image, over 5 MB), no list or download, account delete, sweep, nothing left.
+  folder, not an image, over 5 MB), no list or download, a send retried after it committed saves one
+  row, account delete, sweep, nothing left.
 - Real phone: pick photos and send (no permission prompt); report a real graded recitation and
   check `details.recording` in the dashboard.
 
@@ -113,4 +121,5 @@ Photos are gone within a day. The local seed unschedules the job; call it by han
 - 2026-11-17 · One table for both kinds, the grading payload as JSONB · One insert path and one place to read; the payload can change without a migration.
 - 2026-11-17 · Photos leave with the account through a daily sweep keyed on "the user is gone" · Works for every delete path and app version; SQL can't delete Storage files.
 - 2026-11-17 · Upload first, then insert; no client read or update anywhere · A failed insert leaves files only in the reader's folder, which the sweep still covers.
+- 2026-11-17 · The app makes each report's `id` and keeps it across retries; a duplicate counts as sent · A committed insert whose answer was lost would otherwise save a second report (spine Q8: one per result).
 - 2026-11-17 · Non-KJV payloads keep positions and results, not words; the transcript is kept · Licensing (invariant 2); the transcript is the reader's speech (spine Q2).

@@ -27,7 +27,7 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `device_tokens` | per-user | Expo push tokens |
 | `notification_preferences` | per-user | Reminder settings and per-day fired markers |
 | `notification_log` | per-user | Send log, pruned after 30 days |
-| `feedback_reports` | per-user, insert only | [Feedback](../features/feedback.md#storage-and-access) |
+| `feedback_reports` | per-user, insert only | [Feedback](../features/feedback.md) |
 
 Notification tables are covered in `docs/features/notifications.md`.
 
@@ -142,7 +142,7 @@ A verse can be in many collections; see `delete_verse` for leaving the last.
 ### `verse_cache`
 
 Migrations: `004_verse_level_cache.sql`, `20261114200000_verse_cache_text_rev.sql`
-(adds `text_rev`, clears the licensed rows once).
+(adds `text_rev`, clears the licensed rows once). 004 also dropped `chapter_cache` and the first `verse_cache`.
 
 One row per verse: `book`, `chapter`, `verse`, `version`, `text`,
 `last_used_at` (bumped on every read for LRU) and `text_rev` (nullable,
@@ -230,7 +230,7 @@ users). Rules: [insights.md](../features/insights.md).
 | `get_total_time_studied(user_id)`, `get_current_streak(user_id, tz_offset_min)` | invoker, signed in; the caller's own id only | [insights.md](../features/insights.md#streak) |
 | `update_popular_ranges()`, `update_user_stats()` | SECURITY DEFINER, cron only | rebuild `popular_ranges`, `user_stats` |
 | `delete_own_account()` | SECURITY DEFINER, signed in, `search_path ''` | orders account deletion across tables |
-| `orphaned_feedback_photos()` | SECURITY DEFINER, service role only | [photo sweep](../features/feedback.md#account-delete) |
+| `orphaned_feedback_photos()` | SECURITY DEFINER, service role only | [sweep](../features/feedback.md) |
 | `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
 | `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction RLS checks only the verse's) |
@@ -243,7 +243,7 @@ users). Rules: [insights.md](../features/insights.md).
 
 `pg_cron` jobs: `update-popular-ranges` (every 12h), `update-user-stats`
 (every 6h), `send-notifications` (every minute, through `pg_net`),
-`prune-notification-log` (daily) and `delete-feedback-photos` (daily, `pg_net`).
+`prune-notification-log` (daily) and `delete-feedback-photos` (daily).
 
 ## Relationships
 
