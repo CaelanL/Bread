@@ -1,0 +1,40 @@
+# reader-a opens Settings → Send feedback, sees Send disabled, picks Bug, types a note, sends,
+# sees the thank-you and returns to Settings. Photos need a person on a real phone.
+# The row lands in the local feedback_reports (clients can't read it back; check with SQL).
+appId: com.caelanliu.biblemem
+name: send-feedback
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2Fsettings
+- extendedWaitUntil:
+    visible:
+      id: settings-send-feedback
+    timeout: 30000
+- takeScreenshot: send-feedback-1-settings
+- tapOn:
+    id: settings-send-feedback
+- assertVisible: "Send feedback"
+- assertVisible:
+    id: feedback-send
+    enabled: false
+- takeScreenshot: send-feedback-2-empty
+- tapOn:
+    id: feedback-label-bug
+- tapOn:
+    id: feedback-note
+- inputText: "The streak reset after midnight"
+- hideKeyboard
+- assertVisible:
+    id: feedback-send
+    enabled: true
+- takeScreenshot: send-feedback-3-note
+- tapOn:
+    id: feedback-send
+- extendedWaitUntil:
+    visible: "Thank you"
+    timeout: 15000
+- takeScreenshot: send-feedback-4-thanks
+- tapOn:
+    id: feedback-done
+- assertVisible:
+    id: settings-send-feedback

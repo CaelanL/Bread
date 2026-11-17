@@ -1,0 +1,35 @@
+# reader-a reports a grade from the dev result card (KJV John 11:35, "wept" said as "slept"):
+# Send stays disabled until there is a note, then the card says "Sent, thank you".
+# The row lands in the local feedback_reports (clients can't read it back; check with SQL).
+appId: com.caelanliu.biblemem
+name: grading-report
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fdev-result-card%3Fcard%3DJesus%20wept.%7CJesus%20slept
+- extendedWaitUntil:
+    visible:
+      id: report-grading
+    timeout: 30000
+- takeScreenshot: grading-report-1-card
+- tapOn:
+    id: report-grading
+- assertVisible: "Did we get your grading wrong?"
+- assertVisible:
+    id: grading-report-send
+    enabled: false
+- takeScreenshot: grading-report-2-empty
+- tapOn:
+    id: grading-report-note
+- inputText: "I said wept but it marked it wrong"
+- assertVisible:
+    id: grading-report-send
+    enabled: true
+- takeScreenshot: grading-report-3-note
+- tapOn:
+    id: grading-report-send
+- extendedWaitUntil:
+    visible: "Sent, thank you"
+    timeout: 15000
+- assertNotVisible:
+    id: report-grading
+- takeScreenshot: grading-report-4-sent
