@@ -19,6 +19,8 @@ interface ProcessingResult {
   transcription: string;
   cleanedTranscription: string;
   cleaningUsed: boolean;
+  // The Soniox model, for grading reports. Old clients ignore it.
+  model: string;
 }
 
 interface TranscriptionTiming {
@@ -219,6 +221,7 @@ async function processAudio(
     transcription,
     cleanedTranscription,
     cleaningUsed,
+    model: SONIOX_ASYNC_MODEL,
   };
 }
 

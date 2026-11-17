@@ -289,6 +289,7 @@ test('an interrupted retry restores the prior result and controls without changi
   const submit = () => recorder.submit(async ({ index, isRetry, liveSession, isCurrent }) => {
     const result = await scoreRecording({
       text: 'be still',
+      durationMs: 1000,
       isRetry,
       isPeeked: false,
       liveSession,
