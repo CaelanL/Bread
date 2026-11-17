@@ -23,7 +23,8 @@ name: send-feedback
 - tapOn:
     id: feedback-note
 - inputText: "The streak reset after midnight"
-- hideKeyboard
+# hideKeyboard can't dismiss a multiline input; a tap outside it can.
+- tapOn: "Ideas, bugs, or anything on your mind."
 - assertVisible:
     id: feedback-send
     enabled: true
