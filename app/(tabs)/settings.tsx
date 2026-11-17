@@ -278,6 +278,14 @@ export default function SettingsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]}>
         <View style={styles.titleGap}><LargeTitle root title="Settings" /></View>
+        <SettingsSection title="FEEDBACK">
+          <Pressable testID="settings-send-feedback" onPress={() => router.push('/feedback')}>
+            <SettingsRow icon="bubble.left.fill" label="Send feedback" description="Ideas, bugs, or anything else">
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
+        </SettingsSection>
+
         {/* Bible Settings */}
         <SettingsSection title="BIBLE">
           <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
