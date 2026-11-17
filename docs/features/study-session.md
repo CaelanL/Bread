@@ -19,8 +19,8 @@ engraved rules: `docs/features/review.md`.
 | Cards | `components/study/VerseCard.tsx`, `components/study/ResultCard.tsx` | Verse and result rendering |
 | Tests | `lib/__tests__/study-chunks.test.ts`, `lib/__tests__/align.test.ts` | Run with `npm test` |
 
-The screen keeps only recorder and animation state plus `hideModes`. Nothing is
-persisted until the session saves.
+The screen keeps only recorder and animation state, `hideModes` and the reported results.
+Nothing is persisted until the session saves.
 
 ## Setup screen
 
@@ -173,12 +173,9 @@ In `lib/study-chunks.ts`, each of these rounds, and an empty alignment scores 0:
 | `calculateFinalScore` | All of `chunkResults`, pooled by word, not an average of chunk percentages |
 | `calculatePartialScore` | Early exit: pooled results, plus every word of each uncompleted chunk as missing |
 
-`processRecording` in the hook gets a transcript (see
-`docs/features/transcription.md`), aligns it locally, scores it, and stores it.
-
 `ResultCard` shows "% match" with "Perfect!" when nothing is marked (`isPerfect`),
 "Great!" for other passes, "Good effort!" at 65+, "Keep Practicing" below. A help
-icon opens `AlignmentHelpModal`.
+icon opens `AlignmentHelpModal`; a thumbs-down beside it, a [grading report](feedback.md).
 
 ### Retry
 
@@ -237,7 +234,7 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 - `npm run sim -- flow practice-session`: reader-a opens Psalm 23:1-3 setup, picks Medium, taps Start session, sees "Verse 1" and the mic, taps the mic and gets the iOS microphone prompt. Don't Allow shows "Permission required" and dismissing it restores the mic.
 - `npm run sim -- flow practice-removed-mastered`: reader-a's mastered John 3:16, removed from My Verses, still starts a session; the flow puts it back.
 - `npm run sim -- shot "/session?id=x" --as reader-a`: Close and "This verse is no longer in your library."
-- `npm run sim -- shot "/dev-result-card?card=<expected>|<transcript>"` (`app/dev-result-card.tsx`), light and dark. KJV Romans 6:23 both sides: 100%, "Perfect!". Without "eternal": 95%, "Great!", "eternal" underlined.
+- `npm run sim -- shot "/dev-result-card?card=<expected>|<transcript>"` (`app/dev-result-card.tsx`), light and dark. KJV Romans 6:23 both sides: 100%, "Perfect!". Without "eternal": 95%, "Great!", "eternal" underlined. Thumbs-down: `flow grading-report`.
 - `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. A ring shows until capture starts, then the pill with waveform and actions. The double tap records once.
 - `npm run sim -- flow mic-denied-again`: deny the prompt, tap the mic again: one "Permission required".
 - Real device, Medium, multi-verse: tap the eye, re-hide, recite, submit. The card shows the real score and "Revealed — this chunk won't count", and the final score treats those words as missing.

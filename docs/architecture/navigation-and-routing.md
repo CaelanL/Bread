@@ -36,6 +36,7 @@ app/
 ├── join/index.tsx             ← Typed invite code entry (transparent modal)
 ├── share/[id].tsx             ← Share a collection, or `new`: name, share, code and members (transparent modal)
 ├── notifications.tsx          ← Notification settings, pushed from Settings
+├── feedback.tsx               ← Send feedback, pushed from Settings
 ├── reset-password.tsx         ← Reachable WITHOUT auth (deep link from password-reset email)
 ├── dev-sign-in.tsx            ← Reachable WITHOUT auth; dev builds against a local Supabase only
 ├── session.tsx                ← Full-screen modal — the study session
@@ -110,7 +111,7 @@ dropping its blur, Reanimated view or autoFocus, and keeping it mounted changed 
 `library-plus` still relaunches before that leg. Flow: `library-plus`
 closes the share modal and Join with code with the X and reopens Join with code.
 
-`app/notifications.tsx` and `app/reset-password.tsx` are plain root
+`app/notifications.tsx`, `app/feedback.tsx` and `app/reset-password.tsx` are plain root
 Stack screens.
 
 Home also presents the [intro player](../features/home.md#encouragement-video) through a React Native modal; it adds no route or tab.

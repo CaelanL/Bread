@@ -91,6 +91,7 @@ Memberships in other people's groups cascade too.
 
 Curated save totals follow the [anonymous retention rule](../features/home.md#community-saves).
 Intro presentation markers cascade with the account; see [Home](../features/home.md#encouragement-video).
+Feedback reports cascade too; their photos go with the next daily [sweep](../features/feedback.md#account-delete).
 
 ### Sign out
 
