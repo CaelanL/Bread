@@ -163,16 +163,6 @@ function normalize(word: string): string {
   return n === 'o' ? 'oh' : n;
 }
 
-// "Moses's" said for the verse's "Moses'", or the reverse: a word written "X's" (X ending in one
-// s) reads as X only when the other side writes it "Xs'". "Jesus's" for plain "Jesus" stays wrong.
-function foldDoublePossessives(tokens: Token[], other: Token[]): Token[] {
-  const written = new Set(other.filter((t) => S_POSSESSIVE.test(t.raw)).map((t) => t.normalized));
-  return tokens.map((t) => {
-    const base = normalize(t.raw.replace(DOUBLE_POSSESSIVE, '$1'));
-    return written.has(base) ? { ...t, normalized: base } : t;
-  });
-}
-
 // How a word compares: spellings of one word fold to one key (lib/align-spellings.ts).
 const spelling = (word: string) => SPELLINGS.get(word) ?? word;
 
@@ -600,12 +590,10 @@ export function alignTranscription(
   expectedVerse: string,
   cleanedTranscription: string
 ): AlignmentWord[] {
-  const expectedRaw = tokenize(expectedVerse);
-  const transcribedRaw = tokenize(cleanedTranscription).filter(
+  const expectedTokens = tokenize(expectedVerse);
+  const transcribedTokens = tokenize(cleanedTranscription).filter(
     t => !FILLERS.has(t.normalized)
   );
-  const expectedTokens = foldDoublePossessives(expectedRaw, transcribedRaw);
-  const transcribedTokens = foldDoublePossessives(transcribedRaw, expectedRaw);
   const expectedWords = toComparisonUnits(expectedTokens);
   const transcribedWords = toComparisonUnits(transcribedTokens);
   const expectedMerged = mergeContextNumbers(expectedWords, transcribedWords);
@@ -761,6 +749,11 @@ function alignSubstitution(
   }
 }
 
+// "Moses's" said for the verse's "Moses'", or the reverse: a word written "X's" (X ending in one
+// s) reads as X only against the word it replaces written "Xs'". "Jesus's" for "Jesus" stays wrong.
+const possessiveKey = (token: Token, other: Token) =>
+  S_POSSESSIVE.test(other.raw) ? normalize(token.raw.replace(DOUBLE_POSSESSIVE, '$1')) : token.normalized;
+
 /**
  * Alphabetic words that only differ in how they're split ("for ever" ↔
  * "forever") are spoken identically, so match runs whose letters, as
@@ -778,8 +771,8 @@ function greedySubstitution(
     if (!isAlphabetic(removed[a]) || !isAlphabetic(added[b])) return null;
     let i = a;
     let j = b;
-    let exp = removed[i].normalized;
-    let got = added[j].normalized;
+    let exp = possessiveKey(removed[i], added[j]);
+    let got = possessiveKey(added[j], removed[i]);
     while (exp !== got) {
       if (got.startsWith(exp) && i + 1 < removed.length && isAlphabetic(removed[i + 1])) exp += removed[++i].normalized;
       else if (exp.startsWith(got) && j + 1 < added.length && isAlphabetic(added[j + 1])) got += added[++j].normalized;
