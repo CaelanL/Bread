@@ -196,6 +196,9 @@ describe('alignTranscription — spelling and character normalization', () => {
     ['the jubile', 'the jubilee'],
     ["Moses' hands", "Moses's hands"],
     ["at Jesus' feet", "at Jesus's feet"],
+    ["thy sons, and thy sons' wives", "thy sons, and thy sons's wives"],
+    ["his sons, and his sons' sons", "his sons, and his sons's sons"],
+    ["Moses' hands and Moses' rod", "Moses's hands and Moses rod"],
     // Odd spellings and names the engine wrote in the voice tests.
     ['Hazael, Take a present', 'hazel, take a present'],
     ['vaunteth not itself, Doth not behave itself unseemly', 'vaunteth not itself, doth not behave itself unseamly'],
@@ -229,6 +232,20 @@ describe('alignTranscription — spelling and character normalization', () => {
   ] as const;
   for (const [expected, transcript] of different) {
     it(`${expected} ≠ ${transcript}`, () => assertNotEquivalent(expected, transcript));
+  }
+
+  // "Moses's" matches only "Moses'", not plain "Moses".
+  const extraPossessive = [
+    ['Jesus answered', "Jesus's answered"],
+    ['the rod of Moses', "the rod of Moses's"],
+    ['waters', "waters's"],
+    ["thy sons, and thy sons' wives", "thy sons's, and thy sons' wives"],
+  ] as const;
+  for (const [plain, possessive] of extraPossessive) {
+    it(`${plain} ≠ ${possessive}`, () => {
+      assertNotEquivalent(plain, possessive);
+      assertNotEquivalent(possessive, plain);
+    });
   }
 
   // Other words, not other spellings: no half credit (D1), no contraction equivalence (D18), no
