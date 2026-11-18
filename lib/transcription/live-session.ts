@@ -8,6 +8,10 @@ export type LiveSessionState =
 
 export interface LiveTranscriptionSession {
   readonly state: LiveSessionState;
+  /** Why the stream fell back to batch, once it has. */
+  readonly failure?: string;
+  /** The Soniox model, once a key is in hand. */
+  readonly model?: string;
   feedAudio(chunk: Uint8Array): void;
   finish(timeoutMs: number): Promise<string>;
   abort(): void;
@@ -230,6 +234,7 @@ function openSocket(key: LiveKey): WebSocket {
 
 class LiveSession implements LiveTranscriptionSession {
   state: LiveSessionState = 'connecting';
+  failure?: string;
 
   private ws: WebSocket | null = null;
   private buffer: Uint8Array[] = [];
@@ -253,6 +258,10 @@ class LiveSession implements LiveTranscriptionSession {
     this.maxBufferBytes =
       MAX_BUFFER_SECONDS * format.sampleRate * format.channels * 2;
     this.connect();
+  }
+
+  get model(): string | undefined {
+    return this.key?.model;
   }
 
   private async connect(): Promise<void> {
@@ -418,6 +427,7 @@ class LiveSession implements LiveTranscriptionSession {
     // Never reuse a key Soniox may have refused
     if (this.key && !this.keyAccepted) this.standby.drop(this.key);
     this.state = 'failed';
+    this.failure = reason;
     this.teardown();
     this.finishReject?.(new Error(reason));
     this.clearFinishHandlers();

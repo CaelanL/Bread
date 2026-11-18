@@ -90,12 +90,12 @@ In `useStudySession`, `processRecording` uses `scoreRecording` in order:
 3. If there's no transcript and the attempt is still current, call
    `processRecording` from `lib/api/recording.ts` with the compressed file URI
    (or `fileUri`), duration and `chunk.text`.
-4. Align and score the transcript. The hook applies the result and duration
-   only if the attempt still owns the submission.
+4. Align and score; keep [how it was transcribed](feedback.md). The hook applies
+   the result and duration only if the attempt still owns the submission.
 
 Both paths give raw Soniox text with the verse as recognition context. The models
 differ (`stt-rt-v5` live, `stt-async-v5` batch), so a word can occasionally differ.
-There's no second scoring path and no live transcript on screen.
+There's no second scoring path.
 
 ## Live path
 

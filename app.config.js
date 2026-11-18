@@ -68,6 +68,16 @@ export default {
         },
       ],
       [
+        "expo-image-picker",
+        {
+          // Feedback photos use the system picker, which needs no access to the library.
+          // false drops the photo and camera usage strings the plugin adds by default; the
+          // microphone string is left to Bread's own.
+          photosPermission: false,
+          cameraPermission: false,
+        },
+      ],
+      [
         "@siteed/audio-studio",
         {
           // Plugin defaults this to true, which adds the iOS "audio"

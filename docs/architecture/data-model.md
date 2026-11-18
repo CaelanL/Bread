@@ -27,11 +27,9 @@ Schema: `supabase/migrations/`. Generated columns and types:
 | `device_tokens` | per-user | Expo push tokens |
 | `notification_preferences` | per-user | Reminder settings and per-day fired markers |
 | `notification_log` | per-user | Send log, pruned after 30 days |
+| `feedback_reports` | per-user, insert only | [Feedback](../features/feedback.md) |
 
 Notification tables are covered in `docs/features/notifications.md`.
-
-`chapter_cache` (migration 003) and the first, reference-keyed
-`verse_cache` (migration 001) were dropped by migration 004.
 
 ## Per-table detail
 
@@ -144,7 +142,7 @@ A verse can be in many collections; see `delete_verse` for leaving the last.
 ### `verse_cache`
 
 Migrations: `004_verse_level_cache.sql`, `20261114200000_verse_cache_text_rev.sql`
-(adds `text_rev`, clears the licensed rows once).
+(adds `text_rev`, clears the licensed rows once). 004 also dropped `chapter_cache` and the first `verse_cache`.
 
 One row per verse: `book`, `chapter`, `verse`, `version`, `text`,
 `last_used_at` (bumped on every read for LRU) and `text_rev` (nullable,
@@ -232,6 +230,7 @@ users). Rules: [insights.md](../features/insights.md).
 | `get_total_time_studied(user_id)`, `get_current_streak(user_id, tz_offset_min)` | invoker, signed in; the caller's own id only | [insights.md](../features/insights.md#streak) |
 | `update_popular_ranges()`, `update_user_stats()` | SECURITY DEFINER, cron only | rebuild `popular_ranges`, `user_stats` |
 | `delete_own_account()` | SECURITY DEFINER, signed in, `search_path ''` | orders account deletion across tables |
+| `orphaned_feedback_photos()` | SECURITY DEFINER, service role only | [sweep](../features/feedback.md) |
 | `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment |
 | `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
 | `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction RLS checks only the verse's) |
@@ -243,8 +242,8 @@ users). Rules: [insights.md](../features/insights.md).
 | `get_votm_mastery_count(book, chapter, vs, ve)` | **MISSING** | see `docs/features/home.md` |
 
 `pg_cron` jobs: `update-popular-ranges` (every 12h), `update-user-stats`
-(every 6h), `send-notifications` (every minute, through `pg_net`) and
-`prune-notification-log` (daily).
+(every 6h), `send-notifications` (every minute, through `pg_net`),
+`prune-notification-log` (daily) and `delete-feedback-photos` (daily).
 
 ## Relationships
 
@@ -263,7 +262,8 @@ auth.users
  ├── subscriptions
  ├── device_tokens
  ├── notification_preferences
- └── notification_log
+ ├── notification_log
+ └── feedback_reports
 
 verse_of_month   (public read, admin write)
 popular_ranges   (public read, cron write — derived from user_verses)
@@ -343,16 +343,10 @@ refused unless it has an approval line:
 
 Squawk can't see SQL inside `DO $$` blocks, so check those by hand.
 
-**Local database.** Run through `scripts/db.mjs`:
-
-| Command | Does |
-|---|---|
-| `npm run db:start` / `db:stop` | start or stop local Supabase |
-| `npm run db:reset` | rebuild from migrations and `supabase/seed.sql` |
-| `npm run db:env` | write the local URL and anon key to `.env.local` |
-| `npm run db:status` | show what's running |
-| `npm run db:types` | regenerate `supabase/database.types.ts` (`-- --check` fails if stale) |
-| `npm run db:destroy` | remove the local stack and its data |
+**Local database.** `scripts/db.mjs` runs `npm run db:start`, `db:stop`, `db:status`,
+`db:destroy` (removes the data too), `db:reset` (migrations, then `supabase/seed.sql`), `db:env`
+(local URL and anon key to `.env.local`) and `db:types` (`supabase/database.types.ts`;
+`-- --check` fails if stale).
 
 **Seed.** `supabase/seed.sql` runs only on local databases. Its logins
 are described at its top. It also unschedules any local cron job that

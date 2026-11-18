@@ -35,6 +35,8 @@ supabase/functions/
 │   └── index.ts         ← Mints temp Soniox keys for live streaming
 ├── invite-handoff/
 │   └── index.ts         ← Install handoff: record (sendlabs.dev page) and claim (navigation-and-routing.md#invite-handoff)
+├── delete-feedback-photos/
+│   └── index.ts         ← Daily cron: removes feedback photos of deleted accounts
 └── send-notifications/
     ├── index.ts         ← Cron entry point
     ├── push.ts          ← Expo Push client
@@ -96,7 +98,9 @@ POST /functions/v1/process-recording
 7. Optionally run GPT-5-mini cleaning pass
    - CLEANING_ENABLED is HARDCODED FALSE right now
 8. Stream the JSON payload
-   { transcription, cleanedTranscription, cleaningUsed }
+   { transcription, cleanedTranscription, cleaningUsed, model }
+   - model (the Soniox model) is for grading reports; older clients
+     ignore it
    - failures after step 3 can't change the committed 200 status;
      they ship as { error } in the body instead. The client checks
      the payload shape, not just response.ok.
@@ -171,6 +175,13 @@ JWT: it compares the bearer token in constant time against the
 `cron_secret` in Vault, read through the `get_cron_secret()` RPC and
 re-read once on a mismatch so rotation works. Then it runs each
 notification source in turn. See `docs/features/notifications.md`.
+
+## `delete-feedback-photos`
+
+Called by `pg_cron` daily at 04:30 UTC with the same cron-secret bearer (read through
+`get_cron_secret()`, compared in constant time). It removes, through the Storage API, the
+feedback photos that `orphaned_feedback_photos()` lists: those whose account is gone, 1000 a
+round, at most 20 rounds. See [feedback](../features/feedback.md#account-delete).
 
 ## `_shared/auth.ts`
 

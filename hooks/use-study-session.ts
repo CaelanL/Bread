@@ -161,13 +161,15 @@ export function useStudySession({
 
     const result = await scoreRecording({
       text,
+      durationMs,
       isRetry,
       isPeeked,
       liveSession,
       isCurrent,
       async transcribeFile() {
         if (!uri) throw new Error('No recording URI');
-        return (await processRecordingApi(uri, durationMs, text)).cleanedTranscription;
+        const { cleanedTranscription, model } = await processRecordingApi(uri, durationMs, text);
+        return { transcription: cleanedTranscription, model };
       },
     });
     if (!result || !isCurrent()) return;

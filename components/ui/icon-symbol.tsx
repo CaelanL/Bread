@@ -60,6 +60,9 @@ const MAPPING = {
   'square.grid.2x2': 'grid-view',
   'person.2.slash': 'group-off',
   'arrow.up.arrow.down': 'swap-vert',
+  'hand.thumbsdown': 'thumb-down-off-alt',
+  'bubble.left.fill': 'chat-bubble',
+  'photo': 'photo',
 } as IconMapping;
 
 /**

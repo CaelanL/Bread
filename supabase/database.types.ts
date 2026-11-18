@@ -65,6 +65,20 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"feedback_reports": {
+                  Row: {
+                    "app_version": string | null,"created_at": string,"details": Json | null,"device_model": string | null,"id": string,"kind": string,"label": string | null,"note": string,"os": string | null,"os_version": string | null,"photo_paths": (string)[],"update_id": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "app_version"?: string | null,"created_at"?: string,"details"?: Json | null,"device_model"?: string | null,"id"?: string,"kind": string,"label"?: string | null,"note": string,"os"?: string | null,"os_version"?: string | null,"photo_paths"?: (string)[],"update_id"?: string | null,"user_id"?: string
+                  }
+                  Update: {
+                    "app_version"?: string | null,"created_at"?: string,"details"?: Json | null,"device_model"?: string | null,"id"?: string,"kind"?: string,"label"?: string | null,"note"?: string,"os"?: string | null,"os_version"?: string | null,"photo_paths"?: (string)[],"update_id"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"invite_handoffs": {
                   Row: {
                     "code": string,"created_at": string,"id": number,"network": string
@@ -501,6 +515,9 @@ isOneToOne: false
 { Args: { "p_shared": string }; Returns: {
               "code": string,"expires_at": string
             }[]
+                           },
+"orphaned_feedback_photos":
+{ Args: Record<PropertyKey, never>; Returns: string[]
                            },
 "preview_invite":
 { Args: { "p_code": string }; Returns: {

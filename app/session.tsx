@@ -8,6 +8,8 @@ import { SessionFinish } from '@/components/study/SessionFinish';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStudySession } from '@/hooks/use-study-session';
+import { newReportId, sendGradingReport } from '@/lib/feedback';
+import { buildGradingReport } from '@/lib/feedback/grading-report';
 import { formatVerseReference } from '@/lib/storage';
 import {
   type Chunk,
@@ -30,6 +32,7 @@ import {
   type PressSource,
   type RecordingState,
 } from '@/lib/transcription/recording-controls';
+import type { ChunkResult } from '@/lib/transcription/score-recording';
 import {
   AudioStudioModule,
   type AudioRecording,
@@ -128,6 +131,10 @@ export default function StudySessionScreen() {
   const { currentIndex, setCurrentIndex } = session;
 
   const [recordingState, setRecordingState] = useState<RecordingState>({ phase: 'idle' });
+  // Results already reported. A new recording is a new result, so it can be reported again.
+  const [reportedResults, setReportedResults] = useState<ReadonlySet<ChunkResult>>(new Set());
+  // One report id per result, kept across retries, so a lost answer can't save it twice.
+  const reportIds = useRef(new WeakMap<ChunkResult, string>());
   // Read at open so a tap with permission granted goes straight to native start.
   // The first-run prompt still comes from requestPermissionsAsync on the tap.
   const micPermissionRef = useRef(false);
@@ -567,6 +574,20 @@ export default function StudySessionScreen() {
               transcription={display.transcription}
               isRetry={isRetryResult}
               isPeeked={isPeeked}
+              reported={reportedResults.has(display)}
+              onReport={async (note) => {
+                const report = buildGradingReport({
+                  verse: session.verse!,
+                  chunk: item,
+                  difficulty: difficulty ?? 'easy',
+                  chunkSize,
+                  result: display,
+                  shown: isRetryResult ? 'retry' : isPeeked ? 'peeked' : 'scored',
+                });
+                if (!reportIds.current.has(display)) reportIds.current.set(display, newReportId());
+                await sendGradingReport(reportIds.current.get(display)!, report, note);
+                setReportedResults((prev) => new Set(prev).add(display));
+              }}
             />
           )}
         </View>

@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated';
 import { AlignmentHelpModal } from './AlignmentHelpModal';
+import { GradingReportSheet } from './GradingReportSheet';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.35;
@@ -30,6 +31,10 @@ interface ResultCardProps {
   transcription?: string;
   isRetry?: boolean;
   isPeeked?: boolean;
+  /** Shows the report button; resolves once the report is saved. */
+  onReport?: (note: string) => Promise<void>;
+  /** This result was already reported. */
+  reported?: boolean;
 }
 
 const STATUS_CONFIG = {
@@ -151,11 +156,12 @@ function AlignmentDisplay({ alignment, textColor }: { alignment: AlignmentWord[]
   );
 }
 
-export function ResultCard({ score, alignment, transcription, isRetry = false, isPeeked = false }: ResultCardProps) {
+export function ResultCard({ score, alignment, transcription, isRetry = false, isPeeked = false, onReport, reported = false }: ResultCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
   const [showHelp, setShowHelp] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   const status = getStatus(score);
   const statusConfig = STATUS_CONFIG[status];
@@ -207,6 +213,19 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
             </Text>
           </View>
           <View style={styles.headerRight}>
+            {onReport && (reported ? (
+              <Text style={[styles.sentText, { color: colors.icon }]}>Sent, thank you</Text>
+            ) : (
+              <Pressable
+                testID="report-grading"
+                accessibilityRole="button"
+                accessibilityLabel="Report a wrong grade"
+                onPress={() => setShowReport(true)}
+                hitSlop={8}
+              >
+                <IconSymbol name="hand.thumbsdown" size={18} color={statusColors.text} />
+              </Pressable>
+            ))}
             <Pressable onPress={() => setShowHelp(true)} hitSlop={8}>
               <IconSymbol name="questionmark.circle" size={18} color={statusColors.text} />
             </Pressable>
@@ -239,6 +258,9 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
       </View>
 
       <AlignmentHelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
+      {onReport && (
+        <GradingReportSheet visible={showReport} onClose={() => setShowReport(false)} onSend={onReport} />
+      )}
     </Animated.View>
   );
 }
@@ -271,6 +293,10 @@ const styles = StyleSheet.create({
   statusLabel: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  sentText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   scoreBadge: {
     paddingHorizontal: 10,

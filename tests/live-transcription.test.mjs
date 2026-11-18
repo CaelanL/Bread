@@ -172,13 +172,14 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     let uploaded = false;
     const scoring = scoreRecording({
       text: 'be still',
+      durationMs: 1000,
       isRetry: false,
       isPeeked: false,
       isCurrent: () => true,
       liveSession: session,
       async transcribeFile() {
         uploaded = true;
-        return 'be still';
+        return { transcription: 'be still', model: 'stt-async-v5' };
       },
     });
     scenario.mock.timers.tick(1499);
@@ -188,12 +189,16 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     scenario.mock.timers.tick(1);
     await settle();
     assert.equal(uploaded, true);
-    assert.equal((await scoring)?.display.score, 100);
+    const result = await scoring;
+    assert.equal(result?.display.score, 100);
+    assert.deepEqual(result?.display.recording,
+      { path: 'upload', liveFailure: 'finalize timeout', model: 'stt-async-v5', durationMs: 1000 });
   });
 
   function score(session, upload) {
     return scoreRecording({
       text: 'be still',
+      durationMs: 1000,
       isRetry: false,
       isPeeked: false,
       isCurrent: () => true,
@@ -209,10 +214,11 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     let uploaded = false;
     const result = await score(session, async () => {
       uploaded = true;
-      return 'be still';
+      return { transcription: 'be still' };
     });
     assert.equal(uploaded, true);
     assert.equal(result?.display.score, 100);
+    assert.equal(result?.display.recording?.liveFailure, 'never opened');
     assert.equal(socket.sent.length, 0);
   });
 
@@ -225,7 +231,9 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     scenario.mock.timers.tick(50);
     assert.equal(socket.sent.at(-1), '', 'end-of-audio was sent');
     socket.reply({ tokens: [{ text: 'be still', is_final: true }], finished: true });
-    assert.equal((await scoring)?.display.score, 100);
+    const result = await scoring;
+    assert.equal(result?.display.score, 100);
+    assert.equal(result?.display.recording?.path, 'live');
   });
 
   await t.test('no audio by the end of the grace window goes to batch', async (scenario) => {
@@ -235,13 +243,15 @@ test('live transcription keys and fallback', { timeout: 15000 }, async (t) => {
     let uploaded = false;
     const scoring = score(session, async () => {
       uploaded = true;
-      return 'be still';
+      return { transcription: 'be still' };
     });
     scenario.mock.timers.tick(49);
     await settle();
     assert.equal(uploaded, false);
     scenario.mock.timers.tick(1);
-    assert.equal((await scoring)?.display.score, 100);
+    const result = await scoring;
+    assert.equal(result?.display.score, 100);
+    assert.equal(result?.display.recording?.liveFailure, 'no audio was fed');
     assert.equal(uploaded, true);
   });
 

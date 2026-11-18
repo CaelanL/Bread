@@ -211,6 +211,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="reset-password" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="feedback" />
         <Stack.Screen name="collections/[slug]" />
         <Stack.Screen name="session" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="join/[code]" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
