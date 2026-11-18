@@ -50,6 +50,29 @@ create policy "Owners upload feedback photos"
     and (storage.foldername(name))[1] = (select auth.uid())::text
   );
 
+-- Restrictive, so a broad dashboard policy on storage.objects (prod has some we can't see) can't
+-- open this bucket: clients never read, change or delete its photos, and insert only as above.
+-- Other buckets are untouched.
+create policy "Feedback photos stay unreadable"
+  on storage.objects as restrictive for select to anon, authenticated
+  using (bucket_id is distinct from 'feedback-photos');
+
+create policy "Feedback photos stay unchanged"
+  on storage.objects as restrictive for update to anon, authenticated
+  using (bucket_id is distinct from 'feedback-photos')
+  with check (bucket_id is distinct from 'feedback-photos');
+
+create policy "Feedback photos stay undeleted"
+  on storage.objects as restrictive for delete to anon, authenticated
+  using (bucket_id is distinct from 'feedback-photos');
+
+create policy "Feedback photos only in your folder"
+  on storage.objects as restrictive for insert to anon, authenticated
+  with check (
+    bucket_id is distinct from 'feedback-photos'
+    or (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
 -- Photos whose account is gone, for the delete-feedback-photos function. Storage refuses SQL
 -- deletes and would keep the bytes, so the function removes them through the Storage API.
 create function public.orphaned_feedback_photos()

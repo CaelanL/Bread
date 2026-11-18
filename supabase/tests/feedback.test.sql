@@ -77,6 +77,48 @@ select is((select count(*) from public.feedback_reports where user_id = current_
 select is(array(select public.orphaned_feedback_photos()), array[current_setting('test.fb_gone') || '/p.jpg'],
   'the deleted account''s photo, and only it, is left for the sweep');
 
+-- A broad dashboard policy, like ones prod may have, still can't open feedback photos to clients,
+-- and other buckets keep what it grants.
+create policy "Test: anyone does anything" on storage.objects for all to anon, authenticated using (true) with check (true);
+insert into storage.buckets (id, name, public) values ('images', 'images', true) on conflict (id) do nothing;
+insert into storage.objects (bucket_id, name, owner_id) values ('feedback-photos', current_setting('test.fb_a') || '/kept.jpg', current_setting('test.fb_a'));
+insert into storage.objects (bucket_id, name) values ('images', 'test-art.png');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', current_setting('test.fb_a'), true);
+select set_config('storage.allow_delete_query', 'true', true); -- what the Storage API sets for its deletes
+select is((select count(*) from storage.objects where bucket_id = 'feedback-photos'), 0::bigint,
+  'under a broad policy, a reader still cannot read or list feedback photos, even their own');
+update storage.objects set metadata = '{"changed": true}' where bucket_id = 'feedback-photos';
+delete from storage.objects where bucket_id = 'feedback-photos';
+select throws_ok($$insert into storage.objects (bucket_id, name, owner_id) values ('feedback-photos', current_setting('test.fb_b') || '/wide.jpg', current_setting('test.fb_a'))$$,
+  '42501', 'new row violates row-level security policy "Feedback photos only in your folder" for table "objects"', 'under a broad policy, a reader still cannot upload into another folder');
+select lives_ok($$insert into storage.objects (bucket_id, name, owner_id) values ('feedback-photos', current_setting('test.fb_a') || '/wide.jpg', current_setting('test.fb_a'))$$,
+  'under a broad policy, a reader still uploads into their own folder');
+select throws_ok($$update storage.objects set bucket_id = 'feedback-photos', name = current_setting('test.fb_a') || '/moved.png' where bucket_id = 'images'$$,
+  '42501', null, 'a reader cannot move another bucket''s file into feedback photos');
+select is((select count(*) from storage.objects where bucket_id = 'images'), 1::bigint, 'a broad policy still lets a reader read images');
+select lives_ok($$insert into storage.objects (bucket_id, name) values ('images', 'reader.png')$$, 'a broad policy still lets a reader add images');
+select is((select count(*) from storage.objects where bucket_id = 'images' and name = 'test-art.png' and metadata is null), 1::bigint, 'test art starts unchanged');
+update storage.objects set metadata = '{"changed": true}' where bucket_id = 'images' and name = 'test-art.png';
+select is((select count(*) from storage.objects where bucket_id = 'images' and metadata = '{"changed": true}'), 1::bigint, 'a broad policy still lets a reader change images');
+delete from storage.objects where bucket_id = 'images' and name = 'reader.png';
+select is((select count(*) from storage.objects where bucket_id = 'images'), 1::bigint, 'a broad policy still lets a reader delete images');
+reset role;
+
+set local role anon;
+select set_config('request.jwt.claim.sub', '', true); -- an anonymous session has no user
+select is((select count(*) from storage.objects where bucket_id = 'feedback-photos'), 0::bigint, 'under a broad policy, anonymous clients still cannot list feedback photos');
+select throws_ok($$insert into storage.objects (bucket_id, name) values ('feedback-photos', current_setting('test.fb_a') || '/anon-wide.jpg')$$,
+  '42501', null, 'under a broad policy, anonymous clients still cannot upload feedback photos');
+select is((select count(*) from storage.objects where bucket_id = 'images'), 1::bigint, 'a broad policy still lets anonymous clients read images');
+reset role;
+
+select is((select metadata from storage.objects where bucket_id = 'feedback-photos' and name = current_setting('test.fb_a') || '/kept.jpg'), null::jsonb,
+  'under a broad policy, a reader still cannot change a feedback photo');
+select is((select count(*) from storage.objects where bucket_id = 'feedback-photos' and owner_id = current_setting('test.fb_a')), 3::bigint,
+  'under a broad policy, a reader still cannot delete feedback photos (one, kept and wide stay)');
+
 select is((select count(*) from cron.job where jobname = 'delete-feedback-photos'), 0::bigint,
   'the local seed unscheduled the prod sweep call');
 

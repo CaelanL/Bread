@@ -82,7 +82,10 @@ cascades with the account. Clients can insert their own rows only, with photo pa
 folder; no select, update or delete. Anonymous clients get nothing.
 
 Photos live in the private `feedback-photos` bucket at `<user id>/<report id>-<n>.<ext>`. Clients can
-upload under their own folder and can't read or list anything, their own photos included.
+upload under their own folder and can't read or list anything, their own photos included. Restrictive
+policies on `storage.objects` hold this for `anon` and `authenticated` even if a broad policy (like
+an old dashboard one in prod) allows more: no select, update or delete in this bucket, and inserts
+only into the reader's own folder. Other buckets are unaffected; the service role bypasses them.
 
 | Limit | Value | Enforced by |
 |---|---|---|
@@ -123,3 +126,4 @@ Photos are gone within a day. The local seed unschedules the job; call it by han
 - 2026-11-17 · Upload first, then insert; no client read or update anywhere · A failed insert leaves files only in the reader's folder, which the sweep still covers.
 - 2026-11-17 · The app makes each report's `id` and keeps it across retries; a duplicate counts as sent · A committed insert whose answer was lost would otherwise save a second report (spine Q8: one per result).
 - 2026-11-17 · Non-KJV payloads keep positions and results, not words; the transcript is kept · Licensing (invariant 2); the transcript is the reader's speech (spine Q2).
+- 2026-11-18 · Restrictive storage policies guard the bucket · Prod has dashboard-made storage policies we can't read; a broad one must not open feedback photos.
