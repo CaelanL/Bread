@@ -113,7 +113,8 @@ const APOSTROPHES = '’‘\'ʼʹ′`´‛＇';
 const HYPHENS = '\\-‐‑‒−﹣－';
 // A run of punctuation between two letters that isn't only apostrophes and hyphens.
 const WORD_JOINER = new RegExp(`(?<=\\p{L}\\p{M}*)([^\\p{L}\\p{M}\\p{N}\\s]*[^\\p{L}\\p{M}\\p{N}\\s${APOSTROPHES}${HYPHENS}][^\\p{L}\\p{M}\\p{N}\\s]*)(?=\\p{L})`, 'gu');
-const DOUBLE_POSSESSIVE = new RegExp(`([^s]s)[${APOSTROPHES}]s(?=\\W*$)`);
+const DOUBLE_POSSESSIVE = new RegExp(`([^s]s)[${APOSTROPHES}]s(?=\\W*$)`, 'i'); // "Moses's"
+const S_POSSESSIVE = new RegExp(`s[${APOSTROPHES}]\\W*$`, 'i'); // "Moses'"
 const APOSTROPHE_OR_HYPHEN = new RegExp(`[${APOSTROPHES}${HYPHENS}]`, 'g');
 
 /**
@@ -142,7 +143,6 @@ function normalizeThousandsSpacing(text: string): string {
 /**
  * Normalize a single word:
  * - lowercase, accents and ligatures folded ("Judæa" = "Judaea", "rosé" = "rose")
- * - "Moses's" said like "Moses'"
  * - drop apostrophes (curly, straight or look-alike) and hyphens: possessive vs
  *   plural ("eagle's"/"eagles") and hyphenation ("Beth-lehem"/
  *   "Bethlehem") are acoustically identical, so ASR output can't be
@@ -157,7 +157,6 @@ function normalize(word: string): string {
     .toLowerCase()
     .replace(/æ/g, 'ae')
     .replace(/œ/g, 'oe')
-    .replace(DOUBLE_POSSESSIVE, '$1')
     .replace(APOSTROPHE_OR_HYPHEN, '')
     .replace(/^[^\w]+/, '')
     .replace(/[^\w]+$/, '');
@@ -453,6 +452,24 @@ function toComparisonUnits(tokens: Token[]): ComparisonUnit[] {
   return units;
 }
 
+const possessiveBase = (token: Token) => normalize(token.raw.replace(DOUBLE_POSSESSIVE, '$1'));
+
+// "Moses's" said for the verse's "Moses'", or the reverse: both take one possessive key, so they
+// match each other but not plain "Moses" ("Jesus's" for "Jesus" stays wrong). "Moses'" said as
+// "Moses" still matches, word to word in `greedySubstitution`.
+function possessiveUnits(units: ComparisonUnit[], other: Token[]): ComparisonUnit[] {
+  const said = new Set(other.filter((t) => DOUBLE_POSSESSIVE.test(t.raw)).map(possessiveBase));
+  const printed = new Set(other.filter((t) => S_POSSESSIVE.test(t.raw)).map((t) => t.normalized));
+  return units.map((unit) => {
+    const [token] = unit.tokens;
+    if (unit.tokens.length !== 1) return unit;
+    const base = DOUBLE_POSSESSIVE.test(token.raw) && possessiveBase(token);
+    if (base && printed.has(base)) return { ...unit, key: `${base}'` };
+    if (S_POSSESSIVE.test(token.raw) && said.has(token.normalized)) return { ...unit, key: `${token.normalized}'` };
+    return unit;
+  });
+}
+
 const unitValue = (unit: ComparisonUnit | undefined, kind = 'cardinal') =>
   unit?.key.startsWith(`number:${kind}:`) ? Number(unit.key.slice(`number:${kind}:`.length)) : undefined;
 
@@ -595,8 +612,8 @@ export function alignTranscription(
   const transcribedTokens = tokenize(cleanedTranscription).filter(
     t => !FILLERS.has(t.normalized)
   );
-  const expectedWords = toComparisonUnits(expectedTokens);
-  const transcribedWords = toComparisonUnits(transcribedTokens);
+  const expectedWords = possessiveUnits(toComparisonUnits(expectedTokens), transcribedTokens);
+  const transcribedWords = possessiveUnits(toComparisonUnits(transcribedTokens), expectedTokens);
   const expectedMerged = mergeContextNumbers(expectedWords, transcribedWords);
   const transcribedMerged = mergeContextNumbers(transcribedWords, expectedWords);
   // A run of words whose letters spell one word said on either side ("for as much" /
