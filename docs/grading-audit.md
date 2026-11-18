@@ -153,7 +153,8 @@ F-numbers are the harness's own finding IDs, used by the tests.
   spellings (stedfastly, shew, subtil), names (Judaea, Sion), accents, apostrophes, hyphens and
   spacing (altogether / "all together"). In `lib/align.ts`: `tokenize` drops invisible characters
   and splits on ellipsis and on a slash between letters; `normalize` does NFKD with an accent
-  fold, `s's` → `s'`, and a wider apostrophe and hyphen set; `SPELLINGS` in
+  fold and a wider apostrophe and hyphen set; `foldDoublePossessives` reads `s's` as `s'` only
+  when the other side has the `s'` form ("Jesus's" for plain "Jesus" stays wrong); `SPELLINGS` in
   `lib/align-spellings.ts` is applied to both sides when building comparison units. Forms that
   are other words (ye, spake, forgat, builded) stay wrong, with no half credit (D1). Ride along:
   `uhm`, `erm`, `mm-hmm`, `uh-huh` and similar joined `FILLERS` (test F9); `ah`, `er` and `err`
@@ -543,3 +544,6 @@ translation, or `session_attempts` for an account around the review date with 3-
   no sound-alike rule; D3 stands for real words that sound alike. Hazel/Hazael is in although
   "hazel" is a KJV word (Genesis 30:37) · Caelan's call: a name the engine spells oddly was said
   right.
+- 2026-11-18 · "Moses's" matches the verse's "Moses'" (and the reverse) but not plain "Moses" · The
+  fold is for the spoken form of a printed possessive; on any word it passed an "'s" the verse
+  doesn't have ("Jesus's answered" scored 100). "Moses'" still matches "Moses".
