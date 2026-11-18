@@ -113,7 +113,8 @@ const APOSTROPHES = '’‘\'ʼʹ′`´‛＇';
 const HYPHENS = '\\-‐‑‒−﹣－';
 // A run of punctuation between two letters that isn't only apostrophes and hyphens.
 const WORD_JOINER = new RegExp(`(?<=\\p{L}\\p{M}*)([^\\p{L}\\p{M}\\p{N}\\s]*[^\\p{L}\\p{M}\\p{N}\\s${APOSTROPHES}${HYPHENS}][^\\p{L}\\p{M}\\p{N}\\s]*)(?=\\p{L})`, 'gu');
-const DOUBLE_POSSESSIVE = new RegExp(`([^s]s)[${APOSTROPHES}]s(?=\\W*$)`);
+const DOUBLE_POSSESSIVE = new RegExp(`([^s]s)[${APOSTROPHES}]s(?=\\W*$)`, 'i'); // "Moses's"
+const S_POSSESSIVE = new RegExp(`s[${APOSTROPHES}]\\W*$`, 'i'); // "Moses'"
 const APOSTROPHE_OR_HYPHEN = new RegExp(`[${APOSTROPHES}${HYPHENS}]`, 'g');
 
 /**
@@ -142,7 +143,6 @@ function normalizeThousandsSpacing(text: string): string {
 /**
  * Normalize a single word:
  * - lowercase, accents and ligatures folded ("Judæa" = "Judaea", "rosé" = "rose")
- * - "Moses's" said like "Moses'"
  * - drop apostrophes (curly, straight or look-alike) and hyphens: possessive vs
  *   plural ("eagle's"/"eagles") and hyphenation ("Beth-lehem"/
  *   "Bethlehem") are acoustically identical, so ASR output can't be
@@ -157,11 +157,20 @@ function normalize(word: string): string {
     .toLowerCase()
     .replace(/æ/g, 'ae')
     .replace(/œ/g, 'oe')
-    .replace(DOUBLE_POSSESSIVE, '$1')
     .replace(APOSTROPHE_OR_HYPHEN, '')
     .replace(/^[^\w]+/, '')
     .replace(/[^\w]+$/, '');
   return n === 'o' ? 'oh' : n;
+}
+
+// "Moses's" said for the verse's "Moses'", or the reverse: a word written "X's" (X ending in one
+// s) reads as X only when the other side writes it "Xs'". "Jesus's" for plain "Jesus" stays wrong.
+function foldDoublePossessives(tokens: Token[], other: Token[]): Token[] {
+  const written = new Set(other.filter((t) => S_POSSESSIVE.test(t.raw)).map((t) => t.normalized));
+  return tokens.map((t) => {
+    const base = normalize(t.raw.replace(DOUBLE_POSSESSIVE, '$1'));
+    return written.has(base) ? { ...t, normalized: base } : t;
+  });
 }
 
 // How a word compares: spellings of one word fold to one key (lib/align-spellings.ts).
@@ -591,10 +600,12 @@ export function alignTranscription(
   expectedVerse: string,
   cleanedTranscription: string
 ): AlignmentWord[] {
-  const expectedTokens = tokenize(expectedVerse);
-  const transcribedTokens = tokenize(cleanedTranscription).filter(
+  const expectedRaw = tokenize(expectedVerse);
+  const transcribedRaw = tokenize(cleanedTranscription).filter(
     t => !FILLERS.has(t.normalized)
   );
+  const expectedTokens = foldDoublePossessives(expectedRaw, transcribedRaw);
+  const transcribedTokens = foldDoublePossessives(transcribedRaw, expectedRaw);
   const expectedWords = toComparisonUnits(expectedTokens);
   const transcribedWords = toComparisonUnits(transcribedTokens);
   const expectedMerged = mergeContextNumbers(expectedWords, transcribedWords);

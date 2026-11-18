@@ -231,6 +231,19 @@ describe('alignTranscription — spelling and character normalization', () => {
     it(`${expected} ≠ ${transcript}`, () => assertNotEquivalent(expected, transcript));
   }
 
+  // "Moses's" matches only "Moses'", not plain "Moses".
+  const extraPossessive = [
+    ['Jesus answered', "Jesus's answered"],
+    ['the rod of Moses', "the rod of Moses's"],
+    ['waters', "waters's"],
+  ] as const;
+  for (const [plain, possessive] of extraPossessive) {
+    it(`${plain} ≠ ${possessive}`, () => {
+      assertNotEquivalent(plain, possessive);
+      assertNotEquivalent(possessive, plain);
+    });
+  }
+
   // Other words, not other spellings: no half credit (D1), no contraction equivalence (D18), no
   // sound-alikes (D3).
   const staysWrong = [
