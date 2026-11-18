@@ -143,8 +143,7 @@ the same is correct, and the card shows the verse's word. Rulings:
 - `tokenize` drops invisible characters and splits words glued by punctuation,
   never at apostrophes, hyphens or between digits.
 - `normalize` folds case, accents, apostrophes and hyphens. Vocative "O" is
-  "oh". "Moses's" matches "Moses'" only when the other side has that form, never
-  plain "Moses" (`foldDoublePossessives`).
+  "oh".
 - `SPELLINGS` in `lib/align-spellings.ts` gives British, KJV-era and name
   spellings one key. Other words (ye, spake, hath) stay wrong.
 - `FILLERS` (um, erm, uh-huh) drop from the transcript only. "Ah", "er" and
