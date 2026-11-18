@@ -452,6 +452,24 @@ function toComparisonUnits(tokens: Token[]): ComparisonUnit[] {
   return units;
 }
 
+const possessiveBase = (token: Token) => normalize(token.raw.replace(DOUBLE_POSSESSIVE, '$1'));
+
+// "Moses's" said for the verse's "Moses'", or the reverse: both take one possessive key, so they
+// match each other but not plain "Moses" ("Jesus's" for "Jesus" stays wrong). "Moses'" said as
+// "Moses" still matches, word to word in `greedySubstitution`.
+function possessiveUnits(units: ComparisonUnit[], other: Token[]): ComparisonUnit[] {
+  const said = new Set(other.filter((t) => DOUBLE_POSSESSIVE.test(t.raw)).map(possessiveBase));
+  const printed = new Set(other.filter((t) => S_POSSESSIVE.test(t.raw)).map((t) => t.normalized));
+  return units.map((unit) => {
+    const [token] = unit.tokens;
+    if (unit.tokens.length !== 1) return unit;
+    const base = DOUBLE_POSSESSIVE.test(token.raw) && possessiveBase(token);
+    if (base && printed.has(base)) return { ...unit, key: `${base}'` };
+    if (S_POSSESSIVE.test(token.raw) && said.has(token.normalized)) return { ...unit, key: `${token.normalized}'` };
+    return unit;
+  });
+}
+
 const unitValue = (unit: ComparisonUnit | undefined, kind = 'cardinal') =>
   unit?.key.startsWith(`number:${kind}:`) ? Number(unit.key.slice(`number:${kind}:`.length)) : undefined;
 
@@ -594,8 +612,8 @@ export function alignTranscription(
   const transcribedTokens = tokenize(cleanedTranscription).filter(
     t => !FILLERS.has(t.normalized)
   );
-  const expectedWords = toComparisonUnits(expectedTokens);
-  const transcribedWords = toComparisonUnits(transcribedTokens);
+  const expectedWords = possessiveUnits(toComparisonUnits(expectedTokens), transcribedTokens);
+  const transcribedWords = possessiveUnits(toComparisonUnits(transcribedTokens), expectedTokens);
   const expectedMerged = mergeContextNumbers(expectedWords, transcribedWords);
   const transcribedMerged = mergeContextNumbers(transcribedWords, expectedWords);
   // A run of words whose letters spell one word said on either side ("for as much" /
@@ -749,11 +767,6 @@ function alignSubstitution(
   }
 }
 
-// "Moses's" said for the verse's "Moses'", or the reverse: a word written "X's" (X ending in one
-// s) reads as X only against the word it replaces written "Xs'". "Jesus's" for "Jesus" stays wrong.
-const possessiveKey = (token: Token, other: Token) =>
-  S_POSSESSIVE.test(other.raw) ? normalize(token.raw.replace(DOUBLE_POSSESSIVE, '$1')) : token.normalized;
-
 /**
  * Alphabetic words that only differ in how they're split ("for ever" ↔
  * "forever") are spoken identically, so match runs whose letters, as
@@ -771,8 +784,8 @@ function greedySubstitution(
     if (!isAlphabetic(removed[a]) || !isAlphabetic(added[b])) return null;
     let i = a;
     let j = b;
-    let exp = possessiveKey(removed[i], added[j]);
-    let got = possessiveKey(added[j], removed[i]);
+    let exp = removed[i].normalized;
+    let got = added[j].normalized;
     while (exp !== got) {
       if (got.startsWith(exp) && i + 1 < removed.length && isAlphabetic(removed[i + 1])) exp += removed[++i].normalized;
       else if (exp.startsWith(got) && j + 1 < added.length && isAlphabetic(added[j + 1])) got += added[++j].normalized;

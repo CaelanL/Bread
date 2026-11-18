@@ -197,6 +197,8 @@ describe('alignTranscription — spelling and character normalization', () => {
     ["Moses' hands", "Moses's hands"],
     ["at Jesus' feet", "at Jesus's feet"],
     ["thy sons, and thy sons' wives", "thy sons, and thy sons's wives"],
+    ["his sons, and his sons' sons", "his sons, and his sons's sons"],
+    ["Moses' hands and Moses' rod", "Moses's hands and Moses rod"],
     // Odd spellings and names the engine wrote in the voice tests.
     ['Hazael, Take a present', 'hazel, take a present'],
     ['vaunteth not itself, Doth not behave itself unseemly', 'vaunteth not itself, doth not behave itself unseamly'],
