@@ -153,8 +153,8 @@ F-numbers are the harness's own finding IDs, used by the tests.
   spellings (stedfastly, shew, subtil), names (Judaea, Sion), accents, apostrophes, hyphens and
   spacing (altogether / "all together"). In `lib/align.ts`: `tokenize` drops invisible characters
   and splits on ellipsis and on a slash between letters; `normalize` does NFKD with an accent
-  fold and a wider apostrophe and hyphen set; `foldDoublePossessives` reads `s's` as `s'` only
-  when the other side has the `s'` form ("Jesus's" for plain "Jesus" stays wrong); `SPELLINGS` in
+  fold and a wider apostrophe and hyphen set; `greedySubstitution` reads `s's` as `s'` only
+  against the word it replaces written `s'` ("Jesus's" for plain "Jesus" stays wrong); `SPELLINGS` in
   `lib/align-spellings.ts` is applied to both sides when building comparison units. Forms that
   are other words (ye, spake, forgat, builded) stay wrong, with no half credit (D1). Ride along:
   `uhm`, `erm`, `mm-hmm`, `uh-huh` and similar joined `FILLERS` (test F9); `ah`, `er` and `err`
