@@ -18,7 +18,7 @@ note with an optional label and up to five photos. Reports are read in the Supab
 | Settings screen | `app/feedback.tsx`, from the "Send feedback" row at the top of `app/(tabs)/settings.tsx` |
 | Schema, bucket, sweep lookup, cron | `supabase/migrations/20261117142523_feedback.sql` |
 | Photo sweep | `supabase/functions/delete-feedback-photos/` |
-| Tests | `supabase/tests/feedback.test.sql`, `tests/feedback-photos.integration.ts` |
+| Tests | `supabase/tests/feedback.test.sql`, `tests/feedback-photos.integration.ts`, `lib/feedback/*.test.ts` |
 
 ## Grading reports
 
@@ -71,8 +71,10 @@ five photos from the iOS system photo picker (`expo-image-picker`, `launchImageL
 That picker runs outside the app, so no permission is asked; `app.config.js` turns the plugin's
 photo and camera usage strings off. Photos over the size cap are left out with a note. Send uploads
 the photos, then saves the row; success shows "Thank you" and Done. A failure shows an error and
-keeps the note, label and photos. The screen makes one `id` per send, and photo paths come from
-it, so a retry skips photos that already landed (`409`) and a committed row (`23505`).
+keeps the note, label and photos. The screen makes one `id` per send and one per photo when it's
+picked (`newPhotoId`); a photo's path comes from its own id, so a retry skips photos that already
+landed (`409`) and a committed row (`23505`), and a photo swapped in after a failed send gets a new
+path (`lib/feedback/save.test.ts`). The thumbnails wrap; Add photo shows while fewer than 5 are picked.
 
 ## Storage and access
 
@@ -81,7 +83,7 @@ it, so a retry skips photos that already landed (`409`) and a committed row (`23
 cascades with the account. Clients can insert their own rows only, with photo paths in their own
 folder; no select, update or delete. Anonymous clients get nothing.
 
-Photos live in the private `feedback-photos` bucket at `<user id>/<report id>-<n>.<ext>`. Clients can
+Photos live in the private `feedback-photos` bucket at `<user id>/<photo id>.<ext>`. Clients can
 upload under their own folder and can't read or list anything, their own photos included. Restrictive
 policies on `storage.objects` hold this for `anon` and `authenticated` even if a broad policy (like
 an old dashboard one in prod) allows more: no select, update or delete in this bucket, and inserts

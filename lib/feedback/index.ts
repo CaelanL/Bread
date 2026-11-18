@@ -7,9 +7,9 @@ import { Platform } from 'react-native';
 
 import { sessionUserId, supabase } from '@/lib/api/client';
 import type { GradingReport } from './grading-report';
-import { saveReport, uploadPhoto } from './save';
+import { saveReport, saveReportWithPhotos } from './save';
 
-export { newReportId } from './save';
+export { newPhotoId, newReportId } from './save';
 
 /** The migration enforces the same numbers (table checks and the bucket). */
 export const FEEDBACK_LIMITS = { noteLength: 4000, photos: 5, photoBytes: 50 * 1024 * 1024 } as const;
@@ -17,27 +17,29 @@ export const FEEDBACK_LIMITS = { noteLength: 4000, photos: 5, photoBytes: 50 * 1
 export type FeedbackLabel = 'idea' | 'bug' | 'other';
 
 export interface FeedbackPhoto {
+  /** From `newPhotoId()` when picked; the photo's path comes from it. */
+  id: string;
   uri: string;
   mimeType?: string;
 }
 
-function insertReport(row: { id: string } & Record<string, unknown>): Promise<void> {
-  return saveReport(supabase, {
+function withDevice(row: { id: string } & Record<string, unknown>) {
+  return {
     ...row,
     app_version: Constants.expoConfig?.version ?? null,
     update_id: Updates.updateId ?? null,
     os: Platform.OS,
     os_version: String(Platform.Version),
     device_model: Device.modelName ?? null,
-  });
+  };
 }
 
 /** `id` stays the same across retries of one result's report. */
 export function sendGradingReport(id: string, details: GradingReport, note: string): Promise<void> {
-  return insertReport({ id, kind: 'grading', note: note.trim(), details });
+  return saveReport(supabase, withDevice({ id, kind: 'grading', note: note.trim(), details }));
 }
 
-/** Uploads the photos into the reader's folder, then saves the report. Paths come from `id`, so a retry reuses what landed. */
+/** Uploads the photos into the reader's folder, then saves the report. `id` and each photo's id stay the same across retries. */
 export async function sendFeedback({ id, note, label, photos }: {
   id: string;
   note: string;
@@ -46,12 +48,10 @@ export async function sendFeedback({ id, note, label, photos }: {
 }): Promise<void> {
   const userId = await sessionUserId();
   if (!userId) throw new Error('Not signed in');
-  const paths: string[] = [];
-  for (const photo of photos) {
-    const contentType = photo.mimeType ?? 'image/jpeg';
-    const path = `${userId}/${id}-${paths.length}.${contentType.split('/')[1]}`;
-    await uploadPhoto(supabase, path, await new File(photo.uri).arrayBuffer(), contentType);
-    paths.push(path);
-  }
-  await insertReport({ id, kind: 'general', label, note: note.trim(), photo_paths: paths });
+  await saveReportWithPhotos(supabase, userId, withDevice({ id, kind: 'general', label, note: note.trim() }),
+    photos.map((photo) => ({
+      id: photo.id,
+      contentType: photo.mimeType ?? 'image/jpeg',
+      read: () => new File(photo.uri).arrayBuffer(),
+    })));
 }

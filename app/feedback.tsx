@@ -9,7 +9,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, InputText, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { FEEDBACK_LIMITS, newReportId, sendFeedback, type FeedbackLabel, type FeedbackPhoto } from '@/lib/feedback';
+import { FEEDBACK_LIMITS, newPhotoId, newReportId, sendFeedback, type FeedbackLabel, type FeedbackPhoto } from '@/lib/feedback';
 
 const LABELS: { value: FeedbackLabel; title: string }[] = [
   { value: 'idea', title: 'Idea' },
@@ -44,7 +44,7 @@ export default function FeedbackScreen() {
     if (result.canceled) return;
     const fits = result.assets.filter((asset) => !asset.fileSize || asset.fileSize <= FEEDBACK_LIMITS.photoBytes);
     setPhotoNotice(fits.length < result.assets.length ? `Photos over ${PHOTO_MB} MB were left out.` : null);
-    setPhotos((prev) => [...prev, ...fits.map((asset) => ({ uri: asset.uri, mimeType: asset.mimeType }))]
+    setPhotos((prev) => [...prev, ...fits.map((asset) => ({ id: newPhotoId(), uri: asset.uri, mimeType: asset.mimeType }))]
       .slice(0, FEEDBACK_LIMITS.photos));
   };
 
@@ -116,15 +116,15 @@ export default function FeedbackScreen() {
           />
 
           <View style={styles.photos}>
-            {photos.map((photo, index) => (
-              <View key={photo.uri} style={styles.photo}>
+            {photos.map((photo) => (
+              <View key={photo.id} style={styles.photo}>
                 <Image source={{ uri: photo.uri }} style={styles.photoImage} contentFit="cover" />
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Remove photo"
                   hitSlop={8}
                   disabled={sending}
-                  onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== index))}
+                  onPress={() => setPhotos((prev) => prev.filter((p) => p.id !== photo.id))}
                   style={[styles.removePhoto, { backgroundColor: colors.overlay }]}
                 >
                   <IconSymbol name="xmark" size={12} color={colors.white} />
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlignVertical: 'top',
   },
-  photos: { flexDirection: 'row', gap: 10 },
+  photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photo: { width: PHOTO_SIZE, height: PHOTO_SIZE, borderRadius: Radius.lg, overflow: 'hidden' },
   photoImage: { width: '100%', height: '100%' },
   removePhoto: {
