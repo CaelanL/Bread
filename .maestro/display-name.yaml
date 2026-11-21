@@ -3,6 +3,7 @@
 # Needs a fresh seed (npm run db:reset).
 appId: com.caelanliu.biblemem
 name: display-name
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2Fsettings

@@ -1,5 +1,6 @@
 appId: com.caelanliu.biblemem
 name: intro-interruption
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome%3FintroFixture%3Dsample

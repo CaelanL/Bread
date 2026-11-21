@@ -3,6 +3,7 @@
 # setup screen following along.
 appId: com.caelanliu.biblemem
 name: account-translation
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)

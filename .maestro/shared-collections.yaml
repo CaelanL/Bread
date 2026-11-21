@@ -4,6 +4,7 @@
 # their Library is stale, rejoins; reader-a deletes for everyone and reader-b keeps a personal copy. docs/features/shared-collections.md
 appId: com.caelanliu.biblemem
 name: shared-collections
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)

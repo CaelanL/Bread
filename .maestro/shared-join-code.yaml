@@ -4,6 +4,7 @@
 # sign-in, and joins from there. The collection's people line names the members (lib/shared/display-name.ts).
 appId: com.caelanliu.biblemem
 name: shared-join-code
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)

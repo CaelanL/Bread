@@ -5,6 +5,7 @@
 # docs/features/shared-collections.md
 appId: com.caelanliu.biblemem
 name: shared-stop
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)

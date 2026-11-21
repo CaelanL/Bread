@@ -1,6 +1,7 @@
 # Start from npm run db:reset. Exercises the real store and local database.
 appId: com.caelanliu.biblemem
 name: library-management
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
