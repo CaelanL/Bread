@@ -4,7 +4,8 @@
 //
 //   npm run sim -- shot <route> [<route>...] [--keep] [--as <seed user>]   screenshots to .expo/sim-shots/
 //   npm run sim -- flow <name> [<name>...] [--keep]     runs Maestro flows from .maestro/ after one startup, output to .expo/sim-shots/flows/<name>/
-//   npm run sim -- flow all [--keep]                    every top-level .maestro/*.yaml, alphabetically
+//   npm run sim -- flow all --first-review [--keep]     every top-level .maestro/*.yaml, alphabetically. About 45 minutes,
+//     so only the reviewer runs it, once per feature in the first review; without the flag it refuses.
 //     A flow whose header has `tags: [fresh-seed]` gets `scripts/db.mjs reset` right before it. The run keeps going past
 //     a failed flow, ends with each flow's pass or fail and time, and exits non-zero if any failed.
 //   npm run sim -- stop                                 stops Metro and the device
@@ -260,9 +261,15 @@ const duration = (ms) => {
 async function flow(args) {
   const began = Date.now();
   const keep = args.includes('--keep');
-  const names = args.filter((a) => a !== '--keep');
-  if (!names.length) die('Usage: npm run sim -- flow <name> [<name>...] [--keep] | flow all [--keep]');
-  const paths = names.length === 1 && names[0] === 'all'
+  const names = args.filter((a) => a !== '--keep' && a !== '--first-review');
+  if (!names.length) die('Usage: npm run sim -- flow <name> [<name>...] [--keep] | flow all --first-review [--keep]');
+  const all = names.length === 1 && names[0] === 'all';
+  if (all && !args.includes('--first-review')) {
+    die('`flow all` takes about 45 minutes and holds the one simulator. Name only the flows that cover your change '
+      + '(the feature docs list them as `npm run sim -- flow <name>`). The reviewer runs every flow once per feature, '
+      + 'in the first review, with `flow all --first-review`.');
+  }
+  const paths = all
     ? readdirSync(FLOWS).filter((f) => f.endsWith('.yaml')).sort().map((f) => join(FLOWS, f))
     : names.map(flowPath);
   const maestro = findMaestro();
@@ -317,4 +324,4 @@ if (command === 'shot') await shot(args);
 else if (command === 'flow') await flow(args);
 else if (command === 'stop') stopCommand();
 else if (command === 'install') install();
-else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all [--keep] | stop | install');
+else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install');
