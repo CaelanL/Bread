@@ -1,64 +1,91 @@
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AddCollectionModal } from '@/components/library/AddCollectionModal';
-import { SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
+import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
+import { PopoverMenu } from '@/components/ui/PopoverMenu';
+import { LargeTitle, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
-import { useAppStore, useCollections, useHydrated, useCollectionVerseCount, useDueCounts, useInProgressVerseCount, useMasteredVerseCount } from '@/lib/store';
+import { MAX_SHARED_COLLECTIONS, shareHitsCap } from '@/lib/shared/constants';
+import { hasOtherMembers, sharedEmblem, soloEmblem } from '@/lib/shared/progress';
+import { perfMark } from '@/lib/api/dev-timing';
+import { useAppStore, useCollections, useHydrated, useDueCounts, useInProgressVerseCount, useMasteredVerseCount, useSharedCollection, useSharedOwnerName, useVersesByCollection } from '@/lib/store';
 import { ReviewNowProvider, useReviewNow, useReviewNowValue } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   RefreshControl,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-
-interface CollectionWithCount extends Collection {
-  verseCount: number;
-}
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { FadeInDown, useSharedValue } from 'react-native-reanimated';
 
 // Component to get verse count for a collection
 function CollectionCard({
   collection,
   index,
+  animateIn,
   onPress,
-  onDelete,
+  onRename,
+  onReorder,
+  onShare,
+  reorder,
+  actionsDisabled,
 }: {
   collection: Collection;
   index: number;
+  animateIn: boolean;
   onPress: () => void;
-  onDelete: () => Promise<void>;
+  onRename: () => void;
+  onReorder: () => void;
+  onShare: () => void;
+  reorder?: CollectionReorder;
+  actionsDisabled: boolean;
 }) {
   const isMastered = collection.id === MASTERED_COLLECTION_ID;
   const isInProgress = collection.id === IN_PROGRESS_COLLECTION_ID;
-  const collectionVerseCount = useCollectionVerseCount(collection.id);
+  const collectionVerses = useVersesByCollection(collection.id);
   const masteredVerseCount = useMasteredVerseCount();
   const inProgressVerseCount = useInProgressVerseCount();
   const now = useReviewNowValue();
   const dueCounts = useDueCounts(now);
+  const shared = useSharedCollection(collection.id);
+  const ownerName = useSharedOwnerName(collection.id);
 
   const verseCount = isMastered
     ? masteredVerseCount
     : isInProgress
       ? inProgressVerseCount
-      : collectionVerseCount;
-  const collectionWithCount: CollectionWithCount = { ...collection, verseCount };
+      : collectionVerses.length;
   const dueCount = isMastered ? dueCounts.mastered : 0;
+  // Shared only once someone else joined; until then it's a personal card (docs/features/shared-collections.md).
+  const group = shared && hasOtherMembers(shared) ? shared : undefined;
+  const emblem = useMemo(() => {
+    if (collection.isVirtual) return null;
+    if (group) return sharedEmblem(group);
+    return soloEmblem(collectionVerses.map((v) => v.progress));
+  }, [collection.isVirtual, group, collectionVerses]);
 
   return (
     <SwipeableCollectionCard
-      collection={collectionWithCount}
+      collection={{ ...collection, verseCount }}
       index={index}
+      animateIn={animateIn}
       onPress={onPress}
-      onDelete={onDelete}
+      onRename={onRename}
+      onReorder={onReorder}
+      reorder={reorder}
+      actionsDisabled={actionsDisabled}
       dueCount={dueCount}
+      sharedRole={shared?.role}
+      onShare={onShare}
+      emblem={emblem}
+      memberCount={group?.memberCount}
+      ownerName={group ? ownerName : undefined}
     />
   );
 }
@@ -66,7 +93,6 @@ function CollectionCard({
 export default function LibraryScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
   const now = useReviewNow();
 
   // Store data
@@ -76,17 +102,67 @@ export default function LibraryScreen() {
     ? allCollections
     : allCollections.filter((c) => c.id !== IN_PROGRESS_COLLECTION_ID);
   const hydrated = useHydrated();
+  useEffect(() => {
+    if (hydrated && collections.length > 0) perfMark('library');
+  }, [hydrated, collections.length]);
   const addCollection = useAppStore((s) => s.addCollection);
-  const deleteCollection = useAppStore((s) => s.deleteCollection);
+  const renameCollection = useAppStore((s) => s.renameCollection);
+  const reorderCollections = useAppStore((s) => s.reorderCollections);
+  const orderSaving = useAppStore((s) => s.collectionOrderSaving);
   const refresh = useAppStore((s) => s.refresh);
 
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const barHeight = useTopBarHeight();
+  const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
+  const renamingCollection = nameDialog?.collection;
+  // A link can present a modal route over the Library; its RN Modals must not stay up under it.
+  // Two quick taps on different cards would push two collections; the first push locks until the
+  // Library is focused again.
+  const opening = useRef(false);
+  // The cards of the list's first paint, and whether they fade in: not when the saved library
+  // painted them (it should look already there). A card added later appears at once.
+  const firstCards = useRef<{ ids: Set<string>; animate: boolean } | null>(null);
+  if (hydrated && !firstCards.current) {
+    firstCards.current = { ids: new Set(collections.map((c) => c.id)), animate: useAppStore.getState().hydratedFrom !== 'snapshot' };
+  }
+  useFocusEffect(useCallback(() => {
+    opening.current = false;
+    return () => {
+      setAddMenuOpen(false);
+      setNameDialog(null);
+    };
+  }, []));
+  const customCollections = allCollections.filter((c) => !c.isDefault && !c.isVirtual);
+  const actionsDisabled = refreshing || orderSaving;
+  const scrollGesture = useMemo(() => Gesture.Native(), []);
+  const from = useSharedValue(-1);
+  const to = useSharedValue(-1);
+  const offset = useSharedValue(0);
+
+  useLayoutEffect(() => {
+    from.value = -1;
+    to.value = -1;
+    offset.value = 0;
+  }, [allCollections, editing, from, to, offset]);
 
   const onRefresh = async () => {
+    if (orderSaving) return;
     setRefreshing(true);
     await refresh();
     setRefreshing(false);
+  };
+
+  const moveCollection = (source: number, destination: number) => {
+    const ids = customCollections.map((c) => c.id);
+    const [moved] = ids.splice(source, 1);
+    if (!moved) return;
+    ids.splice(destination, 0, moved);
+    void reorderCollections(ids).catch(() => {
+      showErrorToast('Could not save the collection order. Please try again.');
+    });
   };
 
   const handleAddCollection = async (name: string) => {
@@ -98,20 +174,21 @@ export default function LibraryScreen() {
     }
   };
 
-  const handleDeleteCollection = async (id: string) => {
-    try {
-      await deleteCollection(id);
-    } catch (e) {
-      showErrorToast('Failed to delete collection.');
-      throw e; // Re-throw so SwipeableCollectionCard can handle animation
+  // The share modal is a route, never an RN Modal held here: see ModalCard. `new` names one first.
+  const handleShare = (collectionId: string) => {
+    if (shareHitsCap(allCollections.find((c) => c.id === collectionId)?.sharedId, sharedCount)) {
+      showErrorToast(`${MAX_SHARED_COLLECTIONS} shared collections is the limit.`);
+      return;
     }
+    router.push(`/share/${collectionId}`);
   };
 
   const handleCollectionPress = (collection: Collection) => {
+    if (editing || opening.current) return;
+    opening.current = true;
     router.push(`/(tabs)/(library)/${collection.id}`);
   };
 
-  const primaryColor = colors.primary;
 
   const renderEmptyHint = () => (
     <Animated.View
@@ -127,45 +204,83 @@ export default function LibraryScreen() {
   return (
     <ReviewNowProvider value={now}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Library</Text>
-          <Pressable
-            style={styles.addButton}
-            onPress={() => setModalVisible(true)}
-          >
-            <IconSymbol name="plus" size={28} color={primaryColor} />
-          </Pressable>
-        </View>
-
-        <ScrollView
+        <GestureDetector gesture={scrollGesture}>
+        <Animated.ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.collectionsContainer}
+          contentContainerStyle={[styles.collectionsContainer, { paddingTop: barHeight }]}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
           }
         >
+          <View style={styles.titleGap}><LargeTitle root title="Library" /></View>
           {!hydrated ? (
             <CollectionCardSkeleton count={3} />
           ) : (
             <>
-              {collections.map((collection, index) => (
-                <CollectionCard
-                  key={collection.id}
-                  collection={collection}
-                  index={index}
-                  onPress={() => handleCollectionPress(collection)}
-                  onDelete={() => handleDeleteCollection(collection.id)}
-                />
-              ))}
+              {collections.map((collection, index) => {
+                const customIndex = customCollections.indexOf(collection);
+                return (
+                  <CollectionCard
+                    key={collection.id}
+                    collection={collection}
+                    index={index}
+                    animateIn={!!firstCards.current?.animate && firstCards.current.ids.has(collection.id)}
+                    onPress={() => handleCollectionPress(collection)}
+                    onRename={() => setNameDialog({ collection })}
+                    onReorder={() => setEditing(true)}
+                    onShare={() => handleShare(collection.id)}
+                    actionsDisabled={actionsDisabled}
+                    reorder={editing && customIndex >= 0 ? {
+                      index: customIndex,
+                      count: customCollections.length,
+                      disabled: actionsDisabled,
+                      scrollGesture,
+                      from,
+                      to,
+                      offset,
+                      onMove: moveCollection,
+                    } : undefined}
+                  />
+                );
+              })}
               {collections.length <= 1 && renderEmptyHint()}
             </>
           )}
-        </ScrollView>
+        </Animated.ScrollView>
+        </GestureDetector>
+        <TopBar>
+          {(editing || customCollections.length > 0) && (
+            <Pressable
+              style={styles.editButton}
+              onPress={() => setEditing(!editing)}
+              accessibilityRole="button"
+              disabled={actionsDisabled}
+            >
+              <Text style={[styles.editLabel, { color: colors.text }]}>{editing ? 'Done' : 'Edit'}</Text>
+            </Pressable>
+          )}
+          <TopBarButton testID="library-add" icon="plus" label="Add" onPress={() => setAddMenuOpen(true)} disabled={actionsDisabled} />
+        </TopBar>
 
-        <AddCollectionModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          onAdd={handleAddCollection}
+        {nameDialog && (
+          <AddCollectionModal
+            visible
+            initialName={renamingCollection?.name}
+            onClose={() => setNameDialog(null)}
+            onAdd={renamingCollection
+              ? (name) => renameCollection(renamingCollection.id, name)
+              : handleAddCollection}
+          />
+        )}
+        <PopoverMenu
+          visible={addMenuOpen}
+          onClose={() => setAddMenuOpen(false)}
+          anchorPosition={{ top: barHeight, right: 12 }}
+          items={[
+            { label: 'New collection', icon: 'folder.fill', onPress: () => setNameDialog({}) },
+            { label: 'New shared collection', icon: 'person.2.fill', onPress: () => handleShare('new') },
+            { label: 'Join with code', icon: 'number', onPress: () => router.push('/join') },
+          ]}
         />
       </View>
     </ReviewNowProvider>
@@ -176,27 +291,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
+  titleGap: {
+    paddingHorizontal: 4,
+    marginBottom: 4,
   },
-  title: {
-    fontSize: 34,
-    fontWeight: 'bold',
+  editButton: {
+    padding: 10,
   },
-  addButton: {
-    padding: 4,
+  editLabel: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,
   },
   collectionsContainer: {
     padding: 16,
-    gap: 12,
+    gap: COLLECTION_ROW_GAP,
   },
   hintContainer: {
     marginTop: 20,

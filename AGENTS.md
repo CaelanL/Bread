@@ -4,8 +4,8 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 ## Map
 - Stack: Expo SDK 54, React Native 0.81, React 19, TypeScript strict, Expo Router 6, Zustand 5, `react-native-reanimated` 4, Supabase (Postgres, Auth, Edge Functions in Deno). iOS is what ships. Android and web run but aren't released.
 - `app/` — screens and routes. `components/` — UI, grouped by area, `ui/` holds shared primitives. `hooks/` — `use-study-session.ts`, `use-recording.ts` and others. `constants/theme.ts` — tokens.
-- `lib/` — `store/` (Zustand, mastery), `api/` (Bible, recording, stats), `storage/`, `sync/`, `auth/`, `notifications/`, `transcription/`, `bible/`, plus `align.ts` and `study-chunks.ts`. Co-locate new code with its feature. A new file here must start with `// lib-ok: <reason>`.
-- `supabase/` — `migrations/`, `functions/` (`bible`, `process-recording`, `transcription-token`, `send-notifications`), `tests/` (pgTAP), `seed.sql`, `database.types.ts` (generated). `scripts/` — kit tools. `.eas/workflows/` — deploy.
+- `lib/` — `store/` (Zustand, mastery), `api/` (Bible, recording, stats), `storage/`, `auth/`, `notifications/`, `transcription/`, `bible/`, `collections/` (curated catalog, import, icons, savers), `feedback/` (reports and their payload), `votm/` (monthly schedule), `intro/` (dormant video player), plus `align.ts` and `study-chunks.ts`. Co-locate new code with its feature. A new file here must start with `// lib-ok: <reason>`.
+- `supabase/` — `migrations/`, `functions/` (`bible`, `process-recording`, `transcription-token`, `send-notifications`, `invite-handoff`, `delete-feedback-photos`), `tests/` (pgTAP), `seed.sql`, `database.types.ts` (generated). `scripts/` — kit tools. `.eas/workflows/` — deploy.
 - Old code comments and migrations cite `CLAUDE.md` invariants, which are the numbered list below, and `docs/features/<change>.md` files that no longer exist. Look in the area doc or git history instead.
 
 **Docs: read the matching one before touching that area.**
@@ -13,12 +13,18 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Touching | Read |
 |---|---|
 | Setup screen, chunks, masks, peek, scoring | `docs/features/study-session.md` |
+| Grading accuracy, known grading gaps, the audit harness | `docs/grading-audit.md` |
 | Recording, Soniox, batch and live paths | `docs/features/transcription.md` |
+| Warm audio session, interruptions, the `@siteed/audio-studio` patch | `docs/architecture/native-recorder.md` |
 | Mastery, spaced repetition, engraved | `docs/features/review.md` |
-| Collections, add-verse flow, sorting, library list | `docs/features/library.md` |
+| Collections, sorting, library list | `docs/features/library.md` |
+| Add screen, quick add, chapter range select, double-tap guard | `docs/features/adding-verses.md` |
 | Streak, time studied, popular ranges | `docs/features/insights.md` |
 | Home tab, Verse of the Month | `docs/features/home.md` |
 | Push, cron, prefs UI, device tokens | `docs/features/notifications.md` |
+| Shared collections, invites, display name | `docs/features/shared-collections.md` |
+| Shared collection screen, group progress, Who's where, emblems | `docs/features/group-progress.md` |
+| Grading reports, Send feedback, feedback photos | `docs/features/feedback.md` |
 | Verse fetching, caches, KJV bundle | `docs/architecture/bible-api-and-caching.md` |
 | Adding or switching a Bible version | `docs/architecture/bible-versions.md` |
 | Schema, migrations, RLS | `docs/architecture/data-model.md` |
@@ -36,6 +42,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 - If the DB won't start, or anything else in the local setup breaks, run `npm run doctor`. Never start Docker or another runtime by hand.
 - `npm run sim -- shot <route> [--as <seed user>]` — screenshots of the local app in the simulator, to `.expo/sim-shots/`. Each area doc's "Browser checks" list runs this way, since Bread has no browser flows.
 - `npm run sim -- flow <name|all>` — runs the Maestro flows in `.maestro/` (taps, typing, iOS permission prompts) against the local DB. Prints pass or fail and the screenshots, under `.expo/sim-shots/flows/`. Flows change local data, and `npm run db:reset` restores the seed. Needs Maestro (`curl -fsSL "https://get.maestro.mobile.dev" | bash`).
+- `npx tsx scripts/grading-audit/run.ts` — replays correct recitations of every bundled KJV verse (and any local licensed sample) through the grader, one pass per way an engine can write a correct recitation. Options and the voice and fetch tools are in `scripts/grading-audit/run.ts`. Regression cases: `lib/__tests__/grading-audit.test.ts`.
 - Local seed users are described at the top of `supabase/seed.sql`. They exist only on local databases. Before giving Caelan a login, sign in with it.
 - Supabase CLI: run `direnv exec . supabase <cmd>` from agent shells, so it gets `SUPABASE_ACCESS_TOKEN` from `.envrc`. Never run `supabase login`. Never print or commit `.envrc`.
 
@@ -50,7 +57,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 
 **Invariants.** Breaking these causes silent data loss, licensing violations or broken core flows.
 1. All Supabase writes live in `lib/`, never in components or screens. Exception: auth calls in `lib/auth/context.tsx`. See `docs/architecture/sync-and-storage.md`.
-2. Verse text is never stored in `user_verses` or any user-owned table (ESV and NLT licensing). See `docs/architecture/bible-api-and-caching.md`.
+2. Verse text is never stored in `user_verses`, any user-owned table or the saved library snapshot (ESV and NLT licensing). See `docs/architecture/bible-api-and-caching.md`.
 3. All Bible reads go through `fetchVerse()` and `fetchChapter()` in `lib/api/bible.ts`. `lib/bible/kjv-bundle.ts` is read only from inside them. See `docs/architecture/bible-api-and-caching.md`.
 4. `chunk.text` is the ground truth for scoring, not `displayWords`. See `docs/features/study-session.md`.
 5. Chunk masks are computed once at session start and frozen. See `docs/features/study-session.md`.
@@ -64,7 +71,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 
 **Code conventions**
 - `@/` resolves to the project root.
-- State: read with selectors (`useCollections()`, `useVersesByCollection(id)`, `useHydrated()`), write with actions (`useAppStore.getState().addVerse(...)`).
+- State: read with selectors (`useCollections()`, `useVersesByCollection(id)`, `useHydrated()`), write with actions (`useAppStore.getState().addVerse(...)`). In a store action, check `sameAccount` (or write through `setFor`) after every await, and call `requireSynced()` before a write that depends on the translation or name. See `docs/architecture/sync-and-storage.md`.
 - Styles: `StyleSheet.create()` at module level, inline `style={{}}` only for dynamic theme or state values. Lint rejects radii, durations and press scales outside `constants/theme.ts`.
 - Icons: `IconSymbol` from `components/ui/icon-symbol.tsx`. A new icon needs a `MAPPING` entry for Android and web.
 - Haptics are gated to iOS with `process.env.EXPO_OS === 'ios'`.
@@ -72,6 +79,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 
 ## App-wide decisions
 - The scoring formula is final: `(correct + 0.5*close) / (correct + close + missing + added)`. Added words stay in the denominator on purpose. Fix fairness in alignment normalization, never in the formula. See `docs/features/study-session.md`.
+- Translation is an account setting and a verse is one row per reference, in that translation. No per-verse or per-collection translation. See `docs/architecture/bible-versions.md`.
 - Only public-domain translations are bundled in the app. Licensed text is fetched, and held only in the server cache and in memory. See `docs/architecture/bible-api-and-caching.md`.
 - Don't gate work on "wait for production data". Bread is small, so ship reasonable-default constants and name the knob to turn if scale ever matters.
 - Merges ship through EAS: JS over the air, native changes through the App Store. Those jobs are paused in `.eas/workflows/deploy.yml` for now. See `docs/architecture/release.md`.

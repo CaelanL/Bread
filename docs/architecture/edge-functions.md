@@ -13,23 +13,30 @@ There are four functions: `bible`, `process-recording`,
 ```
 supabase/functions/
 ├── _shared/
-│   ├── auth.ts          ← User auth (verifyJwt, getAuthUser), admin client, tier lookup
+│   ├── auth.ts          ← User auth (verifyJwt), admin client, tier lookup
 │   ├── cors.ts          ← CORS headers and preflight
 │   ├── errors.ts        ← Standard error responses
 │   └── usage.ts         ← Usage metering (usage_daily)
 ├── bible/
 │   ├── index.ts         ← HTTP entry point
 │   ├── cache.ts         ← verse_cache reads/writes + LRU eviction
+│   ├── usage.ts         ← Daily Bible limit: read once, count a miss
 │   ├── normalize.ts     ← Reference normalization
 │   ├── verse-counts.ts  ← Hardcoded chapter verse counts (validation)
 │   └── adapters/
 │       ├── types.ts     ← BibleAdapter contract
 │       ├── esv.ts       ← Crossway ESV API
-│       └── apibible.ts  ← API.Bible for NLT/NIV/NKJV
+│       ├── esv-parse.ts ← its pure parser (tested from lib/__tests__/)
+│       ├── apibible.ts  ← API.Bible for NLT/NIV/NKJV
+│       └── apibible-parse.ts ← its pure parser
 ├── process-recording/
 │   └── index.ts         ← Soniox upload, polling, optional GPT cleaning
 ├── transcription-token/
 │   └── index.ts         ← Mints temp Soniox keys for live streaming
+├── invite-handoff/
+│   └── index.ts         ← Install handoff: record (sendlabs.dev page) and claim (navigation-and-routing.md#invite-handoff)
+├── delete-feedback-photos/
+│   └── index.ts         ← Daily cron: removes feedback photos of deleted accounts
 └── send-notifications/
     ├── index.ts         ← Cron entry point
     ├── push.ts          ← Expo Push client
@@ -45,10 +52,16 @@ adapter contract, cache layers, and rate limiting. Quick summary
 here:
 
 - `GET /functions/v1/bible?ref=<ref>&version=<v>[&chapter=true]`
-- Auth → rate limit → DB cache → adapter → cache write → respond
-- Returns `{ reference, version, text?, verses?, cached }`
+- `verifyJwt` (local) → validate → DB cache read and usage read in
+  parallel → hit: respond, no usage write. Miss: limit check, count
+  alongside the adapter fetch, respond, then write the cache in
+  `EdgeRuntime.waitUntil`
+- Returns `{ reference, version, text?, verses?, cached }`, always with
+  `Cache-Control: no-store`
 - Errors: 401 (auth), 400 (bad ref/version), 429 (rate limit), 500
-  (upstream)
+  (upstream, including a verse the translation omits)
+- One parser per adapter serves the verse and chapter paths; a cached
+  range is answered from one keyed read; cache rows carry `text_rev`
 
 ## `process-recording`
 
@@ -68,17 +81,26 @@ POST /functions/v1/process-recording
    while Soniox works (keeps the client socket alive past its ~60s
    idle timeout; leading whitespace is valid JSON so response.json()
    on any client parses unchanged)
-4. Upload audio to Soniox async API (model stt-async-v5)
+4. Upload audio to Soniox async API (`SONIOX_ASYNC_MODEL`)
    - actualVerse passed as context for accuracy
-5. Poll Soniox until transcription completes (every 250ms for the
-   first 3s, then every 1s, up to a 90s deadline)
+5. Poll Soniox until transcription completes (first poll after
+   150ms, every 250ms for 10s, then every 1s). Every Soniox call goes
+   through `sonioxFetch`, which retries a 429 with jittered backoff;
+   the whole job has a 90s deadline (`SONIOX_DEADLINE_MS`), and a 429
+   past it answers { error: "Transcription is busy right now. Try
+   again in a moment." }
+   - finally: delete the transcription and the file at Soniox
+     (`deleteAtSoniox`, not awaited, kept alive by
+     EdgeRuntime.waitUntil)
 6. Record usage_daily.transcribe_seconds without blocking the
    response (EdgeRuntime.waitUntil). Analytics only — the quota gate
    was removed; nothing returns 429 anymore
 7. Optionally run GPT-5-mini cleaning pass
    - CLEANING_ENABLED is HARDCODED FALSE right now
 8. Stream the JSON payload
-   { transcription, cleanedTranscription, cleaningUsed }
+   { transcription, cleanedTranscription, cleaningUsed, model }
+   - model (the Soniox model) is for grading reports; older clients
+     ignore it
    - failures after step 3 can't change the committed 200 status;
      they ship as { error } in the body instead. The client checks
      the payload shape, not just response.ok.
@@ -124,23 +146,27 @@ POST /functions/v1/transcription-token
   Headers: Authorization: Bearer <supabase JWT>
   Body: none
 
-200 → { apiKey, expiresAt, websocketUrl, model: "stt-rt-v5" }
+200 → { apiKey, expiresAt, websocketUrl, model: SONIOX_RT_MODEL }
 403 → { error: "LIVE_DISABLED" }   ← the kill switch
 500 → Soniox not configured or the mint failed
 ```
 
 - **Kill switch**: unless the `LIVE_TRANSCRIPTION_ENABLED` secret is
   exactly `"true"`, every request gets 403 and every client silently
-  falls back to the batch path within one recording. Flip with
+  falls back to the batch path from its next mint (an open study
+  screen reuses its key for up to 270s). Flip with
   `supabase secrets set LIVE_TRANSCRIPTION_ENABLED=true|false` — no
   deploy, no store release.
-- Temp keys: 60s TTL (gates connection establishment only, not the
-  session), `max_session_duration_seconds: 315` (client's 300s cap
+- Temp keys: 300s TTL (checked when config is sent, not for the rest
+  of the session; a study screen reuses one key for up to 270s), `max_session_duration_seconds: 315` (client's 300s cap
   timer fires first), `client_reference_id: user.id` (per-user
   attribution in the Soniox console).
 - The client treats *any* non-200 as "use batch" — this endpoint can
   never break recitation scoring.
 - Old clients never call it; purely additive.
+- The model comes from this response, so changing it moves every
+  client at once. The client sends `apiKey` as the `soniox-api-key`
+  WebSocket protocol, not in the start frame.
 
 ## `send-notifications`
 
@@ -150,6 +176,13 @@ JWT: it compares the bearer token in constant time against the
 re-read once on a mismatch so rotation works. Then it runs each
 notification source in turn. See `docs/features/notifications.md`.
 
+## `delete-feedback-photos`
+
+Called by `pg_cron` daily at 04:30 UTC with the same cron-secret bearer (read through
+`get_cron_secret()`, compared in constant time). It removes, through the Storage API, the
+feedback photos that `orphaned_feedback_photos()` lists: those whose account is gone, 1000 a
+round, at most 20 rounds. See [feedback](../features/feedback.md#account-delete).
+
 ## `_shared/auth.ts`
 
 All functions set `verify_jwt = false` in `supabase/config.toml`, so
@@ -157,23 +190,21 @@ the gateway doesn't check tokens and each function checks its own.
 
 - `verifyJwt(req)` verifies an ES256 token locally against the
   project's JWKS (keys cached per worker) and returns the user, or
-  `null`. Used by `process-recording` and `transcription-token`.
-- `getAuthUser(req)` asks Supabase Auth with the user's token, a
-  network call. Used by `bible`.
+  `null`. Used by `bible`, `process-recording`, `transcription-token`
+  and `invite-handoff`'s claim. An unexpired token of a
+  deleted account still passes, for up to an hour.
 - `getAdminClient()` is the service-role client that bypasses RLS.
 - `getUserTier(userId)` reads `subscriptions`. No row or an expired
   one means `free`.
 
 ## `_shared/usage.ts`
 
-`checkAndIncrementBibleUsage(userId)`:
-
-1. Look up user's tier via `getUserTier(userId)`.
-2. Look up today's usage in `usage_daily` (one row per
-   `user_id × date`).
-3. If under limit → increment and allow.
-4. If over → `{ allowed: false, used, limit }`, and the function
-   answers with `rateLimitResponse`, which adds `resetsAt`.
+Metering in `usage_daily` (one row per `user_id × date`) and
+`rateLimitResponse`, which adds `resetsAt`. The Bible limit is checked
+by `bible/usage.ts`, on cache misses only
+([bible-api-and-caching.md](bible-api-and-caching.md#rate-limiting)).
+Its numbers (`DAILY_LIMIT`) live only there, so a change redeploys only
+`bible`; the others are `LIMITS` in `_shared/usage.ts`.
 
 Tier limits:
 
@@ -202,7 +233,10 @@ Edge functions need:
 - `OPENAI_API_KEY` — only if GPT cleaning is re-enabled
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — to read/write
   `verse_cache`, `usage_daily`, `subscriptions` past RLS
-- `SUPABASE_ANON_KEY` — for `getAuthUser`'s user-token client
+- `HANDOFF_SALT` — HMAC key for `invite-handoff`'s network hash; unset falls back to a
+  plain hash (and logs a warning). Not set in prod yet: needs Caelan's yes
+  ([release.md](release.md)). After each deploy, check once that the last
+  `x-forwarded-for` hop is the caller's real IP (record from two networks, claim from one).
 
 These are set via `supabase secrets set ...` and never appear in
 the client bundle. `cron_secret` lives in Vault instead; locally,
@@ -236,7 +270,7 @@ the service role key effectively voids all RLS.
 Also:
 
 1. **Every edge function authenticates before anything else.** No
-   open endpoints: `verifyJwt` or `getAuthUser` for user-facing
+   open endpoints: `verifyJwt` for user-facing
    functions, the cron secret for `send-notifications`. Even rate
    limiting depends on having a user ID.
 2. **Use the service role key inside edge functions, the anon key
@@ -244,7 +278,8 @@ Also:
    tables inside an edge function — it would re-trigger RLS where you
    don't want it to.
 3. **Rate-limit before doing real work.** The check is cheap, the
-   work (external API call) is expensive. Order matters.
+   work (external API call) is expensive. In `bible`, the work is the
+   external fetch on a miss.
 4. **`process-recording` does not score.** It transcribes. Scoring
    is on the device. If you find yourself adding accuracy logic
    here, stop and reconsider — moving it server-side is a real
@@ -265,26 +300,27 @@ Also:
 - **GPT cleaning code path is dead code that still exists.** Easy
   to accidentally re-enable by flipping a flag without thinking
   through the consequences.
-- **Soniox polling can take up to ~90 seconds.** The response
+- **Soniox work can take up to ~90 seconds.** The response
   heartbeat keeps clients alive through it, but the Supabase
   runtime wall-clock (~150s) still bounds the whole request.
-- **`usage_daily` increments aren't atomic.** `incrementUsage` reads
-  then writes, so concurrent requests can undercount.
+- **`usage_daily` increments aren't atomic.** `incrementUsage` and
+  `countBibleFetch` read then write, so concurrent requests can
+  undercount.
 - **`transcription_locks` table is orphaned.** The table and its
   cleanup function exist in the schema, but no code ever acquires
   a lock. The only double-submit guard is the client UI disabling the
   mic while transcribing.
 - **No retry logic on external API failures.** If ESV / API.Bible
   / Soniox returns 5xx, the function returns 500 to the client
-  with no automatic retry.
+  with no automatic retry. Only a Soniox 429 is retried.
 - **`evaluate_count` column is legacy** (from when scoring was an
   OpenAI call). Still in the schema; don't read it.
 - **No version-aware verse counts** — adapters log a warning when
   the parsed count doesn't match VERSE_COUNTS, but don't fail or
   fall back. See `docs/architecture/bible-versions.md`.
 - **`_shared/usage.ts` has unused helpers.** `getTierAndUsage` calls
-  an RPC no migration defines, and the transcription and evaluation
-  checks have no callers.
+  an RPC no migration defines; the transcription and evaluation checks
+  have no callers.
 
 ## Decisions
 
@@ -292,3 +328,7 @@ Also:
 - 2025-12-23 · Quota check removed from `process-recording`, usage still recorded · Limits can come back on the server without an app update.
 - 2026-08-24 · `process-recording` streams heartbeat spaces every 10s · Long recordings tripped the client's ~60s idle timeout. Leading whitespace is valid JSON, so old clients parse unchanged.
 - 2026-08-25 · Live transcription gated by a server-side kill switch, batch path kept · A secret flip needs no deploy or store release, and any failure falls back to batch.
+- 2026-11-14 · Supabase CLI 3.1.0 for the local stack · 2.122's local function server booted a fresh worker for every request, and parallel workers raced on the shared Deno npm cache, so several `bible` calls at once answered 503 BOOT_ERROR locally. On 3.1, 30 parallel calls all answer 200. Prod was never affected.
+- 2026-11-14 · `process-recording` deletes its Soniox file and transcription after every job, success or failure · Soniox keeps them 30 days and caps an organization at 1,000 files, so above about 33 batch recordings a day every one would fail. Not awaited, so the score doesn't wait.
+- 2026-11-14 · Retry a Soniox 429 inside the deadline, then answer a "busy" `error` · The limit is per organization. Old clients show `error` after "Recording failed:", so the text says what to do.
+- 2026-11-15 · One Soniox generation for both paths, `SONIOX_GENERATION` in `_shared/soniox.ts`: v5 until we move to v6 on purpose before 2026-12-15 · Batch serves every client, and 2.0.0 phones keep the old aligner, on which v6 missed 102 of 457 audit clips against v5's 71. Soniox routes v5 to v6 from 2026-12-15 with no deploy.

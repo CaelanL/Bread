@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Colors, authAccent } from '@/constants/theme';
+import { Colors, authAccent, InputText } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -116,6 +116,9 @@ export default function ResetPasswordScreen() {
               onFocus={() => setPasswordFocused(true)}
               onBlur={() => setPasswordFocused(false)}
               secureTextEntry
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               autoCapitalize="none"
               returnKeyType="next"
               onSubmitEditing={() => confirmRef.current?.focus()}
@@ -142,6 +145,9 @@ export default function ResetPasswordScreen() {
               onFocus={() => setConfirmFocused(true)}
               onBlur={() => setConfirmFocused(false)}
               secureTextEntry
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               autoCapitalize="none"
               returnKeyType="done"
               onSubmitEditing={handleResetPassword}
@@ -221,6 +227,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   input: {
+    ...InputText,
     flex: 1,
     fontSize: 16,
   },

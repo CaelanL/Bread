@@ -22,6 +22,8 @@ How a change gets from a branch to phones. Three things reach prod, on three clo
 - A lock in the git common dir lets one release run at a time across worktrees.
 - Settings live in `kit` in `package.json`: `prodProjectRef`, `deployFunctions`, `deploy`, `restoredMigrations`.
 - Prod access uses `SUPABASE_ACCESS_TOKEN`, from the environment or from `.envrc` through direnv.
+- The release, doctor and migration-check scripts use the CLI's `--linked`, `--local` and `--project-ref` flags. CLI 3.x still accepts them but warns on stderr that v4 removes them for `--remote`, so moving to CLI 4 means changing the scripts first.
+- A CLI bump also runs `npx supabase stack update`, so `supabase/supabase.lock` (the local service versions) matches, or the doctor fails. When the new lock asks for a newer Postgres build, each folder's existing local database refuses to start; the doctor says to run `npm run db:destroy`, then `npm run db:start`.
 
 ## The deploy workflow
 
@@ -32,19 +34,17 @@ How a change gets from a branch to phones. Three things reach prod, on three clo
 - A match means the change is JS-only: `publish_ios_update` publishes an OTA update to the `production` branch.
 - No match means a native change: `build_ios` builds, and `submit_ios_build` submits to App Store Connect.
 
-**The workflow is paused.** The `build_ios`, `submit_ios_build` and `publish_ios_update` jobs are removed from the file, so a merge ships no build and no OTA update, and step 7 still prints "Deploy live". To end the pause, on the branch of the release that should ship:
+- `submit_ios_build` uploads the build to App Store Connect (`eas submit`). It doesn't submit it for review: that, the What's New text and the release are done by hand in App Store Connect.
+- Step 7 of `npm run release` waits up to 75 minutes for the run and prints "Submitted to the App Store" when the submit job passed, "Deploy live" otherwise.
 
-```
-git restore --source=7787992 -- .eas/workflows/deploy.yml
-```
-
-Don't use `git revert`: the release squash-merges, so that would undo the whole commit that paused it. Edit this section when the jobs return.
+To pause shipping for a release, remove the three jobs after `get_ios_build` on that release's branch and say so at the top of the file; step 7 then prints "Deploy live" with nothing reaching phones.
 
 ## What can ship over the air
 
 - `runtimeVersion` uses the `fingerprint` policy (`app.config.js`), so an update only reaches binaries with the same native hash.
 - OTA can carry JS fixes, copy, styling, layouts and JS-layer assets such as the bundled KJV JSON.
 - OTA can't carry native code or dependency changes, permission changes, or Expo SDK upgrades. Those need a new binary.
+- The fingerprint hashes `patches/`, so a patch-package change routes the merge to a store build ([native-recorder.md](native-recorder.md#shipping)).
 - Store policy still applies. Changes to the app's behavior need review, and the next native build bakes in all merged JS.
 - `checkAutomatically` stays at its default, `ON_LOAD`, so users typically get an update on the second cold start.
 - Roll back with `eas update:rollback`, to the previous update or to the build's embedded bundle.
@@ -65,6 +65,15 @@ These were interactive steps with no repo artifact, so git can't show them:
 - The App Store Connect API key is configured through `eas credentials --platform ios`. `ascAppId` is in `eas.json`.
 
 Which build and version is live on the App Store is in App Store Connect, not here.
+
+Invite links depend on sendlabs.dev (repo `sendlabs-portfolio`, Vercel): it must serve
+`/.well-known/apple-app-site-association` and `/bread/join/[code]` before an app version whose
+invite message links there reaches anyone, OTA included. See
+[navigation-and-routing.md](navigation-and-routing.md#deep-links).
+
+The `invite-handoff` function reads the `HANDOFF_SALT` secret (`supabase secrets set`) to key its
+network hash. Setting it in prod needs Caelan's yes; until then it uses a plain hash. See
+[edge-functions.md](edge-functions.md#secrets).
 
 ## Limits
 

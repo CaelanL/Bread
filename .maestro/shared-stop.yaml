@@ -1,0 +1,107 @@
+# Start from npm run db:reset. Critique pass 1 (C1, C2): reader-c Cara's long-press menu on a card
+# low on the screen stays fully visible; Share… on her personal "Psalm 23" makes a code but the card
+# stays personal ("Not shared yet") and its screen shows the code; Stop sharing kills that code. Then Stop sharing on
+# "Philippians 4" (two members): her card and reader-e's copy are both personal again.
+# docs/features/shared-collections.md
+appId: com.caelanliu.biblemem
+name: shared-stop
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Romans 8, Cara · 2 members.*"
+    timeout: 20000
+- scrollUntilVisible:
+    element: ".*Mastered.*Psalm 23, .*"
+    direction: DOWN
+- longPressOn: ".*Mastered.*Psalm 23, .*"
+- assertVisible: "Rename"
+- assertVisible: "Share…"
+- assertVisible: "Delete"
+- takeScreenshot: stop-1-menu-on-screen
+- tapOn: "Share…"
+- extendedWaitUntil:
+    visible:
+      id: invite-code
+    timeout: 15000
+- assertVisible: "NOT SHARED YET"
+- assertVisible: "It stays a normal collection until someone joins."
+- takeScreenshot: stop-2-not-shared-yet
+- copyTextFrom:
+    id: invite-code
+- tapOn:
+    id: modal-close
+# A code alone changes nothing on the card.
+- extendedWaitUntil:
+    visible: ".*Mastered.*Psalm 23, .* verses.*"
+    timeout: 10000
+- assertNotVisible: ".*Psalm 23, .*members.*"
+# Inside, the code sits in the header.
+- tapOn: ".*Mastered.*Psalm 23, .*"
+- extendedWaitUntil:
+    visible:
+      id: strip-invite-code
+    timeout: 10000
+- assertVisible: "Invite code"
+- takeScreenshot: stop-2b-invite-in-collection
+- tapOn: "Back"
+- longPressOn: ".*Mastered.*Psalm 23, .*"
+- tapOn: "Share…"
+- extendedWaitUntil:
+    visible:
+      id: stop-sharing
+    timeout: 15000
+- tapOn:
+    id: stop-sharing
+- assertVisible: 'Stop sharing "Psalm 23"?'
+- assertVisible: "The code stops working. The collection stays in your Library."
+# The alert's button, not the panel's own Stop sharing behind it.
+- tapOn:
+    text: "Stop sharing"
+    index: 0
+- extendedWaitUntil:
+    notVisible:
+      id: invite-code
+    timeout: 10000
+- assertVisible: ".*Mastered.*Psalm 23, .*"
+# The old code is dead.
+- openLink: com.biblemem://join/${maestro.copiedText}
+- extendedWaitUntil:
+    visible: "Invite unavailable"
+    timeout: 15000
+- takeScreenshot: stop-3-old-code-dead
+- tapOn:
+    id: modal-close
+
+# With members: the panel's Stop sharing dissolves the group; members keep their copy.
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Mastered by everyone.*Philippians 4, .*"
+    timeout: 20000
+- longPressOn: ".*Mastered by everyone.*Philippians 4, .*"
+- tapOn: "Share…"
+- extendedWaitUntil:
+    visible:
+      id: stop-sharing
+    timeout: 15000
+- assertVisible: "SHARED · 3 MEMBERS"
+- tapOn:
+    id: stop-sharing
+- assertVisible: ".*will keep their own copy, but you'll stop seeing each other's progress.*"
+- takeScreenshot: stop-4-confirm-with-members
+# The alert's button, not the panel's own Stop sharing behind it.
+- tapOn:
+    text: "Stop sharing"
+    index: 0
+- extendedWaitUntil:
+    visible: ".*Mastered.*Philippians 4, .*verses?.*"
+    timeout: 15000
+- assertNotVisible: ".*Philippians 4, .*everyone.*"
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-e&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Mastered.*Philippians 4, .*verses?.*"
+    timeout: 20000
+- assertNotVisible: ".*Philippians 4, .*everyone.*"
+- takeScreenshot: stop-5-member-copy-personal

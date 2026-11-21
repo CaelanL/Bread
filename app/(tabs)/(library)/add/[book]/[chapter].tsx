@@ -1,11 +1,12 @@
 import { AppHeader } from '@/components/app-header';
+import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchChapter } from '@/lib/api';
 import { getVerseCount, normalizeBookName } from '@/lib/bible';
-import { BIBLE_VERSIONS } from '@/lib/settings';
-import { type BibleVersion } from '@/lib/storage';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
+import { DEFAULT_COLLECTION_ID, type BibleVersion } from '@/lib/storage';
 import { useAppStore } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import NetInfo from '@react-native-community/netinfo';
@@ -14,7 +15,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,25 +31,20 @@ interface VerseLayout {
 }
 
 export default function VerseSelectScreen() {
-  const { book, chapter, collectionId, version } = useLocalSearchParams<{
+  const { book, chapter, collectionId } = useLocalSearchParams<{
     book: string;
     chapter: string;
     collectionId?: string;
-    version?: string;
   }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-  const bibleVersion = useAppStore((state) => state.bibleVersion);
+  // The account translation. The picker below changes it everywhere.
+  const selectedVersion = useAppStore((state) => state.bibleVersion);
 
   const bookName = normalizeBookName(decodeURIComponent(book ?? ''));
   const chapterNum = parseInt(chapter ?? '1', 10);
   const verseCount = getVerseCount(bookName, chapterNum);
-
-  // Translation from URL param (passed from book selection), fallback to store
-  const validVersions = BIBLE_VERSIONS.map(v => v.value);
-  const initialVersion = (version && validVersions.includes(version as BibleVersion)) ? version as BibleVersion : bibleVersion;
-  const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(initialVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
 
   // Chapter data from API
@@ -308,7 +303,7 @@ export default function VerseSelectScreen() {
         chapter: chapterNum,
         verseStart: min,
         verseEnd: max,
-      }, collectionId || 'my-verses', selectedVersion);
+      }, collectionId || DEFAULT_COLLECTION_ID);
 
       // Navigate back to collection or library
       if (collectionId) {
@@ -318,7 +313,7 @@ export default function VerseSelectScreen() {
       }
     } catch (error) {
       console.error('Failed to add verses:', error);
-      showErrorToast('Failed to add verse. Please try again.');
+      showErrorToast(sharedErrorMessage(error, 'Failed to add verse. Please try again.'));
     } finally {
       setIsSaving(false);
     }
@@ -338,8 +333,8 @@ export default function VerseSelectScreen() {
 
   const handleVersionSelect = (ver: BibleVersion) => {
     Haptics.selectionAsync();
-    setSelectedVersion(ver);
     setVersionPickerVisible(false);
+    void useAppStore.getState().setBibleVersion(ver);
   };
 
   return (
@@ -348,54 +343,19 @@ export default function VerseSelectScreen() {
         title={`${bookName} ${chapterNum}`}
         rightButton={{
           label: selectedVersion,
+          accessibilityLabel: `Translation, ${selectedVersion}`,
+          testID: 'verse-translation-picker',
           onPress: () => setVersionPickerVisible(true),
-          variant: 'text',
         }}
       />
 
-      {/* Version Picker Modal */}
-      <Modal
+      <BibleTranslationPicker
+        version={selectedVersion}
         visible={versionPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVersionPickerVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setVersionPickerVisible(false)}
-        >
-          <View style={[styles.pickerContainer, { backgroundColor: colors.card }]}>
-            <Text style={[styles.pickerTitle, { color: colors.text }]}>Translation</Text>
-            {BIBLE_VERSIONS.map((ver) => (
-              <Pressable
-                key={ver.value}
-                style={[
-                  styles.pickerOption,
-                  selectedVersion === ver.value && { backgroundColor: colors.primary },
-                ]}
-                onPress={() => handleVersionSelect(ver.value)}
-              >
-                <Text
-                  style={[
-                    styles.pickerOptionText,
-                    { color: selectedVersion === ver.value ? colors.white : colors.text },
-                  ]}
-                >
-                  {ver.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.pickerOptionSubtext,
-                    { color: selectedVersion === ver.value ? 'rgba(255,255,255,0.7)' : colors.icon },
-                  ]}
-                >
-                  {ver.full}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
+        onSelect={handleVersionSelect}
+        onClose={() => setVersionPickerVisible(false)}
+        accountNote
+      />
 
       {/* Loading State */}
       {loading && (
@@ -554,43 +514,6 @@ const styles = StyleSheet.create({
     color: '#fff', // Always white on colored button
     fontSize: 16,
     fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerContainer: {
-    width: '80%',
-    maxWidth: 300,
-    borderRadius: 14,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  pickerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  pickerOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    marginBottom: 6,
-  },
-  pickerOptionText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  pickerOptionSubtext: {
-    fontSize: 12,
-    marginTop: 2,
   },
   touchContainer: {
     flex: 1,

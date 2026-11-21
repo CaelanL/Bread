@@ -1,191 +1,350 @@
+import * as Haptics from 'expo-haptics';
+import { confirmRemoveCollection } from '@/components/shared/member-actions';
 import { DueCountPill } from '@/components/library/DueCountPill';
+import { EngravedIcon } from '@/components/ui/EngravedIcon';
+import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
+import { firstName } from '@/lib/shared/display-name';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import type { SymbolViewProps } from 'expo-symbols';
-import { Colors } from '@/constants/theme';
+import { PopoverMenu } from '@/components/ui/PopoverMenu';
+import { Colors, Motion, Radius, withAlpha } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
-import { type Collection } from '@/lib/storage';
+import { resolveCollectionIcon } from '@/lib/collections/icons';
+import { collectionRemoval, type Emblem } from '@/lib/shared/progress';
+import type { Collection, SharedRole } from '@/lib/storage';
+import type { SymbolViewProps } from 'expo-symbols';
+import { useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeInDown,
-  useSharedValue,
+  type SharedValue,
   useAnimatedStyle,
-  withSpring,
+  useSharedValue,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
-const DELETE_BUTTON_WIDTH = 80;
-const SWIPE_THRESHOLD = DELETE_BUTTON_WIDTH / 2;
+export const COLLECTION_ROW_GAP = 0;
+/** The Library list's side padding, where an engraved row's glow fades out. */
+const GLOW_ALPHA = 0.3;
+// An engraved row's gold eases out over GLOW_IN inside the row and GLOW_OUT past it, along one
+// smoothstep curve, so the end of the hairline never shows as a hard band edge.
+const GLOW_IN = 30;
+const GLOW_OUT = 10;
+// The right starts its fade later and finishes at the screen edge: the same curve, shifted right.
+const GLOW_IN_RIGHT = 24;
+const GLOW_OUT_RIGHT = 16;
+const OUTER_RIGHT_STEPS = [0, 0.104, 0.352];
+const INNER_RIGHT_STEPS = [0.352, 0.648, 0.896, 1];
+const OUTER_STEPS = [0, 0.043, 0.156];
+const INNER_STEPS = [0.156, 0.5, 0.844, 1];
 
-interface CollectionWithCount extends Collection {
-  verseCount: number;
+export interface CollectionReorder {
+  index: number;
+  count: number;
+  disabled: boolean;
+  scrollGesture: ReturnType<typeof Gesture.Native>;
+  from: SharedValue<number>;
+  to: SharedValue<number>;
+  offset: SharedValue<number>;
+  onMove: (from: number, to: number) => void;
 }
 
 interface SwipeableCollectionCardProps {
-  collection: CollectionWithCount;
+  collection: Collection & { verseCount: number };
   index: number;
+  /** Fade in with the list's first paint; false for a saved library's paint and cards added later. */
+  animateIn?: boolean;
   onPress: () => void;
-  onDelete: () => Promise<void>;
-  /** When > 0, shows a "N due" pill between the subtitle and the chevron. */
+  onRename: () => void;
+  onReorder: () => void;
+  reorder?: CollectionReorder;
+  actionsDisabled: boolean;
   dueCount?: number;
+  /** Set for a shared collection: a member's delete is Leave, the owner's deletes for everyone. */
+  sharedRole?: SharedRole;
+  /** Shown for a personal collection; opens sharing. */
+  onShare?: () => void;
+  /** Every verse mastered or engraved; on a shared collection with others in it, by every member. */
+  emblem?: Emblem | null;
+  /** Set once someone besides the owner is in the shared collection, from `get_shared_status`. */
+  memberCount?: number;
+  /** The shared collection's owner, shown before the member count; null until known. */
+  ownerName?: string | null;
 }
 
 export function SwipeableCollectionCard({
   collection,
   index,
+  animateIn = true,
   onPress,
-  onDelete,
+  onRename,
+  onReorder,
+  reorder,
+  actionsDisabled,
   dueCount = 0,
+  sharedRole,
+  onShare,
+  emblem,
+  memberCount,
+  ownerName,
 }: SwipeableCollectionCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
-
-  const cardBg = colors.card;
-  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
-  const primaryColor = colors.primary;
+  const { height: windowHeight } = useWindowDimensions();
+  const [menuTop, setMenuTop] = useState<number | null>(null);
+  // Closed when the Library loses focus, so a modal route can't present over it.
+  useFocusEffect(useCallback(() => () => setMenuTop(null), []));
 
   const translateX = useSharedValue(0);
+  const swipeStart = useSharedValue(0);
+  const rowHeight = useSharedValue(0);
   const debouncedPress = useDebouncedPress(onPress);
+  const isCustom = !collection.isDefault && !collection.isVirtual;
+  const editing = Boolean(reorder);
+  // Null while a shared collection's role loads: no Delete or Leave until it's known.
+  const removal = collectionRemoval(collection.sharedId, sharedRole);
+  const isLeave = removal === 'leave';
+  const canSwipe = isCustom && !editing && !actionsDisabled && removal !== null;
+  const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
+  const engraved = emblem === 'engraved';
+  const glow = withAlpha(colors.engravedBarStart, GLOW_ALPHA);
+  const glowAt = (steps: number[]) => steps.map((t) => withAlpha(colors.engravedBarStart, GLOW_ALPHA * t)) as [string, string, ...string[]];
+  const subtitle = memberCount !== undefined
+    ? [ownerName && firstName(ownerName), `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
+    : verseCount;
+  // Read into the card's label after the subtitle, so it's spoken though not written.
+  const emblemLabel = `${engraved ? 'Engraved' : 'Mastered'}${memberCount !== undefined ? ' by everyone' : ''}`;
 
-  // Don't allow swipe on default or virtual collections
-  const canDelete = !collection.isDefault && !collection.isVirtual;
+  useEffect(() => {
+    if (!canSwipe) translateX.value = 0;
+  }, [canSwipe, translateX]);
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-5, 5])
-    .enabled(canDelete)
+    .enabled(canSwipe)
+    .onStart(() => {
+      swipeStart.value = translateX.value;
+    })
     .onUpdate((e) => {
-      // Only allow left swipe (negative values)
-      translateX.value = Math.min(0, Math.max(e.translationX, -DELETE_BUTTON_WIDTH));
+      translateX.value = Math.min(0, Math.max(swipeStart.value + e.translationX, -SWIPE_DELETE_DISTANCE));
     })
     .onEnd(() => {
-      if (translateX.value < -SWIPE_THRESHOLD) {
-        // Snap to reveal delete button
-        translateX.value = withSpring(-DELETE_BUTTON_WIDTH, { damping: 20 });
+      translateX.value = withTiming(
+        translateX.value < -SWIPE_DELETE_DISTANCE / 2 ? -SWIPE_DELETE_DISTANCE : 0,
+        { duration: Motion.pressMs },
+      );
+    });
+
+  const from = reorder?.from;
+  const to = reorder?.to;
+  const offset = reorder?.offset;
+  const reorderIndex = reorder?.index ?? -1;
+  const reorderCount = reorder?.count ?? 0;
+  const onMove = reorder?.onMove;
+  const dragGesture = Gesture.Pan()
+    .enabled(Boolean(reorder && !reorder.disabled))
+    .activeOffsetY([-5, 5])
+    .failOffsetX([-12, 12])
+    .onStart(() => {
+      if (!from || !to || !offset || from.value !== -1) return;
+      from.value = reorderIndex;
+      to.value = reorderIndex;
+      offset.value = 0;
+    })
+    .onUpdate((event) => {
+      if (!from || !to || !offset || from.value !== reorderIndex) return;
+      const pitch = rowHeight.value + COLLECTION_ROW_GAP;
+      const delta = Math.max(-reorderIndex * pitch, Math.min((reorderCount - 1 - reorderIndex) * pitch, event.translationY));
+      offset.value = delta;
+      to.value = reorderIndex + Math.round(delta / pitch);
+    })
+    .onFinalize((_event, success) => {
+      if (!from || !to || !offset || from.value !== reorderIndex) return;
+      const destination = to.value;
+      if (success && onMove && destination !== reorderIndex) {
+        offset.value = (destination - reorderIndex) * (rowHeight.value + COLLECTION_ROW_GAP);
+        scheduleOnRN(onMove, reorderIndex, destination);
       } else {
-        // Snap back to closed
-        translateX.value = withSpring(0, { damping: 20 });
+        from.value = -1;
+        to.value = -1;
+        offset.value = 0;
       }
     });
+  if (reorder) dragGesture.blocksExternalGesture(reorder.scrollGesture);
+
+  const dragStyle = useAnimatedStyle(() => {
+    const origin = from?.value ?? -1;
+    const target = to?.value ?? -1;
+    const dragging = origin >= 0 && origin === reorderIndex;
+    const pitch = rowHeight.value + COLLECTION_ROW_GAP;
+    let shift = 0;
+    if (origin >= 0 && reorderIndex >= 0) {
+      if (origin < reorderIndex && reorderIndex <= target) shift = -pitch;
+      if (target <= reorderIndex && reorderIndex < origin) shift = pitch;
+    }
+    return {
+      zIndex: dragging ? 1 : 0,
+      transform: [{
+        translateY: dragging ? (offset?.value ?? 0)
+          : origin < 0 ? 0 : withTiming(shift, { duration: Motion.pressMs }),
+      }],
+    };
+  });
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const deleteButtonStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, Math.abs(translateX.value) / SWIPE_THRESHOLD),
-  }));
+  const closeSwipe = () => {
+    translateX.value = withTiming(0, { duration: Motion.pressMs });
+  };
 
-  const handleDelete = () => {
-    const hasVerses = collection.verseCount > 0;
+  const handleDelete = () => confirmRemoveCollection(collection.id, { onKept: closeSwipe });
 
-    const title = `Delete "${collection.name}"?`;
-    const message = hasVerses
-      ? 'Verses not mastered or in another collection will be deleted and lose progress.'
-      : 'This collection will be permanently deleted.';
-
-    Alert.alert(title, message, [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-        onPress: () => {
-          translateX.value = withSpring(0, { damping: 20 });
-        },
-      },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await onDelete();
-            translateX.value = withTiming(-500, { duration: 200 });
-          } catch {
-            translateX.value = withSpring(0, { damping: 20 });
-          }
-        },
-      },
-    ]);
+  const openActions = (pageY: number) => {
+    if (!isCustom || actionsDisabled) return;
+    if (process.env.EXPO_OS === 'ios') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    closeSwipe();
+    setMenuTop(pageY + 8);
   };
 
   const handlePress = () => {
-    // Close swipe if open, otherwise navigate
-    if (translateX.value < -10) {
-      translateX.value = withSpring(0, { damping: 20 });
-    } else {
-      debouncedPress();
-    }
+    if (translateX.value < -10) closeSwipe();
+    else debouncedPress();
   };
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 80).duration(300)}
-      style={styles.container}
+      entering={reorder || !animateIn ? undefined
+        : FadeInDown.delay(Math.min(index * Motion.staggerMs, Motion.staggerCapMs)).duration(Motion.expandMs)}
+      onLayout={(event) => { rowHeight.value = event.nativeEvent.layout.height; }}
+      style={[styles.container, reorder && dragStyle]}
     >
-      {/* Delete button (behind card) - only show if can delete */}
-      {canDelete && (
-        <Animated.View style={[styles.deleteButtonContainer, deleteButtonStyle]}>
-          <Pressable style={styles.deleteButton} onPress={handleDelete}>
-            <IconSymbol name="trash.fill" size={20} color={colors.white} />
-            <Text style={styles.deleteText}>Delete</Text>
-          </Pressable>
-        </Animated.View>
+      {/* Engraved: gold across the whole row, fading out only in the page margin past the hairline. */}
+      {engraved && (
+        <>
+          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowOut, styles.outLeft]} />
+          <LinearGradient pointerEvents="none" colors={glowAt(OUTER_RIGHT_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowOut, styles.outRight]} />
+        </>
       )}
-
-      {/* Swipeable card */}
+      <View style={styles.clip}>
+      {canSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} label={isLeave ? 'Leave' : 'Delete'} />}
       <GestureDetector gesture={panGesture}>
-        <Animated.View style={cardStyle}>
+        <Animated.View style={[styles.card, { backgroundColor: colors.background, borderTopColor: colors.separator }, index > 0 && styles.divided, cardStyle]}>
+          {engraved && (
+            <>
+              <LinearGradient pointerEvents="none" colors={glowAt(INNER_STEPS)} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.glowIn, styles.inLeft]} />
+              <View pointerEvents="none" style={[styles.glowMiddle, { backgroundColor: glow }]} />
+              <LinearGradient pointerEvents="none" colors={glowAt(INNER_RIGHT_STEPS)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={[styles.glowIn, styles.inRight]} />
+            </>
+          )}
           <Pressable
-            style={[
-              styles.card,
-              {
-                backgroundColor: cardBg,
-                borderColor,
-              },
-            ]}
+            style={styles.cardButton}
             onPress={handlePress}
+            onLongPress={isCustom ? (event) => openActions(event.nativeEvent.pageY) : undefined}
+            accessibilityRole="button"
+            accessibilityActions={isCustom ? [{ name: 'collectionActions', label: 'Collection actions' }] : undefined}
+            onAccessibilityAction={(event) => {
+              if (event.nativeEvent.actionName === 'collectionActions') openActions(windowHeight / 2);
+            }}
           >
-            <View style={styles.cardContent}>
-              <View style={styles.cardLeft}>
-                <View
-                  style={[
-                    styles.iconContainer,
-                    {
-                      backgroundColor: collection.iconColor
-                        ? `${collection.iconColor}20`
-                        : collection.isDefault
-                        ? `${primaryColor}15`
-                        : isDark
-                        ? 'rgba(255,255,255,0.1)'
-                        : 'rgba(0,0,0,0.05)',
-                    },
-                  ]}
-                >
-                  <IconSymbol
-                    name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : 'folder.fill')}
-                    size={24}
-                    color={collection.iconColor || (collection.isDefault ? primaryColor : colors.icon)}
-                  />
-                </View>
-                <View style={styles.cardText}>
-                  <Text style={[styles.collectionName, { color: colors.text }]}>
-                    {collection.name}
-                  </Text>
-                  <Text style={[styles.verseCount, { color: colors.icon }]}>
-                    {collection.verseCount} verse{collection.verseCount !== 1 ? 's' : ''}
-                  </Text>
-                </View>
+            <View style={styles.cardLeft}>
+              {/* Engraved fills the square like the engraved pill on a verse; the icon stays the collection's own. */}
+              <View style={[
+                styles.iconContainer,
+                {
+                  backgroundColor: engraved
+                    ? colors.engravedFill
+                    : collection.iconColor
+                      ? `${collection.iconColor}20`
+                      : collection.isDefault
+                        ? colors.primaryLight
+                        : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                },
+              ]}>
+                <IconSymbol
+                  name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
+                  size={24}
+                  color={engraved ? colors.tint : collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
+                />
+                {emblem && (
+                  <View
+                    accessibilityLabel={emblemLabel}
+                    style={[
+                      styles.badge,
+                      { backgroundColor: engraved ? colors.tint : colors.success, borderColor: colors.background },
+                    ]}
+                  >
+                    {engraved
+                      ? <EngravedIcon size={11} color={colors.background} />
+                      : <IconSymbol name="checkmark" size={11} color={colors.background} weight="bold" />}
+                  </View>
+                )}
               </View>
-              <View style={styles.cardRight}>
-                <DueCountPill count={dueCount} />
-                <IconSymbol name="chevron.right" size={18} color={colors.icon} />
+              <View style={styles.cardText}>
+                <Text style={[styles.collectionName, { color: colors.text }]} numberOfLines={1}>
+                  {collection.name}
+                </Text>
+                <Text style={[styles.verseCount, { color: colors.icon }]} numberOfLines={1}>{subtitle}</Text>
               </View>
             </View>
+            {!editing && (
+              <View style={styles.cardRight}>
+                <DueCountPill count={dueCount} />
+              </View>
+            )}
           </Pressable>
+          {reorder && (
+            <GestureDetector gesture={dragGesture}>
+              <View
+                accessible
+                accessibilityRole="adjustable"
+                accessibilityLabel={`Reorder ${collection.name}`}
+                accessibilityState={{ disabled: reorder.disabled }}
+                accessibilityActions={[
+                  ...(reorderIndex > 0 ? [{ name: 'decrement', label: 'Move up' }] : []),
+                  ...(reorderIndex < reorderCount - 1 ? [{ name: 'increment', label: 'Move down' }] : []),
+                ]}
+                onAccessibilityAction={(event) => {
+                  if (reorder.disabled) return;
+                  const target = reorderIndex + (event.nativeEvent.actionName === 'decrement' ? -1 : 1);
+                  if (target >= 0 && target < reorderCount) reorder.onMove(reorderIndex, target);
+                }}
+                style={styles.dragHandle}
+              >
+                <IconSymbol name="line.3.horizontal" size={22} color={colors.icon} />
+              </View>
+            </GestureDetector>
+          )}
         </Animated.View>
       </GestureDetector>
+      </View>
+
+      {isCustom && (
+        <PopoverMenu
+          visible={menuTop !== null}
+          onClose={() => setMenuTop(null)}
+          anchorPosition={menuTop === null ? undefined : { top: menuTop, right: 16 }}
+          items={[
+            // A member's copy takes its name from the group, so only the owner renames it.
+            ...(removal === 'delete' ? [{ label: 'Rename', icon: 'pencil', onPress: onRename }] : []),
+            // The owner's Share… opens the code again (or Stop sharing) on a collection already shared.
+            ...(onShare && removal === 'delete' ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
+            { label: 'Reorder', icon: 'line.3.horizontal', onPress: onReorder },
+            ...(removal ? [isLeave
+              ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: handleDelete, destructive: true }
+              : { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true }] : []),
+          ]}
+        />
+      )}
     </Animated.View>
   );
 }
@@ -193,46 +352,31 @@ export function SwipeableCollectionCard({
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
+  },
+  // Clips the row as it swipes over its delete action; the edge glow sits outside it.
+  clip: {
     overflow: 'hidden',
-    borderRadius: 16,
   },
-  deleteButtonContainer: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: DELETE_BUTTON_WIDTH,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ef4444',
-    borderRadius: 16,
-  },
-  deleteButton: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    gap: 4,
-  },
-  deleteText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  glowOut: { position: 'absolute', top: 0, bottom: 0, width: GLOW_OUT },
+  outLeft: { left: -GLOW_OUT },
+  outRight: { right: -GLOW_OUT_RIGHT, width: GLOW_OUT_RIGHT },
+  glowIn: { position: 'absolute', top: 0, bottom: 0, width: GLOW_IN },
+  inLeft: { left: 0 },
+  inRight: { right: 0, width: GLOW_IN_RIGHT },
+  glowMiddle: { position: 'absolute', top: 0, bottom: 0, left: GLOW_IN, right: GLOW_IN_RIGHT },
+  // A flat row on the page, like a verse row in a collection: a hairline between rows, no card.
   card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    flexDirection: 'row',
   },
-  cardContent: {
+  divided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  cardButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   cardLeft: {
     flexDirection: 'row',
@@ -248,11 +392,12 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: Radius.lg,
     justifyContent: 'center',
     alignItems: 'center',
   },
   cardText: {
+    flex: 1,
     gap: 2,
   },
   collectionName: {
@@ -260,6 +405,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   verseCount: {
+    flexShrink: 1,
     fontSize: 14,
+  },
+  // Corner badge on the icon, the way iOS marks a finished item: green check for mastered, gold for engraved.
+  badge: {
+    position: 'absolute',
+    right: -5,
+    bottom: -5,
+    width: 22,
+    height: 22,
+    borderRadius: Radius.full,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dragHandle: {
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

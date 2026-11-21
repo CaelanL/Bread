@@ -1,62 +1,56 @@
+import { librarySynced, useAppStore } from '@/lib/store';
+import * as Haptics from 'expo-haptics';
 import { ReviewStateBadge } from '@/components/library/ReviewStateBadge';
+import { SWIPE_DELETE_DISTANCE, SwipeDeleteAction } from '@/components/library/SwipeDeleteAction';
+import { GroupCount } from '@/components/shared/MemberState';
+import { EngravedIcon } from '@/components/ui/EngravedIcon';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Motion, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
-import { getVerseText } from '@/lib/api/bible';
+import { useVersePreview } from '@/hooks/use-verse-preview';
+import type { MemberState } from '@/lib/shared/progress';
 import { formatVerseReference, type Difficulty, type SavedVerse } from '@/lib/storage';
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
-
-const DELETE_BUTTON_WIDTH = 80;
-const SWIPE_THRESHOLD = DELETE_BUTTON_WIDTH / 2;
+import { scheduleOnRN } from 'react-native-worklets';
 
 interface SwipeableVerseCardProps {
   verse: SavedVerse;
   onPress: () => void;
   onDelete: () => Promise<void>;
+  onCopy: () => void;
   disableSwipe?: boolean;
   /** Number of collections this verse is in (for accurate delete message) */
   collectionCount?: number;
+  /** Set in a shared collection: removing the verse removes it for every member. */
+  sharedMemberCount?: number;
+  /** Set in a shared collection with other members: every member's state, for the count on the right (null until read). */
+  group?: { states: MemberState[] | null; unavailable: boolean };
 }
 
 export function SwipeableVerseCard({
   verse,
   onPress,
   onDelete,
+  onCopy,
   disableSwipe = false,
   collectionCount = 1,
+  sharedMemberCount,
+  group,
 }: SwipeableVerseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
 
-  const cardBg = colors.card;
-  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Keep for subtle accent border
-  const primaryColor = colors.tint;
-
-  // Text loading state (for verses without cached text)
-  const [text, setText] = useState<string>(verse.text || '');
-  const [loading, setLoading] = useState(!verse.text);
-
-  useEffect(() => {
-    if (!verse.text) {
-      setLoading(true);
-      getVerseText(verse)
-        .then(({ text }) => setText(text))
-        .catch(() => setText('Failed to load verse text'))
-        .finally(() => setLoading(false));
-    }
-  }, [verse]);
+  const hideText = useAppStore((state) => state.hideVerseText);
+  const { text, loading } = useVersePreview(verse, hideText);
 
   // Get highest completed difficulty (90%+)
   const getHighestDifficulty = (): Difficulty | null => {
@@ -68,36 +62,44 @@ export function SwipeableVerseCard({
   const highestDifficulty = getHighestDifficulty();
 
   const translateX = useSharedValue(0);
-  const itemHeight = useSharedValue<number | null>(null);
+  const swipeStart = useSharedValue(0);
+  const [open, setOpen] = useState(false);
   const debouncedPress = useDebouncedPress(onPress);
+  const closeSwipe = () => {
+    translateX.value = withTiming(0, { duration: Motion.pressMs });
+    setOpen(false);
+  };
 
   const panGesture = Gesture.Pan()
     .enabled(!disableSwipe)
-    .activeOffsetX([-10, 10])
     .failOffsetY([-5, 5])
+    .onStart(() => {
+      swipeStart.value = translateX.value;
+    })
     .onUpdate((e) => {
-      // Only allow left swipe (negative values)
-      translateX.value = Math.min(0, Math.max(e.translationX, -DELETE_BUTTON_WIDTH));
+      translateX.value = Math.min(0, Math.max(swipeStart.value + e.translationX, -SWIPE_DELETE_DISTANCE));
     })
     .onEnd(() => {
-      if (translateX.value < -SWIPE_THRESHOLD) {
-        // Snap to reveal delete button
-        translateX.value = withSpring(-DELETE_BUTTON_WIDTH, { damping: 20 });
-      } else {
-        // Snap back to closed
-        translateX.value = withSpring(0, { damping: 20 });
-      }
+      const opened = translateX.value < -SWIPE_DELETE_DISTANCE / 2;
+      translateX.value = withTiming(opened ? -SWIPE_DELETE_DISTANCE : 0, { duration: Motion.pressMs });
+      scheduleOnRN(setOpen, opened);
     });
+  // A closed row lets a rightward drag go, so the screen's swipe back gets it first time; an open
+  // row takes it, to close.
+  if (open) panGesture.activeOffsetX([-10, 10]);
+  else panGesture.activeOffsetX(-10).failOffsetX(10);
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const deleteButtonStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, Math.abs(translateX.value) / SWIPE_THRESHOLD),
-  }));
+  // The alert is chosen after the server's library is in, from the props as they are then.
+  const latest = useRef({ verse, collectionCount, sharedMemberCount });
+  latest.current = { verse, collectionCount, sharedMemberCount };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
+    if (!(await librarySynced())) return closeSwipe();
+    const { verse, collectionCount, sharedMemberCount } = latest.current;
     const isMastered = verse.progress?.hard?.completed === true;
     const inOtherCollections = collectionCount > 1;
 
@@ -124,27 +126,26 @@ export function SwipeableVerseCard({
       buttonText = 'Delete';
     }
 
+    if (sharedMemberCount !== undefined) {
+      title = 'Remove for everyone?';
+      message = `It leaves this collection for all ${sharedMemberCount} member${sharedMemberCount === 1 ? '' : 's'}. For you: ${message.charAt(0).toLowerCase()}${message.slice(1)}`;
+      buttonText = 'Remove';
+    }
+
     Alert.alert(title, message, [
       {
         text: 'Cancel',
         style: 'cancel',
-        onPress: () => {
-          // Close swipe
-          translateX.value = withSpring(0, { damping: 20 });
-        },
+        onPress: closeSwipe,
       },
       {
         text: buttonText,
         style: 'destructive',
         onPress: async () => {
           try {
-            // Try to delete first
             await onDelete();
-            // Only animate out on success
-            translateX.value = withTiming(-500, { duration: 200 });
           } catch {
-            // On error, snap back to closed position
-            translateX.value = withSpring(0, { damping: 20 });
+            closeSwipe();
           }
         },
       },
@@ -154,90 +155,74 @@ export function SwipeableVerseCard({
   const handlePress = () => {
     // Close swipe if open, otherwise navigate
     if (translateX.value < -10) {
-      translateX.value = withSpring(0, { damping: 20 });
+      closeSwipe();
     } else {
       debouncedPress();
     }
   };
 
-  return (
-    <Animated.View
-      style={styles.container}
-    >
-      {/* Delete button (behind card) */}
-      <Animated.View style={[styles.deleteButtonContainer, deleteButtonStyle]}>
-        <Pressable style={styles.deleteButton} onPress={handleDelete}>
-          <IconSymbol name="trash.fill" size={20} color={colors.white} />
-          <Text style={styles.deleteText}>Delete</Text>
-        </Pressable>
-      </Animated.View>
+  const handleCopy = () => {
+    if (process.env.EXPO_OS === 'ios') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    closeSwipe();
+    onCopy();
+  };
 
-      {/* Swipeable card */}
+  const engraved = verse.progress.engraved?.completed === true;
+
+  return (
+    <Animated.View style={styles.container}>
+      {!disableSwipe && <SwipeDeleteAction offset={translateX} onPress={handleDelete} />}
+
       <GestureDetector gesture={panGesture}>
         <Animated.View style={cardStyle}>
           <Pressable
-            style={[
-              styles.card,
-              {
-                backgroundColor: verse.progress.engraved?.completed
-                  ? colors.cardAlt
-                  : cardBg,
-                borderColor,
-              },
-            ]}
+            style={({ pressed }) => [styles.row, hideText && styles.rowHidden, pressed && { backgroundColor: colors.fill }]}
+            unstable_pressDelay={PRESS_DELAY_MS}
             onPress={handlePress}
+            onLongPress={handleCopy}
+            accessibilityActions={[
+              { name: 'copy', label: 'Copy to collection' },
+              ...(!disableSwipe ? [{ name: 'delete', label: 'Delete' }] : []),
+            ]}
+            onAccessibilityAction={(event) => {
+              if (event.nativeEvent.actionName === 'copy') handleCopy();
+              if (!disableSwipe && event.nativeEvent.actionName === 'delete') handleDelete();
+            }}
           >
-            {/* Gold glow overlay when engraved */}
-            {verse.progress.engraved?.completed && (
-              <View style={styles.engravedGlow} />
-            )}
-            <View style={styles.cardContent}>
-              <View
-                style={[
-                  styles.iconContainer,
-                  { backgroundColor: colors.primaryLight },
-                ]}
-              >
-                <IconSymbol name="book.fill" size={20} color={colors.icon} />
+            <View style={[styles.rowText, hideText && styles.rowTextHidden]}>
+              <View style={styles.referenceRow}>
+                <Text style={[styles.reference, { color: engraved ? colors.tint : colors.text }]} numberOfLines={1}>
+                  {formatVerseReference(verse)}
+                  <Text style={[styles.version, { color: colors.icon }]}> · {verse.version}</Text>
+                </Text>
+                {/* Where the verse stands: a dot for Easy (grey) or Medium (blue), a check once
+                    mastered, the engraved glyph once engraved. */}
+                {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
+                  <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff' }]} />
+                ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
+                  <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
+                ) : engraved ? (
+                  <EngravedIcon size={13} color={colors.tint} />
+                ) : verse.progress.hard.completed ? (
+                  <IconSymbol name="checkmark" size={13} color={colors.success} />
+                ) : null}
               </View>
-              <View style={styles.cardText}>
-                <View style={styles.referenceRow}>
-                  <Text style={[styles.verseReference, { color: verse.progress.engraved?.completed ? primaryColor : colors.text }]}>
-                    {formatVerseReference(verse)}
-                    <Text style={[styles.versionBadge, { color: verse.progress.engraved?.completed ? colors.tint : colors.icon }]}>
-                      {' '}• {verse.version}
-                    </Text>
-                  </Text>
-                  {/* Top-line indicator. Unmastered verses show a
-                      progression dot (gray=easy, blue=medium).
-                      Mastered-but-not-engraved verses get a green
-                      checkmark — visual parity with the unmastered
-                      dots so users can scan a list at a glance.
-                      Engraved verses skip this slot; their gold
-                      card styling (glow + reference text color) is
-                      the indicator. ReviewStateBadge below carries
-                      the SR review-status detail in all cases. */}
-                  {!verse.progress.hard.completed && highestDifficulty === 'easy' ? (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#a5a5a5ff'}]} />
-                  ) : !verse.progress.hard.completed && highestDifficulty === 'medium' ? (
-                    <View style={[styles.difficultyDot, { backgroundColor: '#1d4ed8' }]} />
-                  ) : verse.progress.hard.completed && !verse.progress.engraved?.completed ? (
-                    <IconSymbol name="checkmark" size={14} color={colors.success} />
-                  ) : null}
+              {hideText ? null : loading ? (
+                <Skeleton width="70%" height={14} borderRadius={4} style={styles.previewSkeleton} />
+              ) : (
+                <Text style={[styles.preview, { color: colors.icon }]} numberOfLines={1}>
+                  {text}
+                </Text>
+              )}
+              {verse.progress.hard.completed && !engraved && (
+                <View style={styles.badge}>
+                  <ReviewStateBadge verse={verse} />
                 </View>
-                {loading ? (
-                  <View style={styles.skeletonContainer}>
-                    <Skeleton width="100%" height={15} borderRadius={4} />
-                    <Skeleton width="65%" height={15} borderRadius={4} />
-                  </View>
-                ) : (
-                  <Text style={[styles.versePreview, { color: colors.text }]} numberOfLines={2}>
-                    {text}
-                  </Text>
-                )}
-                <ReviewStateBadge verse={verse} />
-              </View>
+              )}
             </View>
+            {group && <GroupCount states={group.states} unavailable={group.unavailable} />}
           </Pressable>
         </Animated.View>
       </GestureDetector>
@@ -245,89 +230,60 @@ export function SwipeableVerseCard({
   );
 }
 
+// A row highlights only once a touch stays, so a scroll doesn't flash every row it starts on.
+const PRESS_DELAY_MS = 80;
+
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 16,
   },
-  deleteButtonContainer: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: DELETE_BUTTON_WIDTH,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ef4444', // Keep error red hardcoded for delete action
-    borderRadius: 16,
-  },
-  deleteButton: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    gap: 4,
-  },
-  deleteText: {
-    color: '#fff', // Always white on colored button
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    overflow: 'hidden',
-  },
-  engravedGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
-  },
-  cardContent: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  cardText: {
+  rowText: {
     flex: 1,
-    gap: 4,
+    gap: 2,
+  },
+  // With the text line hidden, a little more air between the reference and the pill below it.
+  rowTextHidden: {
+    gap: 8,
+  },
+  rowHidden: {
+    paddingVertical: 18,
   },
   referenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  verseReference: {
-    fontSize: 15,
-    fontWeight: '600',
+  reference: {
+    flexShrink: 1,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  version: {
+    fontSize: 13,
+    fontWeight: '400',
   },
   difficultyDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: Radius.xs,
   },
-  versionBadge: {
-    fontWeight: '400',
-  },
-  versePreview: {
+  preview: {
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 20,
   },
-  skeletonContainer: {
-    gap: 6,
-    height: 42, // Match 2 lines of text (lineHeight 21 * 2)
+  previewSkeleton: {
+    marginVertical: 3,
+  },
+  badge: {
+    marginTop: 4,
   },
 });

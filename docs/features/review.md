@@ -10,7 +10,6 @@ Read this before touching `lib/store/review.ts`, `lib/store/review-config.ts`, o
 
 - `computeNextSrState` in `lib/store/review.ts` holds the schedule rules as a pure function. `updateVerseProgress` is its only production caller.
 - Other code reads the result: badges, sorts, the due pill, the push digest. None of it writes `progress.engraved`.
-- `lib/storage/index.ts` has a function with the same name. It only updates best scores, and it is reached only through `syncUpdateProgress`, which nothing calls. Don't use it.
 - The practice streak on Insights is a separate activity count in SQL. It decides nothing about mastery. See `docs/features/insights.md`.
 
 ## What a session writes
@@ -27,7 +26,8 @@ Inside the action:
 1. `last_practiced_at` is always written.
 2. If the score beats `progress[difficulty].bestAccuracy`, that difficulty becomes `{ bestAccuracy: score, completed: score >= 90 }`. A lower score never clears `completed`.
 3. If the session is a **qualifying review**, `computeNextSrState` produces the new `progress.engraved`.
-4. The row is updated first. Zustand changes only after the write succeeds. On failure the action throws and local state stays as it was.
+4. The save goes through `save_verse_progress` with the row's `updated_at` as last read (kept as the server's string: microseconds matter). It applies only if the row hasn't changed since; otherwise it changes nothing and returns the current row, steps 2–3 are recomputed from that row, and it saves once more. A second refusal, or no row, throws `Failed to save progress`. So another device's progress, or a saved library's stale copy, is never overwritten.
+5. Zustand changes only after the write succeeds, with the new `updated_at`. On failure the action throws and local state stays as it was.
 
 A verse is **mastered** when `progress.hard.completed` is true. Mastery is permanent until the user resets the verse. A mastered verse joins `masteredVerses` when it first gets there.
 
@@ -78,7 +78,7 @@ Engraved is `passCount >= ENGRAVED_THRESHOLD`, with the threshold set to 10 in `
 | `completed` | Engraved, as above |
 | `passCount` | Qualifying reviews that advanced the schedule. Not reset by lateness |
 | `nextDueAt` | ISO UTC of a local midnight. Null means no schedule yet, and a mastered verse with null is due |
-| `lifetimeReviews` | Every qualifying session, early ones included. Shown on the engraved badge |
+| `lifetimeReviews` | Every qualifying session, early ones included. Not shown in the app |
 | `lastReviewedAt` | ISO UTC of the last qualifying session. Written, not read by any screen |
 | `months` | Legacy, see below |
 
@@ -110,9 +110,9 @@ No migration removes it. Don't build on it.
 | Pre-mastery | `hard.completed` false | No badge | "Engraved Progress", `passCount / 10` |
 | Due | Mastered, not engraved, `nextDueAt` null or passed | "Review now" | "Ready to Review", "Review now to advance" |
 | Locked | Mastered, not engraved, `nextDueAt` in the future | "Next review tmr", "Next review in 3d" | Lock icon, "Unlocks tomorrow", "Unlocks in 3d" |
-| Engraved | `completed` true | Icon and "N reviews" | "Engraved" and a tagline |
+| Engraved | `completed` true | No badge; the engraved glyph sits beside the version, where a mastered verse's check goes | "Engraved" and a tagline |
 
-Engraved wins over due. Engraved verses keep coming due, and they count in the due pill, the due-first sort and the push digest. Only the badge hides it.
+Engraved wins over due. Engraved verses keep coming due, and they count in the due pill, the due-first sort and the push digest. Only the verse row hides it.
 
 `formatTimeUntilDue` in `lib/store/review.ts` is the one label formatter: under 24 hours is `tmr`, 1 to 3 days include hours (`1d 5h`), 4 days and up are `Xd`.
 
@@ -120,10 +120,8 @@ Engraved wins over due. Engraved verses keep coming due, and they count in the d
 
 | Where | Used for |
 |---|---|
-| `ReviewStateBadge` | Verse card badge |
+| `isDueForReview`, `daysUntilDue` in `lib/store/review.ts` | Verse card badge (`ReviewStateBadge`), "N due" pill on the Mastered row (`useDueCounts` in `lib/store/index.ts`, through `DueCountPill`), due-first sort (`sortVerses` in `lib/store/library-sort.ts`) |
 | `ProgressCard` | Setup screen |
-| `useDueCounts` in `lib/store/index.ts` | "N due" pill on the Mastered row, through `DueCountPill` |
-| `isDueForReview`, `daysUntilDue` in `lib/store/review.ts` | Due-first sort, through `sortVerses` in `lib/store/library-sort.ts` |
 | `loadDueVerses` in `supabase/functions/send-notifications/sources/reviews-digest.ts` | Push digest |
 
 Only Mastered has the pill and the due-first sort, which is its default. The In Progress collection has no schedule. See `docs/features/library.md` and `docs/features/notifications.md`.
@@ -154,16 +152,16 @@ Review state lives in the `progress` column, so it follows the row. Delete rules
 
 ## Tests
 
-`lib/store/__tests__/review.test.ts`, run by `npm test`, covers `nextDueAfterDays` (DST included), `computeNextSrState`, the due helpers and `formatTimeUntilDue`. The store action has no unit test.
+`lib/store/__tests__/review.test.ts`, run by `npm test`, covers `nextDueAfterDays` (DST included), `computeNextSrState`, the due helpers and `formatTimeUntilDue`. `tests/progress-guard-store.test.mjs` covers the guard's retry, and `supabase/tests/progress-guard.test.sql` the function.
 
 ## Sharp edges
 
 - **A partial session can master a verse.** The best-score branch of `updateVerseProgress` doesn't check `fullSession`. Leaving a long passage early with a partial score of 90 or more on Hard sets `hard.completed`. The verse enters Mastered as due, with no pass counted. Partial scores set `completed` on Easy and Medium the same way.
 - **A failed save behaves differently by path.** A failed full-session write shows a toast. A failed early-exit write only logs to the console. Neither retries. Quitting right after the results appear can lose the write. See `docs/architecture/sync-and-storage.md`.
-- **Two devices can drift by one.** Writes are last-write-wins and each device checks its own copy of `nextDueAt`. Two reviews can both count, or one can overwrite the other.
+- **Any other write to the row costs a retry.** Study prefs, a reset or a translation move bump `updated_at`, so the next progress save is refused once and recomputed (one extra round trip).
 - **The pill and the push can disagree.** `useDueCounts` includes soft-deleted mastered verses. `loadDueVerses` filters `deleted_at` out. The pill can show verses that the digest never mentions.
 - **Reset on a soft-deleted mastered verse leaves stale state.** See `docs/features/library.md`.
-- **Unused code.** `useReviewState`, `dueVersesFor`, `lockedVersesFor` and `useReviewMaxIntervalDays` have no callers in the app. `dueCount` in `app/(tabs)/(library)/[id].tsx` is computed and never rendered. Don't assume a change to them reaches a screen.
+- **Unused code.** `dueVersesFor` and `lockedVersesFor` have no callers in the app. `dueCount` in `app/(tabs)/(library)/[id].tsx` is computed and never rendered. Don't assume a change to them reaches a screen.
 
 ## Browser checks
 
@@ -187,3 +185,4 @@ Seed user reader-a has John 3:16 mastered with `passCount` 1 and no schedule.
 - 2026-04-28 · A mastered verse with no schedule shows as due · The next qualifying review starts its schedule, which beats showing no badge.
 - 2026-04-29 · `nextDueAt` snaps to local midnight · A digest at any chosen time must catch every verse on its due day.
 - 2026-06-04 · Lower the cap floor from 30 to 10 · 10 still leaves every interval before engraved unclamped.
+- 2026-11-12 · An engraved verse's row shows the engraved glyph beside the version, where a mastered verse's check sits, and no "N reviews" pill · Caelan's pass 4 (C24): the pill under the row was noise once engraved; the reference keeps its tint.

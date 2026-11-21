@@ -15,10 +15,19 @@
  *     is a milestone, not a state change.
  */
 
-import type { Difficulty, EngravedProgress, SavedVerse } from '@/lib/storage';
+import type { Difficulty, EngravedProgress, SavedVerse, VerseProgress } from '@/lib/storage';
 import { ENGRAVED_THRESHOLD } from './review-config';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Any difficulty has a best score. The one "practiced" rule: In Progress, the Insights count and
+ * a shared collection's Learning state read it. The push nudge mirrors it server-side in
+ * supabase/functions/send-notifications/sources/in-progress.ts; change both together.
+ */
+export function hasPracticed(progress: Pick<VerseProgress, 'easy' | 'medium' | 'hard'>): boolean {
+  return [progress.easy, progress.medium, progress.hard].some((d) => d?.bestAccuracy != null);
+}
 
 /**
  * ISO UTC timestamp at local midnight, `daysFromNow` calendar days

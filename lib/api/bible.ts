@@ -1,4 +1,5 @@
 import { getAuthToken, getSupabaseUrl } from "./client";
+import { timedFetch } from "./dev-timing";
 import {
   getChapterFromSession,
   setChapterInSession,
@@ -35,6 +36,13 @@ export interface VerseTextResult {
   verses: Record<string, string>; // Keyed data (for annotated display)
 }
 
+/** The `bible` function's 429: the day's limit is spent. */
+export class DailyLimitError extends Error {
+  constructor(resetsAt?: string) {
+    super(`Daily limit reached. Resets at ${resetsAt || "midnight UTC"}`);
+  }
+}
+
 export interface ChapterResponse {
   reference: string;
   version: BibleVersion;
@@ -65,6 +73,40 @@ function parseReference(ref: string): {
   };
 }
 
+// Identical reads still in progress share one promise, so callers that start
+// together (store hydrate warms every collection membership at once) make one
+// request. Only an entry's own finalizer removes it, on success or failure, so
+// a failed read never poisons a retry. clearSessionCache leaves these alone.
+const inFlight = new Map<string, Promise<unknown>>();
+
+function shareInFlight<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const pending = inFlight.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+  const request = load().finally(() => inFlight.delete(key));
+  inFlight.set(key, request);
+  return request;
+}
+
+// Reads someone is waiting on (a card, Setup, Home's Verse of the Month) go ahead of the verse text
+// preload: it starts no read while one of these is in flight (`whenForegroundIdle`).
+let foregroundReads = 0;
+let idleWaiters: (() => void)[] = [];
+
+/** Holds the preload back until `work` settles. Every exported read here is held already. */
+export function foregroundRead<T>(work: Promise<T>): Promise<T> {
+  foregroundReads++;
+  return work.finally(() => {
+    if (--foregroundReads > 0) return;
+    const waiting = idleWaiters;
+    idleWaiters = [];
+    for (const resolve of waiting) resolve();
+  });
+}
+
+export function whenForegroundIdle(): Promise<void> {
+  return foregroundReads === 0 ? Promise.resolve() : new Promise((resolve) => idleWaiters.push(resolve));
+}
+
 /**
  * Fetch a verse from the Bible API
  *
@@ -72,9 +114,20 @@ function parseReference(ref: string): {
  * @param version - Bible version ("ESV" or "NLT")
  * @returns The verse text and metadata
  */
-export async function fetchVerse(
+export function fetchVerse(
   reference: string,
   version: BibleVersion = "ESV"
+): Promise<BibleVerse> {
+  return foregroundRead(sharedVerse(reference, version));
+}
+
+function sharedVerse(reference: string, version: BibleVersion): Promise<BibleVerse> {
+  return shareInFlight(`verse:${version}:${reference}`, () => loadVerse(reference, version));
+}
+
+async function loadVerse(
+  reference: string,
+  version: BibleVersion
 ): Promise<BibleVerse> {
   // Check session cache first. Assemble per-verse so the result carries
   // keyed data — returning combined text without `verses` makes
@@ -136,7 +189,7 @@ export async function fetchVerse(
     version,
   });
 
-  const response = await fetch(`${baseUrl}/functions/v1/bible?${params}`, {
+  const response = await timedFetch(`${baseUrl}/functions/v1/bible?${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -148,9 +201,7 @@ export async function fetchVerse(
     const error = await response.json().catch(() => ({}));
 
     if (response.status === 429) {
-      throw new Error(
-        `Daily limit reached. Resets at ${error.resetsAt || "midnight UTC"}`
-      );
+      throw new DailyLimitError(error.resetsAt);
     }
 
     throw new Error(error.error || "Failed to fetch verse");
@@ -206,10 +257,18 @@ export async function fetchVerses(
  * @param version - Bible version ("ESV" or "NLT")
  * @returns Object with verses mapped by verse number
  */
-export async function fetchChapter(
+export function fetchChapter(
   book: string,
   chapter: number,
   version: BibleVersion = "ESV"
+): Promise<ChapterResponse> {
+  return foregroundRead(shareInFlight(`chapter:${version}:${book}:${chapter}`, () => loadChapter(book, chapter, version)));
+}
+
+async function loadChapter(
+  book: string,
+  chapter: number,
+  version: BibleVersion
 ): Promise<ChapterResponse> {
   // Check session cache first
   const cached = getChapterFromSession(book, chapter, version);
@@ -240,7 +299,7 @@ export async function fetchChapter(
     chapter: "true", // Signal to API this is a chapter request
   });
 
-  const response = await fetch(`${baseUrl}/functions/v1/bible?${params}`, {
+  const response = await timedFetch(`${baseUrl}/functions/v1/bible?${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -252,9 +311,7 @@ export async function fetchChapter(
     const error = await response.json().catch(() => ({}));
 
     if (response.status === 429) {
-      throw new Error(
-        `Daily limit reached. Resets at ${error.resetsAt || "midnight UTC"}`
-      );
+      throw new DailyLimitError(error.resetsAt);
     }
 
     throw new Error(error.error || "Failed to fetch chapter");
@@ -279,7 +336,16 @@ export async function fetchChapter(
  * @param verse - The saved verse (may or may not have text/verses)
  * @returns Object with both text (combined) and verses (keyed)
  */
-export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> {
+export function getVerseText(verse: SavedVerse): Promise<VerseTextResult> {
+  return foregroundRead(readVerseText(verse));
+}
+
+/** `getVerseText` for the preload: it doesn't hold the preload back. */
+export function warmVerseText(verse: SavedVerse): Promise<VerseTextResult> {
+  return readVerseText(verse);
+}
+
+async function readVerseText(verse: SavedVerse): Promise<VerseTextResult> {
   // If both formats already available, return them
   if (verse.text && verse.verses) {
     return { text: verse.text, verses: verse.verses };
@@ -315,7 +381,7 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
       : `${verse.book} ${verse.chapter}:${verse.verseStart}-${verse.verseEnd}`;
 
   // Fetch from API (which checks verse_cache internally, then external API)
-  const result = await fetchVerse(reference, verse.version);
+  const result = await sharedVerse(reference, verse.version);
 
   // Handle single verse
   if (verse.verseStart === verse.verseEnd) {
@@ -346,22 +412,10 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
   const keyed = result.verses || {};
   const text = result.text;
 
-  // If the response has no keyed verses, return an EMPTY keyed map —
-  // parseVerseIntoChunks then falls back to sentence splitting, which
-  // is imperfect but functional. Never fabricate { start: wholeText }:
-  // that puts the entire passage in the first chunk and leaves the
-  // remaining chunks empty.
+  // A range without keyed verses can't be split into chunks safely, and an
+  // old cache could answer one. Treat it as a failed fetch.
   if (Object.keys(keyed).length === 0) {
-    console.warn("[BIBLE] Range response without verses field - no keyed data");
-    setSavedVerseInSession(
-      verse.book,
-      verse.chapter,
-      verse.verseStart,
-      verse.verseEnd,
-      verse.version,
-      text
-    );
-    return { text, verses: {} };
+    throw new Error(`No verses returned for ${reference}`);
   }
 
   // Cache both formats
@@ -383,6 +437,25 @@ export async function getVerseText(verse: SavedVerse): Promise<VerseTextResult> 
   );
 
   return { text, verses: keyed };
+}
+
+/**
+ * The verse's text if this session already holds it, read synchronously (no KJV bundle, no
+ * network), so a screen can show it on its first frame. Null means call `getVerseText`.
+ */
+export function peekVerseText(verse: SavedVerse): VerseTextResult | null {
+  const { book, chapter, verseStart, verseEnd, version } = verse;
+  const text = getSavedVerseFromSession(book, chapter, verseStart, verseEnd, version);
+  const keyed = getSavedVerseKeyedFromSession(book, chapter, verseStart, verseEnd, version);
+  if (text && keyed) return { text, verses: keyed };
+  // Read some other way this session (a chapter, another range): assembled per verse, as fetchVerse does.
+  const verses: Record<string, string> = {};
+  for (let v = verseStart; v <= verseEnd; v++) {
+    const verseText = getVerseFromSession(book, chapter, v, version);
+    if (!verseText) return null;
+    verses[v.toString()] = verseText;
+  }
+  return { text: Object.values(verses).join(" "), verses };
 }
 
 /**

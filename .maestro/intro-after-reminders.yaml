@@ -1,0 +1,39 @@
+appId: com.caelanliu.biblemem
+name: intro-after-reminders
+---
+- runFlow: subflows/open-app.yaml
+- tapOn: Email
+- inputText: reader-a@example.test
+- tapOn: Password
+- inputText: password123
+- hideKeyboard
+- tapOn: Sign In
+- extendedWaitUntil:
+    visible: Get review reminders
+    timeout: 60000
+- openLink: com.biblemem://home?introFixture=sample
+- assertVisible: Get review reminders
+- assertNotVisible:
+    id: intro-video-modal
+- runScript:
+    file: scripts/intro-presentations.js
+    env:
+      READER: reader-a
+      EXPECTED: 0
+- takeScreenshot: intro-deferred-by-reminders
+- tapOn: Maybe later
+- extendedWaitUntil:
+    visible:
+      id: intro-video-modal
+    timeout: 30000
+- assertNotVisible: Get review reminders
+- assertVisible:
+    id: intro-close
+- takeScreenshot: intro-after-reminders-dismissal
+- tapOn:
+    id: intro-close
+- runScript:
+    file: scripts/intro-presentations.js
+    env:
+      READER: reader-a
+      EXPECTED: 1

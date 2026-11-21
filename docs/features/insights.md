@@ -2,7 +2,7 @@
 
 The Insights screen shows the user's activity and the verses most people have mastered. Some numbers come from the store, some from SQL on demand, and two from tables that cron rebuilds.
 
-The screen is `app/(tabs)/insights.tsx`, a tab with `href: null`. Users reach it from `InsightsCard` on Home (`docs/features/home.md`). Engraved and review rules are in `docs/features/review.md`. Table shapes are in `docs/architecture/data-model.md`.
+The screen is `app/(tabs)/(home)/insights.tsx`, pushed on the Home tab's stack from `InsightsCard` on Home (`docs/features/home.md`). Engraved and review rules are in `docs/features/review.md`. Table shapes are in `docs/architecture/data-model.md`.
 
 ## Screen and sources
 
@@ -18,17 +18,17 @@ Top to bottom:
 | Your Most Memorized Books | `useMostMemorizedBooks` | Store: top 5 books over `masteredVerses` |
 | Popular Verses | `getPopularRanges(10)` | `popular_ranges`, rebuilt every 12 hours |
 
-`lib/api/analytics.ts` and `lib/api/popular-verses.ts` hold the API calls. Time stats and popular ranges load when the screen mounts and on pull to refresh.
+`lib/api/analytics.ts` and `lib/api/popular-verses.ts` hold the API calls. Time stats and popular ranges load when the screen mounts and on pull to refresh. The streak, on Home's card and here, follows Home's reload rule (`useHomeReload`, [home.md](home.md#monthly-schedule-and-loading)): on focus or a resume only when stale or after a session saved; Home's pull always reloads it.
 
 ## Mastered and in progress
 
-Mastered counts `masteredVerses`, which is fetched with no `deleted_at` filter. Soft-deleted verses still count, because mastery is permanent. What masters a verse is in `docs/features/review.md`.
+Mastered counts `masteredVerses`, which is fetched with no `deleted_at` filter. Soft-deleted verses still count, because mastery is permanent. A verse mastered in two translations is listed and counted once (`onePerReference`). What masters a verse is in `docs/features/review.md`.
 
 In progress uses the same `isInProgressVerse` predicate as `useInProgressVerses`, so this number always equals the In Progress collection in the Library. The push source `loadInProgressVerses` mirrors it on the server. Change them together.
 
 ## Streak
 
-`get_current_streak(p_user_id, p_tz_offset_min)` in `supabase/migrations/012_analytics_functions.sql`:
+`get_current_streak(p_user_id, p_tz_offset_min)`, last defined in `supabase/migrations/20261114120000_security_fixes.sql`:
 
 1. Shifts every `session_attempts.created_at` by the offset from the client's `getTimezoneOffset()`.
 2. Takes the distinct local dates, newest first.
@@ -36,6 +36,8 @@ In progress uses the same `isInProgressVerse` predicate as `useInProgressVerses`
 4. Counts back through consecutive days until a gap.
 
 A streak day is any logged attempt: any difficulty, any verse, any score, full or partial.
+
+It and `get_total_time_studied` run as the caller (`security invoker`, under RLS) and count only when `p_user_id` is the caller's own id: another id gets 0. Clients can't run the cron functions `update_popular_ranges()` and `update_user_stats()`. `supabase/tests/access.test.sql` checks both.
 
 ## Time studied
 
@@ -47,8 +49,8 @@ A streak day is any logged attempt: any difficulty, any verse, any score, full o
 
 The `update-user-stats` cron job runs `update_user_stats()` at `0 */6 * * *` (`supabase/migrations/011_user_stats_cron.sql`). It works only from `session_attempts`:
 
-- **`total_words_mastered`:** the sum of `word_count` over each verse's first Hard attempt at 90 or more, per range and version.
-- **`avg_time_per_word_ms`:** for each of those verses, all recording time up to that attempt divided by `word_count`, then averaged. Attempts with a null `word_count` don't count.
+- **`total_words_mastered`:** the sum of `word_count` over each verse's first Hard attempt at 90 or more, per range. A verse mastered in two translations counts once, since a verse follows the account translation (`docs/architecture/bible-versions.md`). Test: `supabase/tests/account-translation.test.sql`.
+- **`avg_time_per_word_ms`:** for each of those verses, all recording time up to that attempt, in any version, divided by `word_count`, then averaged. Attempts with a null `word_count` don't count.
 - **The threshold:** the average is written only when `total_words_mastered` reaches `stats_min_words` in `app_config`, default 600. Below that it is too noisy.
 
 ## Popular Verses
@@ -72,7 +74,7 @@ Tapping a row opens `VerseExpandModal` with the text in the user's current versi
 ## Rules
 
 1. **A streak day means practiced, not passed.** Any attempt counts. Don't change this without a product decision.
-2. **`session_attempts` is append-only for clients.** RLS allows SELECT and INSERT only. Don't try to fix data with an update. Rows stay after a verse is deleted, and only `delete_own_account()` removes them.
+2. **`session_attempts` is append-only for clients.** RLS allows SELECT and INSERT only. Don't try to fix data with an update. Rows stay after a verse is deleted; only deleting the account removes them (`delete_own_account()`, or the user's foreign key cascade).
 3. **The mastered count comes from the store,** not a SQL aggregate.
 4. **`avg_time_per_word_ms` can be null.** The UI must handle it.
 5. **`popular_ranges` is global and counts soft-deleted mastered verses on purpose.**
@@ -81,12 +83,11 @@ Tapping a row opens `VerseExpandModal` with the text in the user's current versi
 ## Sharp edges
 
 - **Attempts are lost silently when offline.** `logSessionAttempt` only logs errors to the console. There is no queue, retry or toast, so streak and time studied undercount.
-- **The streak can go stale on screen.** `useStreak` fetches on mount. `InsightsCard` refreshes it on Home's pull to refresh, but pull to refresh on Insights reloads only time stats and ranges, never the streak. Neither screen refetches on focus, so a finished session isn't reflected until one of those happens.
+- **Pull on Insights doesn't reload the streak.** It reloads only time stats and ranges; the streak there reloads on focus by Home's rule, so after a session it's current anyway.
 - **The offset applies to all history.** `get_current_streak` shifts every attempt by today's offset. After a DST change or travel, an attempt near midnight can move to another date and change the count.
-- **Two meanings of "mastered".** The Mastered card reads `progress`. `user_stats` reads attempts, including partial ones, per version, and a reset doesn't undo them. Stats can count a verse the card no longer does.
+- **Two meanings of "mastered".** The Mastered card reads `progress`. `user_stats` reads attempts, including partial ones, and a reset doesn't undo them. Stats can count a verse the card no longer does.
 - **23 words is a fixed guess.** The figure misleads for someone memorizing much longer or shorter passages.
 - **Popular Verses can look repetitive.** Sub-ranges of one long passage fill rows, and ties have no set order, because both the cron query and `getPopularRanges` sort only by `user_count`.
-- **Stats functions are open too wide.** `get_current_streak` and `get_total_time_studied` accept any user's id. Clients can also run `update_popular_ranges()` and `update_user_stats()`. `supabase/tests/access.test.sql` tracks both as known bugs.
 
 ## Browser checks
 
@@ -101,3 +102,5 @@ Run these on a freshly reset local database. Seed attempts are dated from the re
 - 2026-01-01 · Show time to master only from 600 mastered words · The average is noisy below that.
 - 2026-01-16 · Streak and time studied run as SQL functions · The client doesn't have to fetch every attempt.
 - 2026-04-28 · `popular_ranges` counts mastered verses only, soft-deleted included · "Popular" means memorized, not just added, and mastery is permanent.
+- 2026-11-11 · Words mastered group by reference, not version · A verse follows the account translation, so attempts in two versions are one verse.
+- 2026-11-14 · The stats functions run as the caller and answer only for the caller's id; the cron functions are closed to clients · They were `security definer` and answered for any id. Same signatures, so old clients, which pass their own id, get the same numbers.

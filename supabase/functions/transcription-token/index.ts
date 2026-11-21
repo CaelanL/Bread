@@ -1,13 +1,15 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { verifyJwt } from "../_shared/auth.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { SONIOX_RT_MODEL } from "../_shared/soniox.ts";
 import { badRequest, serverError, unauthorized } from "../_shared/errors.ts";
 
 const SONIOX_API_KEY = Deno.env.get("SONIOX_API_KEY");
 
-// Temp key gates connection establishment only; the session may continue
-// past expiry up to max_session_duration_seconds.
-const KEY_TTL_SECONDS = 60;
+// Soniox checks the temp key when config is sent; the session may continue
+// past expiry up to max_session_duration_seconds. A study screen reuses one
+// key for 30s less than this (KEY_REUSE_MS in live-session.ts).
+const KEY_TTL_SECONDS = 300;
 // Client-side cap is 300s (MAX_RECORDING_MS); 315 keeps the client timer
 // firing first so streams finalize cleanly instead of being cut by Soniox.
 const MAX_SESSION_SECONDS = 315;
@@ -72,7 +74,7 @@ serve(async (req) => {
         apiKey: minted.api_key,
         expiresAt: minted.expires_at ?? null,
         websocketUrl: "wss://stt-rt.soniox.com/transcribe-websocket",
-        model: "stt-rt-v5",
+        model: SONIOX_RT_MODEL,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

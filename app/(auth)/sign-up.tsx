@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
-import { Colors, authAccent } from '@/constants/theme';
+import { Colors, authAccent, InputText } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -108,8 +108,10 @@ export default function SignUpScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="emailAddress"
+              submitBehavior="submit"
             />
           </View>
 
@@ -134,6 +136,9 @@ export default function SignUpScreen() {
               onBlur={() => setPasswordFocused(false)}
               secureTextEntry={!showPassword}
               autoComplete="new-password"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               returnKeyType="next"
               onSubmitEditing={() => confirmRef.current?.focus()}
             />
@@ -167,6 +172,9 @@ export default function SignUpScreen() {
               onBlur={() => setConfirmFocused(false)}
               secureTextEntry={!showConfirmPassword}
               autoComplete="new-password"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="newPassword"
               returnKeyType="done"
               onSubmitEditing={handleSignUp}
             />
@@ -254,6 +262,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   input: {
+    ...InputText,
     flex: 1,
     fontSize: 16,
   },

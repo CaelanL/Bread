@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { SplashScreen } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 interface ErrorBoundaryProps {
@@ -26,6 +27,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // The root layout holds the splash; don't leave it over this screen.
+    SplashScreen.hide();
     // Log error in development
     if (__DEV__) {
       console.error('[ErrorBoundary] Caught error:', error);

@@ -4,6 +4,8 @@ export interface ProcessRecordingResult {
   transcription: string;
   cleanedTranscription: string;
   cleaningUsed: boolean;
+  /** The Soniox model; servers before grading reports don't send it. */
+  model?: string;
 }
 
 /**
@@ -81,6 +83,7 @@ async function handleProcessingResponse(
     transcription: result.transcription,
     cleanedTranscription: result.cleanedTranscription,
     cleaningUsed: result.cleaningUsed,
+    model: typeof result.model === "string" ? result.model : undefined,
   };
 }
 

@@ -17,6 +17,11 @@ interface UxFlagsState {
   q1Dismissed: boolean;
   settingsVisited: boolean;
   hydrated: boolean;
+  q1Presented: boolean;
+  setQ1Presented: (presented: boolean) => void;
+  /** An invite sheet is mounted; the Q1 card waits for it to be gone (see Q1ExplainerCard). */
+  inviteOpen: boolean;
+  setInviteOpen: (open: boolean) => void;
   hydrate: () => Promise<void>;
   markQ1Dismissed: () => Promise<void>;
   markSettingsVisited: () => Promise<void>;
@@ -27,6 +32,10 @@ export const useUxFlagsStore = create<UxFlagsState>((set) => ({
   q1Dismissed: false,
   settingsVisited: false,
   hydrated: false,
+  q1Presented: false,
+  setQ1Presented: (q1Presented) => set({ q1Presented }),
+  inviteOpen: false,
+  setInviteOpen: (inviteOpen) => set({ inviteOpen }),
 
   hydrate: async () => {
     try {

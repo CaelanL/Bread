@@ -103,8 +103,7 @@ per warm container and re-read once on a mismatch, so rotation needs no recycle.
 
 `push.ts` sends one message per token and needs the `EXPO_ACCESS_TOKEN` function secret.
 `DeviceNotRegistered` becomes `token-error`, and `sendToAllTokens` deletes that row.
-Everything else becomes `send-error`. Delivery receipts aren't polled. Function conventions
-are in `docs/architecture/edge-functions.md`.
+Everything else becomes `send-error`. Receipts aren't polled. Conventions: `docs/architecture/edge-functions.md`.
 
 ## Client: `lib/notifications/`
 
@@ -118,16 +117,16 @@ are in `docs/architecture/edge-functions.md`.
 | `uxFlags.ts`, `useSettingsBadge.ts` | Card and badge flags, device-local and kept across sign-out |
 | `debug.ts` | `installDevTools`. No "fire now" helper, since it would bundle the cron secret |
 
-Prefs are per account. `app/_layout.tsx` hydrates them and runs `syncForegroundState` on
-sign-in, runs the sync again on each background-to-active change, and clears the cache on
-sign-out. Its `setNotificationHandler` turns everything off, so a push arriving while the
-app is open shows nothing.
+Prefs are cached per account (`notifications_prefs_cache:<userId>`). `setAccount`
+(`lib/auth/account.ts`) hydrates them, then runs `syncForegroundState`; sign-out removes
+the cache. `app/_layout.tsx` syncs again on every return (`returnTracker`). Its
+`setNotificationHandler` turns everything off, so a push arriving in the app shows nothing.
 
 `signOut` in `lib/auth/context.tsx` calls `unregisterDeviceToken` first, while RLS still lets
-it delete the row. If that fails or the app dies first, the next sign-in on the device takes
-the row over.
+it delete the row. Failing that, the device's next sign-in takes the row over.
 
-`syncForegroundState`, in order:
+`syncForegroundState`, in order (back under 30 s: stops after the permission read unless it
+changed, and skips 4):
 
 1. If `denied`, call `unregisterDeviceToken`.
 2. If granted or provisional, call `registerDeviceToken`. If that returned a token and no
@@ -135,7 +134,7 @@ the row over.
 3. If a row is loaded and the device timezone differs, update `timezone`.
 4. Call `updateLastForegroundedAt`, filtered to rows older than 5 minutes.
 
-A user who never grants permission has no prefs row, so the cron never sees them.
+A user who never grants permission has no prefs row, so the cron skips them.
 
 ## Asking for permission
 
@@ -145,6 +144,8 @@ iOS shows its dialog only once, from `undetermined`, so the app explains first.
 is `undetermined`. **Enable** requests permission, registers the token and inserts defaults
 if there's no row. **Maybe later** only sets the flag. `app/dev-sign-in.tsx` also sets it,
 because the card would cover every simulator screenshot.
+
+`q1Presented` coordinates the [Home intro](home.md#encouragement-video).
 
 `useSettingsBadge` puts a "1" on the Settings tab when flags are hydrated, the card was
 dismissed, Settings hasn't been visited, permission is `undetermined` or `denied`, and the
@@ -166,8 +167,7 @@ so a stray toggle never reaches the server.
   since a stale null would INSERT over an existing row. With master on and no permission, it
   alerts instead. With no row it inserts defaults and patches the difference. With a row it
   patches the difference.
-- **Back.** Unsaved changes ask to discard. `isDirty` ignores `timezone`, which
-  `syncForegroundState` owns.
+- **Back.** Unsaved changes ask to discard. `isDirty` ignores `timezone` (the sync owns it).
 
 `NotificationTimeModal` offers 5-minute steps and disables Save on 12 AM.
 `NotificationCadenceModal` offers Daily or one weekday.

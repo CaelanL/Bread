@@ -1,0 +1,38 @@
+# reader-b has no name yet, so Settings offers Add. They save "Bea Lopez", see that members
+# get "Bea L.", and after a relaunch and fresh sign-in the name comes back from the profile.
+# Needs a fresh seed (npm run db:reset).
+appId: com.caelanliu.biblemem
+name: display-name
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2Fsettings
+- extendedWaitUntil:
+    visible:
+      id: settings-display-name
+    timeout: 20000
+# The Name row starts under the tab bar; a tap there would land on the Library tab.
+- scrollUntilVisible:
+    element:
+      id: settings-display-name
+    centerElement: true
+- assertVisible: ".*Name.*Add.*"
+- takeScreenshot: display-name-1-empty
+- tapOn:
+    id: settings-display-name
+- tapOn:
+    id: display-name-first
+- inputText: "Bea"
+- tapOn:
+    id: display-name-last
+- inputText: "Lopez"
+- assertVisible: "Shown as Bea L."
+- takeScreenshot: display-name-2-modal
+- tapOn:
+    id: display-name-save
+- assertVisible: ".*Name.*Bea Lopez.*"
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2F(tabs)%2Fsettings
+- extendedWaitUntil:
+    visible: ".*Name.*Bea Lopez.*"
+    timeout: 20000
+- takeScreenshot: display-name-3-after-relaunch

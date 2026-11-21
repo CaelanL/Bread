@@ -4,8 +4,9 @@ import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import type { VerseData } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import type { BibleVersion } from '@/lib/storage';
-import { useAppStore, useCollections } from '@/lib/store';
+import { useAddableCollections, useAppStore, useCollections } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
 import { BlurView } from 'expo-blur';
 import { useMemo, useState } from 'react';
@@ -24,6 +25,7 @@ interface AddToCollectionModalProps {
   verse: VerseData | null;
   version: BibleVersion;
   onClose: () => void;
+  onDismiss?: () => void;
   onSuccess?: () => void;
 }
 
@@ -32,6 +34,7 @@ export function AddToCollectionModal({
   verse,
   version,
   onClose,
+  onDismiss,
   onSuccess,
 }: AddToCollectionModalProps) {
   const colorScheme = useColorScheme();
@@ -46,10 +49,8 @@ export function AddToCollectionModal({
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
 
-  // Filter collections for picker (exclude virtual collections like Mastered)
-  const pickableCollections = useMemo(() => {
-    return collections.filter((c) => !c.isVirtual);
-  }, [collections]);
+  // Exclude virtual collections like Mastered, and shared ones the user only reads
+  const pickableCollections = useAddableCollections();
 
   // Pre-select default collection when modal opens
   useMemo(() => {
@@ -83,14 +84,13 @@ export function AddToCollectionModal({
             verseEnd: verse.verseEnd,
           },
           collectionId,
-          version
         );
       }
       onClose();
       onSuccess?.();
     } catch (e) {
       console.error('[AddToCollectionModal] Failed to add verse:', e);
-      showErrorToast('Failed to add verse. Please try again.');
+      showErrorToast(sharedErrorMessage(e, 'Failed to add verse. Please try again.'));
     } finally {
       setAdding(false);
     }
@@ -104,6 +104,7 @@ export function AddToCollectionModal({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      onDismiss={onDismiss}
     >
       <BlurView
         intensity={isDark ? 40 : 80}
@@ -116,7 +117,7 @@ export function AddToCollectionModal({
             <Text style={[styles.pickerTitle, { color: colors.text }]}>
               Add to Collection
             </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable testID="collection-picker-close" accessibilityRole="button" accessibilityLabel="Close collection picker" onPress={onClose} hitSlop={8}>
               <IconSymbol name="xmark.circle.fill" size={28} color={colors.icon} />
             </Pressable>
           </View>

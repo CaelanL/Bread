@@ -1,0 +1,23 @@
+# Dark cold start (docs/architecture/theming-and-ui.md): with the app set to Dark on a light
+# simulator, a relaunch goes from the native splash straight to the dark app. The splash waits for
+# the saved settings read, so no light frame shows in between. Record the simulator during the
+# relaunch to check the frames themselves; the screenshot is the end state.
+appId: com.caelanliu.biblemem
+name: dark-cold-start
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fsettings
+- scrollUntilVisible:
+    element: "Dark"
+    direction: DOWN
+- tapOn: "Dark"
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- takeScreenshot: dark-cold-start-first-screen
+- tapOn:
+    id: tab-home
+- takeScreenshot: dark-cold-start-home

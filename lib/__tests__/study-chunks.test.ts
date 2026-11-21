@@ -12,14 +12,14 @@
  * getVerseText), which imports the supabase client and RN modules and is
  * not loadable under node:test. These tests lock the parser-level
  * invariants that the fix restores: complete keyed data → correct
- * per-verse chunks; missing keyed data → sentence fallback, never the
- * all-text-in-first-chunk shape.
+ * per-verse chunks; missing keyed data → one chunk with the whole text,
+ * never a guessed split.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDifficulty, calculateFinalScore, parseVerseIntoChunks, type AlignmentWord } from '../study-chunks';
+import { applyDifficulty, calculateChunkScore, calculateFinalScore, isPerfect, parseVerseIntoChunks, type AlignmentWord } from '../study-chunks';
 import type { SavedVerse } from '../storage';
 
 // Structurally faithful Psalm 103:1-14 ESV shapes (poetry newlines kept)
@@ -78,26 +78,20 @@ describe('parseVerseIntoChunks — multi-verse range (Psalm 103:1-14)', () => {
     assert.equal(chunks[0].verseNumEnd, 14);
   });
 
-  it('missing keyed data (empty map) → sentence fallback, never all-in-first-chunk', () => {
-    // The fix returns verses: {} when the API response has no keyed data,
-    // which routes here. The fallback's boundaries are imperfect, but it
-    // must not reproduce the bug shape (chunk 1 = everything, rest empty).
+  it('missing keyed data (empty map) → one chunk with every word, never a guessed split', () => {
     const chunks = parseVerseIntoChunks(makeVerse({}), 'easy', 1, 0);
 
-    assert.equal(chunks.length, 14);
-    const c1 = wordCount(chunks[0].text);
-    const total = wordCount(COMBINED);
-    assert.ok(c1 < total, `chunk 1 has all ${total} words — bug shape`);
-    const nonEmpty = chunks.filter((c) => wordCount(c.text) > 0).length;
-    assert.ok(nonEmpty > 1, 'all text collapsed into a single chunk');
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0].text, COMBINED);
+    assert.equal(chunks[0].displayWords.length, wordCount(COMBINED));
   });
 
-  it('poisoned keyed map ({ "1": wholeText }) reproduces the bug shape (documents why the fetch layer must never emit it)', () => {
+  it('poisoned keyed map ({ "1": wholeText }) leaves one chunk, which is why the fetch layer must never emit it', () => {
     const chunks = parseVerseIntoChunks(makeVerse({ '1': COMBINED }), 'easy', 1, 0);
 
-    assert.equal(chunks.length, 14);
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0].verseNum, 1);
     assert.equal(wordCount(chunks[0].text), wordCount(COMBINED));
-    assert.ok(chunks.slice(1).every((c) => wordCount(c.text) === 0));
   });
 });
 
@@ -151,4 +145,23 @@ describe('calculateFinalScore around the 90% pass line', () => {
   for (const [name, chunks, expected] of cases) {
     it(name, () => assert.equal(score(...chunks), expected));
   }
+});
+
+describe('isPerfect — the card says "Perfect!" only with nothing marked', () => {
+  const correct = (n: number): AlignmentWord[] => Array.from({ length: n }, () => ({ word: 'and', status: 'correct' as const }));
+
+  it('a long chunk with one missing word rounds to 100 but is not perfect', () => {
+    const alignment = [...correct(250), { word: 'eternal', status: 'missing' as const, expected: 'eternal' }];
+    assert.equal(calculateChunkScore(alignment), 100);
+    assert.equal(isPerfect(alignment), false);
+  });
+
+  it('a close or added word is marked too', () => {
+    assert.equal(isPerfect([...correct(3), { word: 'hath', status: 'close' as const, expected: 'hath' }]), false);
+    assert.equal(isPerfect([...correct(3), { word: 'um', status: 'added' as const }]), false);
+  });
+
+  it('every word correct is perfect', () => {
+    assert.equal(isPerfect(correct(5)), true);
+  });
 });

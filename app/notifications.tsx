@@ -62,12 +62,13 @@ import {
   Alert,
   AppState,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -148,6 +149,7 @@ function buildPatch(
 }
 
 export default function NotificationsScreen() {
+  const barHeight = useTopBarHeight();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
@@ -355,36 +357,8 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.headerButton} hitSlop={12}>
-          <IconSymbol name="chevron.left" size={24} color={colors.text} />
-          <Text style={[styles.headerBackLabel, { color: colors.text }]}>Settings</Text>
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Notifications</Text>
-        <Pressable
-          onPress={handleSave}
-          disabled={!dirty || saving}
-          style={styles.headerButton}
-          hitSlop={12}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color={colors.tint} />
-          ) : (
-            <Text
-              style={[
-                styles.headerSaveLabel,
-                { color: dirty ? colors.tint : colors.icon },
-                !dirty && { opacity: 0.5 },
-              ]}
-            >
-              Save
-            </Text>
-          )}
-        </Pressable>
-      </View>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]}>
+        <View style={styles.titleGap}><LargeTitle title="Notifications" /></View>
         {/* MASTER */}
         <View style={styles.section}>
           <View
@@ -610,7 +584,29 @@ export default function NotificationsScreen() {
             </View>
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+      <TopBar onBack={handleBack} backLabel="Settings">
+          <Pressable
+            onPress={handleSave}
+            disabled={!dirty || saving}
+            style={styles.headerButton}
+            hitSlop={12}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={colors.tint} />
+            ) : (
+              <Text
+                style={[
+                  styles.headerSaveLabel,
+                  { color: dirty ? colors.tint : colors.icon },
+                  !dirty && { opacity: 0.5 },
+                ]}
+              >
+                Save
+              </Text>
+            )}
+          </Pressable>
+      </TopBar>
 
       {/* Modals — write to draft only */}
       <NotificationTimeModal
@@ -660,35 +656,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+  titleGap: {
+    marginBottom: 4,
   },
   headerButton: {
-    flexDirection: 'row',
+    minWidth: 44,
+    height: 44,
+    paddingHorizontal: 10,
     alignItems: 'center',
-    minWidth: 80,
-  },
-  headerBackLabel: {
-    fontSize: 16,
-    marginLeft: 2,
+    justifyContent: 'center',
   },
   headerSaveLabel: {
     fontSize: 16,
     fontWeight: '600',
-    textAlign: 'right',
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'center',
   },
   scrollView: {
     flex: 1,

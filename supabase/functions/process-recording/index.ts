@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { verifyJwt } from "../_shared/auth.ts";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { SONIOX_ASYNC_MODEL } from "../_shared/soniox.ts";
 import {
   badRequest,
   serverError,
@@ -18,6 +19,8 @@ interface ProcessingResult {
   transcription: string;
   cleanedTranscription: string;
   cleaningUsed: boolean;
+  // The Soniox model, for grading reports. Old clients ignore it.
+  model: string;
 }
 
 interface TranscriptionTiming {
@@ -109,7 +112,8 @@ serve(async (req) => {
           payload = await processAudio(user.id, audioBlob, durationSeconds, actualVerse, requestStart, authMs);
         } catch (error) {
           console.error("[PROCESS] Error:", error);
-          payload = { error: "Processing failed" };
+          // Old clients show `error` after "Recording failed:", so the busy case says what to do.
+          payload = { error: error instanceof SonioxBusyError ? BUSY_MESSAGE : "Processing failed" };
         }
 
         clearInterval(heartbeat);
@@ -217,7 +221,33 @@ async function processAudio(
     transcription,
     cleanedTranscription,
     cleaningUsed,
+    model: SONIOX_ASYNC_MODEL,
   };
+}
+
+const SONIOX_API = "https://api.soniox.com/v1";
+const SONIOX_DEADLINE_MS = 90_000;
+const BUSY_MESSAGE = "Transcription is busy right now. Try again in a moment.";
+
+class SonioxBusyError extends Error {}
+
+/**
+ * A Soniox call that waits out a 429 (the organization's rate limit) with
+ * jittered backoff until the deadline, then throws SonioxBusyError.
+ */
+async function sonioxFetch(path: string, init: RequestInit, deadline: number): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`${SONIOX_API}${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${SONIOX_API_KEY}`, ...init.headers },
+    });
+    if (res.status !== 429) return res;
+    await res.body?.cancel();
+    const wait = Math.min(8_000, 500 * 2 ** attempt) * (0.5 + Math.random());
+    if (Date.now() + wait > deadline) throw new SonioxBusyError("Soniox rate limit");
+    console.warn(`[PROCESS] Soniox 429 on ${path}, retrying in ${Math.round(wait)}ms`);
+    await new Promise((resolve) => setTimeout(resolve, wait));
+  }
 }
 
 /**
@@ -229,6 +259,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
   if (!SONIOX_API_KEY) {
     throw new Error("SONIOX_API_KEY not configured");
   }
+  const deadline = Date.now() + SONIOX_DEADLINE_MS;
 
   // Step 1: Upload audio file
   const uploadStart = Date.now();
@@ -237,11 +268,7 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
   const uploadForm = new FormData();
   uploadForm.append("file", audioBlob, "recording.m4a");
 
-  const uploadRes = await fetch("https://api.soniox.com/v1/files", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${SONIOX_API_KEY}` },
-    body: uploadForm,
-  });
+  const uploadRes = await sonioxFetch("/files", { method: "POST", body: uploadForm }, deadline);
 
   if (!uploadRes.ok) {
     const error = await uploadRes.text();
@@ -254,112 +281,132 @@ async function transcribeWithSoniox(audioBlob: Blob, verseText: string): Promise
   const uploadMs = Date.now() - uploadStart;
   console.log(`[PROCESS] Soniox upload complete: ${uploadMs}ms, ID: ${fileId}`);
 
-  // Step 2: Create transcription job with verse context
-  const jobStart = Date.now();
-  console.log(`[PROCESS] Soniox context: ${verseText.length} chars`);
-  const jobRes = await fetch("https://api.soniox.com/v1/transcriptions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${SONIOX_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      file_id: fileId,
-      model: "stt-async-v5",
-      language_hints: ["en"],
-      context: {
-        general: [
-          { key: "domain", value: "Bible" },
-          { key: "topic", value: "Bible verse memory recitation attempt" },
-        ],
-        text: verseText,
+  // Soniox caps an organization at 1,000 stored files and 2,000
+  // transcriptions, so both are deleted once the transcript is read or the
+  // attempt fails. Not awaited: the reader's score doesn't wait on it.
+  let transcriptionId: string | undefined;
+  try {
+    // Step 2: Create transcription job with verse context
+    const jobStart = Date.now();
+    console.log(`[PROCESS] Soniox context: ${verseText.length} chars`);
+    const jobRes = await sonioxFetch("/transcriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file_id: fileId,
+        model: SONIOX_ASYNC_MODEL,
+        language_hints: ["en"],
+        context: {
+          general: [
+            { key: "domain", value: "Bible" },
+            { key: "topic", value: "Bible verse memory recitation attempt" },
+          ],
+          text: verseText,
+        },
+      }),
+    }, deadline);
+
+    if (!jobRes.ok) {
+      const error = await jobRes.text();
+      console.error("Soniox job error:", error);
+      throw new Error("Failed to create transcription job");
+    }
+
+    transcriptionId = (await jobRes.json()).id;
+    const jobMs = Date.now() - jobStart;
+    console.log(`[PROCESS] Soniox job created: ${jobMs}ms`);
+
+    // Step 3: Poll for completion, up to the deadline (the client can
+    // wait — the response heartbeat keeps its socket alive). A short first
+    // wait, then 250ms for 10s: short clips finish in ~1s, and a 1s sleep
+    // can cost more than the transcription itself. 1s after that.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const pollStart = Date.now();
+    let completed = false;
+    let polls = 0;
+
+    while (Date.now() < deadline) {
+      const statusRes = await sonioxFetch(`/transcriptions/${transcriptionId}`, {}, deadline);
+
+      if (!statusRes.ok) {
+        throw new Error("Failed to check transcription status");
+      }
+
+      const status = await statusRes.json();
+      polls++;
+
+      if (status.status === "completed") {
+        completed = true;
+        break;
+      }
+
+      if (status.status === "error") {
+        console.error("[PROCESS] Soniox transcription error:", JSON.stringify(status));
+        throw new Error(`Transcription failed: ${status.error || status.message || "unknown error"}`);
+      }
+
+      const elapsed = Date.now() - pollStart;
+      await new Promise((resolve) => setTimeout(resolve, elapsed < 10_000 ? 250 : 1000));
+    }
+
+    if (!completed) {
+      throw new Error("Transcription timed out");
+    }
+
+    const pollMs = Date.now() - pollStart;
+    console.log(`[PROCESS] Soniox polling complete: ${pollMs}ms (${polls} polls)`);
+
+    // Step 4: Get transcript
+    const fetchStart = Date.now();
+    const transcriptRes = await sonioxFetch(`/transcriptions/${transcriptionId}/transcript`, {}, deadline);
+
+    if (!transcriptRes.ok) {
+      throw new Error("Failed to get transcript");
+    }
+
+    const { text } = await transcriptRes.json();
+    const fetchMs = Date.now() - fetchStart;
+    // Silent audio may yield a null transcript — treat it as empty so the
+    // client scores 0 instead of erroring
+    const transcriptText = text ?? "";
+    console.log(`[PROCESS] Soniox fetch transcript: ${fetchMs}ms`);
+
+    const totalMs = Date.now() - uploadStart;
+
+    return {
+      text: transcriptText,
+      timing: {
+        uploadMs,
+        jobMs,
+        pollMs,
+        fetchMs,
+        totalMs,
       },
-    }),
-  });
-
-  if (!jobRes.ok) {
-    const error = await jobRes.text();
-    console.error("Soniox job error:", error);
-    throw new Error("Failed to create transcription job");
+    };
+  } finally {
+    const cleanup = deleteAtSoniox(fileId, transcriptionId);
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil?.(cleanup);
   }
+}
 
-  const { id: transcriptionId } = await jobRes.json();
-  const jobMs = Date.now() - jobStart;
-  console.log(`[PROCESS] Soniox job created: ${jobMs}ms`);
-
-  // Step 3: Poll for completion, up to a ~90s deadline (the client can
-  // wait — the response heartbeat keeps its socket alive). Fast 250ms
-  // cadence for the first 3s: short clips finish in ~1s, and a flat 1s
-  // sleep was costing more than the transcription itself.
-  const pollStart = Date.now();
-  const deadline = pollStart + 90_000;
-  let completed = false;
-  let polls = 0;
-
-  while (Date.now() < deadline) {
-    const statusRes = await fetch(
-      `https://api.soniox.com/v1/transcriptions/${transcriptionId}`,
-      { headers: { Authorization: `Bearer ${SONIOX_API_KEY}` } }
-    );
-
-    if (!statusRes.ok) {
-      throw new Error("Failed to check transcription status");
+// A transcription still running can't be deleted; a failed delete is logged
+// and Soniox removes it after 30 days.
+async function deleteAtSoniox(fileId: string, transcriptionId: string | undefined): Promise<void> {
+  const remove = async (path: string) => {
+    try {
+      const res = await fetch(`${SONIOX_API}${path}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${SONIOX_API_KEY}` },
+      });
+      await res.body?.cancel();
+      if (!res.ok && res.status !== 404) console.warn(`[PROCESS] Soniox delete ${path}: ${res.status}`);
+    } catch (e) {
+      console.warn(`[PROCESS] Soniox delete ${path} failed:`, e);
     }
-
-    const status = await statusRes.json();
-    polls++;
-
-    if (status.status === "completed") {
-      completed = true;
-      break;
-    }
-
-    if (status.status === "error") {
-      console.error("[PROCESS] Soniox transcription error:", JSON.stringify(status));
-      throw new Error(`Transcription failed: ${status.error || status.message || "unknown error"}`);
-    }
-
-    const elapsed = Date.now() - pollStart;
-    await new Promise((resolve) => setTimeout(resolve, elapsed < 3000 ? 250 : 1000));
-  }
-
-  if (!completed) {
-    throw new Error("Transcription timed out");
-  }
-
-  const pollMs = Date.now() - pollStart;
-  console.log(`[PROCESS] Soniox polling complete: ${pollMs}ms (${polls} polls)`);
-
-  // Step 4: Get transcript
-  const fetchStart = Date.now();
-  const transcriptRes = await fetch(
-    `https://api.soniox.com/v1/transcriptions/${transcriptionId}/transcript`,
-    { headers: { Authorization: `Bearer ${SONIOX_API_KEY}` } }
-  );
-
-  if (!transcriptRes.ok) {
-    throw new Error("Failed to get transcript");
-  }
-
-  const { text } = await transcriptRes.json();
-  const fetchMs = Date.now() - fetchStart;
-  // Silent audio may yield a null transcript — treat it as empty so the
-  // client scores 0 instead of erroring
-  const transcriptText = text ?? "";
-  console.log(`[PROCESS] Soniox fetch transcript: ${fetchMs}ms`);
-
-  const totalMs = Date.now() - uploadStart;
-
-  return {
-    text: transcriptText,
-    timing: {
-      uploadMs,
-      jobMs,
-      pollMs,
-      fetchMs,
-      totalMs,
-    },
   };
+  if (transcriptionId) await remove(`/transcriptions/${transcriptionId}`);
+  await remove(`/files/${fileId}`);
 }
 
 interface CleaningResult {

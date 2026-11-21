@@ -1,0 +1,37 @@
+# reader-a turns on Hide verses in Settings: My Verses rows lose their text line, and Study setup
+# shows the text only once expanded. Then turns it back off.
+appId: com.caelanliu.biblemem
+name: hide-verses
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2Fsettings
+- extendedWaitUntil:
+    visible:
+      id: hide-verses-switch
+    timeout: 20000
+- tapOn:
+    id: hide-verses-switch
+- openLink: com.biblemem://(tabs)/(library)/my-verses
+- extendedWaitUntil:
+    visible: "John 3:16.*"
+    timeout: 20000
+- assertNotVisible: ".*God so loved the world.*"
+- takeScreenshot: hide-verses-1-collection
+- tapOn: "John 3:16.*"
+- extendedWaitUntil:
+    visible: "Start session.*"
+    timeout: 20000
+- assertNotVisible: ".*God so loved the world.*"
+- takeScreenshot: hide-verses-2-setup
+- openLink: com.biblemem://(tabs)/settings
+- extendedWaitUntil:
+    visible:
+      id: hide-verses-switch
+    timeout: 20000
+- tapOn:
+    id: hide-verses-switch
+- openLink: com.biblemem://(tabs)/(library)/my-verses
+- extendedWaitUntil:
+    visible: ".*God so loved the world.*"
+    timeout: 20000
+- takeScreenshot: hide-verses-3-shown

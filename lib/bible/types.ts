@@ -19,6 +19,7 @@ export const BOOK_ALIASES: Record<string, string> = {
 
   // Common abbreviations
   'gen': 'Genesis',
+  'gn': 'Genesis',
   'ex': 'Exodus',
   'exod': 'Exodus',
   'lev': 'Leviticus',

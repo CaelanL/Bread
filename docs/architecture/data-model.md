@@ -1,40 +1,42 @@
 # Data Model
 
-The schema lives in `supabase/migrations/`. The migrations are the
-source of truth — this doc explains the shape and the *why*. For every
-column and type, see the generated `supabase/database.types.ts`.
+Schema: `supabase/migrations/`. Generated columns and types:
+`supabase/database.types.ts`.
 
 ## Tables overview
 
 | Table | Owner | Purpose |
 |---|---|---|
-| `usage_daily` | per-user | Free/Supporter rate-limit counters (transcribe seconds, evaluate count, Bible fetch count) |
+| `profiles` | per-user | account `translation` (`bible-versions.md`), names ([auth](auth.md#display-name)), 2.0 flag ([nav](navigation-and-routing.md#whats-new-in-20)) |
+| `usage_daily` | per-user | Free/Supporter rate-limit counters |
 | `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
-| `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits, see `docs/architecture/bible-api-and-caching.md` |
+| `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits ([caching](bible-api-and-caching.md)) |
 | `app_config` | shared | Key/value settings for the stats cron (`stats_min_words`, `stats_cron_schedule`) |
-| `user_collections` | per-user | User's collections, soft-deletable, identified by `(user_id, client_id)` |
+| `user_collections` | per-user | Editable, soft-deleted; IDs unique per user |
+| `curated_collection_savers` | global | [All-time contribution ledger and access rules](../features/home.md#community-saves) |
 | `user_verses` | per-user | Verse references — book/chapter/verse_start/verse_end/version + `progress` JSONB. **No text column.** |
 | `verse_collections` | per-user (via verse) | Many-to-many junction: `(verse_id, collection_id)` |
+| `shared_collections`, `shared_collection_members`, `shared_collection_verses`, `shared_invites` | per-group | [Shared collections](../features/shared-collections.md#data-model), references only |
+| `invite_handoffs` | server | [Handoff](navigation-and-routing.md#invite-handoff) |
 | `verse_of_month` | global | Public monthly challenge verse, optional `image_url` |
+| `user_intro_presentations` | per-user | [Intro claims](../features/home.md#encouragement-video) |
 | `session_attempts` | per-user, append-only | One row per practice session (or partial early exit). Denormalized — no FK to `user_verses`. |
 | `user_stats` | per-user | Cron-precomputed: `total_words_mastered`, and `avg_time_per_word_ms` for users with 600+ words mastered. |
 | `popular_ranges` | global | Cron-aggregated top 1000 mastered verse ranges across all users |
 | `device_tokens` | per-user | Expo push tokens |
 | `notification_preferences` | per-user | Reminder settings and per-day fired markers |
 | `notification_log` | per-user | Send log, pruned after 30 days |
+| `feedback_reports` | per-user, insert only | [Feedback](../features/feedback.md) |
 
 Notification tables are covered in `docs/features/notifications.md`.
-
-`chapter_cache` (migration 003) and the first, reference-keyed
-`verse_cache` (migration 001) were dropped by migration 004.
 
 ## Per-table detail
 
 ### `user_collections`
 
-Migration: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
-(`sort_preference`)
+Migrations: `002_user_data.sql`, `016_sort_and_last_practiced.sql`,
+`20261110152251_collection_management.sql`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -42,16 +44,18 @@ Migration: `002_user_data.sql`, `016_sort_and_last_practiced.sql`
 | `client_id` | TEXT | client-generated; unique per `(user_id, client_id)` |
 | `name` | TEXT | |
 | `is_default` | BOOLEAN | `true` for the auto-created "My Verses" collection |
-| `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = client default |
+| `sort_preference` | TEXT | nullable; `recent` \| `alphabetical` \| `mastery` \| `due-first`; NULL = default |
+| `icon_key` | TEXT | nullable |
+| `position` | INTEGER | custom order, nullable |
+| `shared_collection_id` | UUID FK → `shared_collections` | nullable, SET NULL on delete, no client writes ([why](../features/shared-collections.md#access-rules)) |
 | `deleted_at` | TIMESTAMPTZ | soft delete; NULL = active |
-| `updated_at` | TIMESTAMPTZ | auto-updated by trigger `update_user_collections_updated_at` |
+| `updated_at` | TIMESTAMPTZ | trigger maintained |
 
-Indexes:
-- `idx_user_collections_user (user_id) WHERE deleted_at IS NULL` — active-collection lookups
-- `idx_user_collections_client (user_id, client_id)` — lookups by client_id
+Indexes: `idx_user_collections_user (user_id) WHERE deleted_at IS NULL`, and the
+unique `(user_id, client_id)` for client_id lookups.
 
-RLS: SELECT/INSERT/UPDATE where `auth.uid() = user_id`. Service role
-all.
+RLS: owner SELECT/INSERT/UPDATE, signed in only. Insert and update are
+column grants: grant each new column.
 
 ### `user_verses`
 
@@ -67,7 +71,7 @@ Migration: `002_user_data.sql` (created), `005_user_verses_no_text.sql`
 | `book` | TEXT | canonical name e.g. `"John"`, `"Psalms"` (not `"Psalm"`) |
 | `chapter`, `verse_start` | INT | |
 | `verse_end` | INT | equal to `verse_start` for single verses |
-| `version` | TEXT | `ESV` \| `KJV` \| `NLT` \| `NIV` \| `NKJV` |
+| `version` | TEXT | short uppercase version code, from the account translation |
 | `progress` | JSONB | shape below |
 | `last_practiced_at` | TIMESTAMPTZ | nullable; last session, full or partial, any difficulty; cleared on progress reset |
 | `last_chunk_size` | INT | nullable; last chunk size chosen on the setup screen |
@@ -78,11 +82,10 @@ Migration: `002_user_data.sql` (created), `005_user_verses_no_text.sql`
 **Critical: no `text` column.** See invariant 2 in
 `docs/architecture/bible-api-and-caching.md`.
 
-Indexes:
+Indexes (plus the unique `(user_id, client_id)`):
 - `idx_user_verses_user (user_id) WHERE deleted_at IS NULL`
-- `idx_user_verses_client (user_id, client_id)`
 - `idx_user_verses_unique_verse (user_id, book, chapter, verse_start, verse_end, version) WHERE deleted_at IS NULL`
-  — prevents adding the same verse twice while it's active
+  — per version; the client keeps one row per reference (`bible-versions.md`)
 
 `progress` JSONB shape (canonical default is `DEFAULT_PROGRESS` in
 `lib/storage/index.ts`):
@@ -109,47 +112,41 @@ The `engraved` sub-object holds spaced-repetition state. See
 `lib/store/review.ts` for the algorithm and `docs/features/review.md`
 for the rules.
 
-The legacy `months: string[]` array is preserved by migration 014 for
-cross-client safety during the App Store rollout window — old clients
-still append to it, the new client read-fallbacks from it
-(`parseEngravedProgress` uses `months.length` when `passCount` is
-missing), carries it along, but never appends. A later cleanup migration
-can drop it once no live client uses it.
+The legacy `months` array is covered in
+[review.md](../features/review.md#legacy-months).
 
-**Study prefs** (`last_chunk_size`, `last_difficulty`, migration 021):
-the setup screen's last-used values, written fire-and-forget on every
-setup edit and on session start (`setVerseStudyPrefs` store action →
-`updateVerseStudyPrefs` in `lib/storage/`, no-op when unchanged) and
-restored on next open. One `user_verses` row per reference means the
-prefs are shared across all collections containing the verse. A
-progress reset intentionally keeps them. See
-`docs/features/study-session.md`.
+**Study prefs** (`last_chunk_size`, `last_difficulty`, migration 021): see
+[study-session.md](../features/study-session.md#remembered-prefs).
+
+**Delete guard** (`20261114100000_verse_delete_guard.sql`): a `BEFORE DELETE` row trigger,
+`private.guard_verse_delete()` (invoker), raises "This verse is still in a collection" when the
+row has a `verse_collections` link that no other row of the same user and reference holds. Old
+apps' collection delete could hard-delete a verse still in other collections; they ignore the
+error, so it survives. Current deletes unlink first, `collapseVerse` moves links to the twin first
+([bible-versions.md](bible-versions.md#switching)). Cascades (trigger depth > 1) and server
+roles skip it.
 
 ### `verse_collections`
 
-Migration: `006_verse_collections_junction.sql` (introduced — replaces
-the original `collection_id` column on `user_verses`)
+Migration `006_verse_collections_junction.sql` replaces `user_verses.collection_id`.
 
 `verse_id` and `collection_id` are FKs with ON DELETE CASCADE, plus
 `added_at`.
 
 Unique: `(verse_id, collection_id)`. Indexes on both FKs.
 
-RLS: SELECT/INSERT/DELETE allowed only when the requester owns the
-verse. The policy uses an `EXISTS` subquery against
-`user_verses.user_id`.
+RLS uses `EXISTS` on `user_verses.user_id` to require verse ownership for reads, inserts and deletes; an insert also needs the caller's collection.
 
-A verse can live in any number of collections. Removing a verse from
-the *last* collection it belongs to triggers either a soft-delete
-(if mastered) or a hard-delete (if not), in the `deleteVerse` store
-action.
+A verse can be in many collections; see `delete_verse` for leaving the last.
 
 ### `verse_cache`
 
-Migration: `004_verse_level_cache.sql`
+Migrations: `004_verse_level_cache.sql`, `20261114200000_verse_cache_text_rev.sql`
+(adds `text_rev`, clears the licensed rows once). 004 also dropped `chapter_cache` and the first `verse_cache`.
 
-One row per verse: `book`, `chapter`, `verse`, `version`, `text` (the
-actual verse text), and `last_used_at`, bumped on every read for LRU.
+One row per verse: `book`, `chapter`, `verse`, `version`, `text`,
+`last_used_at` (bumped on every read for LRU) and `text_rev` (nullable,
+the parsing revision that wrote the row).
 
 Unique: `(book, chapter, verse, version)`. Indexed for chapter lookups,
 LRU and per-version counts.
@@ -159,14 +156,8 @@ policies and revoked `anon` and `authenticated`, the same for
 `app_config` and the `verse_cache_stats` view (now `security_invoker`).
 Edge functions reach them with the service role, which bypasses both.
 
-Licensing limits, eviction and its known gaps are in
-`docs/architecture/bible-api-and-caching.md`.
-
-The SQL helpers are defined but the edge function doesn't call them:
-- `get_verse_cache_count(version)` → row count for a version
-- `evict_lru_verses(version, max_count, needed)` → deletes oldest
-- `upsert_verses(book, chapter, version, jsonb)` → bulk upsert,
-  bumps `last_used_at` on conflict
+Licensing limits, eviction, `text_rev` and the known gaps:
+[bible-api-and-caching.md](bible-api-and-caching.md). Tests: `supabase/tests/verse-cache.test.sql`.
 
 `getCacheStats` in `cache.ts` reads the view `verse_cache_stats`
 (per-version count + min/max `last_used_at`).
@@ -178,7 +169,7 @@ Migration: `009_session_attempts.sql`, `010_add_word_count.sql`
 
 | Column | Type | Notes |
 |---|---|---|
-| `user_id` | UUID FK → `auth.users` | no CASCADE — deletion handled by `delete_own_account()` |
+| `user_id` | UUID FK → `auth.users` | CASCADE on delete (`20261114120000_security_fixes.sql`) |
 | `book`, `chapter`, `verse_start`, `verse_end`, `version` | | denormalized snapshot |
 | `difficulty` | TEXT | `easy` \| `medium` \| `hard` |
 | `chunk_size` | INT | how the session was split |
@@ -192,11 +183,9 @@ Indexes:
 - `idx_session_attempts_user_difficulty (user_id, difficulty, created_at DESC)`
 - `idx_session_attempts_verse (user_id, book, chapter, verse_start, verse_end)`
 
-RLS: SELECT/INSERT where `auth.uid() = user_id`. **No UPDATE, no
-DELETE policy** — the table is append-only by design. Deletion only
-happens via `delete_own_account()` (`SECURITY DEFINER`).
-
-**No FK to `user_verses`.** See Decisions.
+RLS: SELECT/INSERT of your own rows. **No UPDATE, no DELETE policy**:
+append-only by design. Rows go only with the account (`delete_own_account()`
+or the cascade).
 
 ### `usage_daily`, `transcription_locks`, `subscriptions`
 
@@ -206,35 +195,26 @@ edge function rate limiter. Unique on `(user_id, date)`. Each
 (see `docs/architecture/edge-functions.md`).
 
 `transcription_locks` (migration 001): a mutex keyed by `user_id`,
-service role only. No code acquires a lock, so the table stays empty.
+service role only (clients' grants revoked). No code acquires a lock, so the table stays empty.
 `cleanup_stale_transcription_locks()` deletes locks older than 5
 minutes.
 
 `subscriptions` (migration 001): one row per user. `tier` is `free` or
-`supporter`. `expires_at` is nullable (never-expires when NULL). Read
+`supporter`. A NULL `expires_at` never expires. Read
 by the edge function via `getUserTier()` to apply rate limits.
 
 ### `verse_of_month`, `popular_ranges`, `user_stats`
 
-`verse_of_month` (migrations 007, 008): Public-readable monthly
-challenge. Schema: `id`, `year_month` (TEXT, format `"YYYY-MM"`,
-unique), `book`, `chapter`, `verse_start`, `verse_end`, `image_url`
-(nullable, optional cover image). Inserted by admin via Supabase
-dashboard or service role.
+`verse_of_month`: [monthly references, public-bucket artwork and access rules](../features/home.md#verse_of_month).
 
 `popular_ranges` (migrations `0101_popular_verses.sql`,
-`015_popular_verses_mastered_only.sql`): Top verse ranges across all
-users, refreshed every 12 hours by `update_popular_ranges()`. Generates
-*every* sub-range of each mastered verse using `generate_series` —
-counts distinct users per `(book, chapter, start, end)`.
-Public-readable; service role writes. See `docs/features/insights.md`.
-
-`user_stats` (migration 011): Cron-precomputed every 6 hours by
-`update_user_stats()`. Computes `total_words_mastered` for every user
-with a qualifying attempt, and `avg_time_per_word_ms` only for users
-with `stats_min_words` (600) or more mastered words. So the "average
-time to master" insight is null for most users. Not populated
-incrementally — the cron is the only writer.
+`015_popular_verses_mastered_only.sql`; public-readable) and `user_stats`
+(migration 011) are written only by their cron functions:
+`update_popular_ranges()` every 12 hours (distinct users per *every*
+sub-range of each mastered verse, via `generate_series`, so it grows fast;
+top 1000 kept) and `update_user_stats()` every 6 hours
+(`avg_time_per_word_ms` only from `stats_min_words`, 600, so null for most
+users). Rules: [insights.md](../features/insights.md).
 
 ## Functions, triggers and cron
 
@@ -243,31 +223,35 @@ incrementally — the cron is the only writer.
 | `update_updated_at_column()` | trigger fn | sets `updated_at = NOW()` |
 | `update_user_collections_updated_at` | trigger | fires on UPDATE |
 | `update_user_verses_updated_at` | trigger | fires on UPDATE |
-| `cleanup_stale_transcription_locks()` | fn | deletes locks > 5 min old |
-| `cleanup_expired_verse_cache()` | fn | left from migration 001; references a dropped column and nothing calls it |
-| `get_verse_cache_count(version)` | fn | row count per version |
-| `evict_lru_verses(version, max, needed)` | fn | LRU eviction batch |
-| `upsert_verses(book, chapter, version, jsonb)` | fn | bulk verse upsert |
-| `get_total_time_studied(user_id)` | fn (SECURITY DEFINER) | sums `recording_duration_ms` |
-| `get_current_streak(user_id, tz_offset_min)` | fn (SECURITY DEFINER) | counts consecutive practice days in user's TZ |
-| `update_popular_ranges()` | fn (SECURITY DEFINER) | rebuilds `popular_ranges` |
-| `update_user_stats()` | fn (SECURITY DEFINER) | refreshes `user_stats` |
-| `delete_own_account()` | fn (SECURITY DEFINER) | deletes the caller across all tables in safe order |
-| `register_device_token(token, platform)` | fn (SECURITY DEFINER) | upserts a `device_tokens` row as the caller, taking it from any other user; see `docs/features/notifications.md` |
+| `cleanup_stale_transcription_locks()`, `cleanup_expired_verse_cache()` (references a dropped column), `get_verse_cache_count(version)`, `evict_lru_verses(version, max, needed)`, `upsert_verses(book, chapter, version, jsonb)` | legacy fns, service role only | no caller in the repo |
+| `private.guard_verse_delete()` | trigger fn (invoker) | the `user_verses` delete guard above |
+| `import_curated_collection()` | authenticated invoker | atomic Library import |
+| `claim_intro_presentation(text)` | authenticated invoker | one account claim |
+| `get_total_time_studied(user_id)`, `get_current_streak(user_id, tz_offset_min)` | invoker, signed in; the caller's own id only | [insights.md](../features/insights.md#streak) |
+| `update_popular_ranges()`, `update_user_stats()` | SECURITY DEFINER, cron only | rebuild `popular_ranges`, `user_stats` |
+| `delete_own_account()` | SECURITY DEFINER, signed in, `search_path ''` | orders account deletion across tables |
+| `orphaned_feedback_photos()` | SECURITY DEFINER, service role only | [sweep](../features/feedback.md) |
+| `register_device_token(token, platform)` | fn (SECURITY DEFINER) | assigns token to caller, including reassignment |
+| `reorder_collections` | invoker, authenticated only | saves full custom order atomically |
+| `copy_verse_to_collection` | invoker, authenticated only | checks both owners (junction RLS checks only the verse's) |
+| `add_verse`, `delete_verse`, `delete_collection`, `save_verse_progress` | invoker, signed in | [add](../features/adding-verses.md#verse-identity), [delete](../features/library.md#deleting-a-verse), [progress](../features/review.md#what-a-session-writes) |
+| shared collection functions | invoker wrappers | [table](../features/shared-collections.md#functions) |
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
 | `verse_cache_stats` | view | per-version cache stats |
 | `get_votm_mastery_count(book, chapter, vs, ve)` | **MISSING** | see `docs/features/home.md` |
 
 `pg_cron` jobs: `update-popular-ranges` (every 12h), `update-user-stats`
-(every 6h), `send-notifications` (every minute, through `pg_net`) and
-`prune-notification-log` (daily).
+(every 6h), `send-notifications` (every minute, through `pg_net`),
+`prune-notification-log` (daily) and `delete-feedback-photos` (daily).
 
 ## Relationships
 
 ```
 auth.users
- ├── user_collections (soft-delete)
+ ├── profiles (translation, names, welcome)
+ ├── shared_collections ── members, verses (references), invites
+ ├── user_collections (soft-delete; shared_collection_id → shared_collections)
  │     └── verse_collections (junction) ─── user_verses (soft-delete, no text)
  │                                               │
  │                                               └── (references) verse_cache (shared, LRU)
@@ -278,7 +262,8 @@ auth.users
  ├── subscriptions
  ├── device_tokens
  ├── notification_preferences
- └── notification_log
+ ├── notification_log
+ └── feedback_reports
 
 verse_of_month   (public read, admin write)
 popular_ranges   (public read, cron write — derived from user_verses)
@@ -297,55 +282,42 @@ Soft delete is asymmetric and intentional:
   - If the verse is mastered (`progress.hard.completed === true`),
     soft-delete so it stays visible in the virtual `mastered`
     collection.
-  - If not mastered AND not in any other collection, hard-delete.
+  - If not mastered AND not in any other collection, hard-delete (the
+    delete guard refuses it otherwise).
   - If still in another collection, just remove the junction row
     (the verse remains active in the other collection).
-- **`session_attempts`**: never deleted. Only `delete_own_account()`
-  removes them.
+- **`session_attempts`**: never deleted, except with the account.
 
 The unique index on `user_verses` is partial (`WHERE deleted_at IS
 NULL`), so the database alone wouldn't stop a second row for a
-soft-deleted verse. The `addVerse` store action looks the verse up
-including soft-deleted rows and un-soft-deletes the existing row
-instead of inserting a new one.
+soft-deleted verse; `add_verse` restores it instead.
 
 ## Migration safety (invariant 11)
 
-**Migrations ship to prod *before* the matching client.** `npm run
-release` applies them, then merges. The iOS / Android client takes
-days to clear App Store / Play review and even longer to propagate to
-all users. So at any moment the DB schema may be ahead of the client by
-one (or many) migrations, and a non-trivial number of users will be on
-an older client *forever*. **Every migration must be safe under "old
-client + new schema"**:
+**Migrations reach prod *before* the matching client** (`npm run release`
+applies them, then merges), and store review and slow updates leave some users
+on an older client forever. So the schema can be any number of migrations
+ahead of a client, and **every migration must be safe under "old client + new
+schema"**:
 
-- **Additive only.** Never DROP a column, never NOT NULL an existing
-  column, never tighten a CHECK on an existing column, never rename.
-  Add nullable columns with permissive CHECKs.
-- **Old client SELECTs must keep working.** Supabase JS returns all
-  columns; old clients ignore unknown keys (verify your mapper doesn't
-  choke). New nullable columns are safe.
-- **Old client INSERTs/UPDATEs must keep working.** Old code won't
-  reference new columns — they default to NULL. Make sure no NOT NULL
-  or CHECK can be triggered by old write shapes. Migration 019 gives
-  its new `NOT NULL` column and compound CHECK defaults for this reason.
-- **New columns must be readable as NULL on the new client.** The new
-  client may run against an un-migrated DB during rollout. Mappers and
-  sort/filter logic must handle missing fields gracefully
-  (`parseVerseRowExtras`, `rowToPrefs`).
-- **Backfills** are fine but should not block old clients during
-  migration. Avoid long-running migrations that take exclusive locks
-  on tables old clients are reading.
-- **Cleanup migrations** (DROP a column, tighten NOT NULL) are only
-  safe after enough App Store rollout time has passed that the oldest
-  live client is post-the-feature. Record the rollout window in the
-  area doc; ship cleanup as a separate later migration.
+- **Additive only.** Never drop or rename a column, never make an existing
+  column NOT NULL or tighten its CHECK. Add nullable columns with permissive CHECKs.
+- **Old reads keep working.** supabase-js returns every column; old clients
+  ignore unknown keys (check the mapper doesn't choke).
+- **Old writes keep working.** Old code never sends new columns, so they
+  default to NULL; no NOT NULL or CHECK may trip on an old write shape
+  (migration 019 gives its new `NOT NULL` column and compound CHECK defaults).
+- **The new client handles new columns missing.** It may run against an
+  un-migrated DB during rollout (`parseVerseRowExtras`, `rowToPrefs`).
+- **Backfills** mustn't block old clients: no long exclusive locks on tables they read.
+- **Cleanup** (drop a column, tighten NOT NULL) only once the oldest live
+  client is past the feature, as a separate later migration; record the
+  rollout window in the area doc. Policy and grant cleanups check that each
+  object exists (`pg_policies`, `to_regclass`, `to_regprocedure` in a `DO`
+  block), since prod may predate some.
 
-The same constraint applies to **edge functions** (Bible API,
-transcription) — they deploy from this repo and go live immediately.
-New request/response shapes need backwards-compatible handling for old
-clients still in the wild. See `docs/architecture/edge-functions.md`.
-
+Edge functions go live at once too, so new request or response shapes must
+still answer old clients ([edge-functions.md](edge-functions.md)).
 Migrations 005 and 006 drop columns; they predate this rule.
 
 ## Migration tooling
@@ -371,28 +343,20 @@ refused unless it has an approval line:
 
 Squawk can't see SQL inside `DO $$` blocks, so check those by hand.
 
-**Local database.** Run through `scripts/db.mjs`:
+**Local database.** `scripts/db.mjs` runs `npm run db:start`, `db:stop`, `db:status`,
+`db:destroy` (removes the data too), `db:reset` (migrations, then `supabase/seed.sql`), `db:env`
+(local URL and anon key to `.env.local`) and `db:types` (`supabase/database.types.ts`;
+`-- --check` fails if stale).
 
-| Command | Does |
-|---|---|
-| `npm run db:start` / `db:stop` | start or stop local Supabase |
-| `npm run db:reset` | rebuild from migrations and `supabase/seed.sql` |
-| `npm run db:env` | write the local URL and anon key to `.env.local` |
-| `npm run db:status` | show what's running |
-| `npm run db:types` | regenerate `supabase/database.types.ts` (`-- --check` fails if stale) |
-| `npm run db:destroy` | remove the local stack and its data |
-
-**Seed.** `supabase/seed.sql` runs only on local databases. It creates
-two logins: `reader-a` with a small library and a 5-day streak, and
-`reader-b` brand new. It also unschedules any local cron job that
+**Seed.** `supabase/seed.sql` runs only on local databases. Its logins
+are described at its top. It also unschedules any local cron job that
 would call a hosted URL.
 
-**Tests.** `npm run test:db` runs the pgTAP files in `supabase/tests/`:
-`catalog.test.sql` (every public table has RLS on; no `SECURITY DEFINER`
-function is open to clients unless allowlisted), `access.test.sql`
-(one reader can't read or write another's data, with known bugs as
-todos) and `device-tokens.test.sql` (a shared phone's token row goes
-to the last account to register it).
+**Tests.** `npm run test:db` runs the pgTAP files in `supabase/tests/`, one per
+area. `catalog.test.sql`: every public table has RLS on; no `SECURITY DEFINER`
+function is open to clients unless allowlisted, and each pins `search_path`; no
+"Service role can manage" policy; `auth.uid()` only in a sub-select; no duplicate indexes; every user FK cascades or sets
+null. `access.test.sql`: one reader can't reach another's data.
 
 **Prod.** Migrations reach prod only through `npm run release`, which
 also re-dates new files to sort after prod's newest. See
@@ -400,21 +364,17 @@ also re-dates new files to sort after prod's newest. See
 
 ## Sharp edges
 
-- `get_votm_mastery_count` has no definition: see
-  `docs/features/home.md`.
-- Access gaps in the stats functions: see `docs/features/insights.md`.
-- Function `search_path` is unset on most functions, which Supabase
+- `search_path` is unset on most invoker functions, which Supabase
   Security Advisor flags (low risk).
 - `get_tier_and_usage`, the RPC behind `getTierAndUsage` in
   `_shared/usage.ts`, isn't defined in any migration. Nothing calls
   that helper.
-- `update_popular_ranges()` includes soft-deleted verses on purpose,
-  since mastery is permanent.
-- `popular_ranges` enumerates *every* sub-range with
-  `generate_series` — table size grows fast. Top 1000 only retained.
 
 ## Decisions
 
 - 2025-12-24 · `session_attempts` keeps its own verse columns and no FK to `user_verses` · Attempts must survive verse deletion for analytics.
 - 2026-08-25 · Study prefs are columns, not `progress` keys · Progress writes are whole-object read-modify-write through `parseProgress`, which strips unknown keys, so old clients would clobber a JSONB key and Reset Progress would wipe it.
 - 2026-08-25 · `verse_cache`, `app_config` and `verse_cache_stats` locked to the service role (020) · Clients never query them directly, so this is safe for old clients.
+- 2026-11-11 · Account settings live in `profiles`, not auth metadata · RLS-guarded, additive, room for display names.
+- 2026-11-14 · Old apps' unsafe verse delete is refused by a trigger · Old clients stay in the wild; it refuses only a delete that would drop a collection link nothing else holds, which no current path does.
+- 2026-11-14 · Owner policies are signed-in only with `(select auth.uid())`; "Service role can manage" policies dropped · The sub-select runs once per query, and the service role bypasses RLS anyway.

@@ -1,23 +1,32 @@
-import { AppHeader } from '@/components/app-header';
+import { HeaderPill } from '@/components/library/CollectionHeader';
+import { QuickAddField } from '@/components/library/QuickAddField';
+import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { TopBarButton } from '@/components/ui/TopBar';
+import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
-import { type BibleVersion } from '@/lib/storage';
-import { BIBLE_VERSIONS } from '@/lib/settings';
-import { useAppStore } from '@/lib/store';
+import { DEFAULT_COLLECTION_ID, type BibleVersion } from '@/lib/storage';
+import { useAppStore, useCollection } from '@/lib/store';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  Modal,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import Animated, { Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const easing = Easing.bezier(...Motion.easing);
+// The field's top padding inside QuickAddField, and its gap under the status bar while searching.
+const FIELD_INSET = 8;
+const SEARCH_TOP = 6;
 
 export default function AddVerseScreen() {
   const { collectionId } = useLocalSearchParams<{ collectionId?: string }>();
@@ -27,20 +36,39 @@ export default function AddVerseScreen() {
   const bibleVersion = useAppStore((state) => state.bibleVersion);
 
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<BibleVersion>(bibleVersion);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const collection = useCollection(collectionId ?? DEFAULT_COLLECTION_ID);
+  const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  // Search lifts the field to the top: the bar and title slide up and fade, and the column grows
+  // by the same distance so the suggestions still reach the bottom.
+  const [lift, setLift] = useState(0);
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(searching ? 1 : 0, { duration: searching ? Motion.expandMs : Motion.exitMs, easing });
+  }, [searching, progress]);
+  const column = useAnimatedStyle(() => (reduced ? {} : {
+    transform: [{ translateY: -progress.value * lift }],
+    marginBottom: -progress.value * lift,
+  }));
+  const chrome = useAnimatedStyle(() => ({ opacity: 1 - progress.value }));
 
+  // Ignores only a quick re-tap of the same book; a tap on another book goes through.
+  const lastBookPress = useRef({ book: '', at: 0 });
   const handleBookPress = (book: string) => {
-    setExpandedBook(expandedBook === book ? null : book);
+    const now = Date.now();
+    if (lastBookPress.current.book === book && now - lastBookPress.current.at <= 500) return;
+    lastBookPress.current = { book, at: now };
+    setExpandedBook((current) => (current === book ? null : book));
   };
 
-  const handleChapterPress = (book: string, chapter: number) => {
+  const handleChapterPress = useDebouncedPress((book: string, chapter: number) => {
     const params = new URLSearchParams();
     if (collectionId) params.set('collectionId', collectionId);
-    params.set('version', selectedVersion);
     const queryString = params.toString();
     router.push(`/(tabs)/(library)/add/${encodeURIComponent(book)}/${chapter}?${queryString}`);
-  };
+  });
 
   const renderChapterGrid = (book: string) => {
     const chapterCount = getChapterCount(book);
@@ -93,73 +121,59 @@ export default function AddVerseScreen() {
     );
   };
 
+  // The picker is the account translation: changing it here changes it everywhere.
   const handleVersionSelect = (version: BibleVersion) => {
     Haptics.selectionAsync();
-    setSelectedVersion(version);
     setVersionPickerVisible(false);
+    void useAppStore.getState().setBibleVersion(version);
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader
-        title="Add Verse"
-        rightButton={{
-          label: selectedVersion,
-          onPress: () => setVersionPickerVisible(true),
-          variant: 'text',
-        }}
-      />
-
-      {/* Version Picker Modal */}
-      <Modal
-        visible={versionPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVersionPickerVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setVersionPickerVisible(false)}
-        >
-          <View style={[styles.pickerContainer, { backgroundColor: colors.cardAlt }]}>
-            <Text style={[styles.pickerTitle, { color: colors.text }]}>Translation</Text>
-            <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
-              {BIBLE_VERSIONS.map((version) => (
-                <Pressable
-                  key={version.value}
-                  style={[
-                    styles.pickerOption,
-                    selectedVersion === version.value && { backgroundColor: colors.primary },
-                  ]}
-                  onPress={() => handleVersionSelect(version.value)}
-                >
-                  <Text
-                    style={[
-                      styles.pickerOptionText,
-                      { color: selectedVersion === version.value ? colors.white : colors.text },
-                    ]}
-                  >
-                    {version.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.pickerOptionSubtext,
-                      { color: selectedVersion === version.value ? 'rgba(255,255,255,0.7)' : colors.icon },
-                    ]}
-                  >
-                    {version.full}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+      <Animated.View style={[styles.container, column]}>
+        <Animated.View style={[{ paddingTop: insets.top }, chrome]} pointerEvents={searching ? 'none' : 'auto'}>
+          <View style={styles.bar}>
+            <TopBarButton icon="chevron.left" label="Back" onPress={() => router.back()} />
+            <HeaderPill
+              testID="add-translation-picker"
+              icon="book.closed"
+              label={bibleVersion}
+              accessibilityLabel={`Translation, ${bibleVersion}`}
+              onPress={() => setVersionPickerVisible(true)}
+            />
           </View>
-        </Pressable>
-      </Modal>
+          <View style={styles.titleBlock}>
+            <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Add verses</Text>
+            {collection && (
+              <Text style={[styles.subtitle, { color: colors.icon }]} numberOfLines={1}>to {collection.name}</Text>
+            )}
+          </View>
+        </Animated.View>
 
-      <ScrollView style={styles.scrollView}>
-        {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+        <View
+          style={searching ? styles.container : undefined}
+          onLayout={(event) => setLift(event.nativeEvent.layout.y + FIELD_INSET - insets.top - SEARCH_TOP)}
+        >
+          <QuickAddField collectionId={collectionId} searching={searching} onSearchChange={setSearching} />
+        </View>
+
+        {!searching && (
+          <Animated.View entering={FadeIn.duration(Motion.expandMs)} exiting={FadeOut.duration(Motion.exitMs)} style={styles.scrollView}>
+            <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+              {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
+              <View style={styles.bottomPadding} />
+            </ScrollView>
+          </Animated.View>
+        )}
+      </Animated.View>
+
+      <BibleTranslationPicker
+        version={bibleVersion}
+        visible={versionPickerVisible}
+        onSelect={handleVersionSelect}
+        onClose={() => setVersionPickerVisible(false)}
+        accountNote
+      />
     </View>
   );
 }
@@ -168,49 +182,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)', // Keep hardcoded for overlay
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerContainer: {
-    width: '80%',
-    maxWidth: 300,
-    maxHeight: '60%',
-    borderRadius: 14,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  pickerScroll: {
-    flexGrow: 0,
-  },
-  pickerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  pickerOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    marginBottom: 6,
-  },
-  pickerOptionText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  pickerOptionSubtext: {
-    fontSize: 12,
-    marginTop: 2,
-  },
   scrollView: {
     flex: 1,
+  },
+  bar: {
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 6,
+    paddingRight: 16,
+  },
+  titleBlock: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 4,
+    gap: 2,
+  },
+  title: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 15,
+    lineHeight: 20,
   },
   testamentDivider: {
     paddingHorizontal: 16,

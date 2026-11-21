@@ -8,24 +8,14 @@ interface CollectionCardSkeletonProps {
 }
 
 export function CollectionCardSkeleton({ count = 3 }: CollectionCardSkeletonProps) {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
-  const cardBg = colors.card;
-  const borderColor = isDark ? 'rgba(201,169,98,0.3)' : 'rgba(176,141,87,0.25)'; // Bronze gold accent border
+  const colors = Colors[useColorScheme() ?? 'light'];
 
   return (
     <>
       {Array.from({ length: count }).map((_, index) => (
         <View
           key={index}
-          style={[
-            styles.card,
-            {
-              backgroundColor: cardBg,
-              borderColor,
-            },
-          ]}
+          style={[styles.row, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator }]}
         >
           <View style={styles.cardContent}>
             <View style={styles.cardLeft}>
@@ -44,11 +34,9 @@ export function CollectionCardSkeleton({ count = 3 }: CollectionCardSkeletonProp
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
+  row: {
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   cardContent: {
     flexDirection: 'row',

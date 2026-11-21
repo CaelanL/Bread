@@ -1,0 +1,13 @@
+appId: com.caelanliu.biblemem
+---
+- tapOn:
+    id: curated-translation-picker
+- assertVisible: "Translation"
+- scrollUntilVisible:
+    element:
+      id: bible-translation-${VERSION}
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn:
+    id: bible-translation-${VERSION}
+- assertNotVisible: "Translation"

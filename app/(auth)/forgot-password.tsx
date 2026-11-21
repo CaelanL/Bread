@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
-import { Colors, authAccent } from '@/constants/theme';
+import { Colors, authAccent, InputText } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -117,6 +117,9 @@ export default function ForgotPasswordScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="emailAddress"
               returnKeyType="done"
               onSubmitEditing={handleResetPassword}
             />
@@ -198,6 +201,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   input: {
+    ...InputText,
     flex: 1,
     fontSize: 16,
   },

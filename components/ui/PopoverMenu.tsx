@@ -1,15 +1,17 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 
 interface PopoverMenuItem {
@@ -26,7 +28,8 @@ interface PopoverMenuProps {
   anchorPosition?: { top: number; right: number };
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Space kept between the menu and the safe area's edges.
+const EDGE_GAP = 8;
 
 export function PopoverMenu({
   visible,
@@ -37,9 +40,19 @@ export function PopoverMenu({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // Measured on first layout; the menu stays hidden until then so it never shows cut off.
+  const [menuHeight, setMenuHeight] = useState(0);
+  const top = Math.max(
+    insets.top + EDGE_GAP,
+    Math.min(anchorPosition.top, windowHeight - insets.bottom - EDGE_GAP - menuHeight),
+  );
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const pendingAction = useRef<(() => void) | null>(null);
+  const closing = useRef(false);
 
   useEffect(() => {
     if (visible) {
@@ -62,12 +75,25 @@ export function PopoverMenu({
     }
   }, [visible]);
 
-  const handleClose = () => {
+  const finishDismiss = () => {
+    const action = pendingAction.current;
+    pendingAction.current = null;
+    closing.current = false;
+    action?.();
+  };
+
+  const handleClose = (action?: () => void) => {
+    if (closing.current) return;
+    closing.current = true;
+    pendingAction.current = action ?? null;
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 100,
       useNativeDriver: true,
-    }).start(() => onClose());
+    }).start(() => {
+      onClose();
+      if (Platform.OS !== 'ios') finishDismiss();
+    });
   };
 
   const menuBg = isDark ? colors.cardAlt : colors.card;
@@ -78,17 +104,19 @@ export function PopoverMenu({
       visible={visible}
       transparent
       animationType="none"
-      onRequestClose={handleClose}
+      onRequestClose={() => handleClose()}
+      onDismiss={finishDismiss}
     >
-      <Pressable style={styles.overlay} onPress={handleClose}>
+      <Pressable accessible={false} style={styles.overlay} onPress={() => handleClose()}>
         <Animated.View
+          onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)}
           style={[
             styles.menu,
             {
               backgroundColor: menuBg,
-              top: anchorPosition.top,
+              top,
               right: anchorPosition.right,
-              opacity: fadeAnim,
+              opacity: menuHeight ? fadeAnim : 0,
               transform: [{ scale: scaleAnim }],
             },
           ]}
@@ -100,11 +128,9 @@ export function PopoverMenu({
                   styles.menuItem,
                   pressed && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
                 ]}
-                onPress={() => {
-                  handleClose();
-                  // Small delay to let animation finish
-                  setTimeout(item.onPress, 100);
-                }}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+                onPress={() => handleClose(item.onPress)}
               >
                 {item.icon && (
                   <IconSymbol

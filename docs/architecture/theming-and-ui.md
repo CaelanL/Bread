@@ -8,7 +8,10 @@ just `StyleSheet.create` per file plus inline dynamic styles.
 
 ## Color tokens
 
-Defined in `constants/theme.ts`.
+Defined in `constants/theme.ts`. `CollectionArtColors` supplies the
+decorative surfaces and symbol colors for the curated collection art.
+Titles, subtitles, and introductions use the core text colors on solid
+surfaces.
 
 ### Light mode
 
@@ -17,18 +20,23 @@ Defined in `constants/theme.ts`.
 | `text` | `#1a1a1a` | primary text |
 | `background` | `#faf8f5` | screen background |
 | `tint` / `primary` | `#b08d57` | brand accent (bronze gold) |
+| `recordingControl` | `#987142` | bronze mic and waveform surface with white icons |
+| `recordingAction` | `rgba(0,0,0,0.10)` | submit action fill on bronze, same in both modes |
 | `card` | `#ffffff` | card surfaces |
 | `cardAlt` | `#f5f3f0` | secondary card surfaces |
+| `fill` | `rgba(0,0,0,0.05)` | quiet fill on the page: header pills, a pressed row |
 | `input` | `#f5f3f0` | input backgrounds |
 | `border` | `#e0dcd6` | dividers / borders |
 | `borderLight` | `#ebe7e1` | subtle dividers |
 | `success` | `#22c55e` | success status |
 | `warning` | `#f59e0b` | warning status |
 | `error` | `#ef4444` | error status |
+| `destructiveAction` | `#c93636` | swipe-delete fill in both themes, with white text |
 | `tabIconDefault` | `#8a8a8a` | inactive tab icons |
 | `tabIconSelected` | `#b08d57` | active tab icons |
 | `icon` | `#6b6b6b` | default icon color |
 | `primaryLight` | `rgba(176,141,87,0.12)` | tinted accent background |
+| `engravedFill` | `rgba(245,158,11,0.12)` | engraved collection icon |
 | `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
 | `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 
@@ -39,8 +47,10 @@ Defined in `constants/theme.ts`.
 | `text` | `#f5f5f5` | |
 | `background` | `#1a1a1a` | |
 | `tint` / `primary` | `#c9a962` | brand (lighter for contrast) |
+| `recordingControl` | `#a8824c` | bronze mic and waveform surface with white icons |
 | `card` | `#242424` | |
 | `cardAlt` | `#2e2e2e` | |
+| `fill` | `rgba(255,255,255,0.08)` | |
 | `input` | `#2e2e2e` | |
 | `border` | `#3a3a3a` | |
 | `borderLight` | `#444444` | |
@@ -49,6 +59,7 @@ Defined in `constants/theme.ts`.
 | `tabIconSelected` | `#c9a962` | |
 | `icon` | `#9a9a9a` | |
 | `primaryLight` | `rgba(201,169,98,0.15)` | |
+| `engravedFill` | `rgba(245,158,11,0.15)` | |
 | `overlay` | `rgba(0,0,0,0.6)` | |
 
 Status colors (`success`, `warning`, `error`) are intentionally the
@@ -57,6 +68,9 @@ shift with theme.
 
 Auth screens always use `Colors.dark`, with `authAccent` and
 `authButton` from the same file.
+
+A collection's accent (its `iconColor`, or `primary`) isn't a token: `withAlpha(hex, alpha)` with
+`AccentAlpha.fill` (its icon square) or `AccentAlpha.wash` (the header wash) derives from it.
 
 ## Radius, motion and shadows
 
@@ -104,6 +118,11 @@ export function useColorScheme() {
 - Default `colorMode` is `'system'` → follows the device.
 - User can override to `'light'` or `'dark'` from Settings.
 - Stored in Zustand + AsyncStorage (`app_color_mode`).
+- Read before the first frame: the store reads it with the other device settings at module
+  load (`settingsRead`), and the splash stays up until that read is done
+  ([launch splash](navigation-and-routing.md#launch-splash)), so a dark override never shows a
+  light frame. `npm run sim -- flow dark-cold-start` relaunches in Dark on a light simulator;
+  record the simulator to see the frames.
 - Persisted across sign-out (it's a device preference, not a user
   preference).
 
@@ -137,8 +156,7 @@ export function MyComponent() {
 
 `ThemedText` and `ThemedView` (`components/themed-text.tsx`,
 `themed-view.tsx`) are used only by Expo template leftovers:
-`app/modal.tsx`, `app/(tabs)/explore.tsx`,
-`components/parallax-scroll-view.tsx` and
+`app/modal.tsx`, `components/parallax-scroll-view.tsx` and
 `components/ui/collapsible.tsx`. Don't rewrite existing components to
 use them.
 
@@ -183,8 +201,13 @@ have hex literals; don't copy them.
 | `PopoverMenu.tsx` | Floating context menu |
 | `VerseReferenceBadge.tsx` | "John 3:16 KJV" badge |
 | `VerseExpandModal.tsx` | Expanded verse text modal |
+| `IntroVideoModal.tsx` | Dark video surface, captions, close and playback controls |
 | `AddToCollectionModal.tsx` | Pick collection(s) for a verse |
+| `CopyToCollectionModal.tsx` | Pick one destination for an existing saved verse |
+| `ModalCard.tsx` | `ModalCard` (a centered card on a dimmed backdrop, with an X) and `modalStyles` (its type, input and button), for modal routes |
 | `EngravedIcon.tsx` | Special icon for engraved verses |
+| `SearchTakeover.tsx` | Search that grows out of its pill to the top and covers the screen; Cancel plays it back |
+| `TopBar.tsx` | `TopBar`, `TopBarButton`, `LargeTitle`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
 
 If you're building a new reusable primitive, add it here with a
 `.tsx` (and `.ios.tsx` if it needs platform divergence). Pull
@@ -207,8 +230,38 @@ Adding a new icon means:
 3. Add a line to `MAPPING` in `icon-symbol.tsx`.
 4. Use `<IconSymbol name="house.fill" size={24} color={colors.tint} />`.
 
+The collection icon registry contributes its fallback glyphs to
+`MAPPING` and provides older iOS fallbacks. Cross, sword, and praying hands
+use Material Community Icons through `IconSymbol` on every platform.
+
 Forgetting step 3 means the icon renders correctly on iOS and not
 on Android / web.
+
+## Screen tops
+
+A screen's title lives in its content, never centered in a bar. `TopBar` floats over the scroll
+view (absolute, under the status bar): back on the left, icon actions (`TopBarButton`) on the
+right, and no surface at all: content scrolls under the icons. The bar never shows a title; the
+screen's title lives only in its content (`LargeTitle`). The tab bar has no hairline either: its
+background (`tabBarBackground` in `app/(tabs)/_layout.tsx`) fades content out over the 28 pt above it. The scroll view takes
+`paddingTop: useTopBarHeight()` and the same value as its `RefreshControl`'s `progressViewOffset`,
+so the spinner shows below the bar, not behind the Dynamic Island.
+
+Each screen picks its title. A tab's first screen (Home, Library, Settings) has `LargeTitle root`
+(34/700); a pushed page (Insights, Notifications) has `LargeTitle` (28/600); the collection
+screen has its name. `AppHeader` is the same bar in the layout flow, for screens whose top stays
+put: the title sits beside the back button, a labelled action is a `HeaderPill`, an icon one a
+`TopBarButton`. It carries a title only when the title says something the screen doesn't (a
+session's reference, a chapter's "John 3"). Setup and a curated collection drop theirs: the verse
+card and the collection's own name already say it.
+
+The collection screen's top is `CollectionHeader` (`components/library/`): the accent washing down
+from the top edge (an `expo-linear-gradient`, solid above the bar for a pull), a 56 pt icon square,
+the name at 28/600, a secondary line, and `HeaderPill`s (one `primary`, the rest on `fill`).
+
+Search is ours, not `headerSearchBarOptions`: the native search bar needs the native header
+(off app-wide) and lives in the bar, not in a pill under a header, and the iOS 26 placements
+can't be checked on the iOS 18 simulator.
 
 ## Haptics
 
@@ -220,14 +273,15 @@ if (process.env.EXPO_OS === 'ios') {
 }
 ```
 
-`HapticTab` follows it. The study and add-verse screens call `Haptics`
-without the check, so they also fire on Android.
+`HapticTab`, recording and Library hold actions follow this guard.
+Verse reveal and the add-verse screens also trigger haptics on Android.
 
 | Interaction | Style |
 |---|---|
 | Tab press | `impactAsync(Light)` (in `HapticTab`) |
 | Selection of a verse for adding | `selectionAsync()` |
 | Recording start/stop | `impactAsync(Medium)` |
+| Library long-press actions | `impactAsync(Light)` |
 | Chunk completion | `impactAsync(Light)` |
 
 Use `impactAsync` for taps and recording state transitions,
@@ -260,12 +314,28 @@ Invariant 8 is above. Also:
    automatically with valid SF Symbol names.
 4. **New haptics are gated to iOS.** Use the
    `EXPO_OS === 'ios'` guard.
+5. **Every `TextInput` style spreads `InputText` first** (`constants/theme.ts`: `letterSpacing: 0`,
+   `fontWeight: '400'`), then its own values. iOS on the New Architecture recycles input views and
+   keeps the last input's kern and weight when the next one sets none (react-native#42589); the
+   join-code field's spacing showed up in other fields on a phone. Flow: `input-spacing`.
 
 ## Sharp edges
 
 - **`SwipeableVerseCard.tsx` has hardcoded bronze RGBA values**
   (e.g. `rgba(176,141,87,0.25)`) that should ideally come from a
   derived theme token. Not a bug, but a candidate for cleanup.
+- **The native splash follows the system appearance, not `colorMode`.** It shows before any
+  JavaScript runs, so `app.config.js` (`expo-splash-screen`: white, black in dark) can't know the
+  override; a dark override on a light phone gets a white splash, then a dark first frame.
 - **No design-system documentation beyond this file** —
   `components/ui/` is the de facto catalog. If a new primitive is
   added, list it here.
+
+## Decisions
+
+- 2026-11-10 · Translation-picker backdrops are not accessibility elements · Settings' outer Pressable otherwise grouped the entire popup, hiding individual translation choices from native accessibility and UI automation. `accessible={false}` preserves the existing layout and dismissal behavior while exposing the option rows.
+- 2026-11-12 · `ModalCard`'s backdrop is a plain dim, no `BlurView` · Its routes fade natively, and a blur view under a fading parent drops its effect for the whole fade, so closing the share card flashed from blurred to sharp (Caelan's pass 3, C17).
+- 2026-11-12 · Depth comes from the screen tops, not entrances: the collection's accent wash, a bar that gains the page colour only once content is under it, and a pressed-row fill · Caelan's pass 3 (C20) asked for software-like depth, kept restrained; the lists are opened many times a day, so their rows don't animate in. Everything is scroll- or touch-driven, so reduced motion has nothing to turn off; the one autoplaying motion, search lifting to the top, fades instead under reduced motion.
+- 2026-11-12 · The top bar has no surface, hairline or small title · Caelan's pass 4 (C26): any band or title appearing on scroll read as the old nav bar coming back ("the white fade box is still there").
+- 2026-11-12 · Content fades out above the tab bar, which lost its hairline · Caelan wanted things scrolling under Home, Library and Settings to fade, on every screen.
+- 2026-11-12 · Content fades out into the bar (a page-colour gradient under it), on every `TopBar` screen · Caelan's pass 4 (C28) asked for it in collections and the Library; one bar, one behaviour, so Home, Settings, Insights, Notifications and Details get it too.

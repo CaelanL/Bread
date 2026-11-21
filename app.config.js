@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Bread",
     slug: "biblemem",
-    version: "1.3.1",
+    version: "2.1.0",
     // OTA updates (EAS Update). fingerprint policy: a hash of the native
     // project decides update compatibility, so JS-only merges ship OTA
     // and native changes force a store build. See
@@ -21,6 +21,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.caelanliu.biblemem",
+      // Invite links (https://sendlabs.dev/bread/join/<code>) open Bread. sendlabs.dev serves the
+      // matching apple-app-site-association; a native change, so it ships in a store build.
+      associatedDomains: ["applinks:sendlabs.dev"],
       // Ignored: appVersionSource "remote" in eas.json means EAS owns
       // the real buildNumber (14+ as of Aug 2026).
       buildNumber: "1",
@@ -62,6 +65,16 @@ export default {
         {
           // Default icon/color for Android (no-op on iOS).
           color: "#ffffff",
+        },
+      ],
+      [
+        "expo-image-picker",
+        {
+          // Feedback photos use the system picker, which needs no access to the library.
+          // false drops the photo and camera usage strings the plugin adds by default; the
+          // microphone string is left to Bread's own.
+          photosPermission: false,
+          cameraPermission: false,
         },
       ],
       [

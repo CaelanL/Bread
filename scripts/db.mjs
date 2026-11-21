@@ -121,7 +121,9 @@ function start() {
       if (hasPendingMigrations()) die(STUCK);
     }
   }
-  env();
+  // A phone on the LAN (db:env --lan) would lose the database every time a reset restarted it.
+  const url = parseEnv(envFile)[kit.envNames?.API_URL];
+  env(url && isLocalUrl(url) && !url.includes('127.0.0.1') && !url.includes('localhost') ? ['--lan'] : []);
   status();
 }
 

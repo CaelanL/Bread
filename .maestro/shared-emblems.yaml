@@ -1,0 +1,90 @@
+# Start from npm run db:reset. Library-card emblems on the seeded "Romans 8" (reader-c Cara owns,
+# reader-d Dana is a member): plain "Cara · 2 members" from the seed, "Mastered by everyone" once
+# the script masters every square and "Engraved by everyone" once it engraves them, the personal
+# "3 verses" and the engraved glyph (read as "Engraved") on Dana's copy after Cara deletes for everyone, and reader-a's Psalms mastered solo. docs/features/group-progress.md
+# A row reads its emblem first ("Mastered by everyone, …, Romans 8, …"), since the emblem sits on the icon.
+appId: com.caelanliu.biblemem
+name: shared-emblems
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Romans 8, Cara · 2 members.*"
+    timeout: 20000
+- takeScreenshot: emblems-1-shared-plain
+
+# Master the last squares: Romans 8:28 for Dana, 8:38-39 for both.
+- runScript:
+    file: scripts/shared-collections.js
+    env:
+      READER: reader-c
+      MODE: mastered
+      FILTER: book=eq.Romans&chapter=eq.8&verse_start=eq.38
+- runScript:
+    file: scripts/shared-collections.js
+    env:
+      READER: reader-d
+      MODE: mastered
+      FILTER: book=eq.Romans&chapter=eq.8&verse_start=gt.1
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Mastered by everyone.*Romans 8, .*"
+    timeout: 20000
+- takeScreenshot: emblems-2-mastered-by-everyone
+
+# Engrave every square.
+- runScript:
+    file: scripts/shared-collections.js
+    env:
+      READER: reader-c
+      MODE: engraved
+      FILTER: book=eq.Romans&chapter=eq.8
+- runScript:
+    file: scripts/shared-collections.js
+    env:
+      READER: reader-d
+      MODE: engraved
+      FILTER: book=eq.Romans&chapter=eq.8
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Engraved by everyone.*Romans 8, .*"
+    timeout: 20000
+- takeScreenshot: emblems-3-engraved-by-everyone
+
+# Cara deletes for everyone; Dana's copy is personal, keeps the emblem and loses "Shared".
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Engraved by everyone.*Romans 8, .*"
+    timeout: 20000
+- longPressOn: ".*Engraved by everyone.*Romans 8, .*"
+- tapOn: Delete
+- assertVisible: "Delete for everyone?"
+- tapOn: Delete
+- extendedWaitUntil:
+    notVisible: ".*Romans 8, .*"
+    timeout: 10000
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Engraved.*Romans 8, 3 verses.*"
+    timeout: 20000
+- assertNotVisible: ".*Romans 8, .*Shared.*"
+- takeScreenshot: emblems-4-dissolved-solo-engraved
+
+# reader-a masters Psalm 23:1-3: Psalms is mastered solo, My Verses (one verse still learning) isn't.
+- runScript:
+    file: scripts/shared-collections.js
+    env:
+      READER: reader-a
+      MODE: mastered
+      FILTER: book=eq.Psalms&chapter=eq.23
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible: ".*Mastered.*Psalms, 1 verse.*"
+    timeout: 20000
+- assertVisible: ".*My Verses, 2 verses.*"
+- takeScreenshot: emblems-5-solo-mastered

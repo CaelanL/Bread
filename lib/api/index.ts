@@ -5,7 +5,7 @@
  * All API keys are stored server-side - only the Supabase anon key is in the client.
  */
 
-export { supabase, ensureAuth, getAuthToken } from "./client";
+export { supabase, sessionUserId, getAuthToken } from "./client";
 export { fetchVerse, fetchVerses, fetchChapter, type BibleVersion, type BibleVerse, type ChapterResponse } from "./bible";
 export { processRecording, type ProcessRecordingResult } from "./recording";
 export { logSessionAttempt, getCurrentStreak, getTotalTimeStudied, getAvgTimeToMaster, type SessionAttemptData } from "./analytics";

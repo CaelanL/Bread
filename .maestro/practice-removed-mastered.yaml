@@ -1,0 +1,27 @@
+# reader-a removes John 3:16, a mastered verse, from its only collection, so it lives on the
+# Mastered list alone. Its setup screen still starts a session. The verse goes back afterwards.
+appId: com.caelanliu.biblemem
+name: practice-removed-mastered
+onFlowComplete:
+  - runScript:
+      file: scripts/removed-mastered.js
+      env:
+        MODE: restore
+---
+- runScript:
+    file: scripts/removed-mastered.js
+    env:
+      MODE: remove
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fsetup%2Fseed-john-3-16
+- extendedWaitUntil:
+    visible: "Start session.*"
+    timeout: 20000
+- takeScreenshot: practice-removed-mastered-1-setup
+- tapOn: "Start session.*"
+- extendedWaitUntil:
+    visible:
+      id: "mic-button"
+    timeout: 30000
+- assertNotVisible: "Something went wrong"
+- takeScreenshot: practice-removed-mastered-2-session

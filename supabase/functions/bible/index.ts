@@ -2,11 +2,12 @@
  * Bible API Edge Function
  *
  * Thin routing layer that delegates to adapters.
- * Handles auth, caching, and version routing.
+ * Handles auth, caching, and version routing. Only a server cache miss counts against the daily
+ * limit (docs/architecture/bible-api-and-caching.md).
  */
 
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
-import { getAuthUser } from "../_shared/auth.ts";
+import { verifyJwt } from "../_shared/auth.ts";
 import { handleCors } from "../_shared/cors.ts";
 import {
   unauthorized,
@@ -14,10 +15,8 @@ import {
   jsonResponse,
   serverError,
 } from "../_shared/errors.ts";
-import {
-  checkAndIncrementBibleUsage,
-  rateLimitResponse,
-} from "../_shared/usage.ts";
+import { rateLimitResponse } from "../_shared/usage.ts";
+import { countBibleFetch, readBibleUsage, type BibleUsage } from "./usage.ts";
 
 // Adapters
 import { esvAdapter } from "./adapters/esv.ts";
@@ -27,10 +26,8 @@ import { BibleAdapter } from "./adapters/types.ts";
 // Shared modules
 import { normalizeReference } from "./normalize.ts";
 import {
-  getCachedVerse,
+  getCachedVerses,
   cacheVerse,
-  getCachedVerseRange,
-  getCachedVerseRangeKeyed,
   getCachedChapter,
   cacheChapter,
 } from "./cache.ts";
@@ -76,7 +73,24 @@ function parseReference(ref: string): {
   };
 }
 
-serve(async (req) => {
+// Licensed text must never land in an HTTP cache on the device or in between.
+function noStore(response: Response): Response {
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+// Writes the cache after the response is out; awaited where the runtime can't wait for it.
+async function afterResponse(work: Promise<void>): Promise<void> {
+  // deno-lint-ignore no-explicit-any
+  const runtime = (globalThis as any).EdgeRuntime;
+  const logged = work.catch((e) => console.error("[BIBLE] Cache write failed:", e));
+  if (runtime?.waitUntil) runtime.waitUntil(logged);
+  else await logged;
+}
+
+serve(async (req) => noStore(await handle(req)));
+
+async function handle(req: Request): Promise<Response> {
   // Handle CORS preflight
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -86,8 +100,8 @@ serve(async (req) => {
     return badRequest("Method not allowed");
   }
 
-  // Authenticate user
-  const user = await getAuthUser(req);
+  // Authenticate user (a local signature check, no call to Auth)
+  const user = await verifyJwt(req);
   if (!user) {
     return unauthorized();
   }
@@ -119,18 +133,26 @@ serve(async (req) => {
     return badRequest(`Invalid reference format: ${ref}`);
   }
 
-  // Check usage limits
-  const usage = await checkAndIncrementBibleUsage(user.id);
-  if (!usage.allowed) {
-    return rateLimitResponse(usage.used, usage.limit);
+  // Read the usage alongside the cache; only a miss needs it.
+  const usageRead = readBibleUsage(user.id);
+  usageRead.catch(() => {});
+
+  // A miss over the limit answers 429; otherwise it counts one, alongside the external fetch.
+  async function fetchCounted<T>(fetch: () => Promise<T>): Promise<T | Response> {
+    const usage: BibleUsage = await usageRead;
+    if (usage.used >= usage.limit) {
+      return rateLimitResponse(usage.used, usage.limit);
+    }
+    const [result] = await Promise.all([fetch(), countBibleFetch(usage)]);
+    return result;
   }
 
   try {
-    if (isChapterRequest) {
+    // A chapter, with ?chapter=true or as a chapter-only reference
+    if (isChapterRequest || !parsed.verse) {
       // Get expected verse count for validation and cache check
       const expectedCount = getExpectedVerseCount(ref) || 0;
 
-      // Check cache
       const cached = await getCachedChapter(
         parsed.book,
         parsed.chapter,
@@ -147,13 +169,12 @@ serve(async (req) => {
         });
       }
 
-      // Fetch via adapter
       console.log(`[BIBLE] Fetching chapter from API: ${ref} (${version})`);
-      const result = await adapter.fetchChapter(ref, version, expectedCount);
+      const result = await fetchCounted(() => adapter.fetchChapter(ref, version, expectedCount));
+      if (result instanceof Response) return result;
 
       // Cache result (verse-level)
-      await cacheChapter(parsed.book, parsed.chapter, version, result.verses);
-      console.log(`[BIBLE] Cached chapter: ${ref} (${version}) - ${Object.keys(result.verses).length} verses`);
+      await afterResponse(cacheChapter(parsed.book, parsed.chapter, version, result.verses));
 
       return jsonResponse({
         reference: ref,
@@ -164,133 +185,73 @@ serve(async (req) => {
     }
 
     // Single verse or verse range request
-    if (parsed.verse) {
-      const verseEnd = parsed.verseEnd || parsed.verse;
+    const verseStart = parsed.verse;
+    const verseEnd = parsed.verseEnd || verseStart;
 
-      // Check cache
-      let cachedText: string | null = null;
-      if (parsed.verseEnd) {
-        cachedText = await getCachedVerseRange(
-          parsed.book,
-          parsed.chapter,
-          parsed.verse,
-          verseEnd,
-          version
-        );
-      } else {
-        cachedText = await getCachedVerse(
-          parsed.book,
-          parsed.chapter,
-          parsed.verse,
-          version
-        );
-      }
-
-      if (cachedText) {
-        // Also get keyed data for new clients
-        const cachedVerses = parsed.verseEnd
-          ? await getCachedVerseRangeKeyed(
-              parsed.book,
-              parsed.chapter,
-              parsed.verse,
-              verseEnd,
-              version
-            )
-          : { [parsed.verse.toString()]: cachedText };
-        console.log(`[BIBLE] DB cache hit: ${ref} (${version})`);
-        return jsonResponse({
-          reference: ref,
-          version,
-          text: cachedText,
-          verses: cachedVerses || {},
-          cached: true,
-        });
-      }
-
-      // For ranges, fetch the chapter and extract individual verses
-      // This allows us to cache each verse separately for proper range lookups
-      if (parsed.verseEnd) {
-        console.log(`[BIBLE] Fetching range from API: ${ref} (${version})`);
-        const expectedCount = getExpectedVerseCount(`${parsed.book} ${parsed.chapter}`) || 0;
-        const chapterResult = await adapter.fetchChapter(
-          `${parsed.book} ${parsed.chapter}`,
-          version,
-          expectedCount
-        );
-
-        // Extract just the verses we need
-        const rangeVerses: Record<string, string> = {};
-        for (let v = parsed.verse; v <= verseEnd; v++) {
-          const verseText = chapterResult.verses[v.toString()];
-          if (verseText) {
-            rangeVerses[v.toString()] = verseText;
-          }
-        }
-
-        // Cache each verse individually (cacheChapter handles this)
-        await cacheChapter(parsed.book, parsed.chapter, version, rangeVerses);
-        console.log(`[BIBLE] Cached range: ${ref} (${version}) - ${Object.keys(rangeVerses).length} verses`);
-
-        // Combine for response
-        const combinedText = Object.values(rangeVerses).join(" ");
-        return jsonResponse({
-          reference: ref,
-          version,
-          text: combinedText,
-          verses: rangeVerses,
-          cached: false,
-        });
-      }
-
-      // Single verse - fetch and cache normally
-      console.log(`[BIBLE] Fetching single verse from API: ${ref} (${version})`);
-      const result = await adapter.fetchVerse(ref, version);
-      await cacheVerse(
-        parsed.book,
-        parsed.chapter,
-        parsed.verse,
-        version,
-        result.text
-      );
-      console.log(`[BIBLE] Cached single verse: ${ref} (${version})`);
-
-      return jsonResponse({
-        reference: ref,
-        version,
-        text: result.text,
-        verses: { [parsed.verse.toString()]: result.text },
-        cached: false,
-      });
-    }
-
-    // Chapter-only reference without ?chapter=true (treat as chapter request)
-    const expectedCount = getExpectedVerseCount(ref) || 0;
-    const cached = await getCachedChapter(
+    const cachedVerses = await getCachedVerses(
       parsed.book,
       parsed.chapter,
-      version,
-      expectedCount
+      verseStart,
+      verseEnd,
+      version
     );
-    if (cached) {
+    if (cachedVerses) {
+      console.log(`[BIBLE] DB cache hit: ${ref} (${version})`);
       return jsonResponse({
         reference: ref,
         version,
-        verses: cached,
+        text: Object.values(cachedVerses).join(" "),
+        verses: cachedVerses,
         cached: true,
       });
     }
 
-    const result = await adapter.fetchChapter(ref, version, expectedCount);
-    await cacheChapter(parsed.book, parsed.chapter, version, result.verses);
+    // For ranges, fetch the chapter and extract individual verses
+    // This allows us to cache each verse separately for proper range lookups
+    if (parsed.verseEnd) {
+      console.log(`[BIBLE] Fetching range from API: ${ref} (${version})`);
+      const expectedCount = getExpectedVerseCount(`${parsed.book} ${parsed.chapter}`) || 0;
+      const chapterResult = await fetchCounted(() =>
+        adapter.fetchChapter(`${parsed.book} ${parsed.chapter}`, version, expectedCount)
+      );
+      if (chapterResult instanceof Response) return chapterResult;
+
+      // Extract just the verses we need
+      const rangeVerses: Record<string, string> = {};
+      for (let v = verseStart; v <= verseEnd; v++) {
+        const verseText = chapterResult.verses[v.toString()];
+        if (verseText) {
+          rangeVerses[v.toString()] = verseText;
+        }
+      }
+
+      // Cache each verse individually (cacheChapter handles this)
+      await afterResponse(cacheChapter(parsed.book, parsed.chapter, version, rangeVerses));
+
+      return jsonResponse({
+        reference: ref,
+        version,
+        text: Object.values(rangeVerses).join(" "),
+        verses: rangeVerses,
+        cached: false,
+      });
+    }
+
+    // Single verse - fetch and cache normally
+    console.log(`[BIBLE] Fetching single verse from API: ${ref} (${version})`);
+    const result = await fetchCounted(() => adapter.fetchVerse(ref, version));
+    if (result instanceof Response) return result;
+    if (!result.merged) await afterResponse(cacheVerse(parsed.book, parsed.chapter, verseStart, version, result.text));
 
     return jsonResponse({
       reference: ref,
       version,
-      verses: result.verses,
+      text: result.text,
+      verses: { [verseStart.toString()]: result.text },
       cached: false,
     });
   } catch (error) {
     console.error(`Bible fetch error (${version}):`, error);
     return serverError("Failed to fetch verse");
   }
-});
+}
