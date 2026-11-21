@@ -2,7 +2,7 @@
 -- schedules, and the RPC that was dropped. All writes roll back.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(7);
+select plan(9);
 
 select has_function('public', 'get_votm_mastery_count', array['text', 'integer', 'integer', 'integer'],
   'the Verse of the Month count exists');
@@ -28,6 +28,11 @@ select is((select schedule from cron.job where jobname = 'update-popular-ranges'
   'popular ranges rebuild hourly');
 select is((select schedule from cron.job where jobname = 'vacuum-pg-net-responses'), '17 8 * * *',
   'pg_net''s response table is vacuumed daily');
+select is((select command from cron.job where jobname = 'update-popular-ranges'), 'SELECT update_popular_ranges()',
+  'the popular ranges job still runs update_popular_ranges');
+select is((select command from cron.job where jobname = 'vacuum-pg-net-responses'),
+  'VACUUM (INDEX_CLEANUP ON, TRUNCATE FALSE, PARALLEL 0, SKIP_LOCKED TRUE) net._http_response',
+  'the pg_net job runs prod''s VACUUM command');
 
 select * from finish();
 rollback;

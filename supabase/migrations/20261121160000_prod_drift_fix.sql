@@ -1,6 +1,7 @@
 -- Records the hand edits made on prod after 20261117142523, so the migrations build what prod runs.
--- Every statement is a no-op or a same-result replace on prod's current state.
--- destructive-ok: legacy transcription_locks table and 4 unused cache/lock functions already gone on prod, approved by Caelan 2026-11-21
+-- Every statement is a no-op or a same-result replace on prod's current state, except the drop of
+-- get_tier_and_usage, which removes a live prod function.
+-- destructive-ok: legacy transcription_locks table and 4 unused cache/lock functions already gone on prod; the truncate hit is VACUUM's TRUNCATE FALSE option in the cron command, not a statement, approved by Caelan 2026-11-21
 
 -- Verse of the Month count, made by hand on prod; current and old builds call it (lib/api/votm.ts).
 -- Same signature, result and grants as prod. Pinning search_path is the one change.
