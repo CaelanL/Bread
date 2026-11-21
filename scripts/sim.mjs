@@ -178,6 +178,14 @@ function stopAll() {
 
 // ---------- commands
 
+let live; // the running Maestro, stopped along with everything else on a signal
+
+// Metro runs detached, so a Ctrl-C or a killed shell would otherwise leave Metro, the lock and the device behind.
+function stopOnSignal(keep) {
+  if (keep) return;
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { live?.kill(); stopAll(); process.exit(1); });
+}
+
 // Boots everything and opens the app, bundled. Returns the dev client URL.
 async function startApp() {
   takeLock();
@@ -200,6 +208,7 @@ async function shot(args) {
   const as = asIndex >= 0 ? args[asIndex + 1] : null;
   const routes = args.filter((a, i) => a !== '--keep' && (asIndex < 0 || (i !== asIndex && i !== asIndex + 1)));
   if (!routes.length && !keep) die('Usage: npm run sim -- shot <route> [<route>...] [--keep]');
+  stopOnSignal(keep);
   await startApp();
   mkdirSync(SHOTS, { recursive: true });
   for (const route of routes) {
@@ -211,6 +220,11 @@ async function shot(args) {
   }
   if (!keep) stopAll();
 }
+
+// Async, unlike run(), so a signal handler can run while the command does.
+const runLive = (cmd, args) => new Promise((done) => {
+  live = spawn(cmd, args, { cwd: root, stdio: 'inherit' }).on('close', (code) => done(code === 0));
+});
 
 function findMaestro() {
   if (run('maestro', ['--version']).ok) return 'maestro';
@@ -235,8 +249,8 @@ function flowPath(name) {
   return path;
 }
 
-// Maestro's own `tags` field, in the header above the first `---`.
-const needsFreshSeed = (path) => /^tags:.*\bfresh-seed\b/m.test(readFileSync(path, 'utf8').split(/^---$/m)[0]);
+// Maestro's own `tags` field, in the header above the first `---`: `tags: [fresh-seed]` or one `- fresh-seed` per line.
+const needsFreshSeed = (path) => /^tags:(.*\bfresh-seed\b|(\n\s+-.*)*\n\s+-\s*fresh-seed\b)/m.test(readFileSync(path, 'utf8').split(/^---$/m)[0]);
 
 const duration = (ms) => {
   const s = Math.round(ms / 1000);
@@ -252,6 +266,7 @@ async function flow(args) {
     ? readdirSync(FLOWS).filter((f) => f.endsWith('.yaml')).sort().map((f) => join(FLOWS, f))
     : names.map(flowPath);
   const maestro = findMaestro();
+  stopOnSignal(keep);
   const devClientUrl = await startApp();
   const startup = Date.now() - began;
   rmSync(FLOW_OUT, { recursive: true, force: true });
@@ -268,7 +283,7 @@ async function flow(args) {
       if (!reset.ok) console.error(`Database reset failed, so ${name} didn't run: ${reset.err.trim()}`);
       ok = reset.ok;
     }
-    if (ok) ok = run(maestro, ['test', path, '--test-output-dir', out, '-e', `DEV_CLIENT_URL=${devClientUrl}`, ...publicEnv()], { stdio: 'inherit' }).ok;
+    if (ok) ok = await runLive(maestro, ['test', path, '--test-output-dir', out, '-e', `DEV_CLIENT_URL=${devClientUrl}`, ...publicEnv()]);
     results.push({ name, ok, ms: Date.now() - flowBegan });
     for (const file of readdirSync(out, { recursive: true }).filter((f) => f.endsWith('.png')).sort()) console.log(join(out, file));
   }
