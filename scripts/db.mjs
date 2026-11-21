@@ -122,8 +122,11 @@ function start() {
       if (hasPendingMigrations()) die(STUCK);
     }
   }
-  // Always the 127.0.0.1 address: a LAN address left behind by a stopped `phone` would never answer.
-  env();
+  // A running `phone` keeps its LAN address; one left behind by a stopped `phone` goes back to 127.0.0.1.
+  const url = parseEnv(envFile)[kit.envNames?.API_URL];
+  const phoneOn = url && isLocalUrl(url) && !/127\.0\.0\.1|localhost/.test(url)
+    && run('curl', ['-sf', '-m', '2', new URL('/auth/v1/health', url).href]).ok;
+  env(phoneOn ? ['--lan'] : []);
   status();
 }
 
@@ -260,7 +263,8 @@ async function guard() {
 }
 
 function lanAddress() {
-  const ip = Object.values(networkInterfaces()).flat().find((i) => i.family === 'IPv4' && !i.internal)?.address;
+  const ip = Object.values(networkInterfaces()).flat()
+    .find((i) => i.family === 'IPv4' && !i.internal && isLocalUrl(`http://${i.address}`))?.address;
   if (!ip) die('No LAN address found. Is this Mac on Wi-Fi?');
   return ip;
 }
