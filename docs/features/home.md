@@ -108,7 +108,7 @@ text: reference and retry. Only the current month's text is fetched.
 
 - **Text.** Three lines at most, in the user's `bibleVersion`, with the version shown beside the reference.
 - **Art.** `expo-image` fills the card behind white copy and the original dark overlay, in the original structure (reference badge, header, three-line body, footer). A broken image falls back to the plain themed card; collection symbols are never monthly artwork.
-- **Count.** "N people have mastered" shows only after a successful `getVOTMMasteryCount`, zero included; an unknown count is omitted.
+- **Count.** "N people have mastered" shows only after a successful `getVOTMMasteryCount`, zero included; an unknown count is omitted. It calls `get_votm_mastery_count(book, chapter, verse start, verse end)` (`supabase/migrations/20261121160000_prod_drift_fix.sql`), a `SECURITY DEFINER` function, since RLS hides other users' rows. Anyone can run it, signed in or not, and it returns only the number of `user_verses` rows with that exact range and `hard.completed`.
 - **User status.** One of these, in this order:
 
 | Condition | Shows |
@@ -171,13 +171,13 @@ the intro flows carry the `fresh-seed` tag so the stack resets before each; neve
 
 ## Sharp edges
 
-- **`get_votm_mastery_count` doesn't exist in the repo. This is a bug.** `getVOTMMasteryCount` calls it (book, chapter, verse start and end), but nothing in `supabase/` defines it, so it returns null and the card hides the count without an error; the untyped `SupabaseClient` hides it from typecheck. A fix needs a migration: a `SECURITY DEFINER` function, since RLS hides other users' rows, counting distinct users with the exact range and `hard.completed`.
+- **The mastery count counts rows, not people.** `get_votm_mastery_count` includes soft-deleted rows, and a user who mastered the range in two versions counts twice.
 
 ## Browser checks
 
 The release migration seeds the monthly schedule; the local seed preserves it.
 
-- `npm run sim -- shot /home --as reader-a`: on a freshly reset database, the current monthly card with reference and text and no mastery total (the missing function), and an insights card with 5 day streak, 1 mastered, 1 in progress.
+- `npm run sim -- shot /home --as reader-a`: on a freshly reset database, the current monthly card with reference, text and a mastery total, and an insights card with 5 day streak, 1 mastered, 1 in progress.
 - `npm run sim -- shot /home --as reader-b`: the same current monthly card, an insights card with 0 day streak, 0 mastered, 0 in progress, Explore collections, and no video card.
 - `npm run sim -- flow collection-discovery`: sets reader-b's account translation to KJV, then Home and Explore in both themes, introduction, KJV preview, add and open the saved copy, and an ESV preview that still opens it.
 - `npm run sim -- flow collection-icons`: icons on an imported and a personal collection, a cancelled change, and both saves after a relaunch.
