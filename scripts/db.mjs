@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Local Supabase for this folder. Commands: start, stop, destroy, reset, env, status, types, guard.
+// Local Supabase for this folder. Commands: start, stop, destroy, reset, env, status, types, guard, phone.
 // App-specific values come from package.json "kit". Never prints key values.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { connect, createServer } from 'node:net';
 import { homedir, networkInterfaces, release } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -121,9 +122,11 @@ function start() {
       if (hasPendingMigrations()) die(STUCK);
     }
   }
-  // A phone on the LAN (db:env --lan) would lose the database every time a reset restarted it.
+  // A running `phone` keeps its LAN address; one left behind by a stopped `phone` goes back to 127.0.0.1.
   const url = parseEnv(envFile)[kit.envNames?.API_URL];
-  env(url && isLocalUrl(url) && !url.includes('127.0.0.1') && !url.includes('localhost') ? ['--lan'] : []);
+  const phoneOn = url && isLocalUrl(url) && !/127\.0\.0\.1|localhost/.test(url)
+    && run('curl', ['-sf', '-m', '2', new URL('/auth/v1/health', url).href]).ok;
+  env(phoneOn ? ['--lan'] : []);
   status();
 }
 
@@ -176,8 +179,7 @@ function env(args = []) {
     values[name] = status[name];
   }
   if (args.includes('--lan')) {
-    const ip = Object.values(networkInterfaces()).flat().find((i) => i.family === 'IPv4' && !i.internal)?.address;
-    if (!ip) die('No LAN address found.');
+    const ip = lanAddress();
     for (const name of Object.keys(values)) values[name] = values[name].replaceAll('127.0.0.1', ip);
   }
   const appUrl = args.indexOf('--app-url');
@@ -260,7 +262,43 @@ async function guard() {
   }
 }
 
+function lanAddress() {
+  const ip = Object.values(networkInterfaces()).flat()
+    .find((i) => i.family === 'IPv4' && !i.internal && isLocalUrl(`http://${i.address}`))?.address;
+  if (!ip) die('No LAN address found. Is this Mac on Wi-Fi?');
+  return ip;
+}
+
+// The native runtime listens on 127.0.0.1 only, so a phone on the same Wi-Fi can't reach it.
+// Until Ctrl-C, this relays the Mac's LAN address to it and points the env file there.
+async function phone() {
+  ensureRunning();
+  const port = Number(new URL(statusValues().API_URL).port);
+  const ip = lanAddress();
+  const server = createServer((client) => {
+    const upstream = connect(port, '127.0.0.1');
+    client.on('error', () => upstream.destroy());
+    upstream.on('error', () => client.destroy());
+    client.pipe(upstream).pipe(client);
+  });
+  await new Promise((resolve) => {
+    server.once('error', (e) => die(`Can't listen on ${ip}:${port}: ${e.message}`));
+    server.listen(port, ip, resolve);
+  });
+  env(['--lan']);
+  console.log(`Phone mode on: phones on this Wi-Fi reach the local database at http://${ip}:${port}.`);
+  console.log('Now run `npm start` in another terminal (restart it if it was already running). Ctrl-C here puts everything back.');
+  console.log('If the database restarts or the Wi-Fi changes, run this again.');
+  const off = () => {
+    env();
+    server.close();
+    process.exit(0);
+  };
+  process.on('SIGINT', off);
+  process.on('SIGTERM', off);
+}
+
 const [command, ...args] = process.argv.slice(2);
-const commands = { start, stop, destroy, reset, env: () => env(args), status, types: () => types(args), guard };
-if (!commands[command]) die('Usage: node scripts/db.mjs start|stop|destroy|reset|env|status|types|guard');
+const commands = { start, stop, destroy, reset, env: () => env(args), status, types: () => types(args), guard, phone };
+if (!commands[command]) die('Usage: node scripts/db.mjs start|stop|destroy|reset|env|status|types|guard|phone');
 await commands[command]();

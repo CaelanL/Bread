@@ -339,8 +339,9 @@ Squawk can't see SQL inside `DO $$` blocks, so check those by hand.
 
 **Local database.** `scripts/db.mjs` runs `npm run db:start`, `db:stop`, `db:status`,
 `db:destroy` (removes the data too), `db:reset` (migrations, then `supabase/seed.sql`), `db:env`
-(local URL and anon key to `.env.local`) and `db:types` (`supabase/database.types.ts`;
-`-- --check` fails if stale).
+(local URL and anon key to `.env.local`), `db:types` (`supabase/database.types.ts`;
+`-- --check` fails if stale) and `db:phone` (relays the Mac's LAN address to the local API so a
+phone on the same Wi-Fi can use it, until Ctrl-C; `db:start` keeps that address while it answers).
 
 **Seed.** `supabase/seed.sql` runs only on local databases. Its logins
 are described at its top. It also unschedules any local cron job that
