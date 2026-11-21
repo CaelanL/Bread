@@ -1,6 +1,7 @@
 # Start and discard actual simulator recordings. Speech capture needs a real device.
 appId: com.caelanliu.biblemem
 name: recording-controls
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fsetup%2Fseed-psalm-23-1-3

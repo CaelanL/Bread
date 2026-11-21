@@ -5,6 +5,7 @@
 # docs/features/group-progress.md
 appId: com.caelanliu.biblemem
 name: shared-progress
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-d&next=%2F(tabs)%2F(library)%2Fshared-cccccccc-0000-4000-8000-000000000031

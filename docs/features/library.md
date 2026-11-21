@@ -250,8 +250,8 @@ way a verse leaves Mastered.
 - `npm run sim -- shot '/(tabs)/(library)' --as reader-b`: My Verses and Mastered only, with no In Progress row.
 - `npm run sim -- shot '/(tabs)/(library)/mastered' --as reader-a`: John 3:16 with "Review now", the sort pill on "Due first", and no + button.
 - `npm run sim -- flow account-translation`: reader-a switches to KJV on the add screen; cards follow, mastery stays.
-- After a local reset, `npm run sim -- flow library-plus`: the + menu, Share… with an invite linked over it, the Library tab pops back, New shared collection, Join with code.
-- After a local reset, `npm run sim -- flow library-management`: rename, reorder and reopen, copy from Mastered, remove the copy, swipe Delete in both themes.
+- `npm run sim -- flow library-plus`: the + menu, Share… with an invite linked over it, the Library tab pops back, New shared collection, Join with code.
+- `npm run sim -- flow library-management`: rename, reorder and reopen, copy from Mastered, remove the copy, swipe Delete in both themes.
 - Tap path: My Verses, sort to Mastery, force-quit, reopen: still Mastery.
 - `npm run sim -- flow delete-before-sync`: a delete on the saved library counts from the server.
 

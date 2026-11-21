@@ -4,6 +4,7 @@
 # way a new account starts, never sees it.
 appId: com.caelanliu.biblemem
 name: welcome
+tags: [fresh-seed]
 ---
 - runScript:
     file: scripts/welcome.js

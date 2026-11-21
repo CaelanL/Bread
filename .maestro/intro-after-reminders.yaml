@@ -1,5 +1,6 @@
 appId: com.caelanliu.biblemem
 name: intro-after-reminders
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - tapOn: Email

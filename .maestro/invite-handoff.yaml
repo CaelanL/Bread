@@ -4,6 +4,7 @@
 # no group, and a relaunch doesn't open it again.
 appId: com.caelanliu.biblemem
 name: invite-handoff
+tags: [fresh-seed]
 ---
 - runScript:
     file: scripts/shared-collections.js

@@ -3,7 +3,11 @@
 //   "sim": { "name": "<short app name>", "scheme": "<URL scheme>" }
 //
 //   npm run sim -- shot <route> [<route>...] [--keep] [--as <seed user>]   screenshots to .expo/sim-shots/
-//   npm run sim -- flow <file|all> [--keep]             runs Maestro flows from .maestro/, output to .expo/sim-shots/flows/
+//   npm run sim -- flow <name> [<name>...] [--keep]     runs Maestro flows from .maestro/ after one startup, output to .expo/sim-shots/flows/<name>/
+//   npm run sim -- flow all --first-review [--keep]     every top-level .maestro/*.yaml, alphabetically. About 45 minutes,
+//     so only the reviewer runs it, once per feature in the first review; without the flag it refuses.
+//     A flow whose header has `tags: [fresh-seed]` gets `scripts/db.mjs reset` right before it. The run keeps going past
+//     a failed flow, ends with each flow's pass or fail and time, and exits non-zero if any failed.
 //   npm run sim -- stop                                 stops Metro and the device
 //   npm run sim -- install                              installs the latest simulator build
 //
@@ -14,7 +18,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -45,8 +49,15 @@ function run(cmd, args, options = {}) {
   return { ok: r.status === 0, out: r.stdout ?? '', err: r.stderr ?? r.error?.message ?? '' };
 }
 
+// Codex's allow rule for `npm run sim` matches only the plain command. Wrapped in pipes or redirects
+// it runs inside the sandbox, where simctl can't reach CoreSimulator.
+const SANDBOXED = /CoreSimulatorService connection became invalid/;
+
 function must(cmd, args) {
   const r = run(cmd, args);
+  if (!r.ok && SANDBOXED.test(r.err)) {
+    die("This shell's sandbox blocks the simulator. Run `npm run sim …` as a plain command (no pipes, redirects, `;` or `&&`) so the Codex allow rule applies, or ask to run it outside the sandbox.");
+  }
   if (!r.ok) die(`${cmd} ${args.join(' ')} failed: ${r.err.trim()}`);
   return r.out;
 }
@@ -168,6 +179,14 @@ function stopAll() {
 
 // ---------- commands
 
+let live; // the running Maestro, stopped along with everything else on a signal
+
+// Metro runs detached, so a Ctrl-C or a killed shell would otherwise leave Metro, the lock and the device behind.
+function stopOnSignal(keep) {
+  if (keep) return;
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { live?.kill(); stopAll(); process.exit(1); });
+}
+
 // Boots everything and opens the app, bundled. Returns the dev client URL.
 async function startApp() {
   takeLock();
@@ -190,6 +209,7 @@ async function shot(args) {
   const as = asIndex >= 0 ? args[asIndex + 1] : null;
   const routes = args.filter((a, i) => a !== '--keep' && (asIndex < 0 || (i !== asIndex && i !== asIndex + 1)));
   if (!routes.length && !keep) die('Usage: npm run sim -- shot <route> [<route>...] [--keep]');
+  stopOnSignal(keep);
   await startApp();
   mkdirSync(SHOTS, { recursive: true });
   for (const route of routes) {
@@ -201,6 +221,11 @@ async function shot(args) {
   }
   if (!keep) stopAll();
 }
+
+// Async, unlike run(), so a signal handler can run while the command does.
+const runLive = (cmd, args) => new Promise((done) => {
+  live = spawn(cmd, args, { cwd: root, stdio: 'inherit' }).on('close', (code) => done(code === 0));
+});
 
 function findMaestro() {
   if (run('maestro', ['--version']).ok) return 'maestro';
@@ -219,21 +244,63 @@ function publicEnv() {
   return Object.entries(kit.envNames ?? {}).flatMap(([name, envName]) => ['-e', `${name}=${values[envName] ?? ''}`]);
 }
 
-async function flow(args) {
-  const keep = args.includes('--keep');
-  const [target] = args.filter((a) => a !== '--keep');
-  if (!target) die('Usage: npm run sim -- flow <file|all> [--keep]');
-  const path = target === 'all' ? FLOWS : resolve(existsSync(target) ? target : join(FLOWS, target.endsWith('.yaml') ? target : `${target}.yaml`));
+function flowPath(name) {
+  const path = resolve(existsSync(name) ? name : join(FLOWS, name.endsWith('.yaml') ? name : `${name}.yaml`));
   if (!existsSync(path)) die(`No flow at ${path}`);
+  return path;
+}
+
+// Maestro's own `tags` field, in the header above the first `---`: `tags: [fresh-seed]` or one `- fresh-seed` per line.
+const needsFreshSeed = (path) => /^tags:(.*\bfresh-seed\b|(\n\s+-.*)*\n\s+-\s*fresh-seed\b)/m.test(readFileSync(path, 'utf8').split(/^---$/m)[0]);
+
+const duration = (ms) => {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+};
+
+async function flow(args) {
+  const began = Date.now();
+  const keep = args.includes('--keep');
+  const names = args.filter((a) => a !== '--keep' && a !== '--first-review');
+  if (!names.length) die('Usage: npm run sim -- flow <name> [<name>...] [--keep] | flow all --first-review [--keep]');
+  const all = names.length === 1 && names[0] === 'all';
+  if (all && !args.includes('--first-review')) {
+    die('`flow all` takes about 45 minutes and holds the one simulator. Name only the flows that cover your change '
+      + '(the feature docs list them as `npm run sim -- flow <name>`). The reviewer runs every flow once per feature, '
+      + 'in the first review, with `flow all --first-review`.');
+  }
+  const paths = all
+    ? readdirSync(FLOWS).filter((f) => f.endsWith('.yaml')).sort().map((f) => join(FLOWS, f))
+    : names.map(flowPath);
   const maestro = findMaestro();
+  stopOnSignal(keep);
   const devClientUrl = await startApp();
+  const startup = Date.now() - began;
   rmSync(FLOW_OUT, { recursive: true, force: true });
-  mkdirSync(FLOW_OUT, { recursive: true });
-  const r = run(maestro, ['test', path, '--test-output-dir', FLOW_OUT, '-e', `DEV_CLIENT_URL=${devClientUrl}`, ...publicEnv()], { stdio: 'inherit' });
+  const results = [];
+  for (const path of paths) {
+    const name = basename(path, '.yaml');
+    const out = join(FLOW_OUT, name);
+    mkdirSync(out, { recursive: true });
+    const flowBegan = Date.now();
+    let ok = true;
+    if (needsFreshSeed(path)) {
+      console.log(`Resetting the local database for ${name} (fresh-seed).`);
+      const reset = run(process.execPath, ['scripts/db.mjs', 'reset']);
+      if (!reset.ok) console.error(`Database reset failed, so ${name} didn't run: ${reset.err.trim()}`);
+      ok = reset.ok;
+    }
+    if (ok) ok = await runLive(maestro, ['test', path, '--test-output-dir', out, '-e', `DEV_CLIENT_URL=${devClientUrl}`, ...publicEnv()]);
+    results.push({ name, ok, ms: Date.now() - flowBegan });
+    for (const file of readdirSync(out, { recursive: true }).filter((f) => f.endsWith('.png')).sort()) console.log(join(out, file));
+  }
   if (!keep) stopAll();
-  for (const file of readdirSync(FLOW_OUT, { recursive: true }).filter((f) => f.endsWith('.png')).sort()) console.log(join(FLOW_OUT, file));
-  if (!r.ok) die(`Flow failed: ${target}. Maestro's report and screenshots are in ${FLOW_OUT}`);
-  console.log(`Flow passed: ${target}`);
+  const width = Math.max(...results.map((r) => r.name.length));
+  console.log('');
+  for (const r of results) console.log(`${r.ok ? 'pass' : 'FAIL'}  ${r.name.padEnd(width)}  ${duration(r.ms)}`);
+  console.log(`Total ${duration(Date.now() - began)} (startup ${duration(startup)})`);
+  const failed = results.filter((r) => !r.ok).length;
+  if (failed) die(`${failed} of ${results.length} flows failed. Maestro's report and screenshots for each are in ${FLOW_OUT}/<flow>/`);
 }
 
 function stopCommand() {
@@ -257,4 +324,4 @@ if (command === 'shot') await shot(args);
 else if (command === 'flow') await flow(args);
 else if (command === 'stop') stopCommand();
 else if (command === 'install') install();
-else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <file|all> [--keep] | stop | install');
+else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install');

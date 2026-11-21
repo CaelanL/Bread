@@ -379,7 +379,7 @@ Invariants 1 and 10 are above. Also:
 
 ## Browser checks
 
-- `npm run sim -- flow startup-timing` (from `npm run db:reset`): reader-c, 150ms added per
+- `npm run sim -- flow startup-timing`: reader-c, 150ms added per
   request, 5 cold launches each to Home and Library; `[PERF]` lines in `.expo/sim-metro.log`
   (`lib/api/dev-timing.ts`).
 - `npm run sim -- flow snapshot-cold-start`: a relaunch with 10s added

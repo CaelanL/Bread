@@ -4,6 +4,7 @@
 # Start from npm run db:reset: each launch spends Bible reads against reader-c's daily limit.
 appId: com.caelanliu.biblemem
 name: startup-timing
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&latency=150&perf=1&next=%2Fhome

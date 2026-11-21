@@ -246,7 +246,7 @@ check, the database refuses the write.
 ## Browser checks
 
 - `npm run sim -- flow display-name`: reader-b sees Add, saves "Bea Lopez", sees "Shown as
-  Bea L.", and the name is back after a relaunch and fresh sign-in. Needs a fresh seed.
+  Bea L.", and the name is back after a relaunch and fresh sign-in.
 - `npm run sim -- flow sign-in-out`: reader-b signs in through the form, Settings shows
   `reader-b@example.test`, Sign Out returns to the Sign In screen.
 - `npm run sim -- flow account-switch-link`: dev sign-in as reader-a, then reader-c with no

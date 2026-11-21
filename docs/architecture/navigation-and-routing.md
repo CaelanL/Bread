@@ -244,8 +244,8 @@ walkthrough still shows. It holds the reminders card like the join modal. The sh
 the collection screen's Share icon (`person.badge.plus`) in its steps and mentions long-press in
 the Library. Share a collection counts your own collections that aren't shared or joined (not My
 Verses): exactly one opens its `/share/<id>` over the Library, several open the Library, none opens
-`/share/new`. Locally, seed accounts start as seen. Flow: `npm run sim -- flow welcome` after
-`npm run db:reset` (marks reader-a unseen first, and shares reader-a's Psalms).
+`/share/new`. Locally, seed accounts start as seen. Flow: `npm run sim -- flow welcome`
+(marks reader-a unseen first, and shares reader-a's Psalms).
 
 ## Header / tab bar
 

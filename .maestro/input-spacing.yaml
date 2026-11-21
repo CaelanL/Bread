@@ -2,6 +2,7 @@
 # keeps normal spacing: iOS recycles TextInput views (react-native#42589). docs/architecture/theming-and-ui.md
 appId: com.caelanliu.biblemem
 name: input-spacing
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
