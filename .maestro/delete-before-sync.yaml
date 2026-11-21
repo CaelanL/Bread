@@ -4,6 +4,7 @@
 # wide. Meanwhile another device emptied "Psalm 23": the saved library says it has verses.
 appId: com.caelanliu.biblemem
 name: delete-before-sync
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&latency=10000&next=%2F(tabs)%2F(library)

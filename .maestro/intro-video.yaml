@@ -1,5 +1,6 @@
 appId: com.caelanliu.biblemem
 name: intro-video
+tags: [fresh-seed]
 ---
 # Home has no manual entry, so every check runs inside the one automatic presentation.
 - runFlow: subflows/open-app.yaml

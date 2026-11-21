@@ -1,5 +1,6 @@
 appId: com.caelanliu.biblemem
 name: collection-savers
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - runScript:

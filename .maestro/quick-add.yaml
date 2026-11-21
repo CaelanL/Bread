@@ -5,6 +5,7 @@
 # docs/features/adding-verses.md
 appId: com.caelanliu.biblemem
 name: quick-add
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 # My Verses opened by tapping it: opened straight from the dev-sign-in link it is the Library

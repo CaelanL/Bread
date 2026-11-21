@@ -3,6 +3,7 @@
 # never show under reader-c (docs/architecture/auth.md).
 appId: com.caelanliu.biblemem
 name: account-switch-link
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)

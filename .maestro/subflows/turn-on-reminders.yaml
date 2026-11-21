@@ -4,6 +4,11 @@ appId: com.caelanliu.biblemem
 ---
 - tapOn:
     id: "tab-settings"
+# The Notifications row sits below the fold; a tap there would land on the tab bar.
+- scrollUntilVisible:
+    element: "notifications, Notifications.*"
+    direction: DOWN
+    centerElement: true
 - tapOn: "notifications, Notifications.*"
 - extendedWaitUntil:
     visible:
