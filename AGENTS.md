@@ -38,7 +38,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 ## Run and check
 - `npm start` — the app against the local DB; it refuses to start on a non-local database, and starts the local DB if it isn't answering. `npm run ios`, `npm run android`, `npm run web`.
 - `npm run db:start`, `db:stop`, `db:reset`, `db:status`, `db:env`, `db:types`, `db:destroy` — the local Supabase for this folder. `npm run test:db` — database tests alone.
-- `npm run db:phone` — lets a development build on a real iPhone on the same Wi-Fi use the local database (the native runtime only listens on 127.0.0.1). Leave it running, then `npm start` in another terminal. Ctrl-C puts `.env.local` back.
+- `node scripts/db.mjs phone` — lets a development build on a real iPhone on the same Wi-Fi use the local database (the native runtime only listens on 127.0.0.1). Leave it running, then `npm start` in another terminal. Ctrl-C puts `.env.local` back.
 - `npm run check` before calling anything done; `npm run check:fast` while iterating. `npm test` — unit tests alone.
 - If the DB won't start, or anything else in the local setup breaks, run `npm run doctor`. Never start Docker or another runtime by hand.
 - `npm run sim -- shot <route> [--as <seed user>]` — screenshots of the local app in the simulator, to `.expo/sim-shots/`. Each area doc's "Browser checks" list runs this way, since Bread has no browser flows.
@@ -83,7 +83,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 - Translation is an account setting and a verse is one row per reference, in that translation. No per-verse or per-collection translation. See `docs/architecture/bible-versions.md`.
 - Only public-domain translations are bundled in the app. Licensed text is fetched, and held only in the server cache and in memory. See `docs/architecture/bible-api-and-caching.md`.
 - Don't gate work on "wait for production data". Bread is small, so ship reasonable-default constants and name the knob to turn if scale ever matters.
-- Merges ship through EAS: JS over the air, native changes through the App Store. Those jobs are paused in `.eas/workflows/deploy.yml` for now. See `docs/architecture/release.md`.
+- Merges ship through EAS: JS over the air, native changes through the App Store (`.eas/workflows/deploy.yml`). Anything in the fingerprint counts as native, including `package.json` "scripts": changing one makes the next merge do a full build and store submit, and live updates stop until that build ships. See `docs/architecture/release.md`.
 
 ## Review checklist
 - A migration is safe under old client + new schema (invariant 11), and a new table has access-rule tests in `supabase/tests/`.
