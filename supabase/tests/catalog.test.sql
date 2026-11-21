@@ -36,6 +36,7 @@ select is(
         -- allowlist: one signature per line, with why
         select sig from (values
           ('delete_own_account()'), -- the client calls it; it only ever acts on auth.uid()
+          ('get_votm_mastery_count(text,integer,integer,integer)'), -- Home calls it signed in or not; it returns only a count
           ('register_device_token(text,text)') -- the client calls it; it only ever writes rows for auth.uid()
         ) as allowlist(sig)
       )

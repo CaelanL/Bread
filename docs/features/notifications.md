@@ -215,8 +215,8 @@ a local-only `cron_secret` in Vault so 017 can apply.
 - **`rowToPrefs` turns a null weekday into 1.** That fallback also hits daily rows, so re-saving
   Daily in the in-progress cadence modal marks the page dirty. Writes stay valid.
 - **pg_net housekeeping.** The per-minute `net.http_post` from migration 017 leaves rows in
-  `net._http_response`. pg_net versions before 0.20.3 didn't report worker statistics, so
-  autovacuum may not clean that table ([upstream fix](https://github.com/supabase/pg_net/pull/254)).
+  `net._http_response`, which autovacuum may miss on pg_net before 0.20.3
+  ([upstream fix](https://github.com/supabase/pg_net/pull/254)). The `vacuum-pg-net-responses` cron job vacuums it daily.
 
 ## Browser checks
 

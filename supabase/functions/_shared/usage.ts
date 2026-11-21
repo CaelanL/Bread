@@ -24,48 +24,6 @@ interface UsageResult {
   limit: number;
 }
 
-interface TierAndUsage {
-  tier: Tier;
-  used: number;
-  limit: number;
-}
-
-/**
- * Get tier and usage in a single DB query
- * Saves ~100-200ms (1 query instead of 2)
- */
-export async function getTierAndUsage(
-  userId: string,
-  usageType: UsageType = "transcribe_seconds"
-): Promise<TierAndUsage> {
-  const admin = getAdminClient();
-  const today = new Date().toISOString().split("T")[0];
-
-  const { data, error } = await admin
-    .rpc("get_tier_and_usage", {
-      p_user_id: userId,
-      p_date: today,
-      p_usage_type: usageType,
-    });
-
-  if (error || !data || data.length === 0) {
-    // Default to free tier with 0 usage
-    return {
-      tier: "free",
-      used: 0,
-      limit: LIMITS.free[usageType],
-    };
-  }
-
-  const result = data[0];
-  const tier: Tier = (result.tier as Tier) || "free";
-  return {
-    tier,
-    used: result.used || 0,
-    limit: LIMITS[tier][usageType],
-  };
-}
-
 /**
  * Get next midnight UTC for rate limit reset
  */

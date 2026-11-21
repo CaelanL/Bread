@@ -306,10 +306,8 @@ Also:
 - **`usage_daily` increments aren't atomic.** `incrementUsage` and
   `countBibleFetch` read then write, so concurrent requests can
   undercount.
-- **`transcription_locks` table is orphaned.** The table and its
-  cleanup function exist in the schema, but no code ever acquires
-  a lock. The only double-submit guard is the client UI disabling the
-  mic while transcribing.
+- **No server-side double-submit guard.** The only one is the client UI
+  disabling the mic while transcribing.
 - **No retry logic on external API failures.** If ESV / API.Bible
   / Soniox returns 5xx, the function returns 500 to the client
   with no automatic retry. Only a Soniox 429 is retried.
@@ -318,9 +316,8 @@ Also:
 - **No version-aware verse counts** — adapters log a warning when
   the parsed count doesn't match VERSE_COUNTS, but don't fail or
   fall back. See `docs/architecture/bible-versions.md`.
-- **`_shared/usage.ts` has unused helpers.** `getTierAndUsage` calls
-  an RPC no migration defines; the transcription and evaluation checks
-  have no callers.
+- **`_shared/usage.ts` has unused helpers.** The transcription and
+  evaluation checks have no callers.
 
 ## Decisions
 

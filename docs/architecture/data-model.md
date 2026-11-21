@@ -9,7 +9,6 @@ Schema: `supabase/migrations/`. Generated columns and types:
 |---|---|---|
 | `profiles` | per-user | account `translation` (`bible-versions.md`), names ([auth](auth.md#display-name)), 2.0 flag ([nav](navigation-and-routing.md#whats-new-in-20)) |
 | `usage_daily` | per-user | Free/Supporter rate-limit counters |
-| `transcription_locks` | per-user | Unused server-side mutex (see below) |
 | `subscriptions` | per-user | Tier (`free` \| `supporter`) with optional expiry |
 | `verse_cache` | shared | Server-side Bible text cache under ESV/NLT licensing limits ([caching](bible-api-and-caching.md)) |
 | `app_config` | shared | Key/value settings for the stats cron (`stats_min_words`, `stats_cron_schedule`) |
@@ -187,17 +186,12 @@ RLS: SELECT/INSERT of your own rows. **No UPDATE, no DELETE policy**:
 append-only by design. Rows go only with the account (`delete_own_account()`
 or the cascade).
 
-### `usage_daily`, `transcription_locks`, `subscriptions`
+### `usage_daily`, `subscriptions`
 
 `usage_daily` (migration 001): per-user per-day counters used by the
 edge function rate limiter. Unique on `(user_id, date)`. Each
 `bible_fetch_count` increment counts against the user's tier limit
 (see `docs/architecture/edge-functions.md`).
-
-`transcription_locks` (migration 001): a mutex keyed by `user_id`,
-service role only (clients' grants revoked). No code acquires a lock, so the table stays empty.
-`cleanup_stale_transcription_locks()` deletes locks older than 5
-minutes.
 
 `subscriptions` (migration 001): one row per user. `tier` is `free` or
 `supporter`. A NULL `expires_at` never expires. Read
@@ -210,7 +204,7 @@ by the edge function via `getUserTier()` to apply rate limits.
 `popular_ranges` (migrations `0101_popular_verses.sql`,
 `015_popular_verses_mastered_only.sql`; public-readable) and `user_stats`
 (migration 011) are written only by their cron functions:
-`update_popular_ranges()` every 12 hours (distinct users per *every*
+`update_popular_ranges()` every hour (distinct users per *every*
 sub-range of each mastered verse, via `generate_series`, so it grows fast;
 top 1000 kept) and `update_user_stats()` every 6 hours
 (`avg_time_per_word_ms` only from `stats_min_words`, 600, so null for most
@@ -223,7 +217,7 @@ users). Rules: [insights.md](../features/insights.md).
 | `update_updated_at_column()` | trigger fn | sets `updated_at = NOW()` |
 | `update_user_collections_updated_at` | trigger | fires on UPDATE |
 | `update_user_verses_updated_at` | trigger | fires on UPDATE |
-| `cleanup_stale_transcription_locks()`, `cleanup_expired_verse_cache()` (references a dropped column), `get_verse_cache_count(version)`, `evict_lru_verses(version, max, needed)`, `upsert_verses(book, chapter, version, jsonb)` | legacy fns, service role only | no caller in the repo |
+| `upsert_verses(book, chapter, version, jsonb)` | legacy fn, service role only | no caller in the repo |
 | `private.guard_verse_delete()` | trigger fn (invoker) | the `user_verses` delete guard above |
 | `import_curated_collection()` | authenticated invoker | atomic Library import |
 | `claim_intro_presentation(text)` | authenticated invoker | one account claim |
@@ -239,11 +233,12 @@ users). Rules: [insights.md](../features/insights.md).
 | `get_cron_secret()` | fn (SECURITY DEFINER), service role only | reads `cron_secret` from Vault |
 | `local_time_in_tz(tz)` | fn | local time in an IANA zone, UTC if the name is unknown |
 | `verse_cache_stats` | view | per-version cache stats |
-| `get_votm_mastery_count(book, chapter, vs, ve)` | **MISSING** | see `docs/features/home.md` |
+| `get_votm_mastery_count(book, chapter, vs, ve)` | SECURITY DEFINER, anyone, `search_path ''` | [Verse of the Month count](../features/home.md#the-card) |
 
-`pg_cron` jobs: `update-popular-ranges` (every 12h), `update-user-stats`
+`pg_cron` jobs: `update-popular-ranges` (hourly), `update-user-stats`
 (every 6h), `send-notifications` (every minute, through `pg_net`),
-`prune-notification-log` (daily) and `delete-feedback-photos` (daily).
+`prune-notification-log` (daily), `delete-feedback-photos` (daily) and
+`vacuum-pg-net-responses` (daily at 08:17 UTC, vacuums `net._http_response`).
 
 ## Relationships
 
@@ -258,7 +253,6 @@ auth.users
  ├── session_attempts (append-only, denormalized — no FK to user_verses)
  ├── user_stats (cron-computed)
  ├── usage_daily
- ├── transcription_locks
  ├── subscriptions
  ├── device_tokens
  ├── notification_preferences
@@ -366,9 +360,6 @@ also re-dates new files to sort after prod's newest. See
 
 - `search_path` is unset on most invoker functions, which Supabase
   Security Advisor flags (low risk).
-- `get_tier_and_usage`, the RPC behind `getTierAndUsage` in
-  `_shared/usage.ts`, isn't defined in any migration. Nothing calls
-  that helper.
 
 ## Decisions
 
@@ -378,3 +369,4 @@ also re-dates new files to sort after prod's newest. See
 - 2026-11-11 · Account settings live in `profiles`, not auth metadata · RLS-guarded, additive, room for display names.
 - 2026-11-14 · Old apps' unsafe verse delete is refused by a trigger · Old clients stay in the wild; it refuses only a delete that would drop a collection link nothing else holds, which no current path does.
 - 2026-11-14 · Owner policies are signed-in only with `(select auth.uid())`; "Service role can manage" policies dropped · The sub-select runs once per query, and the service role bypasses RLS anyway.
+- 2026-11-21 · Hand edits on prod recorded in `20261121160000_prod_drift_fix.sql`; `get_tier_and_usage` dropped · `npm run doctor` showed prod drift. The RPC had no caller and let any client read any user's tier and usage.

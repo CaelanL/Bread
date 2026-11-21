@@ -251,20 +251,6 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"transcription_locks": {
-                  Row: {
-                    "started_at": string,"user_id": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "started_at"?: string,"user_id": string
-                  }
-                  Update: {
-                    "started_at"?: string,"user_id"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
                 },"usage_daily": {
                   Row: {
                     "bible_fetch_count": number,"created_at": string,"date": string,"evaluate_count": number,"id": string,"transcribe_seconds": number,"user_id": string
@@ -436,12 +422,6 @@ isOneToOne: false
 "claim_intro_presentation":
 { Args: { "p_intro_id": string }; Returns: boolean
                            },
-"cleanup_expired_verse_cache":
-{ Args: Record<PropertyKey, never>; Returns: undefined
-                           },
-"cleanup_stale_transcription_locks":
-{ Args: Record<PropertyKey, never>; Returns: undefined
-                           },
 "copy_verse_to_collection":
 { Args: { "collection_client_id": string,"verse_client_id": string }; Returns: {
               "added_at": string,
@@ -463,9 +443,6 @@ isOneToOne: false
                            },
 "delete_verse":
 { Args: { "collection_client_id": string,"verse_client_id": string }; Returns: undefined
-                           },
-"evict_lru_verses":
-{ Args: { "p_max_count": number,"p_needed": number,"p_version": string }; Returns: number
                            },
 "get_cron_secret":
 { Args: Record<PropertyKey, never>; Returns: string
@@ -496,8 +473,8 @@ isOneToOne: false
 "get_total_time_studied":
 { Args: { "p_user_id": string }; Returns: number
                            },
-"get_verse_cache_count":
-{ Args: { "p_version": string }; Returns: number
+"get_votm_mastery_count":
+{ Args: { "p_book": string,"p_chapter": number,"p_verse_end": number,"p_verse_start": number }; Returns: number
                            },
 "import_curated_collection":
 { Args: { "p_catalog_id": string,"p_icon_key": string,"p_name": string,"p_passages": Json,"p_version": string }; Returns: string

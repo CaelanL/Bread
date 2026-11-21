@@ -16,7 +16,7 @@ Top to bottom:
 | Time Studied | `getTotalTimeStudied` | SQL on demand: `get_total_time_studied` |
 | Time to Master Verse | `getAvgTimeToMaster` | `user_stats`, rebuilt every 6 hours |
 | Your Most Memorized Books | `useMostMemorizedBooks` | Store: top 5 books over `masteredVerses` |
-| Popular Verses | `getPopularRanges(10)` | `popular_ranges`, rebuilt every 12 hours |
+| Popular Verses | `getPopularRanges(10)` | `popular_ranges`, rebuilt every hour |
 
 `lib/api/analytics.ts` and `lib/api/popular-verses.ts` hold the API calls. Time stats and popular ranges load when the screen mounts and on pull to refresh. The streak, on Home's card and here, follows Home's reload rule (`useHomeReload`, [home.md](home.md#monthly-schedule-and-loading)): on focus or a resume only when stale or after a session saved; Home's pull always reloads it.
 
@@ -59,8 +59,8 @@ The `update-user-stats` cron job runs `update_user_stats()` at `0 */6 * * *` (`s
 
 - **Mastered only.** Migration 015 (`supabase/migrations/015_popular_verses_mastered_only.sql`) redefined the function to count rows where `progress.hard.completed` is true.
 - **Soft-deleted but mastered verses count.** The query has no `deleted_at` filter, on purpose.
-- **Refresh every 12 hours.** The `update-popular-ranges` cron job runs at `0 */12 * * *` (`supabase/migrations/0101_popular_verses.sql`). Each run truncates and rebuilds.
-- **Lag.** The table can trail reality by up to 12 hours. A newly mastered verse doesn't appear until the next pass. A reset verse keeps its contribution until then.
+- **Refresh every hour.** The `update-popular-ranges` cron job runs at `0 * * * *` (`supabase/migrations/20261121160000_prod_drift_fix.sql`; `0101_popular_verses.sql` first set it to every 12 hours). Each run truncates and rebuilds.
+- **Lag.** The table can trail reality by up to an hour. A newly mastered verse doesn't appear until the next pass. A reset verse keeps its contribution until then.
 - **Sub-ranges.** Each mastered row adds to every sub-range. Mastering John 3:1-16 counts toward 3:1, 3:1-2, and so on through 3:16. Each user adds at most 1 per range.
 - **Any version.** Rows group by book, chapter and verse range, so versions combine.
 - **Top 1000 kept, top 10 shown.** The section is hidden when the table is empty.
