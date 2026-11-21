@@ -160,7 +160,7 @@ supplies a labeled original nine-second tone/video for the automatic path;
 `introFixture=unavailable` uses a missing local file. Hosted/production builds ignore
 the parameter; dev sign-in restrictions stay intact. The preloader is keyed by account
 (per-fixture remounts failed their first unload). Ordinary startup has no fixture; release bundles carry the unused 79 KB fixture rather than custom bundler config. The server marker is per account, not device:
-reset the stack before a fresh intro flow, never delete markers through the client.
+the intro flows carry the `fresh-seed` tag so the stack resets before each; never delete markers through the client.
 
 ## Rules
 
@@ -184,7 +184,6 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - `npm run sim -- flow collection-savers`: save with two seed accounts; all three surfaces hide the line (local counts stay under 10; DB and integration tests cover counting); another translation and edits/delete/re-add add no second contribution.
 - On a freshly reset local stack, run `tests/curated-collection.integration.ts` (seed credentials; concurrent imports, lost responses) and `tests/curated-savers-migration.integration.ts` (the migration's backfill; rolls back its fixtures).
 - `npm run sim -- flow monthly-verse`: original full-card artwork/overlay, readable native copy, image-error fallback, expand and add picker in both themes, compared with the original card (same artwork and reference).
-- Each intro flow needs unclaimed accounts: run it on a freshly reset stack.
 - `npm run sim -- flow intro-video`: local fixture autoplay, captions/progress, pause/resume, tap pause, scrub back, close, no second autoplay, and no presentation or claim for unavailable/unset media.
 - `npm run sim -- flow intro-modal-handoff` defers intro while each Home modal is visible and presents after native dismissal, for both accounts.
 - `npm run sim -- flow intro-interruption`: reader-b autoplay, a Control Center interruption keeping pause and position, background close; also on a physical iPhone.
