@@ -5,6 +5,7 @@
 # A row reads its emblem first ("Mastered by everyone, …, Romans 8, …"), since the emblem sits on the icon.
 appId: com.caelanliu.biblemem
 name: shared-emblems
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)

@@ -1,5 +1,6 @@
 appId: com.caelanliu.biblemem
 name: intro-modal-handoff
+tags: [fresh-seed]
 ---
 - runFlow:
     file: subflows/intro-modal-handoff.yaml

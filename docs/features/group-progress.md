@@ -124,7 +124,7 @@ The seed (header of `supabase/seed.sql`) gives Cara one collection per emblem ("
 references in every state, so Who's where scrolls sideways
 (`"/(tabs)/(library)/shared/seed-sermon-mount" --as reader-c`).
 
-After `npm run db:reset`: `npm run sim -- flow shared-progress` (the seeded Romans 8 as Cara and
+`npm run sim -- flow shared-progress` (the seeded Romans 8 as Cara and
 Dana: the header, Group counts, the people line opens the member list, the menu's Details and the
 progress line Who's where, Cara makes Dana an editor, Dana adds Romans 8:31, Cara sees it);
 `npm run sim -- flow shared-grid` (Dana opens Who's where from the progress line: four states, your

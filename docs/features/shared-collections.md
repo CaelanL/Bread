@@ -195,7 +195,7 @@ code `BREAD828`, and the groups in [group-progress.md](group-progress.md#browser
 
 ## Browser checks
 
-After `npm run db:reset` each: `npm run sim -- flow shared-collections` (share, copy, join by
+`npm run sim -- flow shared-collections` (share, copy, join by
 link, both in the list, leave, rejoin, delete for everyone, personal copy) and
 `npm run sim -- flow shared-join-code` (typed code, revoked code, link across sign-in to the
 modal over the Library, close, Join) and `npm run sim -- flow shared-stop` (a code alone keeps the

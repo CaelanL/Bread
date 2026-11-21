@@ -10,6 +10,11 @@ name: sign-in-out
       EMAIL: reader-b@example.test
 - tapOn:
     id: "tab-settings"
+# The account row sits below the fold.
+- scrollUntilVisible:
+    element: ".*reader-b@example.test.*"
+    direction: DOWN
+    centerElement: true
 - assertVisible: ".*reader-b@example.test.*"
 - takeScreenshot: sign-in-out-2-settings
 - runFlow: subflows/sign-out.yaml

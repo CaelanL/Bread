@@ -1,5 +1,6 @@
 appId: com.caelanliu.biblemem
 name: collection-icons
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fsettings
