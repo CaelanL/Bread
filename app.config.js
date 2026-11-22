@@ -82,8 +82,12 @@ export default {
           // UIBackgroundModes key — an App Store review flag we don't
           // need (no background recording).
           enableBackgroundAudio: false,
-          microphonePermission:
-            "Bread needs microphone access to record your verse recitations for accuracy scoring.",
+          // The plugin writes NSMicrophoneUsageDescription from here, over ios.infoPlist; it
+          // ignores `microphonePermission`, which left builds before 2.2.0 with its generic default.
+          iosConfig: {
+            microphoneUsageDescription:
+              "Bread needs microphone access to record your verse recitations for accuracy scoring.",
+          },
         },
       ],
     ],
