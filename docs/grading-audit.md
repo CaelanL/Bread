@@ -362,8 +362,8 @@ Not grading, but it fails recordings.
   transcriptions and auto-deletes after 30 days, so at about 33 batch recordings a day every batch
   recording fails.
 - **No 429 back-off:** a 429 on job create or status poll threw; the function answered "Processing
-  failed", `processRecording` in `lib/api/recording.ts` throws, and `hooks/use-recording.ts` shows
-  "Recording failed". The limit is per organization; 27 audit clips got 429 while two audit runs
+  failed", `processRecording` in `lib/api/recording.ts` throws, and `handleSubmit` in `app/session.tsx`
+  shows "Recording failed". The limit is per organization; 27 audit clips got 429 while two audit runs
   were calling at once.
 - **Dates:** v5 models removed 2026-12-15 (routed to v6, RC2 grows); `api_key` in the websocket
   start frame refused after 2027-01-15 (old builds fall to batch).
