@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { prepareIntroVideo } from '../lib/intro/preparation.ts';
+import { preparableVideo, prepareIntroVideo } from '../lib/intro/preparation.ts';
 
 function clock(t) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -86,4 +86,31 @@ test('native failure and stale-owner deadlines never authorize later playback', 
   current = false; t.mock.timers.tick(15_000); await rejected;
   assert.equal(unloads, 1);
   held.resolve({ isLoaded: false }); await flush(); assert.equal(unloads, 1);
+});
+
+function fakePlayer(settle) {
+  const listeners = new Set();
+  const player = {
+    status: 'idle', muted: false, sources: [],
+    async replaceAsync(source) { player.sources.push(source); player.status = source === null ? 'idle' : 'loading'; settle(player, source); },
+    addListener(event, listener) { assert.equal(event, 'statusChange'); listeners.add(listener); return { remove: () => listeners.delete(listener) }; },
+    emit(status) { player.status = status; for (const listener of [...listeners]) listener({ status }); },
+    listeners,
+  };
+  return player;
+}
+
+test('the expo-video player unloads, loads muted, and is loaded once ready to play', async () => {
+  const player = fakePlayer((p, source) => { if (source !== null) setImmediate(() => p.emit('readyToPlay')); });
+  await prepareIntroVideo(preparableVideo(player), 42, new AbortController().signal, () => true);
+  assert.deepEqual(player.sources, [null, 42]);
+  assert.equal(player.muted, true);
+  assert.equal(player.listeners.size, 0);
+});
+
+test('an expo-video load that fails, even before its listener subscribes, is unavailable media', async () => {
+  const player = fakePlayer((p, source) => { if (source !== null) p.emit('error'); });
+  await assert.rejects(prepareIntroVideo(preparableVideo(player), 'file:///missing.mp4', new AbortController().signal, () => true), /Media unavailable/);
+  assert.deepEqual(player.sources, [null, { uri: 'file:///missing.mp4' }]);
+  assert.equal(player.listeners.size, 0);
 });

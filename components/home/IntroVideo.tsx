@@ -1,13 +1,13 @@
 import { useIsFocused } from '@react-navigation/native';
-import { Audio, Video } from 'expo-av';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, StyleSheet } from 'react-native';
+import { useVideoPlayer } from 'expo-video';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { AppState } from 'react-native';
 
 import { IntroVideoModal } from '@/components/ui/IntroVideoModal';
 import { useAuth } from '@/lib/auth';
 import { createIntroCoordinator } from '@/lib/intro/coordinator';
-import { prepareIntroVideo } from '@/lib/intro/preparation';
+import { preparableVideo, prepareIntroVideo, type PreparableVideo } from '@/lib/intro/preparation';
 import { canUseIntroFixture, introMediaForPreview } from '@/lib/intro/media';
 import { useUxFlagsStore } from '@/lib/notifications';
 import { useHydrated } from '@/lib/store';
@@ -25,7 +25,7 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
   sessionRef.current = session;
   const accountId = session?.user.id;
   const [modalOwner, setModalOwner] = useState<string | null>(null);
-  const preload = useRef<Video>(null);
+  const preload = useRef<PreparableVideo | null>(null);
   const preparation = useRef(0);
   const preparationAbort = useRef<AbortController | null>(null);
   const media = useMemo(() => {
@@ -51,7 +51,8 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
       await prepareIntroVideo(video, source, controller.signal,
         () => request === preparation.current && currentOwner.current === owner && preload.current === video);
     },
-    configureAudio: () => Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false }),
+    // expo-video sets the .playback category (sound with the silent switch on) itself when playback starts.
+    configureAudio: async () => {},
     show() { if (currentOwner.current === owner) setModalOwner(owner); },
     close() {
       if (currentOwner.current !== owner) return;
@@ -78,13 +79,20 @@ export function IntroVideo({ blocked }: { blocked: boolean }) {
   return (
     <>
       {media.playback !== null && session && (
-        <Video key={`preload:${session.user.id}`} ref={preload} style={styles.preloader} pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
+        <IntroPreloader key={`preload:${session.user.id}`} target={preload} />
       )}
       <IntroVideoModal key={modalOwner === owner ? `modal:${owner}` : 'closed'} media={media} visible={modalOwner === owner} inactive={appState === 'inactive'} onClose={() => coordinator?.cancel()} />
     </>
   );
 }
 
-const styles = StyleSheet.create({
-  preloader: { position: 'absolute', width: 1, height: 1, opacity: 0 },
-});
+// A viewless player the coordinator prepares before presenting.
+function IntroPreloader({ target }: { target: RefObject<PreparableVideo | null> }) {
+  const player = useVideoPlayer(null);
+  useEffect(() => {
+    const video = preparableVideo(player);
+    target.current = video;
+    return () => { if (target.current === video) target.current = null; };
+  }, [player, target]);
+  return null;
+}

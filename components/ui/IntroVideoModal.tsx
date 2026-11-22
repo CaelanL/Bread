@@ -1,4 +1,5 @@
-import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
+import { useEventListener } from 'expo';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
@@ -17,23 +18,40 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
   inactive: boolean;
   onClose: () => void;
 }) {
+  if (!visible || !media.playback) return null;
+  return <IntroVideoPlayer media={media} playback={media.playback} inactive={inactive} onClose={onClose} />;
+}
+
+// Mounted only while presented, so no native player exists otherwise.
+function IntroVideoPlayer({ media, playback, inactive, onClose }: {
+  media: IntroMedia;
+  playback: string | number;
+  inactive: boolean;
+  onClose: () => void;
+}) {
   const colors = Colors.dark;
   const insets = useSafeAreaInsets();
-  const player = useRef<Video>(null);
+  const source = typeof playback === 'number' ? playback : { uri: playback };
+  const player = useVideoPlayer(source, (created) => {
+    created.loop = false;
+    created.timeUpdateEventInterval = 0.25;
+    // Other audio keeps playing, as it always has under the intro; the default 'auto' would interrupt it.
+    created.audioMixingMode = 'mixWithOthers';
+    created.play();
+  });
   const interruption = useRef<ReturnType<typeof createIntroInterruption> | null>(null);
   useEffect(() => {
     const current = createIntroInterruption({
-      pause: async () => player.current?.pauseAsync(),
-      play: async () => player.current?.playAsync(),
+      pause: async () => player.pause(),
+      play: async () => player.play(),
     });
     interruption.current = current;
     return () => current.dispose();
-  }, []);
+  }, [player]);
   useEffect(() => {
     void interruption.current?.setInactive(inactive).catch(() => {});
   }, [inactive]);
-  const active = useRef(visible);
-  active.current = visible;
+  const active = useRef(true);
   const [position, setPosition] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -46,35 +64,42 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
   const glyphOpacity = useSharedValue(0);
   const glyphStyle = useAnimatedStyle(() => ({ opacity: glyphOpacity.value }));
 
-  useEffect(() => {
-    if (visible) {
-      setPosition(0); setPlaying(false); setLoaded(false); setFinished(false); setError(false); setDuration(0); setScrub(null);
-    } else {
-      void player.current?.unloadAsync().catch(() => {});
-    }
-    return () => { void player.current?.unloadAsync().catch(() => {}); };
-  }, [visible]);
-
-  const onStatus = (status: AVPlaybackStatus) => {
+  useEventListener(player, 'statusChange', ({ status }) => {
     if (!active.current) return;
-    if (status.isLoaded) {
-      void interruption.current?.onPlaying(status.isPlaying).catch(() => {});
-      setLoaded(true); setPosition(status.positionMillis); setPlaying(status.isPlaying); setDuration(status.durationMillis ?? 0);
-      if (status.didJustFinish) setFinished(true);
-    } else if (status.error) setError(true);
-  };
+    if (status === 'readyToPlay') { setLoaded(true); setDuration(player.duration * 1000); }
+    else if (status === 'error') setError(true);
+  });
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    if (!active.current) return;
+    void interruption.current?.onPlaying(isPlaying).catch(() => {});
+    setPlaying(isPlaying);
+  });
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    if (active.current) setPosition(currentTime * 1000);
+  });
+  useEventListener(player, 'playToEnd', () => {
+    if (active.current) setFinished(true);
+  });
+  // Events sent before the listeners above subscribed are lost, so read the player once they are.
+  useEffect(() => {
+    if (player.status === 'readyToPlay') { setLoaded(true); setDuration(player.duration * 1000); }
+    else if (player.status === 'error') setError(true);
+    void interruption.current?.onPlaying(player.playing).catch(() => {});
+    setPlaying(player.playing);
+  }, [player]);
+
   const close = () => {
     active.current = false;
     interruption.current?.dispose();
-    void player.current?.unloadAsync().catch(() => {});
+    player.pause();
     onClose();
   };
   const toggle = async () => {
     try {
       if (error) {
         setError(false); setLoaded(false);
-        await player.current?.unloadAsync();
-        await player.current?.loadAsync(source, { shouldPlay: true });
+        await player.replaceAsync(source);
+        player.play();
         return;
       }
       setGlyph(playing && !finished ? 'pause.fill' : 'play.fill');
@@ -82,9 +107,9 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
         withTiming(1, { duration: Motion.pressMs }),
         withDelay(Motion.expandMs, withTiming(0, { duration: Motion.expandMs })),
       );
-      if (finished) { setFinished(false); await player.current?.replayAsync(); }
-      else if (playing) await player.current?.pauseAsync();
-      else await player.current?.playAsync();
+      if (finished) { setFinished(false); player.replay(); }
+      else if (playing) player.pause();
+      else player.play();
     } catch { setError(true); }
   };
   const canScrub = loaded && !error && duration > 0;
@@ -92,20 +117,19 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
     track.current.target = seekPosition((event.nativeEvent.pageX - track.current.left) / track.current.width, duration);
     setScrub(track.current.target);
   };
-  const seek = async () => {
+  const seek = () => {
     const target = track.current.target;
     track.current.target = null;
     if (target === null) return;
     try {
-      await player.current?.setPositionAsync(target, { toleranceMillisBefore: 0, toleranceMillisAfter: 0 });
+      // seekTolerance defaults to exact.
+      player.currentTime = target / 1000;
       setPosition(target);
       if (target < duration) setFinished(false);
     } catch { /* The bar returns to the actual position. */ }
     setScrub(null);
   };
 
-  if (!visible || !media.playback) return null;
-  const source = typeof media.playback === 'number' ? media.playback : { uri: media.playback };
   const shown = scrub ?? position;
   const fraction = `${playbackFraction(shown, duration) * 100}%` as const;
 
@@ -132,16 +156,12 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
               onPress={() => void toggle()}
               style={[styles.frame, { backgroundColor: colors.card }]}
             >
-              <Video
-                ref={player}
-                source={source}
+              <VideoView
+                player={player}
                 style={StyleSheet.absoluteFill}
-                resizeMode={ResizeMode.CONTAIN}
-                shouldPlay
-                isLooping={false}
-                progressUpdateIntervalMillis={250}
-                onPlaybackStatusUpdate={onStatus}
-                onError={() => { if (active.current) setError(true); }}
+                pointerEvents="none"
+                contentFit="contain"
+                nativeControls={false}
               />
               {!loaded && !error && <ActivityIndicator color={colors.primary} />}
               <Animated.View pointerEvents="none" style={[styles.glyph, { backgroundColor: colors.overlay }, glyphStyle]}>
@@ -172,8 +192,8 @@ export function IntroVideoModal({ media, visible, inactive, onClose }: {
                 onResponderTerminationRequest={() => false}
                 onResponderGrant={(event) => { track.current.left = event.nativeEvent.pageX - event.nativeEvent.locationX; drag(event); }}
                 onResponderMove={drag}
-                onResponderRelease={() => void seek()}
-                onResponderTerminate={() => void seek()}
+                onResponderRelease={seek}
+                onResponderTerminate={seek}
               >
                 <View pointerEvents="none" style={[styles.rail, { backgroundColor: colors.border }]}>
                   <View style={[styles.fill, { width: fraction, backgroundColor: colors.primary }]} />
