@@ -39,16 +39,28 @@ export async function processRecording(
   formData.append("durationMs", durationMs.toString());
   formData.append("actualVerse", actualVerse);
 
-  const response = await fetch(`${baseUrl}/functions/v1/process-recording`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      // Don't set Content-Type - let browser set it with boundary for multipart
-    },
-    body: formData,
-  });
+  const response = await postFormData(`${baseUrl}/functions/v1/process-recording`, token, formData);
 
   return handleProcessingResponse(response);
+}
+
+/**
+ * The global fetch is expo/fetch from SDK 56, which rejects React Native's
+ * `{ uri }` file parts. React Native's own fetch was built on XMLHttpRequest,
+ * so this sends the same request as before, with the file streamed natively
+ * from its URI and the multipart boundary set by the networking module.
+ */
+function postFormData(url: string, token: string, body: FormData): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.onload = () =>
+      resolve(new Response(xhr.responseText, { status: xhr.status, statusText: xhr.statusText }));
+    xhr.onerror = () => reject(new TypeError("Network request failed"));
+    xhr.ontimeout = () => reject(new TypeError("Network request timed out"));
+    xhr.send(body);
+  });
 }
 
 /**
