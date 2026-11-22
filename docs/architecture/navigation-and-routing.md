@@ -270,6 +270,12 @@ Verses): exactly one opens its `/share/<id>` over the Library, several open the 
   dark-mode-only and unauthenticated.
 - **Dynamic route**: file name with `[param].tsx`. Read with
   `useLocalSearchParams()`.
+- **Navigation imports** come from `expo-router/react-navigation`
+  (`useFocusEffect`, `useIsFocused`, themes, `PlatformPressable`) and
+  `expo-router/js-tabs` (`Tabs`, `BottomTabBarButtonProps`,
+  `useBottomTabBarHeight`). Expo Router bundles React Navigation, so the
+  app has no direct `@react-navigation/*` dependency; expo-doctor warns
+  if one comes back.
 
 ## Invariants
 
