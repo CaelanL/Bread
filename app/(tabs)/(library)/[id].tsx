@@ -29,7 +29,7 @@ import { isDueForReview } from '@/lib/store/review';
 import { ReviewNowProvider, useReviewNow } from '@/hooks/use-review-now';
 import { showErrorToast } from '@/lib/toast';
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
-import type { SymbolViewProps } from 'expo-symbols';
+import type { SFSymbol } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -327,7 +327,7 @@ export default function CollectionScreen() {
     onPress: showMembers,
   } : undefined;
   const progress = grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null;
-  const symbol = (collection?.icon as SymbolViewProps['name']) || (collection?.isDefault ? 'heart.fill' : collectionIcon.symbol);
+  const symbol = (collection?.icon as SFSymbol) || (collection?.isDefault ? 'heart.fill' : collectionIcon.symbol);
   const name = collection?.name ?? (known ? 'Collection' : '');
 
   const menuItems = [

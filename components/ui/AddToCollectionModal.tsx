@@ -1,5 +1,5 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import type { SymbolViewProps } from 'expo-symbols';
+import type { SFSymbol } from 'expo-symbols';
 import { VerseReferenceBadge } from '@/components/ui/VerseReferenceBadge';
 import type { VerseData } from '@/components/ui/VerseExpandModal';
 import { Colors } from '@/constants/theme';
@@ -148,7 +148,7 @@ export function AddToCollectionModal({
                 >
                   <View style={styles.collectionInfo}>
                     <IconSymbol
-                      name={(collection.icon as SymbolViewProps['name']) || 'folder.fill'}
+                      name={(collection.icon as SFSymbol) || 'folder.fill'}
                       size={20}
                       color={collection.iconColor || accentColor}
                     />

@@ -3,11 +3,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { COLLECTION_ICONS, COLLECTION_VECTOR_GLYPHS, isCollectionVectorSymbol } from '@/lib/collections/icons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { SFSymbol, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+type IconMapping = Record<SFSymbol, ComponentProps<typeof MaterialIcons>['name']>;
 type IconSymbolName = keyof typeof MAPPING | keyof typeof COLLECTION_VECTOR_GLYPHS;
 
 /**

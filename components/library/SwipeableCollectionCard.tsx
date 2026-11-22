@@ -12,7 +12,7 @@ import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { resolveCollectionIcon } from '@/lib/collections/icons';
 import { collectionRemoval, type Emblem } from '@/lib/shared/progress';
 import type { Collection, SharedRole } from '@/lib/storage';
-import type { SymbolViewProps } from 'expo-symbols';
+import type { SFSymbol } from 'expo-symbols';
 import { useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useState } from 'react';
@@ -271,7 +271,7 @@ export function SwipeableCollectionCard({
                 },
               ]}>
                 <IconSymbol
-                  name={(collection.icon as SymbolViewProps['name']) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
+                  name={(collection.icon as SFSymbol) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
                   size={24}
                   color={engraved ? colors.tint : collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
                 />
