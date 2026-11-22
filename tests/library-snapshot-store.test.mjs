@@ -453,7 +453,7 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   await t.test('Home reloads when a session save lands while it is focused', async () => {
     const fixtureHooks = registerHooks({
       resolve(specifier, context, nextResolve) {
-        const stub = { react: 'react-stub.cjs', '@react-navigation/native': 'navigation-stub.cjs', '@/hooks/use-resume': 'resume-stub.cjs' }[specifier];
+        const stub = { react: 'react-stub.cjs', 'expo-router/react-navigation': 'navigation-stub.cjs', '@/hooks/use-resume': 'resume-stub.cjs' }[specifier];
         return stub && context.parentURL?.endsWith('use-home-reload.ts')
           ? { url: pathToFileURL(join(fixture, stub)).href, shortCircuit: true }
           : nextResolve(specifier, context);

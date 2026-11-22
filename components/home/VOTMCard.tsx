@@ -116,7 +116,7 @@ export function VOTMCard({
 const styles = StyleSheet.create({
   card: { borderRadius: Radius.xxl, overflow: 'hidden' },
   contentWrapper: { position: 'relative' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: MonthlyCardColors.overlay },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: MonthlyCardColors.overlay },
   content: { padding: 16, gap: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },

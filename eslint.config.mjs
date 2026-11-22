@@ -26,6 +26,18 @@ export default defineConfig([
     },
   },
   {
+    // eslint-plugin-react-hooks 7 (SDK 56) reports where React Compiler 1.0.0 skips a
+    // component. The compiler and its skips are the same as on SDK 55, so rewriting these
+    // components would change what it compiles. Warnings until that is its own change.
+    rules: {
+      "react-hooks/refs": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/set-state-in-render": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/purity": "warn",
+    },
+  },
+  {
     // Deno imports (npm:, https:) that ESLint can't resolve.
     files: ["supabase/functions/**"],
     rules: { "import/no-unresolved": "off" },

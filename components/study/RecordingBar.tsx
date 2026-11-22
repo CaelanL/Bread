@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   actions: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
