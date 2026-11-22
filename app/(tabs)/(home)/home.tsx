@@ -1,4 +1,4 @@
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from 'expo-router/react-navigation';
 import { useAuth } from '@/lib/auth';
 import type { VOTM } from '@/lib/api/votm';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';

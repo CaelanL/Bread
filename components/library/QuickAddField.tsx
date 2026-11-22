@@ -5,7 +5,7 @@ import { completeBook, MAX_ROWS, parseQuickAdd, quickAddRows, type QuickAddRefer
 import { sharedErrorMessage } from '@/lib/shared/invite-code';
 import { DEFAULT_COLLECTION_ID, formatVerseReference, type SavedVerse } from '@/lib/storage';
 import { useAppStore, useVersesByCollection } from '@/lib/store';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from 'expo-router/js-tabs';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
