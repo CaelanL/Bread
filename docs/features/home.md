@@ -136,7 +136,7 @@ is an authenticated invoker with an empty search path; insert-on-conflict return
 true only to the winner.
 
 `createIntroCoordinator` reads the account's presentation state, prepares media in
-a paused hidden native Video, configures audio, then claims atomically just
+a paused, muted expo-video player, then claims atomically just
 before presenting. Native unload/load has a 15-second deadline; cancellation and stale guards stop
 late presentation or cleanup of a newer request. Each attempt's reads and claims use its session's token; same-account refreshes keep the coordinator and playback. Only a
 confirmed winning claim autoplays; local absence, offline, failed reads or preparation
@@ -147,8 +147,8 @@ has no caller until the Home card returns. No writes are queued offline.
 The coordinator needs focused, active Home, hydration done, reminder UX settled and no
 verse or collection modal. Home keeps an open verse or picker through a
 metadata refresh and holds the intro until its native dismissal. Q1's transient presentation
-flag blocks overlap until actual dismissal; a stale reminder check rechecks. Transient inactivity pauses in place, resumes only if it was playing, and blocks new automatic starts. Backgrounding, navigation, account changes and close unload the players. Audio sets `playsInSilentModeIOS: true` (sound with the silent switch on), no recording or
-background playback; the recorder sets its own mode on start, so cleanup restores none.
+flag blocks overlap until actual dismissal; a stale reminder check rechecks. Transient inactivity pauses in place, resumes only if it was playing, and blocks new automatic starts. Backgrounding, navigation, account changes and close unload the players. expo-video sets `.playback` (sound with the silent switch on) and never deactivates; the modal
+mixes with other audio. The recorder sets its own category, so cleanup restores none.
 
 `IntroVideoModal` shows Close at once and timed captions. Tapping the video toggles pause
 with a fading glyph. Below it: a play/replay button, elapsed/total time and a 44-point scrub
@@ -200,3 +200,4 @@ The release migration seeds the monthly schedule; the local seed preserves it.
 - 2026-11-11 · Intro sound ignores the silent switch; scrubbing uses RN responders · A chosen video should just play; no new native module.
 - 2026-11-11 · The curated preview picker previews only; imports use the account translation · One translation per account (`docs/architecture/bible-versions.md`).
 - 2026-11-14 · Home's monthly verse and streak reload only when stale, after a session or in a new month · Every focus reread both.
+- 2026-11-22 · Intro on expo-video, mixing like expo-av · SDK 55 removed expo-av.
