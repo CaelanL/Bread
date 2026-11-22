@@ -207,6 +207,13 @@ sees when the app didn't open: Open in Bread (`com.biblemem://join/<code>`), Get
 through Apple's CDN when Bread installs, so it works only in a store or EAS build, never before
 sendlabs.dev serves the file.
 
+On iOS, Bread runs under the UIKit scene lifecycle, which the iOS 27 SDK requires
+(`ios.enableSceneSupport` from `expo-build-properties` in `app.config.js`). UIKit then hands
+links to the scene delegate, not the app delegate. Expo's `ExpoAppSceneDelegate`
+(`expo/ios/AppDelegates/`) forwards them to the AppDelegate and `RCTLinkingManager`, and
+rebuilds a cold start's launch options so `Linking.getInitialURL()` still returns its link. JS
+didn't change.
+
 The handler extracts tokens from the URL and calls
 `supabase.auth.setSession(...)`. Auth state change then drives the
 gating logic above. A notification tap routes through
