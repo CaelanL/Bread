@@ -25,7 +25,7 @@ import { DEFAULT_COLLECTION_ID, DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLL
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, InteractionManager } from 'react-native';
+import { Alert } from 'react-native';
 import { create } from 'zustand';
 import { pickPreload } from './preload';
 import { parseSnapshot, serializeSnapshot, snapshotKey, type SnapshotData } from './snapshot';
@@ -652,7 +652,7 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
     await tellKeptVerses(kept, translation);
   }
   if (launch && libraryOk && sameAccount(generation)) {
-    InteractionManager.runAfterInteractions(() => {
+    requestIdleCallback(() => {
       if (sameAccount(generation)) preloadVerseText(store().verses, false);
     });
   }

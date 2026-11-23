@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  type TextInputInstance,
   Pressable,
   StyleSheet,
   ActivityIndicator,
@@ -24,8 +25,8 @@ export default function ResetPasswordScreen() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [confirmFocused, setConfirmFocused] = useState(false);
 
-  const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
 
   const buttonBg = authAccent;
   const inputBg = colors.input;

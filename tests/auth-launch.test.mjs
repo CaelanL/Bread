@@ -12,7 +12,7 @@ test("a launch whose snapshot paint finishes after a sign-in as another account 
   const fixture = mkdtempSync(join(tmpdir(), 'bread-auth-launch-'));
   const file = (name, body) => { writeFileSync(join(fixture, name), body); return join(fixture, name); };
   const native = {
-    'react-native': file('platform.cjs', 'exports.Platform = { OS: "android" }; exports.Alert = { alert() {} }; exports.Linking = {}; exports.InteractionManager = { runAfterInteractions() {} };'),
+    'react-native': file('platform.cjs', 'exports.Platform = { OS: "android" }; exports.Alert = { alert() {} }; exports.Linking = {}; globalThis.requestIdleCallback = () => 0;'),
     // A key in globalThis.heldKeys answers only when its promise is resolved.
     '@react-native-async-storage/async-storage': file('storage.cjs', `
       const values = new Map(); globalThis.storedValues = values; globalThis.heldKeys = new Map();

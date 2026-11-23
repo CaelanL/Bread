@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  type TextInputInstance,
   Pressable,
   StyleSheet,
   ActivityIndicator,
@@ -29,9 +30,9 @@ export default function SignUpScreen() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [confirmFocused, setConfirmFocused] = useState(false);
 
-  const emailRef = useRef<TextInput>(null);
-  const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInputInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
 
   const buttonBg = authAccent;
   const inputBg = colors.input;

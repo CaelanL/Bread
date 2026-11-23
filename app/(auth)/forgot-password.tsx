@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  type TextInputInstance,
   Pressable,
   StyleSheet,
   ActivityIndicator,
@@ -24,7 +25,7 @@ export default function ForgotPasswordScreen() {
   const [sent, setSent] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
 
-  const emailRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInputInstance>(null);
 
   const buttonBg = authAccent;
   const inputBg = colors.input;

@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 // migration: it applies only on a matching updated_at and otherwise returns the server's row.
 test('progress saves land only on the row they were computed from', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-progress-guard-'));
-  writeFileSync(join(fixture, 'platform.cjs'), 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.InteractionManager = { runAfterInteractions() {} };');
+  writeFileSync(join(fixture, 'platform.cjs'), 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; globalThis.requestIdleCallback = () => 0;');
   writeFileSync(join(fixture, 'storage.cjs'), 'const values=new Map();module.exports={async getItem(k){return values.get(k)??null},async setItem(k,v){values.set(k,v)},async removeItem(k){values.delete(k)}};');
   const native = { 'react-native': join(fixture, 'platform.cjs'), '@react-native-async-storage/async-storage': join(fixture, 'storage.cjs') };
   const hooks = registerHooks({ resolve(specifier, context, nextResolve) {

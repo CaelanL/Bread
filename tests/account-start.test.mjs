@@ -28,7 +28,7 @@ test('accounts start from the auth session, keyed by user id', async (t) => {
   const file = (name, body) => { writeFileSync(join(fixture, name), body); return join(fixture, name); };
   const native = {
     // Not iOS, so the foreground sync reads no notification permission.
-    'react-native': file('platform.cjs', 'exports.Platform = { OS: "android" }; exports.Alert = { alert() {} }; exports.Linking = {}; exports.InteractionManager = { runAfterInteractions() {} };'),
+    'react-native': file('platform.cjs', 'exports.Platform = { OS: "android" }; exports.Alert = { alert() {} }; exports.Linking = {}; globalThis.requestIdleCallback = () => 0;'),
     '@react-native-async-storage/async-storage': file('storage.cjs', `
       const values = new Map(); globalThis.storedValues = values;
       module.exports = {

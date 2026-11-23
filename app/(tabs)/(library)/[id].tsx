@@ -38,6 +38,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewInstance,
   RefreshControl,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -94,7 +95,7 @@ export default function CollectionScreen() {
   const [renaming, setRenaming] = useState(false);
   // Set while search is open: where its pill sat, so the field grows from there and goes back.
   const [searchOrigin, setSearchOrigin] = useState<SearchOrigin | null>(null);
-  const searchPill = useRef<View>(null);
+  const searchPill = useRef<ViewInstance>(null);
   const openSearch = () => {
     searchPill.current?.measureInWindow((x, y, width, height) => setSearchOrigin({ x, y, width, height }));
   };

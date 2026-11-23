@@ -2,7 +2,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { composeDisplayName, MAX_NAME_PART_LENGTH } from '@/lib/shared/display-name';
 import { useRef } from 'react';
-import { type StyleProp, StyleSheet, Text, TextInput, type TextStyle } from 'react-native';
+import { type StyleProp, StyleSheet, Text, TextInput, type TextInputInstance, type TextStyle } from 'react-native';
 
 interface Props {
   first: string;
@@ -18,7 +18,7 @@ interface Props {
 /** First name, optional last name, and what members will see ("Shown as Caelan L."). */
 export function NameFields({ first, last, onChangeFirst, onChangeLast, onSubmit, inputStyle, editable = true, testIDPrefix }: Props) {
   const colors = Colors[useColorScheme() ?? 'light'];
-  const lastRef = useRef<TextInput>(null);
+  const lastRef = useRef<TextInputInstance>(null);
   const shown = first.trim() ? composeDisplayName(first, last) : null;
   const common = {
     style: inputStyle,

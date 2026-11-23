@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   View,
@@ -119,7 +120,7 @@ export default function VerseSelectScreen() {
   const verseLayouts = useRef<VerseLayout[]>([]);
   const scrollOffset = useRef(0);
   const scrollViewPageY = useRef(0);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
 
   // Long press timer
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

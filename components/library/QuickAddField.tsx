@@ -8,7 +8,7 @@ import { useAppStore, useVersesByCollection } from '@/lib/store';
 import { useBottomTabBarHeight } from 'expo-router/js-tabs';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
@@ -42,7 +42,7 @@ export function QuickAddField({
   const targetId = collectionId ?? DEFAULT_COLLECTION_ID;
   const existing = useVersesByCollection(targetId);
   const verses = useAppStore((state) => state.verses);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const pending = useRef(new Set<string>());
 
   const [input, setInput] = useState('');

@@ -60,7 +60,7 @@ The store warms the session cache through `warmVerseText`
 `lib/store/preload.ts`, tested in `preload.test.ts`):
 
 - At launch, once the first load and alignment settle and after
-  `InteractionManager.runAfterInteractions`: every verse once, most
+  `requestIdleCallback`: every verse once, most
   recently practiced first (never practiced last), then newest.
 - Opening a collection (`[id].tsx`, Mastered and In Progress too) puts
   its verses at the front of the queue.

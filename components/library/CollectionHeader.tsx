@@ -7,7 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Emblem } from '@/lib/shared/progress';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ComponentProps, ReactNode, Ref } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, withRepeat, withSequence, withDelay } from 'react-native-reanimated';
 
 type IconName = ComponentProps<typeof IconSymbol>['name'];
@@ -193,7 +193,7 @@ export function Sweep({ color }: { color: string }) {
 
 /** A small action under the header. `primary` is the screen's one accent action. */
 export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessibilityLabel, hidden, disabled }: {
-  ref?: Ref<View>;
+  ref?: Ref<ViewInstance>;
   icon: IconName;
   label?: string;
   onPress: () => void;

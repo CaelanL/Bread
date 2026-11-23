@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Dimensions,
   Pressable,
@@ -128,7 +129,7 @@ export function VerseCard({
   // during the collapse must not overwrite the saved offset — only
   // record while text is showing and no restore is pending.
   const showPlaceholder = (difficulty === 'hard' || memoryPlaceholder) && !revealed;
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const savedOffsetY = useRef(0);
   const restorePending = useRef(false);
   const prevShowPlaceholder = useRef(showPlaceholder);

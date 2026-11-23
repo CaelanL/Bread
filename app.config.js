@@ -44,8 +44,6 @@ export default {
       favicon: "./assets/images/favicon.png",
     },
     plugins: [
-      // UIKit scene lifecycle, which the iOS 27 SDK requires. SDK 58 does this by default.
-      ["expo-build-properties", { ios: { enableSceneSupport: true } }],
       "expo-font",
       "expo-router",
       [

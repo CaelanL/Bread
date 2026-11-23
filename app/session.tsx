@@ -50,11 +50,11 @@ import {
   AppState,
   Dimensions,
   FlatList,
+  type ListViewToken,
   Pressable,
   StyleSheet,
   Text,
   View,
-  type ViewToken,
 } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
@@ -433,10 +433,10 @@ export default function StudySessionScreen() {
   }, [isEasy, recorder, session]);
 
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
       if (viewableItems.length > 0) {
         const index = viewableItems[0].index;
-        if (index !== null && index !== currentIndex) {
+        if (index !== undefined && index !== currentIndex) {
           // Cancel any active recording when scrolling away
           void recorder.cancel();
           setCurrentIndex(index);
