@@ -593,8 +593,14 @@ export default function StudySessionScreen() {
         </View>
 
         <View style={styles.controlsContainer}>
-          {canContinue && (
-            <View style={styles.controlsRow}>
+          {/* Kept mounted (hidden) through a Retry take: unmounting the pressed Retry mid-touch loses the next tap (RN 0.88). */}
+          {(canContinue || isRetrying) && (
+            <View
+              pointerEvents={canContinue ? 'auto' : 'none'}
+              accessibilityElementsHidden={!canContinue}
+              importantForAccessibility={canContinue ? 'auto' : 'no-hide-descendants'}
+              style={[styles.controlsRow, !canContinue && styles.hiddenControls]}
+            >
               {session.allChunksCompleted && (
                 <Pressable
                   style={({ pressed }) => [styles.retryButton, { backgroundColor: colors.text }, pressed && styles.pressedControl]}
@@ -605,7 +611,7 @@ export default function StudySessionScreen() {
                   <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={colors.background} />
                 </Pressable>
               )}
-              {canRetry && (
+              {(canRetry || isRetrying) && (
                 <Pressable
                   style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
                   onPressIn={() => handleMicPress(index, true, 'pressIn')}
@@ -759,6 +765,9 @@ const styles = StyleSheet.create({
   },
   pressedControl: {
     opacity: 0.7,
+  },
+  hiddenControls: {
+    opacity: 0,
   },
   nextButton: {
     flexDirection: 'row',

@@ -190,7 +190,21 @@ export function RecordingBar({
           importantForAccessibility={canStart || starting ? 'auto' : 'no-hide-descendants'}
           style={[styles.round, micFade]}
         >
-          {starting ? (
+          {/* The Pressable and its icon stay mounted under the ring: unmounting the touched view mid-touch loses the next tap (RN 0.88). */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start recording"
+            accessibilityElementsHidden={starting}
+            importantForAccessibility={starting ? 'no-hide-descendants' : 'auto'}
+            testID="mic-button"
+            onPressIn={() => onStart('pressIn')}
+            onPress={() => onStart('press')}
+            disabled={!canStart}
+            style={({ pressed }) => [styles.mic, pressed && canStart && styles.pressed]}
+          >
+            <IconSymbol name="mic.fill" size={28} color={colors.white} />
+          </Pressable>
+          {starting && (
             <View
               accessible
               accessibilityRole="progressbar"
@@ -210,20 +224,7 @@ export function RecordingBar({
                   ringStyle,
                 ]}
               />
-              <IconSymbol name="mic.fill" size={28} color={colors.white} />
             </View>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Start recording"
-              testID="mic-button"
-              onPressIn={() => onStart('pressIn')}
-              onPress={() => onStart('press')}
-              disabled={!canStart}
-              style={({ pressed }) => [styles.mic, pressed && styles.pressed]}
-            >
-              <IconSymbol name="mic.fill" size={28} color={colors.white} />
-            </Pressable>
           )}
         </Animated.View>
       )}

@@ -186,6 +186,11 @@ Discarding, leaving the chunk or failing restores the previous result and
 controls. Retry is hidden on single-chunk sessions. The result card shows retry
 first, then peek, then the original.
 
+Retry and the mic (`RecordingBar`) stay mounted while their take starts: Retry's row hides
+(opacity 0, inert, hidden from accessibility), and the starting ring draws over the mic. From
+React Native 0.88 a touched view that unmounts mid-touch never gets its touch end, so the next tap
+(Discard or Submit) did nothing.
+
 ## Finishing a session
 
 The final score computes only once every chunk has a result. Then the hook:
