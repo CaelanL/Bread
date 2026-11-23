@@ -165,6 +165,9 @@ authenticated with a navigator key, an effect after the gate replaces to the Lib
 `dev-sign-in?next=/join/<code>` does the same. `Q1ExplainerCard` waits until `Motion.exitMs`
 after `JoinInvite` unmounts (`useUxFlagsStore.inviteOpen`): an RN `Modal` presented over the
 modal route, or as it closes, never shows and leaves an invisible layer that takes every tap.
+The gate's sign-in redirect sets the hold too, so the card can't present between sign-in and that
+effect's read: a card already up (or closing) blocks the join modal's presentation, and the route
+sits on `/join/<code>` with nothing on screen.
 
 `reset-password` is whitelisted because the user reaches it from an
 email link before they have a session. `dev-sign-in` is whitelisted
