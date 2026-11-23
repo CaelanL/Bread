@@ -321,6 +321,9 @@ Invariant 8 is above. Also:
 
 ## Sharp edges
 
+- **Never unmount or swap a Pressable from its own `onPressIn`.** On RN 0.88 the touch
+  that pressed it never ends, so the next tap is read as a second finger and lost. Keep it
+  mounted and hide it (see `RecordingBar.tsx`, the mic and Retry).
 - **`SwipeableVerseCard.tsx` has hardcoded bronze RGBA values**
   (e.g. `rgba(176,141,87,0.25)`) that should ideally come from a
   derived theme token. Not a bug, but a candidate for cleanup.
