@@ -55,7 +55,7 @@ To pause shipping for a release, remove the three jobs after `get_ios_build` on 
 - `eas.json` has `appVersionSource: "remote"` and `autoIncrement` on the `production` profile, so EAS owns the build number. `ios.buildNumber` in `app.config.js` is ignored.
 - `version` in `app.config.js` is the marketing version, and it changes the fingerprint, so bumping it routes that merge to a build.
 - App Store Connect rejects an upload whose marketing version's train is closed, and the build number is used up anyway. Bump `version` before any native change that follows an approved release.
-- `eas.json` profiles: `development`, `simulator` (`npm run sim -- install`), `preview`, `production` (channel `production`).
+- `eas.json` profiles: `development`, `simulator` (`npm run sim -- install`), `preview`, `production` (channel `production`). `npm run sim -- install --local` builds the same simulator dev client with the Mac's Xcode (`expo run:ios`), at no EAS build cost.
 
 ## What lives outside the repo
 

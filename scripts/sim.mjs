@@ -10,6 +10,7 @@
 //     a failed flow, ends with each flow's pass or fail and time, and exits non-zero if any failed.
 //   npm run sim -- stop                                 stops Metro and the device
 //   npm run sim -- install                              installs the latest simulator build
+//   npm run sim -- install --local                      builds the dev client with this Mac's Xcode and installs it (no EAS build)
 //
 // The app must add a <scheme>://dev-sign-in?next=<route> route. Still unproven:
 //   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags are right per --help; that it installs on DEVICE is not run.
@@ -27,6 +28,10 @@ const DEVICE = 'iPhone 16 Pro';
 const SETTLE_MS = 5000;
 const METRO_TIMEOUT_MS = 120_000;
 const BUNDLE_TIMEOUT_MS = 300_000;
+
+// With this set (the Claude app sets it), Node 24.7 on macOS 27 crashes in about 1 in 10 short runs while reading
+// the keychain (LoadSystemCACertificates), which fails `pod install` at random. Every child here inherits the fix.
+delete process.env.NODE_USE_SYSTEM_CA;
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const kit = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).kit ?? {};
@@ -111,7 +116,7 @@ function checkFingerprint() {
     return;
   }
   if (saved !== now) {
-    die('Native code changed since the simulator build. Run `npx eas-cli build -p ios --profile simulator` (uses 1 of 15 free builds a month), then `npm run sim -- install`.');
+    die('Native code changed since the simulator build. Run `npm run sim -- install --local` (builds on this Mac).');
   }
 }
 
@@ -310,10 +315,13 @@ function stopCommand() {
   console.log('Simulator and Metro stopped.');
 }
 
-function install() {
+function install(args) {
   takeLock();
   bootDevice();
-  const r = run('npx', ['eas-cli', 'build:run', '-p', 'ios', '--profile', 'simulator', '--latest'], { stdio: 'inherit' }); // unproven (4)
+  // CocoaPods fails on a non-UTF-8 locale, and agent shells often have none set.
+  const r = args.includes('--local')
+    ? run('npx', ['expo', 'run:ios', '--no-bundler', '--device', DEVICE], { stdio: 'inherit', env: { LANG: 'en_US.UTF-8', ...process.env } })
+    : run('npx', ['eas-cli', 'build:run', '-p', 'ios', '--profile', 'simulator', '--latest'], { stdio: 'inherit' }); // unproven (4)
   if (!r.ok) die('Install failed. See the output above.');
   writeFileSync(FINGERPRINT, JSON.stringify({ native: currentFingerprint() }));
   console.log('Simulator build installed.');
@@ -323,5 +331,5 @@ const [command, ...args] = process.argv.slice(2);
 if (command === 'shot') await shot(args);
 else if (command === 'flow') await flow(args);
 else if (command === 'stop') stopCommand();
-else if (command === 'install') install();
-else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install');
+else if (command === 'install') install(args);
+else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install [--local]');
