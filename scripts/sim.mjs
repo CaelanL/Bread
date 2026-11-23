@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // See the app's screens without Xcode. Expo apps only. Needs "sim" in package.json "kit":
-//   "sim": { "name": "<short app name>", "scheme": "<URL scheme>" }
+//   "sim": { "name": "<short app name>", "scheme": "<URL scheme>", "appId": "<iOS bundle identifier>" }
 //
 //   npm run sim -- shot <route> [<route>...] [--keep] [--as <seed user>]   screenshots to .expo/sim-shots/
 //   npm run sim -- flow <name> [<name>...] [--keep]     runs Maestro flows from .maestro/ after one startup, output to .expo/sim-shots/flows/<name>/
@@ -35,7 +35,7 @@ delete process.env.NODE_USE_SYSTEM_CA;
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const kit = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).kit ?? {};
-if (!kit.sim?.name || !kit.sim?.scheme) die('package.json needs kit.sim: { "name": ..., "scheme": ... }.');
+if (!kit.sim?.name || !kit.sim?.scheme || !kit.sim?.appId) die('package.json needs kit.sim: { "name": ..., "scheme": ..., "appId": ... }.');
 const CACHE = join(homedir(), '.cache');
 const LOCK = join(CACHE, `${kit.sim.name}-sim.lock`);
 const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim.json`);
@@ -122,7 +122,23 @@ function checkFingerprint() {
 
 // ---------- device and Metro
 
+// From iOS 27, every `simctl openurl` (Maestro's openLink too) asks "Open in <app>?" unless the scheme is
+// approved for simctl's bridge. The device reads the approvals at boot, so they're written before it.
+function approveScheme() {
+  const devices = Object.values(JSON.parse(must('xcrun', ['simctl', 'list', 'devices', 'available', '-j'])).devices).flat();
+  const udid = devices.find((d) => d.name === DEVICE)?.udid;
+  if (!udid) die(`No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro`);
+  // Written as a file: the Mac's `defaults write` caches it and may never reach the disk.
+  const prefs = join(homedir(), 'Library/Developer/CoreSimulator/Devices', udid, 'data/Library/Preferences/com.apple.launchservices.schemeapproval.plist');
+  const approvals = existsSync(prefs) ? JSON.parse(must('plutil', ['-convert', 'json', '-o', '-', prefs])) : {};
+  approvals[`com.apple.CoreSimulator.CoreSimulatorBridge-->${kit.sim.scheme}`] = kit.sim.appId;
+  mkdirSync(dirname(prefs), { recursive: true });
+  writeFileSync(prefs, JSON.stringify(approvals));
+  must('plutil', ['-convert', 'binary1', prefs]);
+}
+
 function bootDevice() {
+  approveScheme();
   run('xcrun', ['simctl', 'boot', DEVICE]); // fails harmlessly when already booted
   must('xcrun', ['simctl', 'bootstatus', DEVICE, '-b']);
 }

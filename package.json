@@ -104,7 +104,8 @@
     },
     "sim": {
       "name": "bread",
-      "scheme": "com.biblemem"
+      "scheme": "com.biblemem",
+      "appId": "com.caelanliu.biblemem"
     }
   }
 }
