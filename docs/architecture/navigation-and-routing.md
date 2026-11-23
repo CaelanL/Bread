@@ -1,6 +1,6 @@
 # Navigation and Routing
 
-The app uses [Expo Router 6](https://docs.expo.dev/router/) with
+The app uses [Expo Router 58](https://docs.expo.dev/router/) with
 file-based navigation. Each file in `app/` becomes a route; folders
 become nested navigators (Stack or Tabs). Auth-related routes,
 authenticated tabs, and modals are organized into route groups.
@@ -58,7 +58,7 @@ Home and Library each use a nested Stack, so pushing a screen keeps the
 tab bar visible, animates in, and supports the back swipe. Explore
 (`/explore`) and Insights (`/insights`) are Home stack screens. Their
 "Back to Home" header button calls `router.back()`. The Home stack's
-`initialRouteName` is `home`, so a deep link to `/explore` still has
+`anchor` is `home`, so a deep link to `/explore` still has
 Home under it. A tab keeps its stack when you switch away and back.
 `npm run sim -- flow home-stack` checks this and that a double tap on a
 curated card opens one introduction. Maestro cannot start the iOS edge

@@ -85,6 +85,12 @@ To change the patch: edit `node_modules/@siteed/audio-studio`, run
 applies. A new dev build is needed to test it; the simulator records, but timing, the
 orange dot, AirPods and interruptions need a phone.
 
+The patch applied unchanged from SDK 54 to 58, and compiles with Xcode 27. The module uses
+only `Name`, `Constant`, `Events`, `Function`, `AsyncFunction`, `OnCreate`, `OnDestroy` and
+`sendEvent` from `expo-modules-core`, and its podspec pins Swift 5. At an SDK upgrade, grep
+its `ios/` for what that SDK's `expo-modules-core` CHANGELOG removes, then build locally
+(`npm run sim -- install --local`).
+
 ## Browser checks
 
 Needs a person and a phone with a patched dev build.
