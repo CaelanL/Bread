@@ -83,7 +83,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 - Translation is an account setting and a verse is one row per reference, in that translation. No per-verse or per-collection translation. See `docs/architecture/bible-versions.md`.
 - Only public-domain translations are bundled in the app. Licensed text is fetched, and held only in the server cache and in memory. See `docs/architecture/bible-api-and-caching.md`.
 - Don't gate work on "wait for production data". Bread is small, so ship reasonable-default constants and name the knob to turn if scale ever matters.
-- Merges ship through EAS: JS over the air, native changes through the App Store (`.eas/workflows/deploy.yml`). Anything in the fingerprint counts as native, including `package.json` "scripts": changing one makes the next merge do a full build and store submit, and live updates stop until that build ships. See `docs/architecture/release.md`.
+- Merges ship through EAS: JS over the air, native changes through the App Store (`.eas/workflows/deploy.yml`). Anything in the fingerprint counts as native, `patches/` included (`fingerprint.config.js` skips `package.json` "scripts"): changing it makes the next merge do a full build and store submit, and live updates stop until that build ships. See `docs/architecture/release.md`.
 
 ## Review checklist
 - A migration is safe under old client + new schema (invariant 11), and a new table has access-rule tests in `supabase/tests/`.
