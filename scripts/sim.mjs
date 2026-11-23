@@ -217,7 +217,9 @@ async function startApp() {
   must(process.execPath, ['scripts/db.mjs', 'guard']);
   bootDevice();
   const port = await startMetro();
-  const devClientUrl = `${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}?disableOnboarding=1`)}`;
+  // From SDK 58 the dev menu opens over the app at every launch, and its floating button covers the
+  // top-right corner, unless the launcher URL turns them off.
+  const devClientUrl = `${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}?disableOnboarding=1`)}&disableAutoLaunch=1&disableFab=1`;
   openUrl(devClientUrl);
   await waitForBundle();
   await sleep(SETTLE_MS);
