@@ -70,6 +70,7 @@ All in `ios/` unless noted. Each change carries a `Bread:` comment.
 | `breadPatch` constant (1) | `AudioStudioModule` | The JS gate |
 | Live PCM from an `AVAudioSinkNode`, not an input tap | `installTapWithHardwareFormat`, `connectInputSink`, `BreadInputRing` | An input tap delivers about 100 ms buffers whatever `bufferSize` asks (AVAudioNode.h: "Supported range is [100, 400] ms"), so the first audio came ~120 ms after the engine started and pieces were 100 ms. The sink gets each IO cycle on the realtime thread, which only copies into 64 preallocated slots and signals a processing thread; that thread runs the same `processAudioBuffer`. Kept connected between recordings, reconnected when the hardware format changes. The library's device fallback (unused: Bread pauses) still taps |
 | IO buffer hint 10 ms | `prepareRecording` | Was 1024 frames at 16 kHz (64 ms). The IO cycle is now the sink's step, so first audio lands one short cycle after the engine starts and pieces are about 50 ms |
+| Whole-number options read through `NSNumber` | `RecordingSettings.fromDictionary` and every other option read in the module | From SDK 56 a JS number in a `[String: Any]` argument arrives as a Swift `Double`, and `as? Int` on it is nil, so `interval` fell back to 1000 ms and the m4a `bitrate` to 128 kbps. `as? Double` reads were unaffected |
 | `keepSessionActive` in the TS types | `src/`, `build/types/` | No casts |
 | No "Adding recording interruption listener" log | `events.{js,ts}` | Noise |
 
@@ -85,7 +86,9 @@ To change the patch: edit `node_modules/@siteed/audio-studio`, run
 applies. A new dev build is needed to test it; the simulator records, but timing, the
 orange dot, AirPods and interruptions need a phone.
 
-The patch applied unchanged from SDK 54 to 58, and compiles with Xcode 27. The module uses
+The patch applied unchanged from SDK 54 to 58 and compiles with Xcode 27, but SDK 56 changed how
+numbers arrive (the `NSNumber` row above), which no compile error shows: after an upgrade, check
+the `[MIC]` log still shows ~1,700 B pieces and a ~64 kbps m4a. The module uses
 only `Name`, `Constant`, `Events`, `Function`, `AsyncFunction`, `OnCreate`, `OnDestroy` and
 `sendEvent` from `expo-modules-core`, and its podspec pins Swift 5. At an SDK upgrade, grep
 its `ios/` for what that SDK's `expo-modules-core` CHANGELOG removes, then build locally

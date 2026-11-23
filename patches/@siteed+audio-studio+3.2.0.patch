@@ -35,6 +35,32 @@ index 1ffa17f..9ab0827 100644
      /** Show a notification during recording (default is false) */
      showNotification?: boolean;
      /** Show waveform in the notification (Android only, when showNotification is true) */
+diff --git a/node_modules/@siteed/audio-studio/ios/AudioProcessor.swift b/node_modules/@siteed/audio-studio/ios/AudioProcessor.swift
+index 6e035c4..b990cea 100644
+--- a/node_modules/@siteed/audio-studio/ios/AudioProcessor.swift
++++ b/node_modules/@siteed/audio-studio/ios/AudioProcessor.swift
+@@ -708,7 +708,7 @@ public class AudioProcessor {
+         // Log output format details
+         if let format = outputFormat {
+             let formatType = format["format"] as? String ?? "unknown"
+-            let bitrate = format["bitrate"] as? Int ?? 0
++            let bitrate = (format["bitrate"] as? NSNumber)?.intValue ?? 0
+             Logger.debug("AudioProcessor", "- Output format: \(formatType), bitrate: \(bitrate)")
+         }
+         
+@@ -740,9 +740,9 @@ public class AudioProcessor {
+         }
+ 
+         let targetSampleRate = outputFormat?["sampleRate"] as? Double ?? inputSampleRate
+-        let targetChannels = outputFormat?["channels"] as? Int ?? inputChannels
+-        let targetBitDepth = outputFormat?["bitDepth"] as? Int ?? 16
+-        let bitrate = outputFormat?["bitrate"] as? Int ?? 128000
++        let targetChannels = (outputFormat?["channels"] as? NSNumber)?.intValue ?? inputChannels
++        let targetBitDepth = (outputFormat?["bitDepth"] as? NSNumber)?.intValue ?? 16
++        let bitrate = (outputFormat?["bitrate"] as? NSNumber)?.intValue ?? 128000
+ 
+         let fileExtension = formatStr == "wav" ? "wav" : "aac"
+         let outputURL = FileManager.default.temporaryDirectory
 diff --git a/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift b/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
 index 4d69b16..20a9ac8 100644
 --- a/node_modules/@siteed/audio-studio/ios/AudioStreamManager.swift
@@ -788,7 +814,7 @@ index 4d69b16..20a9ac8 100644
              
              // Force prepare engine again to ensure it's ready
 diff --git a/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift b/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
-index 3627274..0d6c871 100644
+index 3627274..7f88c9e 100644
 --- a/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
 +++ b/node_modules/@siteed/audio-studio/ios/AudioStudioModule.swift
 @@ -43,6 +43,9 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
@@ -801,6 +827,26 @@ index 3627274..0d6c871 100644
          // Defines event names that the module can send to JavaScript.
          Events([
              audioDataEvent,
+@@ -121,8 +124,8 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+             // Get time or byte range options
+             let startTimeMs = options["startTimeMs"] as? Double
+             let endTimeMs = options["endTimeMs"] as? Double
+-            let position = options["position"] as? Int
+-            let byteLength = options["length"] as? Int
++            let position = (options["position"] as? NSNumber)?.intValue
++            let byteLength = (options["length"] as? NSNumber)?.intValue
+             
+             // Validate ranges - can have time range OR byte range OR no range
+             let hasTimeRange = startTimeMs != nil && endTimeMs != nil
+@@ -136,7 +139,7 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+             
+             let features = options["features"] as? [String: Bool] ?? [:]
+             let featureOptions = self.extractFeatureOptions(from: features)
+-            let segmentDurationMs = options["segmentDurationMs"] as? Int ?? DEFAULT_SEGMENT_DURATION_MS // Default value of 100ms
++            let segmentDurationMs = (options["segmentDurationMs"] as? NSNumber)?.intValue ?? DEFAULT_SEGMENT_DURATION_MS // Default value of 100ms
+             
+             DispatchQueue.global().async(execute: {
+                 do {
 @@ -215,6 +218,7 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
          ///   - promise: A promise to resolve with the recording settings or reject with an error.
          AsyncFunction("startRecording") { (options: [String: Any], promise: Promise) in
@@ -842,8 +888,58 @@ index 3627274..0d6c871 100644
          /// Asynchronously lists all audio files stored in the document directory.
          ///
          /// - Parameters:
+@@ -646,8 +669,8 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+             // Get time or byte range options
+             let startTimeMs = options["startTimeMs"] as? Double
+             let endTimeMs = options["endTimeMs"] as? Double
+-            let position = options["position"] as? Int
+-            let length = options["length"] as? Int
++            let position = (options["position"] as? NSNumber)?.intValue
++            let length = (options["length"] as? NSNumber)?.intValue
+             let includeWavHeader = options["includeWavHeader"] as? Bool ?? false
+             let includeNormalizedData = options["includeNormalizedData"] as? Bool ?? false
+             let decodingOptions = options["decodingOptions"] as? [String: Any] ?? [:]
+@@ -946,7 +969,7 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+                 return
+             }
+ 
+-            let chunkDurationMs = options["chunkDurationMs"] as? Int ?? 1000
++            let chunkDurationMs = (options["chunkDurationMs"] as? NSNumber)?.intValue ?? 1000
+             guard (10...60000).contains(chunkDurationMs) else {
+                 promise.reject(
+                     "ERR_AUDIO_STREAM_INVALID_RANGE",
+@@ -961,11 +984,11 @@ public class AudioStudioModule: Module, AudioStreamManagerDelegate, AudioDeviceM
+                 startTimeMs: options["startTimeMs"] as? Double,
+                 endTimeMs: options["endTimeMs"] as? Double,
+                 targetSampleRate: options["targetSampleRate"] as? Double,
+-                channels: options["channels"] as? Int,
++                channels: (options["channels"] as? NSNumber)?.intValue,
+                 normalizeAudio: options["normalizeAudio"] as? Bool ?? true,
+                 chunkDurationMs: chunkDurationMs,
+-                maxChunkBytes: options["maxChunkBytes"] as? Int,
+-                maxBufferedChunks: options["maxBufferedChunks"] as? Int ?? 4,
++                maxChunkBytes: (options["maxChunkBytes"] as? NSNumber)?.intValue,
++                maxBufferedChunks: (options["maxBufferedChunks"] as? NSNumber)?.intValue ?? 4,
+                 backpressureTimeoutMs: options["backpressureTimeoutMs"] as? Double
+             )
+ 
+diff --git a/node_modules/@siteed/audio-studio/ios/DecodingConfig.swift b/node_modules/@siteed/audio-studio/ios/DecodingConfig.swift
+index 387c66b..d2839d7 100644
+--- a/node_modules/@siteed/audio-studio/ios/DecodingConfig.swift
++++ b/node_modules/@siteed/audio-studio/ios/DecodingConfig.swift
+@@ -32,8 +32,8 @@ public struct DecodingConfig {
+         
+         return DecodingConfig(
+             targetSampleRate: dict["targetSampleRate"] as? Double,
+-            targetChannels: dict["targetChannels"] as? Int,
+-            targetBitDepth: dict["targetBitDepth"] as? Int,
++            targetChannels: (dict["targetChannels"] as? NSNumber)?.intValue,
++            targetBitDepth: (dict["targetBitDepth"] as? NSNumber)?.intValue,
+             normalizeAudio: dict["normalizeAudio"] as? Bool ?? false
+         )
+     }
 diff --git a/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift b/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift
-index 3a8235f..1316e4f 100644
+index 3a8235f..01e3c11 100644
 --- a/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift
 +++ b/node_modules/@siteed/audio-studio/ios/RecordingSettings.swift
 @@ -101,6 +101,8 @@ struct RecordingSettings {
@@ -855,7 +951,29 @@ index 3a8235f..1316e4f 100644
      var showNotification: Bool = false
      var enableProcessing: Bool = false
      
-@@ -181,6 +183,7 @@ struct RecordingSettings {
+@@ -146,7 +148,7 @@ struct RecordingSettings {
+                 outputSettings.compressed.enabled = compressedDict["enabled"] as? Bool ?? false
+                 let format = (compressedDict["format"] as? String)?.lowercased() ?? "aac"
+                 outputSettings.compressed.format = format
+-                outputSettings.compressed.bitrate = compressedDict["bitrate"] as? Int ?? 128000
++                outputSettings.compressed.bitrate = (compressedDict["bitrate"] as? NSNumber)?.intValue ?? 128000
+                 
+                 // Validate compression settings if enabled
+                 if outputSettings.compressed.enabled {
+@@ -173,21 +175,23 @@ struct RecordingSettings {
+         
+         settings.output = outputSettings
+         
++        // Bread: whole numbers through NSNumber. Since Expo SDK 56 a JS number in [String: Any] arrives as a Swift Double, and Double as? Int is nil
+         // Parse core settings
+-        settings.numberOfChannels = dict["channels"] as? Int ?? 1
+-        settings.bitDepth = dict["bitDepth"] as? Int ?? 16
+-        settings.interval = dict["interval"] as? Int
+-        settings.intervalAnalysis = dict["intervalAnalysis"] as? Int
++        settings.numberOfChannels = (dict["channels"] as? NSNumber)?.intValue ?? 1
++        settings.bitDepth = (dict["bitDepth"] as? NSNumber)?.intValue ?? 16
++        settings.interval = (dict["interval"] as? NSNumber)?.intValue
++        settings.intervalAnalysis = (dict["intervalAnalysis"] as? NSNumber)?.intValue
          
          // Parse feature flags
          settings.keepAwake = dict["keepAwake"] as? Bool ?? true
@@ -863,6 +981,14 @@ index 3a8235f..1316e4f 100644
          settings.showNotification = dict["showNotification"] as? Bool ?? false
          settings.enableProcessing = dict["enableProcessing"] as? Bool ?? false
          
+         settings.featureOptions = dict["features"] as? [String: Bool]
+         
+         // Update segmentDurationMs parsing
+-        settings.segmentDurationMs = dict["segmentDurationMs"] as? Int ?? 100
++        settings.segmentDurationMs = (dict["segmentDurationMs"] as? NSNumber)?.intValue ?? 100
+         
+         // Parse iOS-specific config
+         if let iosDict = dict["ios"] as? [String: Any],
 diff --git a/node_modules/@siteed/audio-studio/src/AudioStudio.types.ts b/node_modules/@siteed/audio-studio/src/AudioStudio.types.ts
 index 0fa8d70..ce45b18 100644
 --- a/node_modules/@siteed/audio-studio/src/AudioStudio.types.ts
