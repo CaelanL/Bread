@@ -12,6 +12,12 @@
 //   npm run sim -- install                              installs the latest simulator build
 //   npm run sim -- install --local                      builds the dev client with this Mac's Xcode and installs it (no EAS build)
 //
+// Options for shot, flow and install (stop takes --device too):
+//   --device duo           the iPhone Duo simulator (iOS 27.2 iPhone19,4 runtime) instead of iPhone 16 Pro. It boots
+//                          closed; fold, open or rotate it with Claude's iOS Simulator tool (set_posture, rotate).
+//   --display outer|inner  which Duo display a shot captures (default outer); the file name ends in it.
+//   --dark                 dark appearance for the run, set back afterwards (left on with --keep); shot files end in -dark.
+//
 // The app must add a <scheme>://dev-sign-in?next=<route> route. Still unproven:
 //   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags are right per --help; that it installs on DEVICE is not run.
 
@@ -24,7 +30,6 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 const MAX_SIMS = 1;
-const DEVICE = 'iPhone 16 Pro';
 const SETTLE_MS = 5000;
 const METRO_TIMEOUT_MS = 120_000;
 const BUNDLE_TIMEOUT_MS = 300_000;
@@ -33,12 +38,27 @@ const BUNDLE_TIMEOUT_MS = 300_000;
 // the keychain (LoadSystemCACertificates), which fails `pod install` at random. Every child here inherits the fix.
 delete process.env.NODE_USE_SYSTEM_CA;
 
+// Options are read here, before the commands see their arguments.
+const argv = process.argv.slice(2);
+function option(name, takesValue) {
+  const i = argv.indexOf(name);
+  if (i < 0) return null;
+  const [, value] = argv.splice(i, takesValue ? 2 : 1);
+  return takesValue ? value : true;
+}
+const duo = option('--device', true) === 'duo';
+const DEVICE = duo ? 'iPhone Duo' : 'iPhone 16 Pro';
+const display = option('--display', true) ?? 'outer';
+if (!['outer', 'inner'].includes(display)) die('--display is outer or inner.');
+const dark = option('--dark', false);
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const kit = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).kit ?? {};
 if (!kit.sim?.name || !kit.sim?.scheme || !kit.sim?.appId) die('package.json needs kit.sim: { "name": ..., "scheme": ..., "appId": ... }.');
 const CACHE = join(homedir(), '.cache');
 const LOCK = join(CACHE, `${kit.sim.name}-sim.lock`);
-const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim.json`);
+// Each device has its own build, so its own record of what's installed.
+const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim${duo ? '-duo' : ''}.json`);
 const LOG = join(root, '.expo/sim-metro.log');
 const SHOTS = join(root, '.expo/sim-shots');
 const FLOWS = join(root, '.maestro');
@@ -127,7 +147,11 @@ function checkFingerprint() {
 function approveScheme() {
   const devices = Object.values(JSON.parse(must('xcrun', ['simctl', 'list', 'devices', 'available', '-j'])).devices).flat();
   const udid = devices.find((d) => d.name === DEVICE)?.udid;
-  if (!udid) die(`No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro`);
+  if (!udid) {
+    die(duo
+      ? 'No simulator named "iPhone Duo". Create one: xcrun simctl create "iPhone Duo" com.apple.CoreSimulator.SimDeviceType.iPhone-Duo com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4'
+      : `No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro`);
+  }
   // Written as a file: the Mac's `defaults write` caches it and may never reach the disk.
   const prefs = join(homedir(), 'Library/Developer/CoreSimulator/Devices', udid, 'data/Library/Preferences/com.apple.launchservices.schemeapproval.plist');
   const approvals = existsSync(prefs) ? JSON.parse(must('plutil', ['-convert', 'json', '-o', '-', prefs])) : {};
@@ -137,10 +161,16 @@ function approveScheme() {
   must('plutil', ['-convert', 'binary1', prefs]);
 }
 
+let lightBefore; // the appearance a --dark run puts back
+
 function bootDevice() {
   approveScheme();
   run('xcrun', ['simctl', 'boot', DEVICE]); // fails harmlessly when already booted
   must('xcrun', ['simctl', 'bootstatus', DEVICE, '-b']);
+  if (dark) {
+    lightBefore = must('xcrun', ['simctl', 'ui', DEVICE, 'appearance']).trim();
+    must('xcrun', ['simctl', 'ui', DEVICE, 'appearance', 'dark']);
+  }
 }
 
 const freePort = () => new Promise((resolve, reject) => {
@@ -193,6 +223,7 @@ function stopMetro(held) {
 }
 
 function stopAll() {
+  if (lightBefore) run('xcrun', ['simctl', 'ui', DEVICE, 'appearance', lightBefore]);
   stopMetro(readJson(LOCK));
   run('xcrun', ['simctl', 'shutdown', DEVICE]);
   rmSync(LOCK, { force: true });
@@ -238,8 +269,9 @@ async function shot(args) {
   for (const route of routes) {
     openUrl(`${kit.sim.scheme}://dev-sign-in?next=${encodeURIComponent(route)}${as ? `&as=${encodeURIComponent(as)}` : ''}`); 
     await sleep(SETTLE_MS);
-    const file = join(SHOTS, `${fileName(route)}.png`);
-    must('xcrun', ['simctl', 'io', 'booted', 'screenshot', file]);
+    const file = join(SHOTS, `${fileName(route)}${dark ? '-dark' : ''}${duo ? `-${display}` : ''}.png`);
+    // simctl refuses a Duo screenshot without --display: 1 is the outer display, 3 the inner.
+    must('xcrun', ['simctl', 'io', 'booted', 'screenshot', ...(duo ? [`--display=${display === 'outer' ? 1 : 3}`] : []), file]);
     console.log(file);
   }
   if (!keep) stopAll();
@@ -345,9 +377,10 @@ function install(args) {
   console.log('Simulator build installed.');
 }
 
-const [command, ...args] = process.argv.slice(2);
+const [command, ...args] = argv;
 if (command === 'shot') await shot(args);
 else if (command === 'flow') await flow(args);
 else if (command === 'stop') stopCommand();
 else if (command === 'install') install(args);
-else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install [--local]');
+else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install [--local]'
+  + ' (shot, flow and install take [--device duo] [--display outer|inner] [--dark])');
