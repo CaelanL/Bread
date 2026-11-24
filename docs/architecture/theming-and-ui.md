@@ -263,7 +263,7 @@ Each screen picks its title. A tab's first screen (Home, Library, Settings) has 
 (34/700); a pushed page (Insights, Notifications) has `LargeTitle` (28/600); the collection
 screen has its name; study setup has none, its reference sits in a glass bubble in `TopBar`'s
 `center`, the one bar with a title, because the reference names the screen and opens the passage
-([window layouts](window-layouts.md#study-setup)). `AppHeader` is the same bar in the layout flow, for screens whose top stays
+([wide study screens](wide-study.md#study-setup)). `AppHeader` is the same bar in the layout flow, for screens whose top stays
 put: the title sits beside the back button, a labelled action is a `HeaderPill`, an icon one a
 `TopBarButton`. It carries a title only when the title says something the screen doesn't (a
 session's reference, a chapter's "John 3"). A curated collection drops its own: the collection's

@@ -35,7 +35,7 @@ without a fetch. Verse text loads through `getVerseText`, keyed on
   the session: `/session?id=<verseId>&difficulty=<d>&chunkSize=<n>`.
 - The reference bubble in the bar, ⤢ and the preview text open the whole passage
   (`PassageCard`). Also `ProgressCard` and Reset Progress in ⋯.
-  [Look and parts](../architecture/window-layouts.md#study-setup).
+  [Look and parts](../architecture/wide-study.md#study-setup).
 
 ### Remembered prefs
 
