@@ -38,6 +38,7 @@ surfaces.
 | `primaryLight` | `rgba(176,141,87,0.12)` | tinted accent background |
 | `engravedFill` | `rgba(245,158,11,0.12)` | engraved collection icon |
 | `glass` / `glassBorder` | `rgba(255,255,255,0.72)` / `rgba(255,255,255,0.9)` | glass buttons and pills before Liquid Glass |
+| `controlFill` / `controlThumb` | `rgba(118,118,128,0.12)` / `#ffffff` | a switcher's track and raised thumb, capsule value buttons |
 | `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
 | `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 
@@ -62,6 +63,7 @@ surfaces.
 | `primaryLight` | `rgba(201,169,98,0.15)` | |
 | `engravedFill` | `rgba(245,158,11,0.15)` | |
 | `glass` / `glassBorder` | `rgba(46,46,46,0.72)` / `rgba(255,255,255,0.12)` | |
+| `controlFill` / `controlThumb` | `rgba(118,118,128,0.24)` / `#636366` | iOS's dark segmented control |
 | `overlay` | `rgba(0,0,0,0.6)` | |
 
 Status colors (`success`, `warning`, `error`) are intentionally the
@@ -79,6 +81,9 @@ A collection's accent (its `iconColor`, or `primary`) isn't a token: `withAlpha(
 `constants/theme.ts` also exports `Radius`, `Motion` and `Shadows`.
 `eslint.config.mjs` rejects radii, durations and press scales outside
 those values, so `npm run lint` catches a stray one.
+
+`Shadows.card` (a white grouped card), `thumb` (a switcher's thumb), `action` (the docked Start)
+and `sheet` (a card over a blurred page) come from the study setup boards.
 
 `Motion.paneMs` (380) is the one long duration: a pane sliding in or out on a wide window and
 the passage card growing from what was tapped. Everything else stays at 200 or under.
@@ -255,11 +260,13 @@ so the spinner shows below the bar, not behind the Dynamic Island.
 
 Each screen picks its title. A tab's first screen (Home, Library, Settings) has `LargeTitle root`
 (34/700); a pushed page (Insights, Notifications) has `LargeTitle` (28/600); the collection
-screen has its name. `AppHeader` is the same bar in the layout flow, for screens whose top stays
+screen has its name; study setup has none, its reference sits in a glass bubble in `TopBar`'s
+`center`, the one bar with a title, because the reference names the screen and opens the passage
+([window layouts](window-layouts.md#study-setup)). `AppHeader` is the same bar in the layout flow, for screens whose top stays
 put: the title sits beside the back button, a labelled action is a `HeaderPill`, an icon one a
 `TopBarButton`. It carries a title only when the title says something the screen doesn't (a
-session's reference, a chapter's "John 3"). Setup and a curated collection drop theirs: the verse
-card and the collection's own name already say it.
+session's reference, a chapter's "John 3"). A curated collection drops its own: the collection's
+name already says it.
 
 The collection screen's top is `CollectionHeader` (`components/library/`): the accent washing down
 from the top edge (an `expo-linear-gradient`, solid above the bar for a pull), a 56 pt icon square,

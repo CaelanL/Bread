@@ -12,15 +12,15 @@ engraved rules: `docs/features/review.md`.
 
 | Layer | File | Role |
 |---|---|---|
-| Setup | `app/(tabs)/(library)/setup/[id].tsx`, `components/study/ChunkSizeModal.tsx` | Difficulty, chunk size, remembered prefs |
+| Setup | `app/(tabs)/(library)/setup/[id].tsx`, `components/study/setup/` | Difficulty, chunk size, remembered prefs |
 | Screen | `app/session.tsx` | Animations, recorder, per-chunk visibility, results page |
 | Session state | `hooks/use-study-session.ts` (`useStudySession`) | Chunks, results, peek and retry state, saving |
 | Pure logic | `lib/study-chunks.ts`, `lib/align.ts` | Chunks, masks, score formulas, alignment |
 | Cards | `components/study/VerseCard.tsx`, `components/study/ResultCard.tsx` | Verse and result rendering |
 | Tests | `lib/__tests__/study-chunks.test.ts`, `lib/__tests__/align.test.ts` | Run with `npm test` |
 
-The screen keeps only recorder and animation state, `hideModes` and the reported results.
-Nothing is persisted until the session saves.
+The screen keeps only recorder and animation state, `hideModes` and the reported results;
+nothing persists until the session saves.
 
 ## Setup screen
 
@@ -29,13 +29,13 @@ without a fetch. Verse text loads through `getVerseText`, keyed on
 `verse?.id`: saving prefs swaps the verse object and would flash the loader.
 
 - **Difficulty:** Easy ("All words"), Medium ("Some hidden"), Hard ("No words").
-- **Verses per chunk:** shown only for multi-verse passages. A value pill opens
-  `ChunkSizeModal`, where a tap on 1..N-1 or "All" commits and closes. An "All"
-  button sits beside the pill too.
-- **Start session:** a floating pill. `handleStartSession` is the only route into
+- **Verses per chunk:** multi-verse passages only. The value opens
+  `ChunkSizeModal` (a tap on 1..N-1 or "All" commits and closes); "All" sits beside it.
+- **Start session:** docked at the bottom. `handleStartSession` is the only route into
   the session: `/session?id=<verseId>&difficulty=<d>&chunkSize=<n>`.
-- Also `ProgressCard`, a passage preview sized by `useSafeAreaFrame` height, and
-  Reset Progress in the menu.
+- The reference bubble in the bar, ⤢ and the preview text open the whole passage
+  (`PassageCard`). Also `ProgressCard` and Reset Progress in ⋯.
+  [Look and parts](../architecture/window-layouts.md#study-setup).
 
 ### Remembered prefs
 
@@ -223,26 +223,26 @@ recordings don't count. A peeked session has no marker in its row. Columns:
 
 - **Partial scores can mark mastery.** See `docs/features/review.md`.
 - **Partial scores read low.** One of two equal chunks at 100% saves about 50%.
-- **Two `getVerseText`s.** `lib/api/bible.ts` fetches. `lib/study-chunks.ts` is the
-  deprecated splitter.
+- **Two `getVerseText`s.** `lib/api/bible.ts` fetches; `lib/study-chunks.ts` splits (deprecated).
 
 ## Browser checks
 
-- `npm run sim -- shot "/(tabs)/(library)/setup/seed-psalm-23-1-3" --as reader-a`: Easy selected, "Verses per chunk" at 1 with All beside it, "Start session" pill.
+- `npm run sim -- shot "/(tabs)/(library)/setup/seed-psalm-23-1-3" --as reader-a`: Easy, "Verses per chunk" at 1, All, "Start session".
+- `npm run sim -- flow setup-iphone`: the passage opens three ways; chunk size 2, All, 2; "Verses 1-2".
 - `npm run sim -- shot "/(tabs)/(library)/setup/seed-john-3-16" --as reader-a`: Hard selected (mastered with nothing saved), no chunk row.
 - `npm run sim -- shot "/session?id=seed-psalm-23-1-3&difficulty=medium&chunkSize=1" --as reader-a`: "Verse 1" card with every other word as one unbroken blank, three progress segments, mic button. Needs the local `bible` function serving ESV.
-- `npm run sim -- flow practice-session`: reader-a opens Psalm 23:1-3 setup, picks Medium, taps Start session, sees "Verse 1" and the mic, taps the mic and gets the iOS microphone prompt. Don't Allow shows "Permission required" and dismissing it restores the mic.
+- `npm run sim -- flow practice-session`: reader-a starts Psalm 23:1-3 on Medium, sees "Verse 1", taps the mic: the iOS prompt. Don't Allow shows "Permission required"; dismissing it restores the mic.
 - `npm run sim -- flow practice-removed-mastered`: reader-a's mastered John 3:16, removed from My Verses, still starts a session; the flow puts it back.
 - `npm run sim -- shot "/session?id=x" --as reader-a`: Close and "This verse is no longer in your library."
 - `npm run sim -- shot "/dev-result-card?card=<expected>|<transcript>"` (`app/dev-result-card.tsx`), light and dark. KJV Romans 6:23 both sides: 100%, "Perfect!". Without "eternal": 95%, "Great!", "eternal" underlined. Thumbs-down: `flow grading-report`.
-- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. A ring shows until capture starts, then the pill with waveform and actions. The double tap records once.
+- `npm run sim -- flow recording-controls`: start and discard a recording, then double-tap the mic. A ring shows until capture starts, then the waveform pill. The double tap records once.
 - `npm run sim -- flow mic-denied-again`: deny the prompt, tap the mic again: one "Permission required".
 - Real device, Medium, multi-verse: tap the eye, re-hide, recite, submit. The card shows the real score and "Revealed — this chunk won't count", and the final score treats those words as missing.
 
 ## Decisions
 
 - 2026-04-26 · Retries are display-only and never change `chunkResults` · One attempt counts, so practice is free. Hidden on single-chunk sessions (2026-04-30), where it would mislead.
-- 2026-05-01 · Chunk picker is a tap-to-commit modal, with a floating Start pill over a scrolling form · The old dropdown overlapped the form on small phones.
+- 2026-05-01 · Chunk picker is a tap-to-commit modal, with Start docked over a scrolling form · The old dropdown overlapped the form on small phones.
 - 2026-06-06 · A peeked chunk scores 0 through an all-`missing` alignment, with no confirm dialog · No scorer special case, can't be gamed, and a peeked Hard session can't reach 90.
 - 2026-08-25 · Scoring formula `(correct + 0.5*close) / (correct + close + missing + added)` in `lib/study-chunks.ts` is deliberate · Added words count in the denominator to reward clean recitation. Fix fairness in alignment normalization, never in the formula.
 - 2026-08-25 · Prefs are per-verse columns, not `progress` keys; mastered verses with none open on Hard, whole passage · `progress` round-trips through `parseProgress`, so older clients would clobber JSONB keys. Engraved reviews only qualify on Hard, so Easy would stall them.

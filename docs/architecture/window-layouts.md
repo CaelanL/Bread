@@ -50,13 +50,43 @@ when the phone turns. No `expo-screen-orientation`, no native change.
 - Maestro works on the closed Duo only. With it open, Maestro reads the screen in the outer
   display's coordinates (offset by −203, −273 and clipped to 466 × 678), so taps and scrolls miss.
 
+## Study setup
+
+Study setup is the one screen that looks different on every iPhone, not only on wide windows; its
+parts live in `components/study/setup/` so the wide layouts reuse them. On a phone, top to bottom:
+
+- `TopBar` with back, ⋯ and, in its `center`, `ReferenceBubble`: the reference in a `GlassPill`
+  in place of a "Study setup" title.
+- `VersePreview`: the opening lines on `cardAlt` (2 lines under 870 pt of `useSafeAreaFrame`
+  height, 3 under 920, else 4) with ⤢ at the top right. Hide verses shows "Verse hidden".
+- `DifficultySwitcher`: a `controlFill` capsule track with a raised `controlThumb` that slides to
+  the chosen level (`Motion.expandMs`, none under Reduce Motion). Legend dots and check as before.
+- `ProgressCard`: three best scores, then the engraved row (icon, state, "N / 10" on one line, bar,
+  then the callout, unlock time or tagline), on a white `card` with `Shadows.card`.
+- `ChunkRow` (passages only): the size in a capsule that opens `ChunkSizeModal`, and All.
+- `StartButton`: a 56 pt full-width bronze capsule docked over the page fade.
+
+Spacing: 24 pt between sections, section titles 17 pt semibold, 10 pt from a title to its control.
+The bubble, ⤢ and the preview text open `PassageCard`, the whole passage with numbered verses. It
+grows out of whatever was tapped (measured with `measureInWindow`) over `Motion.paneMs` on
+`Motion.easing` while the page blurs, and shrinks back into it on close; Reduce Motion fades it.
+
 ## Browser checks
 
 - `npm run sim -- shot /dev-window --device duo`: "466 × 678", "outer", and the glass buttons and
   bubble over bronze text. Opened (`set_posture open`), `--display inner`: "951 × 669", "wide";
   turned (`rotate left`): "669 × 951", "tall". Add `--dark` for the dark glass.
+- Study setup on iPhone 16 Pro, light and `--dark`: `shot` the setup routes for `seed-psalm-23-1-3`,
+  `seed-john-3-16` (review due) and `seed-romans-8-28` as reader-a, `seed-c-romans-8-1` (engraved),
+  `seed-32-2` (locked) and `seed-32-4` (five verses) as reader-c. Taps: `flow setup-iphone`; Hide
+  verses: `flow hide-verses`.
 
 ## Decisions
 
 - 2026-11-23 · Classes use width and height, not width alone · the outer display gets the rail and the upright inner display doesn't, at nearly the same width.
 - 2026-11-23 · Stay portrait-only · the probe on the Duo simulator showed the inner display already gets both orientations and the outer stays upright, so the native change (and its store build) isn't needed.
+- 2026-11-23 · iPhone setup keeps today's order (preview, Difficulty, Your Progress, Verses per chunk); only the look follows the Duo boards · Caelan: "Yes, all leans" (O4); the restyle shouldn't move anything a reader knows.
+- 2026-11-23 · Chunk size keeps today's sheet, restyled, not a native menu · a native menu needs `@expo/ui`, a native change, and this feature ships over the air (O2).
+- 2026-11-23 · On the phone, back and ⋯ stay plain bar icons; only the reference is glass · the bar has no surface on every other screen, and the boards' glass buttons belong to the wide layouts.
+- 2026-11-23 · The boards' deep bronze (#8f6a3a: Review now callout, tagline, selected All) is `tint`/`primary`, and the selected difficulty is the raised thumb, not solid bronze · tokens with a dark mode, and Q17 keeps today's bronze.
+- 2026-11-23 · The preview card drops its reference pill · the bubble already names the verse.
