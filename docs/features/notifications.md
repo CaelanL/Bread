@@ -26,7 +26,7 @@ Bodies use the reference only, never Bible text. Both can fire in the same minut
 **Due** in `loadDueVerses`: `hard.completed` is true, `deleted_at` is null, and
 `engraved.nextDueAt` is null or past. Due dates snap to local midnight
 (`nextDueAfterDays` in `lib/store/review.ts`), so a digest at any time on the due day
-catches the verse. Review rules: [review](review.md).
+catches the verse. Review rules are in `docs/features/review.md`.
 
 **In progress** in `loadInProgressVerses` mirrors `isInProgressVerse` in
 `lib/store/index.ts`: any non-null `bestAccuracy` and not mastered on Hard. Change them
@@ -71,7 +71,7 @@ user's row fail. Tested in `supabase/tests/device-tokens.test.sql`.
 
 - `*_hour BETWEEN 1 AND 23`. 12 AM isn't allowed.
 - Cadence and weekday are coupled: `daily` with null, or `weekly` with a weekday.
-  `buildPatch` in `NotificationSettings` always sends the pair.
+  `buildPatch` always sends the pair.
 - `timezone` is `NOT NULL` with no default. A `UTC` default would mistime pushes until
   the first client update.
 
@@ -134,7 +134,7 @@ changed, and skips 4):
 3. If a row is loaded and the device timezone differs, update `timezone`.
 4. Call `updateLastForegroundedAt`, filtered to rows older than 5 minutes.
 
-Without permission there's no prefs row, so the cron skips the user.
+A user who never grants permission has no prefs row, so the cron skips them.
 
 ## Asking for permission
 
@@ -143,7 +143,7 @@ iOS shows its dialog only once, from `undetermined`, so the app explains first.
 `components/notifications/Q1ExplainerCard.tsx` appears once after sign-in when the status
 is `undetermined`. **Enable** requests permission, registers the token and inserts defaults
 if there's no row. **Maybe later** only sets the flag. `app/dev-sign-in.tsx` also sets it,
-since the card would cover every sim shot.
+because the card would cover every simulator screenshot.
 
 `q1Presented` coordinates the [Home intro](home.md#encouragement-video).
 
@@ -154,8 +154,8 @@ the hook false until every gate resolves, or it flickers on cold start.
 
 ## Settings page
 
-`NotificationSettings`: `/notifications`, or a [Settings pane](../architecture/window-layouts.md#settings) when wide.
-The row in Settings reads "On" only if `masterEnabled`
+`NotificationSettings` on `/notifications` ([wide](../architecture/window-layouts.md#settings)).
+The Settings row reads "On" only if `masterEnabled`
 is true and permission is granted or provisional. Edits stay in a draft until Save,
 so a stray toggle never reaches the server.
 
@@ -177,13 +177,13 @@ so a stray toggle never reaches the server.
 
 `deep-links.ts` validates `source` and `target`, then pushes `/(tabs)/(library)/mastered` or
 `/(tabs)/(library)/in-progress`. A tap never starts a session. Mastered defaults to Due first
-unless the user chose another sort ([library](library.md)). A tap that launched the app
+unless the user chose another sort (`docs/features/library.md`). A tap that launched the app
 waits for `replayColdStartTap`, which `app/_layout.tsx` calls once authenticated and mounted.
 
 ## Local development
 
 Migration 017 schedules its call to the hosted URL. `supabase/seed.sql` unschedules that job,
-so a local database never calls prod or fires a push by itself. `supabase/config.toml` puts
+so a local database never calls prod and no push fires by itself. `supabase/config.toml` puts
 a local-only `cron_secret` in Vault so 017 can apply.
 
 ## Sharp edges
@@ -208,7 +208,7 @@ a local-only `cron_secret` in Vault so 017 can apply.
   the spring-forward day. A weekly nudge skipped by the 24h gate waits a week.
 - **Revoking permission in iOS Settings doesn't change `master_enabled`.** The cron still
   matches, then logs `skipped-empty` once the token row is gone. Settings reads "Off" anyway.
-- **The digest and the due pill can disagree.** See [review](review.md).
+- **The digest and the due pill can disagree.** See `docs/features/review.md`.
 - **An invalid timezone skips the user** until the client fixes it on the next foreground. The
   SQL helper `local_time_in_tz`, with its UTC fallback, exists but nothing calls it.
 - **Enabling with no edits can't Save.** With no row, the draft already has master on, so

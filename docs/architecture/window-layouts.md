@@ -130,11 +130,12 @@ beside it. The rail holds Add, then Edit as a glass word (`GlassButton text`).
   topic's title (28 pt) and its controls: Feedback is the form (`FeedbackForm`; Done starts a fresh one);
   Translation lists the versions, a tap calls `setBibleVersion` (no sheet); Appearance, Review, Account (Delete
   Account under it) and About reuse the phone's rows and sheets; Notifications is the notifications page's body
-  (`NotificationSettings`) with Save as a glass word in the rail, dimmed until there's an edit. Leaving it with
-  unsaved edits asks to discard, like Back. Settings opens on Translation.
+  (`NotificationSettings`) with Save as a glass word in the rail: dimmed until there's an edit, a spinner while
+  saving, a check for 1.5 s after. With unsaved edits, another topic asks to discard (like Back); another tab
+  keeps the draft (Settings stays mounted); a fold drops it with no prompt. Settings opens on Translation.
 - `/notifications` and `/feedback` on a wide window (an unfold, a link) `dismissTo` Settings with `topic` and an
-  `opened` time, which picks that pane. A fold from wide shows today's Settings; an unsaved notifications draft
-  or feedback note in the pane is dropped. For shots, `shot "/(tabs)/settings?topic=<topic>"`.
+  `opened` time, which picks that pane. A fold from wide shows today's Settings; an unsaved feedback note in
+  the pane is dropped too. For shots, `shot "/(tabs)/settings?topic=<topic>"`.
 - `outer` (Settings-Outer): today's page, the title 26 pt under the safe top, 18/10 side padding. `tall`: today's.
 - Off the rail, `TopBar` pads its right side by the safe area's right inset, and the Notifications and Feedback
   pages pad their content by it, so Save and the note clear the status bar down the outer display's right edge

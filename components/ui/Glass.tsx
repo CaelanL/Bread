@@ -1,6 +1,6 @@
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import type { ComponentProps, ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radius, Shadows } from '@/constants/theme';
@@ -22,8 +22,8 @@ function GlassSurface({ style, children }: { style: StyleProp<ViewStyle>; childr
   );
 }
 
-/** A 44 pt glass circle holding one icon, or a short word (`text`): a wide window's back, sidebar, ⋯, Edit and translation buttons. */
-export function GlassButton({ icon, text, label, onPress, testID, disabled, expanded }: {
+/** A 44 pt glass circle holding one icon, or a short word (`text`), or a spinner while `busy`: a wide window's back, sidebar, ⋯, Edit, translation and Save buttons. */
+export function GlassButton({ icon, text, label, onPress, testID, disabled, expanded, busy }: {
   icon?: ComponentProps<typeof IconSymbol>['name'];
   text?: string;
   label: string;
@@ -31,6 +31,7 @@ export function GlassButton({ icon, text, label, onPress, testID, disabled, expa
   testID?: string;
   disabled?: boolean;
   expanded?: boolean;
+  busy?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   return (
@@ -38,14 +39,18 @@ export function GlassButton({ icon, text, label, onPress, testID, disabled, expa
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={expanded === undefined ? undefined : { expanded }}
-      disabled={disabled}
+      accessibilityState={expanded === undefined && !busy ? undefined : { expanded, busy }}
+      disabled={disabled || busy}
       onPress={onPress}
       style={({ pressed }) => pressed && styles.pressed}
     >
       <GlassSurface style={styles.button}>
-        {icon && <IconSymbol name={icon} size={icon === 'chevron.left' ? 22 : 20} color={colors.text} />}
-        {text && <Text style={[styles.text, { color: colors.text }]} numberOfLines={1}>{text}</Text>}
+        {busy ? <ActivityIndicator size="small" color={colors.tint} /> : (
+          <>
+            {icon && <IconSymbol name={icon} size={icon === 'chevron.left' ? 22 : 20} color={colors.text} />}
+            {text && <Text style={[styles.text, { color: colors.text }]} numberOfLines={1}>{text}</Text>}
+          </>
+        )}
       </GlassSurface>
     </Pressable>
   );

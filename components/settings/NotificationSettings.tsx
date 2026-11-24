@@ -74,6 +74,7 @@ import { GlassButton } from '@/components/ui/Glass';
 import { RailContext } from '@/components/ui/TabRail';
 import { LargeTitle, TopBar } from '@/components/ui/TopBar';
 
+const SAVED_CUE_MS = 1500;
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function deviceTimezone(): string {
@@ -207,6 +208,13 @@ export function NotificationSettings({ contentStyle, onBack, onSaved, onDirtyCha
   const [permission, setPermission] = useState<IosPermissionStatus>('undetermined');
   const [requestingPermission, setRequestingPermission] = useState(false);
   const [saving, setSaving] = useState(false);
+  // In the rail, a check stands in for Save for a moment after a save that went through.
+  const [savedCue, setSavedCue] = useState(false);
+  useEffect(() => {
+    if (!savedCue) return;
+    const timer = setTimeout(() => setSavedCue(false), SAVED_CUE_MS);
+    return () => clearTimeout(timer);
+  }, [savedCue]);
 
   // iOS one-shots requestPermissionsAsync — guard against double-tap
   // racing two calls.
@@ -338,6 +346,7 @@ export function NotificationSettings({ contentStyle, onBack, onSaved, onDirtyCha
         const finalPrefs = usePrefsStore.getState().prefs ?? inserted;
         setBaseline(finalPrefs);
         setDraft(finalPrefs);
+        if (railed) setSavedCue(true);
         onSaved();
         return;
       }
@@ -359,11 +368,12 @@ export function NotificationSettings({ contentStyle, onBack, onSaved, onDirtyCha
       const finalPrefs = usePrefsStore.getState().prefs ?? draft;
       setBaseline(finalPrefs);
       setDraft(finalPrefs);
+      if (railed) setSavedCue(true);
       onSaved();
     } finally {
       setSaving(false);
     }
-  }, [baseline, draft, saving, onSaved]);
+  }, [baseline, draft, saving, onSaved, railed]);
 
   const handleBack = useCallback(() => {
     if (!onBack) return;
@@ -603,8 +613,15 @@ export function NotificationSettings({ contentStyle, onBack, onSaved, onDirtyCha
       </Animated.ScrollView>
       <TopBar onBack={onBack && handleBack} backLabel="Settings">
         {railed ? (
-          <View style={!dirty && styles.saveIdle}>
-            <GlassButton text="Save" label="Save" onPress={handleSave} disabled={!dirty || saving} />
+          <View style={!dirty && !saving && !savedCue && styles.saveIdle}>
+            <GlassButton
+              icon={savedCue ? 'checkmark' : undefined}
+              text={savedCue ? undefined : 'Save'}
+              label={savedCue ? 'Saved' : 'Save'}
+              onPress={handleSave}
+              disabled={!dirty}
+              busy={saving}
+            />
           </View>
         ) : (
           <Pressable
