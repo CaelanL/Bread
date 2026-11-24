@@ -5,7 +5,6 @@ import {
   ScrollView,
   type ScrollViewInstance,
   StyleSheet,
-  Dimensions,
   Pressable,
   useWindowDimensions,
   type NativeSyntheticEvent,
@@ -23,9 +22,6 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Chunk, Difficulty, DisplayWord } from '@/lib/study-chunks';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.30;
-const SCROLL_MAX_HEIGHT = CARD_MAX_HEIGHT - 28 - 16 - 20 - 20;
 const STAGGER_DELAY = 30; // ms between each word
 
 interface InlineWordProps {
@@ -112,7 +108,9 @@ export function VerseCard({
   onToggleVisibility,
 }: VerseCardProps) {
   const colorScheme = useColorScheme();
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, height: screenHeight } = useWindowDimensions();
+  const cardMaxHeight = screenHeight * 0.30;
+  const scrollMaxHeight = cardMaxHeight - 28 - 16 - 20 - 20;
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
 
@@ -161,7 +159,7 @@ export function VerseCard({
       style={[
         styles.card,
         styles.cardShadow,
-        { backgroundColor: cardBg, maxHeight: CARD_MAX_HEIGHT, borderColor },
+        { backgroundColor: cardBg, maxHeight: cardMaxHeight, borderColor },
       ]}
       layout={Layout.duration(300)}
     >
@@ -177,7 +175,7 @@ export function VerseCard({
         {/* Verse Text */}
         <ScrollView
           ref={scrollRef}
-          style={[styles.cardScrollContent, { maxHeight: SCROLL_MAX_HEIGHT }]}
+          style={[styles.cardScrollContent, { maxHeight: scrollMaxHeight }]}
           contentContainerStyle={styles.verseTextContainer}
           onScroll={handleScroll}
           scrollEventThrottle={16}
@@ -223,7 +221,6 @@ export function VerseCard({
   );
 }
 
-export { CARD_MAX_HEIGHT, SCROLL_MAX_HEIGHT };
 
 const styles = StyleSheet.create({
   card: {

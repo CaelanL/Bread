@@ -48,17 +48,15 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  Dimensions,
   FlatList,
   type ListViewToken,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Recording cap: at 5 minutes the recording auto-submits exactly as if
 // the user tapped done, so they still see how far they got.
@@ -121,6 +119,7 @@ export default function StudySessionScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const { width: screenWidth } = useWindowDimensions();
 
   // Session state hook
   const session = useStudySession({
@@ -478,7 +477,7 @@ export default function StudySessionScreen() {
     // Results page
     if (isResultsPage(item)) {
       return (
-        <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.chunkContainer, { width: screenWidth }]}>
           <SessionFinish
             score={session.finalScore}
             difficulty={difficulty ?? 'easy'}
@@ -532,7 +531,7 @@ export default function StudySessionScreen() {
         : `Verse ${item.verseNum}`;
 
     return (
-      <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
+      <View style={[styles.chunkContainer, { width: screenWidth }]}>
         <View style={styles.cardsArea}>
           {/* Score badge on top of verse card when completed. For a
               peeked chunk, show the real recited score (the scored 0
@@ -686,8 +685,8 @@ export default function StudySessionScreen() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({
-          length: SCREEN_WIDTH,
-          offset: SCREEN_WIDTH * index,
+          length: screenWidth,
+          offset: screenWidth * index,
           index,
         })}
       />
