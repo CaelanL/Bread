@@ -37,6 +37,7 @@ surfaces.
 | `icon` | `#6b6b6b` | default icon color |
 | `primaryLight` | `rgba(176,141,87,0.12)` | tinted accent background |
 | `engravedFill` | `rgba(245,158,11,0.12)` | engraved collection icon |
+| `glass` / `glassBorder` | `rgba(255,255,255,0.72)` / `rgba(255,255,255,0.9)` | glass buttons and pills before Liquid Glass |
 | `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
 | `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 
@@ -60,6 +61,7 @@ surfaces.
 | `icon` | `#9a9a9a` | |
 | `primaryLight` | `rgba(201,169,98,0.15)` | |
 | `engravedFill` | `rgba(245,158,11,0.15)` | |
+| `glass` / `glassBorder` | `rgba(46,46,46,0.72)` / `rgba(255,255,255,0.12)` | |
 | `overlay` | `rgba(0,0,0,0.6)` | |
 
 Status colors (`success`, `warning`, `error`) are intentionally the
@@ -77,6 +79,9 @@ A collection's accent (its `iconColor`, or `primary`) isn't a token: `withAlpha(
 `constants/theme.ts` also exports `Radius`, `Motion` and `Shadows`.
 `eslint.config.mjs` rejects radii, durations and press scales outside
 those values, so `npm run lint` catches a stray one.
+
+`Motion.paneMs` (380) is the one long duration: a pane sliding in or out on a wide window and
+the passage card growing from what was tapped. Everything else stays at 200 or under.
 
 ## Fonts
 
@@ -208,6 +213,7 @@ have hex literals; don't copy them.
 | `EngravedIcon.tsx` | Special icon for engraved verses |
 | `SearchTakeover.tsx` | Search that grows out of its pill to the top and covers the screen; Cancel plays it back |
 | `TopBar.tsx` | `TopBar`, `TopBarButton`, `LargeTitle`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
+| `Glass.tsx` | `GlassButton` (a 44 pt circle with one icon) and `GlassPill` (a capsule: the reference bubble, the tab pill). Liquid Glass (`expo-glass-effect`) where iOS has it, else the `glass` fill, `glassBorder` hairline and `Shadows.glass` |
 
 If you're building a new reusable primitive, add it here with a
 `.tsx` (and `.ios.tsx` if it needs platform divergence). Pull
@@ -321,6 +327,9 @@ Invariant 8 is above. Also:
 
 ## Sharp edges
 
+- **Never read the window size at module load.** `Dimensions.get('window')` at the top of a file
+  keeps the launch size after the iPhone Duo folds or the window turns; read
+  `useWindowDimensions()` in render ([window layouts](window-layouts.md#live-sizes)).
 - **Never unmount or swap a Pressable from its own `onPressIn`.** On RN 0.88 the touch
   that pressed it never ends, so the next tap is read as a second finger and lost. Keep it
   mounted and hide it (see `RecordingBar.tsx`, the mic and Retry).

@@ -33,6 +33,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Store, hydration, what's persisted, offline | `docs/architecture/sync-and-storage.md` |
 | Screens, tabs, modals, deep links | `docs/architecture/navigation-and-routing.md` |
 | Tokens, dark mode, fonts, `components/ui` | `docs/architecture/theming-and-ui.md` |
+| Wide windows: iPhone Duo, iPad, rail | `docs/architecture/window-layouts.md` |
 | Release, EAS, OTA | `docs/architecture/release.md` |
 
 ## Run and check
