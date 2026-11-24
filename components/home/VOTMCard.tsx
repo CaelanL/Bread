@@ -155,6 +155,6 @@ const styles = StyleSheet.create({
 const verseSize = StyleSheet.create({
   phone: {},
   outer: { fontSize: 17, lineHeight: 25 },
-  wide: { fontSize: 27, lineHeight: 38, letterSpacing: -0.2, maxWidth: 420 },
-  tall: { fontSize: 26, lineHeight: 36, letterSpacing: -0.2, maxWidth: 520 },
+  wide: { fontSize: 27, lineHeight: 38, maxWidth: 420 },
+  tall: { fontSize: 26, lineHeight: 36, maxWidth: 520 },
 });

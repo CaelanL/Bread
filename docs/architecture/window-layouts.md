@@ -89,7 +89,8 @@ grows out of whatever was tapped (measured with `measureInWindow`) over `Motion.
 **Rail actions.** Inside the tabs, `RailContext` says the rail shows. A `TopBar` there renders no
 actions; while its screen is focused, `useRailActions` puts its `children` in the rail's top slot,
 and `TopBarButton` draws itself as a `GlassButton` there (`RailSlotContext`). Closures keep working
-(setup's ⋯ opens Reset as before). Screens outside the tabs (session, notifications) keep their
+(setup's ⋯ opens Reset as before). A screen's `PopoverMenu` takes `useMenuAnchor()` from `TopBar.tsx`:
+under the bar's right end, or, railed, level with the rail's first action and just left of the rail. Screens outside the tabs (session, notifications) keep their
 actions in the bar. The slot's store is named `useRailSlot`: the React Compiler treats only `use*`
 names as hooks and skipped re-reading a store named otherwise ("Rendered fewer hooks").
 
@@ -117,8 +118,8 @@ the class themselves.
 - Home on the Duo: `npm run sim -- shot "/(tabs)/(home)/home" --device duo` closed (outer), then
   opened `--display inner` on its side and turned upright, each also `--dark`: the rail or pill, and
   the board's layout. On iPhone 16 Pro, Home matches today's.
-- Rail actions: closed Duo, Maestro taps `tab-settings` and `tab-library` in the rail, then More on
-  setup's rail and Reset Progress (no committed flow; the open Duo can't be tapped).
+- Rail: `npm run sim -- flow duo-rail --device duo` on the closed Duo: tabs switch from the rail, and
+  setup's More opens its menu beside the rail (Reset Progress, then Cancel). The open Duo can't be tapped.
 - Study setup on iPhone 16 Pro, light and `--dark`: `shot` the setup routes for `seed-psalm-23-1-3`,
   `seed-john-3-16` (review due) and `seed-romans-8-28` as reader-a, `seed-c-romans-8-1` (engraved),
   `seed-32-2` (locked) and `seed-32-4` (five verses) as reader-c. Taps: `flow setup-iphone`; Hide

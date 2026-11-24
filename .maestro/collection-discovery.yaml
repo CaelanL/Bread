@@ -23,18 +23,10 @@ name: collection-discovery
     file: subflows/browse-collections.yaml
     env:
       THEME: Dark
-- runFlow:
-    when:
-      visible: "Add collection"
-    commands:
-      - tapOn:
-          id: curated-collection-action
-- runFlow:
-    when:
-      visible: "Open collection"
-    commands:
-      - tapOn:
-          id: curated-collection-action
+# Add collection and Open collection both open the saved copy; one tap either way (a second tap after
+# Add raced its navigation).
+- tapOn:
+    id: curated-collection-action
 - extendedWaitUntil:
     visible: "Change collection icon, .*"
     timeout: 30000

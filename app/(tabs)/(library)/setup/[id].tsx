@@ -1,5 +1,5 @@
 import { showErrorToast } from '@/lib/toast';
-import { BAR_HEIGHT, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
+import { TopBar, TopBarButton, useMenuAnchor, useTopBarHeight } from '@/components/ui/TopBar';
 import { ChunkRow } from '@/components/study/setup/ChunkRow';
 import { ChunkSizeModal } from '@/components/study/setup/ChunkSizeModal';
 import { DifficultySwitcher, type Difficulty } from '@/components/study/setup/DifficultySwitcher';
@@ -53,6 +53,7 @@ export default function StudySetupScreen() {
   // models, not raw window height.
   const insets = useSafeAreaInsets();
   const barHeight = useTopBarHeight();
+  const menuAnchor = useMenuAnchor();
   // With verses hidden, the text shows only in the expanded view.
   const hideVerseText = useAppStore((state) => state.hideVerseText);
   const frameHeight = useSafeAreaFrame().height;
@@ -190,7 +191,7 @@ export default function StudySetupScreen() {
       <PopoverMenu
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
-        anchorPosition={{ top: insets.top + BAR_HEIGHT, right: 12 }}
+        anchorPosition={menuAnchor}
         items={[
           {
             label: 'Reset Progress',

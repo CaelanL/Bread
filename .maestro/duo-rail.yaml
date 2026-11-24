@@ -1,0 +1,45 @@
+# The right-edge rail. Run on the closed iPhone Duo: `npm run sim -- flow duo-rail --device duo` (Maestro
+# can't tap the open Duo, see docs/architecture/window-layouts.md). reader-a switches tabs from the rail,
+# then study setup's More (in the rail's top slot) opens its menu beside the rail; Reset Progress asks
+# first, and Cancel keeps the scores. On an iPhone the same taps go through the tab bar and the top bar.
+appId: com.caelanliu.biblemem
+name: duo-rail
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- assertVisible:
+    id: tab-home
+    selected: true
+- tapOn:
+    id: tab-settings
+- assertVisible:
+    id: tab-settings
+    selected: true
+- tapOn:
+    id: tab-library
+- assertVisible:
+    id: tab-library
+    selected: true
+- takeScreenshot: duo-rail-library
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fsetup%2Fseed-john-3-16
+- extendedWaitUntil:
+    visible: "Start session.*"
+    timeout: 20000
+- tapOn: "More"
+- extendedWaitUntil:
+    visible: "Reset Progress"
+    timeout: 5000
+- waitForAnimationToEnd
+- takeScreenshot: duo-rail-setup-menu
+- tapOn: "Reset Progress"
+- extendedWaitUntil:
+    visible: "Reset Progress\\?"
+    timeout: 5000
+- takeScreenshot: duo-rail-reset-alert
+- tapOn: "Cancel"
+- assertNotVisible: "Reset Progress\\?"
+- assertVisible: ".*92%.*"

@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BottomTabBarHeightCallbackContext, type BottomTabBarProps } from 'expo-router/js-tabs';
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { EdgeInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
 import { GlassPill } from '@/components/ui/Glass';
@@ -37,6 +38,7 @@ const RAIL = {
   outer: { width: 72, button: 46, pad: 4, gap: 3, icon: 22 },
 };
 const RAIL_BOTTOM = 20;
+const MENU_GAP = 8;
 const PILL_BOTTOM = 24;
 const PILL_FADE = 40;
 const BADGE = 18;
@@ -81,22 +83,28 @@ function TabButtons({ state, descriptors, emitter, navigateToTab, size, iconSize
   });
 }
 
+/** The rail's width and where its actions start, from the window's safe area. */
+function railFrame(compact: boolean, insets: EdgeInsets) {
+  return {
+    width: Math.max(RAIL[compact ? 'outer' : 'wide'].width, insets.right),
+    actionsTop: Math.max(STATUS_ROOM[compact ? 'outer' : 'wide'], insets.top),
+  };
+}
+
+/** A `PopoverMenu` anchor beside the rail's actions: level with the first one, just left of the rail. */
+export function railMenuAnchor(compact: boolean, insets: EdgeInsets) {
+  const { width, actionsTop } = railFrame(compact, insets);
+  return { top: actionsTop, right: width + MENU_GAP };
+}
+
 /** The right-edge rail on wide windows and the Duo's outer display: the screen's actions on top, a vertical glass tab pill low. */
 export function TabRail({ compact, ...props }: BottomTabBarProps & { compact: boolean }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const actions = useRailSlot((s) => s.node);
   const rail = RAIL[compact ? 'outer' : 'wide'];
+  const { width, actionsTop } = railFrame(compact, props.insets);
   return (
-    <View
-      style={[
-        styles.rail,
-        {
-          width: Math.max(rail.width, props.insets.right),
-          paddingTop: Math.max(STATUS_ROOM[compact ? 'outer' : 'wide'], props.insets.top),
-          backgroundColor: colors.background,
-        },
-      ]}
-    >
+    <View style={[styles.rail, { width, paddingTop: actionsTop, backgroundColor: colors.background }]}>
       <RailSlotContext.Provider value>
         <View style={styles.actions}>{actions}</View>
       </RailSlotContext.Provider>

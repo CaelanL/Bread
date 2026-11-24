@@ -8,7 +8,7 @@ import { CopyToCollectionModal } from '@/components/ui/CopyToCollectionModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { SearchTakeover, type SearchOrigin } from '@/components/ui/SearchTakeover';
-import { TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
+import { TopBar, TopBarButton, useMenuAnchor, useTopBarHeight } from '@/components/ui/TopBar';
 import { SwipeableVerseCard } from '@/components/library/SwipeableVerseCard';
 import { VerseCardSkeleton } from '@/components/library/VerseCardSkeleton';
 import { Colors, Radius } from '@/constants/theme';
@@ -91,6 +91,7 @@ export default function CollectionScreen() {
   const isCustom = Boolean(collection && !collection.isDefault && !collection.isVirtual);
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const barHeight = useTopBarHeight();
+  const menuAnchor = useMenuAnchor();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   // Set while search is open: where its pill sat, so the field grows from there and goes back.
@@ -441,7 +442,7 @@ export default function CollectionScreen() {
       <PopoverMenu
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
-        anchorPosition={{ top: barHeight, right: 12 }}
+        anchorPosition={menuAnchor}
         items={menuItems}
       />
       {renaming && collection && (

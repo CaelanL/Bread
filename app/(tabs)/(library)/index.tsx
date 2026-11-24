@@ -2,7 +2,7 @@ import { AddCollectionModal } from '@/components/library/AddCollectionModal';
 import { COLLECTION_ROW_GAP, type CollectionReorder, SwipeableCollectionCard } from '@/components/library/SwipeableCollectionCard';
 import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkeleton';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
-import { LargeTitle, TopBar, TopBarButton, useTopBarHeight } from '@/components/ui/TopBar';
+import { LargeTitle, TopBar, TopBarButton, useMenuAnchor, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { type Collection, IN_PROGRESS_COLLECTION_ID, MASTERED_COLLECTION_ID } from '@/lib/storage';
@@ -116,6 +116,7 @@ export default function LibraryScreen() {
   const [nameDialog, setNameDialog] = useState<{ collection?: Collection } | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const barHeight = useTopBarHeight();
+  const menuAnchor = useMenuAnchor();
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
   // A link can present a modal route over the Library; its RN Modals must not stay up under it.
@@ -275,7 +276,7 @@ export default function LibraryScreen() {
         <PopoverMenu
           visible={addMenuOpen}
           onClose={() => setAddMenuOpen(false)}
-          anchorPosition={{ top: barHeight, right: 12 }}
+          anchorPosition={menuAnchor}
           items={[
             { label: 'New collection', icon: 'folder.fill', onPress: () => setNameDialog({}) },
             { label: 'New shared collection', icon: 'person.2.fill', onPress: () => handleShare('new') },

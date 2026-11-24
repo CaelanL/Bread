@@ -1,5 +1,7 @@
 appId: com.caelanliu.biblemem
 name: monthly-verse
+# reader-b's card must offer Add to Library; collection-discovery saves a collection holding 1 Peter 5:7.
+tags: [fresh-seed]
 ---
 - runFlow: subflows/open-app.yaml
 - openLink: com.biblemem://dev-sign-in?as=reader-b&next=%2Fhome

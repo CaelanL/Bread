@@ -1,8 +1,9 @@
 import { GlassButton } from '@/components/ui/Glass';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { RailContext, RailSlotContext, useRailActions } from '@/components/ui/TabRail';
+import { RailContext, RailSlotContext, railMenuAnchor, useRailActions } from '@/components/ui/TabRail';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { useIsFocused } from 'expo-router/react-navigation';
 import { useContext, type ComponentProps, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,6 +14,13 @@ export const BAR_HEIGHT = 44;
 /** The bar's full height (status bar included): a scroll view's top padding under it. */
 export function useTopBarHeight() {
   return useSafeAreaInsets().top + BAR_HEIGHT;
+}
+
+/** Where a menu opened from the bar's actions appears: under the bar's right end, or beside the rail's actions when they live there. */
+export function useMenuAnchor() {
+  const insets = useSafeAreaInsets();
+  const outer = useWindowClass() === 'outer';
+  return useContext(RailContext) ? railMenuAnchor(outer, insets) : { top: insets.top + BAR_HEIGHT, right: 12 };
 }
 
 /** A screen's bar, floating over its scroll view with no surface: back on the left, icon actions on the right. The screen's title lives only in its content, except study setup's reference bubble in `center`. Where the tabs show the right-edge rail, the actions move to the rail's top slot while the screen is focused. */
