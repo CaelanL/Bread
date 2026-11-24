@@ -6,7 +6,7 @@ import kit, { address } from "./eslint.kit.mjs";
 // Standard UI values only: the tokens in constants/theme.ts.
 const RADIUS_KEY = "/^border(TopLeft|TopRight|BottomLeft|BottomRight|Top|Bottom|Left|Right|TopStart|TopEnd|BottomStart|BottomEnd)?Radius$/";
 const RADII = "4|8|10|12|14|16|20|24|999";
-const DURATIONS = "100|150|200|300";
+const DURATIONS = "100|150|200|300|380";
 const uiRule = (selector) => ({ selector, message: "Use the standard UI values from constants/theme.ts." });
 const notIn = (values) => `[value.type='Literal'][value.raw!=/^(${values})$/]`;
 

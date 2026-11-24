@@ -25,6 +25,7 @@ export const Motion = {
   pulseRestMs: 1100,
   jumpMs: 0, // An instant reset inside an animation sequence
   scoreMs: 1100, // The session finish's count-up and line fill
+  paneMs: 380, // A pane sliding in or out on a wide window, and the passage card growing from what was tapped
   easing: [0.2, 0, 0, 1],
 } as const;
 /**
@@ -37,6 +38,8 @@ export const Shadows = {
   floating: '0px 4px 10px rgba(0,0,0,0.14)',
   border: '0px 0px 0px 1px rgba(0,0,0,0.06), 0px 1px 2px -1px rgba(0,0,0,0.06), 0px 2px 4px 0px rgba(0,0,0,0.04)',
   borderHover: '0px 0px 0px 1px rgba(0,0,0,0.08), 0px 1px 2px -1px rgba(0,0,0,0.08), 0px 2px 4px 0px rgba(0,0,0,0.06)',
+  // A glass button or pill where Liquid Glass isn't available.
+  glass: '0px 4px 14px rgba(70,50,20,0.10), 0px 0px 0px 0.5px rgba(0,0,0,0.08)',
 } as const;
 
 /** How much of a collection's accent shows behind its icon and across the top of its screen. */
@@ -76,6 +79,8 @@ export const Colors = {
     fill: 'rgba(0,0,0,0.05)',     // Quiet fill on the page: pills, pressed rows
     input: '#f5f3f0',             // Warm input background
     overlay: 'rgba(0,0,0,0.5)',
+    glass: 'rgba(255,255,255,0.72)', // Glass buttons and pills before Liquid Glass (iOS 26)
+    glassBorder: 'rgba(255,255,255,0.9)',
 
     // Borders
     border: '#e0dcd6',            // Warm gray border
@@ -118,6 +123,8 @@ export const Colors = {
     fill: 'rgba(255,255,255,0.08)',
     input: '#2e2e2e',             // Input background
     overlay: 'rgba(0,0,0,0.6)',
+    glass: 'rgba(46,46,46,0.72)',
+    glassBorder: 'rgba(255,255,255,0.12)',
 
     // Borders
     border: '#3a3a3a',            // Charcoal border
