@@ -122,6 +122,24 @@ beside it. The rail holds Add, then Edit as a glass word (`GlassButton text`).
   are dropped, so an unfold after it shows the books alone.
 - `tall` (Bible-Picker-Portrait2) and `outer`: today's drill-down, stretched.
 
+## Settings
+
+- `wide` (Settings board): a 340 pt list on `cardAlt` (`SettingsList` in `components/settings/SettingsSplit.tsx`)
+  beside the chosen topic's pane. Rows: Send feedback; Translation, Appearance, Review, Notifications; Account,
+  About, each with its value (the translation in the text colour, the email under Account). The pane has the
+  topic's title (28 pt) and its controls: Feedback is the form (`FeedbackForm`; Done starts a fresh one);
+  Translation lists the versions, a tap calls `setBibleVersion` (no sheet); Appearance, Review, Account (Delete
+  Account under it) and About reuse the phone's rows and sheets; Notifications is the notifications page's body
+  (`NotificationSettings`) with Save as a glass word in the rail, dimmed until there's an edit. Leaving it with
+  unsaved edits asks to discard, like Back. Settings opens on Translation.
+- `/notifications` and `/feedback` on a wide window (an unfold, a link) `dismissTo` Settings with `topic` and an
+  `opened` time, which picks that pane. A fold from wide shows today's Settings; an unsaved notifications draft
+  or feedback note in the pane is dropped. For shots, `shot "/(tabs)/settings?topic=<topic>"`.
+- `outer` (Settings-Outer): today's page, the title 26 pt under the safe top, 18/10 side padding. `tall`: today's.
+- Off the rail, `TopBar` pads its right side by the safe area's right inset, and the Notifications and Feedback
+  pages pad their content by it, so Save and the note clear the status bar down the outer display's right edge
+  (0 on an iPhone).
+
 ## Browser checks
 
 - `npm run sim -- shot /dev-window --device duo`: "466 × 678", "outer", and the glass buttons and
@@ -135,6 +153,11 @@ beside it. The rail holds Add, then Edit as a glass word (`GlassButton text`).
   `shot "/(tabs)/(library)" --as reader-c --device duo --display inner` opened: the four-column grid.
 - Picker: `shot "/(tabs)/(library)/add/Romans/8" --device duo --display inner` opened on its side:
   books with Romans 8 outlined beside the chapter; turned upright: today's chapter screen.
+- Settings: `npm run sim -- flow duo-settings --device duo` on the closed Duo: Settings from the rail, the Send
+  feedback and Notifications pages clear of the status bar, notifications allowed. Opened, `shot
+  "/(tabs)/settings?topic=notifications" --as reader-a --device duo --display inner`: the list, the Notifications
+  pane, Save in the rail. Closed on `/notifications` (`shot /notifications --device duo --keep`), then opened: the
+  same pane; closed again: today's Settings.
 - Rail: `npm run sim -- flow duo-rail --device duo` on the closed Duo: tabs switch from the rail, and
   setup's More opens its menu beside the rail (Reset Progress, then Cancel). The open Duo can't be tapped.
 
@@ -151,3 +174,8 @@ beside it. The rail holds Add, then Edit as a glass word (`GlassButton text`).
 - 2026-11-24 · Grid squares use the list row's colours, not the boards' curated gradients · the Library rows have no gradients today; same data as the phone.
 - 2026-11-24 · Reordering always shows the list · a drag in a wrapping grid is a different gesture; the list's drag and move actions already work.
 - 2026-11-24 · The open Duo upright keeps today's Library (no grid) · Q20: undrawn upright screens use the phone layout.
+- 2026-11-24 · Send feedback is a Settings topic with the form in the pane, not a pushed page · the board lists it like the others; a pushed page would stretch across the wide window.
+- 2026-11-24 · On wide, Translation lists the versions in its pane instead of the sheet · the pane has the room; same `setBibleVersion`.
+- 2026-11-24 · Settings on wide opens on Translation · nothing specifies it; Send feedback would open on an empty form.
+- 2026-11-24 · A fold drops an unsaved notifications draft or feedback note in the pane · the collection's rule (a fold shows today's list); keeping it would mean holding the draft outside the pane.
+- 2026-11-24 · Settings-Outer's bottom fade isn't drawn · like Home-Outer.

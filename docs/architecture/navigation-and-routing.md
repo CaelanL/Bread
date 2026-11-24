@@ -112,7 +112,7 @@ dropping its blur, Reanimated view or autoFocus, and keeping it mounted changed 
 closes the share modal and Join with code with the X and reopens Join with code.
 
 `app/notifications.tsx`, `app/feedback.tsx` and `app/reset-password.tsx` are plain root
-Stack screens.
+Stack screens; on a wide window the first two go to their [Settings pane](window-layouts.md#settings).
 
 Home also presents the [intro player](../features/home.md#encouragement-video) through a React Native modal; it adds no route or tab.
 

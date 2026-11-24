@@ -15,7 +15,7 @@ note with an optional label and up to five photos. Reports are read in the Supab
 | Payload builder | `lib/feedback/grading-report.ts` (`buildGradingReport`), test beside it |
 | Writes and limits | `lib/feedback/index.ts` (`sendGradingReport`, `sendFeedback`, `FEEDBACK_LIMITS`) |
 | Retry-safe insert and upload | `lib/feedback/save.ts` (`newReportId`, `saveReport`, `uploadPhoto`) |
-| Settings screen | `app/feedback.tsx`, from the "Send feedback" row at the top of `app/(tabs)/settings.tsx` |
+| Settings screen | `app/feedback.tsx` (body `components/settings/FeedbackForm.tsx`, also Settings' pane on a wide window), from the "Send feedback" row at the top of `app/(tabs)/settings.tsx` |
 | Schema, bucket, sweep lookup, cron | `supabase/migrations/20261117142523_feedback.sql` |
 | Photo sweep | `supabase/functions/delete-feedback-photos/` |
 | Tests | `supabase/tests/feedback.test.sql`, `tests/feedback-photos.integration.ts`, `lib/feedback/*.test.ts` |
