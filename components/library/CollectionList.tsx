@@ -69,15 +69,16 @@ export function useBackToLibrary() {
  * opening setup, keeping a row selected while there is one, and Details (the progress line, the people
  * line, the menu) opens in the right pane instead of being pushed.
  */
-export function CollectionList({ id, wide }: {
+export function CollectionList({ id, wide, onDetails }: {
   id: string;
+  /** Details opened (also on a phone, so an unfold lands on them) or left for a verse on a wide window. */
+  onDetails?: (shown: boolean) => void;
   wide?: {
     width: number;
     selectedId: string | undefined;
     onSelect: (verseId: string | undefined) => void;
     /** The right pane shows the group's Details, not the selected verse. */
     details: boolean;
-    onDetails: (shown: boolean) => void;
   };
 }) {
   const colorScheme = useColorScheme();
@@ -218,9 +219,16 @@ export function CollectionList({ id, wide }: {
     router.push(`/(tabs)/(library)/add?collectionId=${id}`);
   });
 
+  // On a wide window Details opens beside the list, with the read the phone's Details page makes per visit.
+  const openDetails = () => {
+    onDetails?.(true);
+    if (!wide) return false;
+    if (!wide.details && sharedId) void useAppStore.getState().fetchSharedProgress(sharedId);
+    return true;
+  };
+
   const showGrid = useDebouncedPress(() => {
-    if (wide) wide.onDetails(true);
-    else router.push(`/(tabs)/(library)/shared/${id}`);
+    if (!openDetails()) router.push(`/(tabs)/(library)/shared/${id}`);
   });
 
   // The share card is a route, never an RN Modal held here: see ModalCard. Sharing a personal
@@ -233,10 +241,9 @@ export function CollectionList({ id, wide }: {
     router.push(`/share/${id}`);
   });
 
-  // On a wide window the members are in Details, beside the list.
+  // On a wide window the members are in Details.
   const showMembers = useDebouncedPress(() => {
-    if (wide) wide.onDetails(true);
-    else router.push(`/share/${id}?view=members`);
+    if (!openDetails()) router.push(`/share/${id}?view=members`);
   });
 
   const removeCollection = () => confirmRemoveCollection(id, { onConfirm: backToLibrary });
@@ -249,7 +256,7 @@ export function CollectionList({ id, wide }: {
   const handleVersePress = (verse: SavedVerse) => {
     if (wide) {
       wide.onSelect(verse.id);
-      wide.onDetails(false);
+      onDetails?.(false);
     } else router.push(`/(tabs)/(library)/setup/${verse.id}`);
   };
 

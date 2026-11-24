@@ -20,6 +20,7 @@ import {
 import { formatVerseReference } from '@/lib/storage';
 import { useAppStore, useCollection, useSharedCollection, useSynced, useVersesByCollection } from '@/lib/store';
 import { showErrorToast } from '@/lib/toast';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -27,11 +28,16 @@ const LEGEND: MemberState[] = ['open', 'learning', 'mastered', 'engraved'];
 const PAGE_SIDE = 20;
 const CARD_PAD = 16;
 
-/** Pull to refresh on Details: the collection screen's pull (sync the copy, then the library and the grid at once). */
-export async function refreshSharedDetails(sharedId: string | undefined) {
+/**
+ * Pull to refresh on Details: the collection screen's pull (sync the copy, then the library and the
+ * grid at once). Removed or left elsewhere, the copy is gone and the screen goes back to the Library;
+ * a dissolved copy stays, now personal.
+ */
+export async function refreshSharedDetails(sharedId: string | undefined, id: string) {
   if (!sharedId) return;
   try {
-    await useAppStore.getState().openSharedCollection(sharedId, { pull: true });
+    const stillShared = await useAppStore.getState().openSharedCollection(sharedId, { pull: true });
+    if (!stillShared && !useAppStore.getState().collections.some((c) => c.id === id)) router.dismissTo('/(tabs)/(library)');
   } catch {
     showErrorToast("Couldn't update this shared collection. Pull to refresh to try again.");
   }

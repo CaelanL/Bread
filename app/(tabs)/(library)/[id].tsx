@@ -106,7 +106,8 @@ export default function CollectionScreen() {
       >
         <CollectionList
           id={id}
-          wide={sized ? { width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId, details: showDetails, onDetails: setDetails } : undefined}
+          wide={sized ? { width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId, details: showDetails } : undefined}
+          onDetails={setDetails}
         />
       </Animated.View>
       {wide && (

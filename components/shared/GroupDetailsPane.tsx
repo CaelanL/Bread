@@ -34,7 +34,7 @@ export function GroupDetailsPane({ id, width, listWidth, collapse, collapsed, se
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshSharedDetails(collection?.sharedId);
+    await refreshSharedDetails(collection?.sharedId, id);
     setRefreshing(false);
   };
 

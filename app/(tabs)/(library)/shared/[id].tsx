@@ -2,6 +2,7 @@ import { GroupDetails, refreshSharedDetails } from '@/components/shared/GroupDet
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { useAppStore, useCollection } from '@/lib/store';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -10,7 +11,7 @@ import Animated from 'react-native-reanimated';
 
 /**
  * Who's where, pushed on a phone: `GroupDetails` under a large "Details" title. On a wide window the
- * collection screen shows the same details in its right pane instead.
+ * collection screen shows the same details in its right pane, so this page goes back to it.
  */
 export default function WhoIsWhereScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -20,18 +21,19 @@ export default function WhoIsWhereScreen() {
   const sharedId = collection?.sharedId;
   const [refreshing, setRefreshing] = useState(false);
   const barHeight = useTopBarHeight();
+  const wide = useWindowClass() === 'wide';
 
   // A fresh read each visit; the collection screen under this one already synced the copy.
   const fetchedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!sharedId || fetchedFor.current === sharedId) return;
+    if (wide || !sharedId || fetchedFor.current === sharedId) return;
     fetchedFor.current = sharedId;
     void useAppStore.getState().fetchSharedProgress(sharedId);
-  }, [sharedId]);
+  }, [sharedId, wide]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshSharedDetails(sharedId);
+    await refreshSharedDetails(sharedId, id || '');
     setRefreshing(false);
   };
 
@@ -39,6 +41,13 @@ export default function WhoIsWhereScreen() {
     if ((navigation.getState()?.index ?? 0) > 0) router.back();
     else router.replace(`/(tabs)/(library)/${id}`);
   };
+
+  // On a wide window (an unfold with this page open, or a link) the collection shows Details beside its list.
+  useEffect(() => {
+    if (wide) back();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide]);
+  if (wide) return null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

@@ -119,9 +119,12 @@ member sheet.
 - List showing: the cards stack in the pane (32 pt sides). List hidden: Verses and Members side by side
   (Members 320 wide), the bubble centred over the window. The pane moves like setup's
   (`usePaneMotion` in `StudySetupPane.tsx`: same slide, fades and bubble glide). No rail action.
-- It reads the grid the collection screen's sync fetched (no read of its own, unlike the phone
-  route's visit); pull to refresh is the collection's pull. Loading, Couldn't load and Couldn't
+- Opened from the progress line, people line or menu, it reads the grid once (`fetchSharedProgress`),
+  like the phone route's visit; landing on it uses the collection sync's read. Pull to refresh is the
+  collection's pull, back to the Library when you were removed. Loading, Couldn't load and Couldn't
   refresh are the phone's.
+- The phone's Details page on a wide window (an unfold with it open, a link) goes back to the
+  collection under it, or replaces itself with the collection, which opens on Details.
 
 ## Navigation
 
@@ -208,5 +211,6 @@ the class themselves.
 - 2026-11-23 · The verse is cut to the lines that fit its pane, not the boards' 420 pt · the same rule on the Duo and a taller iPad.
 - 2026-11-23 · Hide verses lines and Show verse use `primaryLight` and `tint` (boards: 0.16 bronze and #7d5c2e) · existing tokens with a dark mode.
 - 2026-11-23 · A shared collection with others opens on Details on wide, and the people line opens Details too · the Shared-Collection board lands on the group, and its members are in that pane.
+- 2026-11-23 · Opening Details on wide reads the grid once, as a phone visit does · the collection screen stays mounted across sessions, so without it other members' squares would be as old as the visit (F26).
 - 2026-11-23 · Details on wide drops the board's "Details" heading for the name in a bubble, and its parts are white cards (stacked beside the list, two columns without it) · Q9: restyled to match the final setup; side-by-side cards are too narrow beside the list.
 - 2026-11-23 · Dev builds take `collapsed=1|<verse id>` on a collection · shots of each board state without taps; one param, since the dev sign-in link loses a second.
