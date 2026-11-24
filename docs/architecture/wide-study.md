@@ -49,11 +49,17 @@ collection show the list full width. Search fills the list only (`SearchTakeover
   scroll above a docked Start (larger text). The bubble sits centred over the verse pane, narrowed to clear the buttons.
 - Hide verses: `hiddenLineWidths` bronze lines (`primaryLight`) and a Show verse button instead of
   the text; rows drop their text line as on a phone.
-- The collapse is one shared value running linearly over `Motion.paneMs`; `paneShift` puts it on
-  `Motion.easing` for the moving parts (the list slides out as one piece, the pane's left edge and
-  the bubble follow). The list-open layout fades out over the first 120 ms and the hidden one fades
-  in from 200 ms, rising 8 pt; only the resting layout stays mounted. Reduce Motion: everything fades
-  and the panes jump halfway. Selection and the collapse last while the screen is open, folds included. Phone and wide render
+- The collapse is one shared value running linearly over `Collapse.durationMs` (`Motion.paneMs`);
+  every knob is in `Collapse` (`components/study/setup/collapse-motion.ts`): the curve (`Motion.easing`),
+  the list slide's window (the pane's left edge and the bubble follow it), the list-open layout's fade
+  out (first 120 ms), the hidden one's fade in (from 200 ms, rising 8 pt); only the resting layout stays
+  mounted. Reduce Motion: everything fades and the panes jump halfway.
+- Meanwhile the verse travels (`VerseTravel`): two copies, the preview's text in its 16 pt wrap and the
+  pane's in its wrap, ride one path from the preview's spot (minus the column's scroll) to the pane's and
+  grow from 16 pt to the pane's size (`grow`: a scale, or the font size itself), cross-fading over
+  `crossFade` so nothing rewraps in flight. The copies sit above the list and show only between the
+  ends; the real texts hide then. Hide verses: "Verse hidden" becomes the bars. Not under Reduce Motion
+  or while the text loads. Selection and the collapse last while the screen is open, folds included. Phone and wide render
   the same tree, so a fold keeps the list's scroll and an open search.
 - Setup opened straight on wide (a link, Review now) is the list-hidden layout with back only.
 - The passage card is at most 560 wide (22/34 text) and the chunk sheet at most 280 wide on wide.
@@ -118,7 +124,9 @@ and recording are the phone's.
   --device duo --display inner` after `set_posture open` (list showing), and with `?collapsed=1` or
   `?collapsed=<verse id>` (dev builds only: list hidden, that verse selected): `seed-psalms?collapsed=1`
   (long), `my-verses?collapsed=seed-john-3-16` (due), and as reader-c `seed-psalm-23?collapsed=seed-35-1`
-  (short, locked) and `seed-35-2` (engraved), each also `--dark`; Hide verses on for the lines. Setup
+  (short, locked) and `seed-35-2` (engraved), each also `--dark`; Hide verses on for the lines. The
+  collapse on video: `?loop=1|<verse id>[,<slow-down>]` (dev builds on the local database) collapses and
+  reopens every couple of seconds; record with `xcrun simctl io <duo udid> recordVideo --display=3`. Setup
   straight: `/(tabs)/(library)/setup/seed-john-3-16`. Taps: `flow duo-collection --device ipad`
   (iPad Pro 13-inch (M5), turned on its side by the flow).
 - Shared collection on wide, opened Duo (shots), as reader-c: `seed-romans-8`, `seed-sermon-mount`
@@ -149,3 +157,4 @@ and recording are the phone's.
 - 2026-11-24 · The session's chunk sidebar is the tinted 320 pt one with card rows (Recite-C2, Result-C2, Finish-C2), not Result-C3's 340 pt list · three boards of four; one sidebar look.
 - 2026-11-24 · A new page width remounts the session's list on its chunk, not `scrollToIndex` (F7) · the paging list's stale offset reached `onViewableItemsChanged` first, which would cancel a take and change the chunk; seen on the Duo, where an unfold landed between pages.
 - 2026-11-24 · The result card keeps the phone's text size on wide; only the verse card grows to the boards' 25/40 · the chunk result stays close to today's (Q10).
+- 2026-11-24 · The collapse's verse is two cross-fading copies scaled along one path, not one text with an animated font size · one text rewraps every frame; `grow: 'fontSize'` keeps each wrap and is there to compare (Q23).
