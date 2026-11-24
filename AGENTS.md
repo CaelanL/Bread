@@ -2,8 +2,8 @@
 Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible memorization app, live on the [App Store](https://apps.apple.com/app/id6757946016). Users add verses, organize them into collections, then recite out loud. The app transcribes the recording with Soniox, aligns it against the verse on the device, and scores it. 90% completes a difficulty, Hard means mastered, and 10 passed spaced reviews means engraved. Say "Bread" in anything a user reads.
 
 ## Map
-- Stack: Expo SDK 54, React Native 0.81, React 19, TypeScript strict, Expo Router 6, Zustand 5, `react-native-reanimated` 4, Supabase (Postgres, Auth, Edge Functions in Deno). iOS is what ships. Android and web run but aren't released.
-- `app/` — screens and routes. `components/` — UI, grouped by area, `ui/` holds shared primitives. `hooks/` — `use-study-session.ts`, `use-recording.ts` and others. `constants/theme.ts` — tokens.
+- Stack: Expo SDK 58, React Native 0.88, React 19, TypeScript 6 strict, Expo Router 58, Zustand 5, `react-native-reanimated` 4, Supabase (Postgres, Auth, Edge Functions in Deno). iOS is what ships, minimum iOS 16.4. Android and web run but aren't released.
+- `app/` — screens and routes. `components/` — UI, grouped by area, `ui/` holds shared primitives. `hooks/` — `use-study-session.ts` and others. `constants/theme.ts` — tokens.
 - `lib/` — `store/` (Zustand, mastery), `api/` (Bible, recording, stats), `storage/`, `auth/`, `notifications/`, `transcription/`, `bible/`, `collections/` (curated catalog, import, icons, savers), `feedback/` (reports and their payload), `votm/` (monthly schedule), `intro/` (dormant video player), plus `align.ts` and `study-chunks.ts`. Co-locate new code with its feature. A new file here must start with `// lib-ok: <reason>`.
 - `supabase/` — `migrations/`, `functions/` (`bible`, `process-recording`, `transcription-token`, `send-notifications`, `invite-handoff`, `delete-feedback-photos`), `tests/` (pgTAP), `seed.sql`, `database.types.ts` (generated). `scripts/` — kit tools. `.eas/workflows/` — deploy.
 - Old code comments and migrations cite `CLAUDE.md` invariants, which are the numbered list below, and `docs/features/<change>.md` files that no longer exist. Look in the area doc or git history instead.
@@ -33,6 +33,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 | Store, hydration, what's persisted, offline | `docs/architecture/sync-and-storage.md` |
 | Screens, tabs, modals, deep links | `docs/architecture/navigation-and-routing.md` |
 | Tokens, dark mode, fonts, `components/ui` | `docs/architecture/theming-and-ui.md` |
+| Wide windows: iPhone Duo, iPad, rail | `docs/architecture/window-layouts.md` |
 | Release, EAS, OTA | `docs/architecture/release.md` |
 
 ## Run and check
@@ -83,7 +84,7 @@ Bread (codebase and folder name `biblemem`, GitHub `CaelanL/Bread`) is a Bible m
 - Translation is an account setting and a verse is one row per reference, in that translation. No per-verse or per-collection translation. See `docs/architecture/bible-versions.md`.
 - Only public-domain translations are bundled in the app. Licensed text is fetched, and held only in the server cache and in memory. See `docs/architecture/bible-api-and-caching.md`.
 - Don't gate work on "wait for production data". Bread is small, so ship reasonable-default constants and name the knob to turn if scale ever matters.
-- Merges ship through EAS: JS over the air, native changes through the App Store (`.eas/workflows/deploy.yml`). Anything in the fingerprint counts as native, including `package.json` "scripts": changing one makes the next merge do a full build and store submit, and live updates stop until that build ships. See `docs/architecture/release.md`.
+- Merges ship through EAS: JS over the air, native changes through the App Store (`.eas/workflows/deploy.yml`). Anything in the fingerprint counts as native, `patches/` included (`fingerprint.config.js` skips `package.json` "scripts"): changing it makes the next merge do a full build and store submit, and live updates stop until that build ships. See `docs/architecture/release.md`.
 
 ## Review checklist
 - A migration is safe under old client + new schema (invariant 11), and a new table has access-rule tests in `supabase/tests/`.

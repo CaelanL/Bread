@@ -52,8 +52,15 @@ test('LC_ names that aren\'t locales are left alone', { skip: !onMac }, () => {
   assert.doesNotMatch(r.out, /this Mac has no/)
 })
 
+// Codex's C.UTF-8 was missing until macOS 27, which ships it, so the test uses a made-up locale.
 test('a locale this Mac lacks is reported and fixed', { skip: !onMac }, () => {
-  const r = doctor({ LANG: 'en_US.UTF-8', LC_COLLATE: 'C.UTF-8' })
-  assert.match(r.out, /this Mac has no LC_COLLATE=C\.UTF-8/)
+  const r = doctor({ LANG: 'en_US.UTF-8', LC_COLLATE: 'xx_XX.UTF-8' })
+  assert.match(r.out, /this Mac has no LC_COLLATE=xx_XX\.UTF-8/)
   assert.match(r.out, /fixed {6}Locale is one this machine has/)
+})
+
+test('NODE_USE_SYSTEM_CA is dropped for the run, with a note on how to run without it', { skip: !onMac }, () => {
+  const r = doctor({ NODE_USE_SYSTEM_CA: '1' })
+  assert.match(r.out, /fixed {6}Node skips the macOS keychain/)
+  assert.match(r.out, /env -u NODE_USE_SYSTEM_CA/)
 })

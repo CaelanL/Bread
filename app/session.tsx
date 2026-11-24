@@ -5,9 +5,15 @@ import { VerseCard } from '@/components/study/VerseCard';
 import { ResultCard, getScoreColor } from '@/components/study/ResultCard';
 import { RecordingBar } from '@/components/study/RecordingBar';
 import { SessionFinish } from '@/components/study/SessionFinish';
+import { CHUNK_SIDEBAR_WIDTH, ChunkSidebar } from '@/components/study/ChunkSidebar';
+import { Collapse, listShift } from '@/components/study/setup/collapse-motion';
+import { GlassButton } from '@/components/ui/Glass';
+import { railFrame } from '@/components/ui/TabRail';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useSessionDemo } from '@/hooks/use-session-demo';
 import { useStudySession } from '@/hooks/use-study-session';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { newReportId, sendGradingReport } from '@/lib/feedback';
 import { buildGradingReport } from '@/lib/feedback/grading-report';
 import { formatVerseReference } from '@/lib/storage';
@@ -48,21 +54,38 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  Dimensions,
   FlatList,
+  type ListViewToken,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
-  type ViewToken,
 } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 // Recording cap: at 5 minutes the recording auto-submits exactly as if
 // the user tapped done, so they still see how far they got.
 const MAX_RECORDING_MS = 300_000;
+
+// A wide window (the Recite and Result boards): the cards' band between the title and the controls,
+// their widest, and the chunk pages' fade while the chunk sidebar slides (the `Collapse` windows, so the
+// pages change width unseen).
+const WIDE_CARDS = { top: 80, bottom: 130, side: 32, max: 620 };
+const PAGE_FADE = [...Collapse.setupFadeOut, ...Collapse.paneFadeIn];
+/** The chunk sidebar's button: inset from the top and left, and the gap under it. */
+const SIDEBAR_EDGE = 20;
+const SIDEBAR_BUTTON = 44;
 
 interface MicTiming {
   down?: number;
@@ -111,16 +134,31 @@ const RECORDING_OPTIONS: RecordingConfig = {
   },
 };
 
+// A full-screen modal takes the screen under it out of the window, so the app's root safe-area
+// provider stops hearing about rotations and folds. This one measures the session itself.
 export default function StudySessionScreen() {
-  const { id, difficulty, chunkSize: chunkSizeParam } = useLocalSearchParams<{
+  return (
+    <SafeAreaProvider>
+      <StudySession />
+    </SafeAreaProvider>
+  );
+}
+
+function StudySession() {
+  const { id, difficulty, chunkSize: chunkSizeParam, demo } = useLocalSearchParams<{
     id: string;
     difficulty: Difficulty;
     chunkSize: string;
+    demo?: string;
   }>();
   const chunkSize = parseInt(chunkSizeParam ?? '1', 10);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
+  const { width: screenWidth } = useWindowDimensions();
+  const wide = useWindowClass() === 'wide';
+  const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
 
   // Session state hook
   const session = useStudySession({
@@ -151,6 +189,37 @@ export default function StudySessionScreen() {
   // Bar levels live in a shared value so the waveform animates on the
   // UI thread without re-rendering this screen (20x/sec while recording)
   const waveformLevels = useSharedValue<number[]>(new Array(WAVEFORM_SAMPLES).fill(0));
+  const devDemo = useSessionDemo(session, demo, waveformLevels);
+
+  // A wide window: the close button in a rail at the right edge and, with two or more chunks, the chunk
+  // sidebar on the left. `chunksHidden` is where the sidebar is heading; the pages take their new width
+  // halfway through the slide (`pagesWide`), while they're faded out.
+  const rail = railFrame(false, insets);
+  const hasSidebar = wide && session.chunks.length > 1;
+  const [chunksHidden, setChunksHidden] = useState(devDemo.closed);
+  const [pagesWide, setPagesWide] = useState(devDemo.closed);
+  const collapse = useSharedValue(devDemo.closed ? 1 : 0);
+  const pageWidth = (wide ? screenWidth - rail.width : screenWidth) - (hasSidebar && !pagesWide ? CHUNK_SIDEBAR_WIDTH : 0);
+  const toggleChunks = () => {
+    const next = !chunksHidden;
+    setChunksHidden(next);
+    collapse.set(withTiming(next ? 1 : 0, { duration: Collapse.durationMs, easing: Easing.linear }));
+  };
+  useAnimatedReaction(() => collapse.value > 0.5, (past, before) => {
+    if (before !== null && past !== before) scheduleOnRN(setPagesWide, past);
+  });
+  const sidebarStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -(CHUNK_SIDEBAR_WIDTH + 1) * listShift(collapse.value, reduced) }],
+  }));
+  const paneStyle = useAnimatedStyle(() => ({
+    left: hasSidebar ? CHUNK_SIDEBAR_WIDTH * (1 - listShift(collapse.value, reduced)) : 0,
+  }));
+  const pagesFade = useAnimatedStyle(() => ({
+    opacity: interpolate(chunksHidden ? collapse.value : 1 - collapse.value, PAGE_FADE, [1, 0, 0, 1], 'clamp'),
+  }));
+  const headerFade = useAnimatedStyle(() => ({
+    opacity: hasSidebar ? listShift(collapse.value, reduced) : 1,
+  }));
   // Meter ballistics state: fast attack, slow release (kills ripple)
   const smoothedLevelRef = useRef(0);
   // Dev-only tap-to-capture timing, in ms from touch-down (or from the native
@@ -433,10 +502,10 @@ export default function StudySessionScreen() {
   }, [isEasy, recorder, session]);
 
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
       if (viewableItems.length > 0) {
         const index = viewableItems[0].index;
-        if (index !== null && index !== currentIndex) {
+        if (index !== undefined && index !== currentIndex) {
           // Cancel any active recording when scrolling away
           void recorder.cancel();
           setCurrentIndex(index);
@@ -451,6 +520,13 @@ export default function StudySessionScreen() {
   };
 
   const buttonBg = colors.primary;
+
+  const close = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    void recorder.cancel();
+    session.saveAndExit();
+  };
 
   // Loading state
   if (session.loading) {
@@ -478,7 +554,7 @@ export default function StudySessionScreen() {
     // Results page
     if (isResultsPage(item)) {
       return (
-        <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.chunkContainer, wide && styles.pageWide, { width: pageWidth }]}>
           <SessionFinish
             score={session.finalScore}
             difficulty={difficulty ?? 'easy'}
@@ -486,6 +562,7 @@ export default function StudySessionScreen() {
             active={session.showResults && currentIndex === session.chunks.length}
             onDone={session.done}
             onReview={session.viewResults}
+            wide={wide}
           />
         </View>
       );
@@ -531,9 +608,13 @@ export default function StudySessionScreen() {
         ? `Verses ${item.verseNum}-${item.verseNumEnd}`
         : `Verse ${item.verseNum}`;
 
+    const cardsSide = Math.max(WIDE_CARDS.side, (pageWidth - WIDE_CARDS.max) / 2);
     return (
-      <View style={[styles.chunkContainer, { width: SCREEN_WIDTH }]}>
-        <View style={styles.cardsArea}>
+      <View style={[styles.chunkContainer, wide && styles.pageWide, { width: pageWidth }]}>
+        <View style={[
+          styles.cardsArea,
+          wide && [styles.cardsWide, { top: insets.top + WIDE_CARDS.top, left: cardsSide, right: cardsSide }],
+        ]}>
           {/* Score badge on top of verse card when completed. For a
               peeked chunk, show the real recited score (the scored 0
               lives only in the session total, explained on the card). */}
@@ -565,6 +646,8 @@ export default function StudySessionScreen() {
             onToggleVisibility={
               (isCompleted && !isRetrying) || transcribing ? undefined : () => handleToggleVisibility(index)
             }
+            large={wide}
+            heightShare={wide && !display ? 0.6 : undefined}
           />
 
           {display && (
@@ -592,9 +675,15 @@ export default function StudySessionScreen() {
           )}
         </View>
 
-        <View style={styles.controlsContainer}>
-          {canContinue && (
-            <View style={styles.controlsRow}>
+        <View style={[styles.controlsContainer, wide && styles.controlsWide]}>
+          {/* Kept mounted (hidden) through a Retry take: unmounting the pressed Retry mid-touch loses the next tap (RN 0.88). */}
+          {(canContinue || isRetrying) && (
+            <View
+              pointerEvents={canContinue ? 'auto' : 'none'}
+              accessibilityElementsHidden={!canContinue}
+              importantForAccessibility={canContinue ? 'auto' : 'no-hide-descendants'}
+              style={[styles.controlsRow, !canContinue && styles.hiddenControls]}
+            >
               {session.allChunksCompleted && (
                 <Pressable
                   style={({ pressed }) => [styles.retryButton, { backgroundColor: colors.text }, pressed && styles.pressedControl]}
@@ -605,7 +694,7 @@ export default function StudySessionScreen() {
                   <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={colors.background} />
                 </Pressable>
               )}
-              {canRetry && (
+              {(canRetry || isRetrying) && (
                 <Pressable
                   style={[styles.retryButton, { backgroundColor: colors.cardAlt }]}
                   onPressIn={() => handleMicPress(index, true, 'pressIn')}
@@ -632,68 +721,131 @@ export default function StudySessionScreen() {
     );
   };
 
+  const reference = formatVerseReference(session.verse);
+  const progress = (
+    <View style={[styles.progressContainer, wide && styles.progressWide, { backgroundColor: colors.cardAlt }]}>
+      {session.chunks.map((_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.progressSegment,
+            {
+              backgroundColor: session.completedChunks.has(index)
+                ? colors.success
+                : index === session.currentIndex
+                ? buttonBg
+                : 'transparent',
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+  const sidebarLocked = recordingState.phase !== 'idle' && !session.showResults;
+
+  // One tree for every window class, so a fold or rotation never remounts the list or the mic.
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader
-        title={formatVerseReference(session.verse)}
-        leftButton={{
-          icon: 'xmark',
-          label: 'Close',
-          onPress: () => {
-            if (closingRef.current) return;
-            closingRef.current = true;
-            void recorder.cancel();
-            session.saveAndExit();
-          },
-        }}
-      />
-
-      {/* Progress Bar */}
-      <View style={[styles.progressContainer, { backgroundColor: colors.cardAlt }]}>
-        {session.chunks.map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.progressSegment,
-              {
-                backgroundColor: session.completedChunks.has(index)
-                  ? colors.success
-                  : index === session.currentIndex
-                  ? buttonBg
-                  : 'transparent',
-              },
-            ]}
+      {hasSidebar && (
+        <Animated.View
+          pointerEvents={chunksHidden ? 'none' : 'auto'}
+          accessibilityElementsHidden={chunksHidden}
+          importantForAccessibility={chunksHidden ? 'no-hide-descendants' : 'auto'}
+          style={[styles.sidebar, { borderRightColor: colors.border }, sidebarStyle]}
+        >
+          <ChunkSidebar
+            top={insets.top + SIDEBAR_EDGE + SIDEBAR_BUTTON + 16}
+            reference={reference}
+            subtitle={`${(difficulty ?? 'easy')[0].toUpperCase()}${(difficulty ?? 'easy').slice(1)} · ${session.chunks.length} chunks`}
+            rows={session.chunks.map((chunk, index) => {
+              const review = session.getChunkReview(index, recordingState);
+              return {
+                label: chunk.verseNumEnd ? `Verses ${chunk.verseNum}-${chunk.verseNumEnd}` : `Verse ${chunk.verseNum}`,
+                text: review.originalDisplay && chunk.text,
+                score: review.originalDisplay?.score,
+                peeked: review.isCompleted ? review.isPeeked : session.getPeekedChunks().has(index),
+              };
+            })}
+            results={session.allChunksCompleted ? session.finalScore : undefined}
+            current={currentIndex}
+            disabled={sidebarLocked}
+            onSelect={(index) => session.flatListRef.current?.scrollToIndex({ index, animated: true })}
           />
-        ))}
-      </View>
+        </Animated.View>
+      )}
 
-      {/* Swipeable Chunks */}
-      <FlatList
-        ref={session.flatListRef}
-        data={session.listData}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        scrollEnabled={recordingState.phase === 'idle' || session.showResults}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        getItemLayout={(_, index) => ({
-          length: SCREEN_WIDTH,
-          offset: SCREEN_WIDTH * index,
-          index,
-        })}
-      />
+      <Animated.View style={[styles.container, wide && [styles.pane, { right: rail.width }], paneStyle]}>
+        {wide ? (
+          <Animated.View
+            pointerEvents="none"
+            accessibilityElementsHidden={hasSidebar && !chunksHidden}
+            importantForAccessibility={hasSidebar && !chunksHidden ? 'no-hide-descendants' : 'auto'}
+            style={[styles.wideHeader, { top: insets.top + 24 }, headerFade]}
+          >
+            <Text accessibilityRole="header" numberOfLines={1} style={[styles.wideTitle, { color: colors.text }]}>{reference}</Text>
+            <View style={{ width: Math.min(WIDE_CARDS.max, pageWidth - 2 * WIDE_CARDS.side) }}>{progress}</View>
+          </Animated.View>
+        ) : (
+          // The outer display's status bar runs down its right edge (insets.right); 0 on every iPhone.
+          <View style={{ paddingRight: insets.right }}>
+            <AppHeader title={reference} leftButton={{ icon: 'xmark', label: 'Close', onPress: close }} />
+            {progress}
+          </View>
+        )}
 
-      <RecordingBar
-        phase={recordingState.phase}
-        showMic={currentIndex < session.chunks.length && !session.completedChunks.has(currentIndex)}
-        waveformLevels={waveformLevels}
-        onStart={(source) => handleMicPress(currentIndex, false, source)}
-        onCancel={handleCancel}
-        onSubmit={handleSubmit}
-      />
+        {/* Swipeable Chunks. A new page width remounts the list on its current chunk: a paging list keeps
+            its old offset, and the stale offset would read as a swipe to another chunk (cancelling a take).
+            The list is always exactly one page wide, even while its pane slides, so iOS never clamps that offset. */}
+        <Animated.View style={[styles.container, pagesFade]}>
+          <FlatList
+            style={[styles.list, { width: pageWidth }]}
+            key={pageWidth}
+            ref={session.flatListRef}
+            data={session.listData}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEnabled={recordingState.phase === 'idle' || session.showResults}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            initialScrollIndex={currentIndex > 0 ? currentIndex : undefined}
+            getItemLayout={(_, index) => ({
+              length: pageWidth,
+              offset: pageWidth * index,
+              index,
+            })}
+          />
+        </Animated.View>
+
+        <RecordingBar
+          phase={devDemo.recording ? 'recording' : recordingState.phase}
+          showMic={currentIndex < session.chunks.length && !session.completedChunks.has(currentIndex)}
+          waveformLevels={waveformLevels}
+          onStart={(source) => handleMicPress(currentIndex, false, source)}
+          onCancel={handleCancel}
+          onSubmit={handleSubmit}
+          lowRight={wide}
+        />
+      </Animated.View>
+
+      {wide && (
+        <View style={[styles.rail, { width: rail.width, paddingTop: rail.actionsTop }]}>
+          <GlassButton icon="xmark" label="Close" onPress={close} />
+        </View>
+      )}
+      {hasSidebar && (
+        <View style={[styles.sidebarButton, { top: insets.top + SIDEBAR_EDGE }]}>
+          <GlassButton
+            testID="chunk-sidebar-toggle"
+            icon="sidebar.left"
+            label={chunksHidden ? 'Show chunks' : 'Hide chunks'}
+            expanded={!chunksHidden}
+            onPress={toggleChunks}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -760,6 +912,9 @@ const styles = StyleSheet.create({
   pressedControl: {
     opacity: 0.7,
   },
+  hiddenControls: {
+    opacity: 0,
+  },
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -773,6 +928,33 @@ const styles = StyleSheet.create({
     color: '#fff', // Always white on colored button
     fontSize: 17,
     fontWeight: '600',
+  },
+  sidebar: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: CHUNK_SIDEBAR_WIDTH,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    zIndex: 1,
+  },
+  sidebarButton: { position: 'absolute', left: SIDEBAR_EDGE, zIndex: 2 },
+  pane: { position: 'absolute', top: 0, bottom: 0 },
+  list: { alignSelf: 'flex-end' },
+  rail: { position: 'absolute', top: 0, bottom: 0, right: 0, alignItems: 'center' },
+  wideHeader: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 14, zIndex: 1 },
+  wideTitle: { fontSize: 17, lineHeight: 22, fontWeight: '600', paddingHorizontal: 72 },
+  progressWide: { marginHorizontal: 0, marginTop: 0 },
+  pageWide: { padding: 0 },
+  cardsWide: { position: 'absolute', bottom: WIDE_CARDS.bottom },
+  controlsWide: {
+    position: 'absolute',
+    right: 24,
+    bottom: 44,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    minHeight: 0,
   },
   scoreBadgeRow: {
     flexDirection: 'row',

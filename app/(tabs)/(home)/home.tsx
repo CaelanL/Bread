@@ -1,6 +1,7 @@
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from 'expo-router/react-navigation';
 import { useAuth } from '@/lib/auth';
 import type { VOTM } from '@/lib/api/votm';
+import { RAIL_TITLE_TOP } from '@/components/ui/TabRail';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { ExploreCollections } from '@/components/home/ExploreCollections';
 import { InsightsCard, type InsightsCardRef } from '@/components/home/InsightsCard';
@@ -11,6 +12,7 @@ import { VerseExpandModal } from '@/components/ui/VerseExpandModal';
 import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useVotm } from '@/hooks/use-votm';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { perfMark } from '@/lib/api/dev-timing';
 import { useAppStore, useHydrated, useVerses } from '@/lib/store';
 import { useEffect, useState, useMemo, useRef } from 'react';
@@ -23,8 +25,9 @@ import {
   View,
 } from 'react-native';
 import Reanimated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function SkeletonCard({ isDark }: { isDark: boolean }) {
+function SkeletonCard({ isDark, big }: { isDark: boolean; big: boolean }) {
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
@@ -54,7 +57,7 @@ function SkeletonCard({ isDark }: { isDark: boolean }) {
   const shimmerColor = colors.border;
 
   return (
-    <View style={[styles.skeletonCard, { backgroundColor: bgColor }]}>
+    <View style={[styles.skeletonCard, big && styles.fill, { backgroundColor: bgColor }]}>
       {/* Header placeholder */}
       <Animated.View
         style={[styles.skeletonLine, styles.skeletonHeader, { backgroundColor: shimmerColor, opacity: pulseAnim }]}
@@ -80,6 +83,12 @@ function SkeletonCard({ isDark }: { isDark: boolean }) {
 
 export default function HomeScreen() {
   const barHeight = useTopBarHeight();
+  const insets = useSafeAreaInsets();
+  // Phones keep today's Home. The iPhone Duo follows the Main (wide), Home-Portrait (tall) and Home-Outer boards.
+  const windowClass = useWindowClass();
+  const big = windowClass === 'wide' || windowClass === 'tall';
+  // Upright, the status bar only fills the top right corner, so the title sits under the inset.
+  const top = windowClass === 'phone' ? barHeight : windowClass === 'tall' ? TALL_TOP : insets.top + RAIL_TITLE_TOP;
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -175,45 +184,51 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Reanimated.ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingTop: barHeight }]}
+        contentContainerStyle={[styles.content, contentLayout[windowClass], { paddingTop: top }]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={top} />
         }
       >
         <LargeTitle root title="Home" />
-        {/* VOTM Section */}
-        {votmLoading ? (
-          <SkeletonCard isDark={isDark} />
-        ) : votm ? (
-          <VOTMCard
-            votm={votm}
-            verseText={verseText}
-            textLoading={textLoading}
-            masteryCount={masteryCount}
-            userMastered={userMastered}
-            userHasVerse={userHasVerse}
-            version={defaultVersion}
-            onPress={handleVOTMPress}
-            onAddPress={handleAddPress}
-            onRetry={() => void refreshVotm()}
-          />
-        ) : (
-          <View style={[styles.emptyCard, { backgroundColor: colors.cardAlt }]}>
-            <Text style={[styles.emptyText, { color: colors.icon }]}>
-              {monthlyError ?? 'No verse of the month yet.'}
-            </Text>
-            {monthlyError ? (
-              <Pressable accessibilityRole="button" onPress={() => void refreshVotm()}>
-                <Text style={[styles.emptySubtext, { color: colors.primary }]}>Try again</Text>
-              </Pressable>
+        <View style={windowClass === 'wide' ? styles.wideRow : windowClass === 'phone' ? styles.phoneStack : styles.stack}>
+          <View style={[windowClass === 'wide' && styles.votm, windowClass === 'tall' && styles.tallVotm]}>
+            {/* VOTM Section */}
+            {votmLoading ? (
+              <SkeletonCard isDark={isDark} big={big} />
+            ) : votm ? (
+              <VOTMCard
+                votm={votm}
+                verseText={verseText}
+                textLoading={textLoading}
+                masteryCount={masteryCount}
+                userMastered={userMastered}
+                userHasVerse={userHasVerse}
+                version={defaultVersion}
+                onPress={handleVOTMPress}
+                onAddPress={handleAddPress}
+                onRetry={() => void refreshVotm()}
+              />
             ) : (
-              <Text style={[styles.emptySubtext, { color: colors.icon }]}>Check back soon!</Text>
+              <View style={[styles.emptyCard, big && styles.fill, { backgroundColor: colors.cardAlt }]}>
+                <Text style={[styles.emptyText, { color: colors.icon }]}>
+                  {monthlyError ?? 'No verse of the month yet.'}
+                </Text>
+                {monthlyError ? (
+                  <Pressable accessibilityRole="button" onPress={() => void refreshVotm()}>
+                    <Text style={[styles.emptySubtext, { color: colors.primary }]}>Try again</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={[styles.emptySubtext, { color: colors.icon }]}>Check back soon!</Text>
+                )}
+              </View>
             )}
           </View>
-        )}
 
-        {/* Insights Section */}
-        <InsightsCard ref={insightsCardRef} />
+          {/* Insights Section */}
+          <View style={windowClass === 'wide' && styles.wideSide}>
+            <InsightsCard ref={insightsCardRef} />
+          </View>
+        </View>
         <ExploreCollections />
         <IntroVideo blocked={expanded || collectionPickerVisible || modalTransition || expandedPresented || pickerPresented} />
       </Reanimated.ScrollView>
@@ -243,7 +258,24 @@ export default function HomeScreen() {
   );
 }
 
+// Board number: the title's distance from the top upright.
+const TALL_TOP = 54;
+
+const contentLayout = StyleSheet.create({
+  phone: {},
+  wide: { paddingLeft: 28, paddingRight: 24, gap: 16 },
+  outer: { paddingLeft: 18, paddingRight: 10, gap: 16 },
+  tall: { paddingHorizontal: 24, gap: 16 },
+});
+
 const styles = StyleSheet.create({
+  fill: { flexGrow: 1 },
+  wideRow: { flexDirection: 'row', gap: 16, minHeight: 316 },
+  wideSide: { width: 330 },
+  phoneStack: { gap: 20 },
+  stack: { gap: 16 },
+  votm: { flex: 1 },
+  tallVotm: { minHeight: 262 },
   container: {
     flex: 1,
   },

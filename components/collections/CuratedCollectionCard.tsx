@@ -12,9 +12,11 @@ import { useCuratedSaverCount } from '@/lib/store';
 
 const lastCardPress = { current: 0 };
 
-export function CuratedCollectionCard({ collection, grouped = false }: {
+/** A row with a thumbnail; `grouped` drops its card for a list's hairlines; `tile` stacks it under a banner for a grid. */
+export function CuratedCollectionCard({ collection, grouped = false, tile = false }: {
   collection: CuratedCollection;
   grouped?: boolean;
+  tile?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const saverCount = useCuratedSaverCount(collection.id);
@@ -23,6 +25,27 @@ export function CuratedCollectionCard({ collection, grouped = false }: {
     undefined,
     lastCardPress,
   );
+
+  const saves = saverCountLabel(saverCount ?? 0);
+
+  if (tile) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={[collection.title, `${collection.passages.length} passages`, saves].filter(Boolean).join(', ')}
+        testID={`discover-${collection.id}`}
+        onPress={handlePress}
+        style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+      >
+        <View style={styles.banner}><CollectionArt icon={collection.icon} size="banner" /></View>
+        <Text style={[styles.title, styles.tileTitle, { color: colors.text }]} numberOfLines={1}>{collection.title}</Text>
+        <Text style={[styles.count, { color: colors.icon }]} numberOfLines={1}>{collection.subtitle}</Text>
+        <Text testID={saves ? `collection-savers-${collection.id}` : undefined} style={[styles.count, { color: colors.icon }]}>
+          {[`${collection.passages.length} passages`, saves].filter(Boolean).join(' · ')}
+        </Text>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
@@ -56,6 +79,9 @@ export function CuratedCollectionCard({ collection, grouped = false }: {
 }
 
 const styles = StyleSheet.create({
+  tile: { flex: 1, minWidth: 0, gap: 3 },
+  banner: { marginBottom: 7 },
+  tileTitle: { fontSize: 17 },
   card: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.xxl,

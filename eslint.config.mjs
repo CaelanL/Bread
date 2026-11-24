@@ -6,7 +6,7 @@ import kit, { address } from "./eslint.kit.mjs";
 // Standard UI values only: the tokens in constants/theme.ts.
 const RADIUS_KEY = "/^border(TopLeft|TopRight|BottomLeft|BottomRight|Top|Bottom|Left|Right|TopStart|TopEnd|BottomStart|BottomEnd)?Radius$/";
 const RADII = "4|8|10|12|14|16|20|24|999";
-const DURATIONS = "100|150|200|300";
+const DURATIONS = "100|150|200|300|380";
 const uiRule = (selector) => ({ selector, message: "Use the standard UI values from constants/theme.ts." });
 const notIn = (values) => `[value.type='Literal'][value.raw!=/^(${values})$/]`;
 
@@ -23,6 +23,18 @@ export default defineConfig([
         uiRule(`Property[key.name='duration']${notIn(DURATIONS)}`),
         uiRule(`Property[key.name='scale']${notIn("0\\.96|1")}`),
       ],
+    },
+  },
+  {
+    // eslint-plugin-react-hooks 7 (SDK 56) reports where React Compiler 1.0.0 skips a
+    // component. The compiler and its skips are the same as on SDK 55, so rewriting these
+    // components would change what it compiles. Warnings until that is its own change.
+    rules: {
+      "react-hooks/refs": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/set-state-in-render": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/purity": "warn",
     },
   },
   {

@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   modalCard: {
     borderRadius: 20,

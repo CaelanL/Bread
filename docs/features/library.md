@@ -29,7 +29,7 @@ Full schema is in `docs/architecture/data-model.md`. Three things matter here:
 | Route (`app/(tabs)/(library)/`) | Purpose |
 |---|---|
 | `index.tsx` | Collection list, pull to refresh, Edit, and the + menu |
-| `[id].tsx` | One collection: `CollectionHeader` (icon, name, Search, sort and Add pills), flat verse rows, long press to copy, a menu |
+| `[id].tsx` | One collection (`CollectionList`): `CollectionHeader` (icon, name, Search, sort and Add pills), flat verse rows, long press to copy, a menu |
 | `add.tsx` | Quick-add field, then pick a book and chapter. Its picker sets the account translation. Passes `collectionId` along |
 | `add/[book]/[chapter].tsx` | Read the chapter and select a verse range |
 | `setup/[id].tsx` | Study setup and Reset Progress. See `docs/features/study-session.md` |
@@ -58,8 +58,8 @@ mastered or engraved (engraved also fills the square and washes the row gold; se
 
 **Hide verses.** Settings → Appearance → Hide verses (`hideVerseText`, a device pref in the store,
 kept across sign-out like Theme, default off) drops the text line from a collection's verse rows
-(`SwipeableVerseCard`, skipping the fetch) and from Study setup's preview card, where
-the expand button still shows the full text. Off, a collection warms its text on open
+(`SwipeableVerseCard`, skipping the fetch) and from Study setup's preview
+([setup](../architecture/wide-study.md#study-setup)). Off, a collection warms its text on open
 ([preload](../architecture/bible-api-and-caching.md#preloading-verse-text)).
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.

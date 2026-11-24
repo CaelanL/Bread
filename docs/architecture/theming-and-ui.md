@@ -37,6 +37,9 @@ surfaces.
 | `icon` | `#6b6b6b` | default icon color |
 | `primaryLight` | `rgba(176,141,87,0.12)` | tinted accent background |
 | `engravedFill` | `rgba(245,158,11,0.12)` | engraved collection icon |
+| `glass` / `glassBorder` | `rgba(255,255,255,0.72)` / `rgba(255,255,255,0.9)` | glass buttons and pills before Liquid Glass |
+| `controlFill` / `controlThumb` | `rgba(118,118,128,0.12)` / `#ffffff` | a switcher's track and raised thumb, capsule value buttons |
+| `actionFill` | `#b08d57` | Start session, today's bronze in both modes (white text on the dark `primary` is too faint) |
 | `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
 | `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 
@@ -60,6 +63,8 @@ surfaces.
 | `icon` | `#9a9a9a` | |
 | `primaryLight` | `rgba(201,169,98,0.15)` | |
 | `engravedFill` | `rgba(245,158,11,0.15)` | |
+| `glass` / `glassBorder` | `rgba(46,46,46,0.72)` / `rgba(255,255,255,0.12)` | |
+| `controlFill` / `controlThumb` | `rgba(118,118,128,0.24)` / `#636366` | iOS's dark segmented control |
 | `overlay` | `rgba(0,0,0,0.6)` | |
 
 Status colors (`success`, `warning`, `error`) are intentionally the
@@ -77,6 +82,12 @@ A collection's accent (its `iconColor`, or `primary`) isn't a token: `withAlpha(
 `constants/theme.ts` also exports `Radius`, `Motion` and `Shadows`.
 `eslint.config.mjs` rejects radii, durations and press scales outside
 those values, so `npm run lint` catches a stray one.
+
+`Shadows.card` (a white grouped card), `thumb` (a switcher's thumb), `action` (the docked Start)
+and `sheet` (a card over a blurred page) come from the study setup boards.
+
+`Motion.paneMs` (380) is the one long duration: a pane sliding in or out on a wide window and
+the passage card growing from what was tapped. Everything else stays at 200 or under.
 
 ## Fonts
 
@@ -208,6 +219,7 @@ have hex literals; don't copy them.
 | `EngravedIcon.tsx` | Special icon for engraved verses |
 | `SearchTakeover.tsx` | Search that grows out of its pill to the top and covers the screen; Cancel plays it back |
 | `TopBar.tsx` | `TopBar`, `TopBarButton`, `LargeTitle`, `useTopBarHeight`: a screen's bar over its scroll view (see Screen tops) |
+| `Glass.tsx` | `GlassButton` (a 44 pt circle with one icon) and `GlassPill` (a capsule: the reference bubble, the tab pill). Liquid Glass (`expo-glass-effect`) where iOS has it, else the `glass` fill, `glassBorder` hairline and `Shadows.glass` |
 
 If you're building a new reusable primitive, add it here with a
 `.tsx` (and `.ios.tsx` if it needs platform divergence). Pull
@@ -249,11 +261,13 @@ so the spinner shows below the bar, not behind the Dynamic Island.
 
 Each screen picks its title. A tab's first screen (Home, Library, Settings) has `LargeTitle root`
 (34/700); a pushed page (Insights, Notifications) has `LargeTitle` (28/600); the collection
-screen has its name. `AppHeader` is the same bar in the layout flow, for screens whose top stays
+screen has its name; study setup has none, its reference sits in a glass bubble in `TopBar`'s
+`center`, the one bar with a title, because the reference names the screen and opens the passage
+([wide study screens](wide-study.md#study-setup)). `AppHeader` is the same bar in the layout flow, for screens whose top stays
 put: the title sits beside the back button, a labelled action is a `HeaderPill`, an icon one a
 `TopBarButton`. It carries a title only when the title says something the screen doesn't (a
-session's reference, a chapter's "John 3"). Setup and a curated collection drop theirs: the verse
-card and the collection's own name already say it.
+session's reference, a chapter's "John 3"). A curated collection drops its own: the collection's
+name already says it.
 
 The collection screen's top is `CollectionHeader` (`components/library/`): the accent washing down
 from the top edge (an `expo-linear-gradient`, solid above the bar for a pull), a 56 pt icon square,
@@ -321,6 +335,12 @@ Invariant 8 is above. Also:
 
 ## Sharp edges
 
+- **Never read the window size at module load.** `Dimensions.get('window')` at the top of a file
+  keeps the launch size after the iPhone Duo folds or the window turns; read
+  `useWindowDimensions()` in render ([window layouts](window-layouts.md#live-sizes)).
+- **Never unmount or swap a Pressable from its own `onPressIn`.** On RN 0.88 the touch
+  that pressed it never ends, so the next tap is read as a second finger and lost. Keep it
+  mounted and hide it (see `RecordingBar.tsx`, the mic and Retry).
 - **`SwipeableVerseCard.tsx` has hardcoded bronze RGBA values**
   (e.g. `rgba(176,141,87,0.25)`) that should ideally come from a
   derived theme token. Not a bug, but a candidate for cleanup.

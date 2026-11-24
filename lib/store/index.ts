@@ -16,6 +16,7 @@ import { validateCollectionPassages } from '@/lib/collections/passages';
 import { readCollectionSavers } from '@/lib/collections/savers';
 import type { CollectionIconKey } from '@/lib/collections/icons';
 import { BIBLE_VERSIONS, type ColorMode } from '@/lib/settings';
+import type { LibraryView } from '@/lib/layout';
 import { composeDisplayName } from '@/lib/shared/display-name';
 import { isSharedRole, normalizeInviteCode } from '@/lib/shared/invite-code';
 import { getSharedMembers, type SharedMember } from '@/lib/shared/invites';
@@ -25,7 +26,7 @@ import { DEFAULT_COLLECTION_ID, DEFAULT_PROGRESS, DEFAULT_SORT, IN_PROGRESS_COLL
 import { showErrorToast } from '@/lib/toast';
 import type { Database } from '@/supabase/database.types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, InteractionManager } from 'react-native';
+import { Alert } from 'react-native';
 import { create } from 'zustand';
 import { pickPreload } from './preload';
 import { parseSnapshot, serializeSnapshot, snapshotKey, type SnapshotData } from './snapshot';
@@ -42,6 +43,7 @@ import { isVisible, mayBeMissing, onePerReference, planCollapse, planMoves, refe
 
 const COLOR_MODE_KEY = 'app_color_mode';
 const HIDE_VERSE_TEXT_KEY = 'app_hide_verse_text';
+const LIBRARY_VIEW_KEY = 'library_view';
 // Local cache of the account translation (profiles.translation).
 const BIBLE_VERSION_KEY = 'app_bible_version';
 const KEPT_NOTICES_KEY = 'translation_kept_notices';
@@ -103,6 +105,8 @@ interface AppState {
   colorMode: ColorMode;
   /** Device pref: collection rows and Study setup show references without the verse text. */
   hideVerseText: boolean;
+  /** Device pref: the Library as a grid or a list on the iPhone Duo; null until chosen (window-layouts.md#library). */
+  libraryView: LibraryView | null;
   bibleVersion: BibleVersion;
   // profiles.display_name: what members of a shared collection see ("Caelan L."). Null until saved.
   displayName: string | null;
@@ -165,6 +169,7 @@ interface AppState {
   // Actions - Settings
   setColorMode: (mode: ColorMode) => Promise<void>;
   setHideVerseText: (hide: boolean) => Promise<void>;
+  setLibraryView: (view: LibraryView) => Promise<void>;
   setBibleVersion: (version: BibleVersion) => Promise<void>;
   setName: (firstName: string, lastName: string) => Promise<void>;
   setReviewMaxIntervalDays: (days: number) => Promise<void>;
@@ -652,7 +657,7 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
     await tellKeptVerses(kept, translation);
   }
   if (launch && libraryOk && sameAccount(generation)) {
-    InteractionManager.runAfterInteractions(() => {
+    requestIdleCallback(() => {
       if (sameAccount(generation)) preloadVerseText(store().verses, false);
     });
   }
@@ -666,13 +671,14 @@ async function loadAccount(generation: number, userId: string, launch: boolean) 
  */
 async function readSettings() {
   try {
-    const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText] = await Promise.all([
+    const [savedColorMode, savedBibleVersion, savedReviewMax, savedMasteredSort, savedInProgressSort, savedHideVerseText, savedLibraryView] = await Promise.all([
       AsyncStorage.getItem(COLOR_MODE_KEY),
       AsyncStorage.getItem(BIBLE_VERSION_KEY),
       AsyncStorage.getItem(REVIEW_MAX_INTERVAL_DAYS_KEY),
       getMasteredSort(),
       getInProgressSort(),
       AsyncStorage.getItem(HIDE_VERSE_TEXT_KEY),
+      AsyncStorage.getItem(LIBRARY_VIEW_KEY),
     ]);
 
     const updates: Partial<AppState> = {};
@@ -680,6 +686,7 @@ async function readSettings() {
       updates.colorMode = savedColorMode as ColorMode;
     }
     if (savedHideVerseText === 'true') updates.hideVerseText = true;
+    if (savedLibraryView === 'grid' || savedLibraryView === 'list') updates.libraryView = savedLibraryView;
     if (isBibleVersion(savedBibleVersion)) {
       updates.bibleVersion = savedBibleVersion;
     }
@@ -895,6 +902,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sharedProgress: {},
   colorMode: 'system',
   hideVerseText: false,
+  libraryView: null,
   bibleVersion: 'ESV',
   displayName: null,
   firstName: null,
@@ -1203,6 +1211,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       await AsyncStorage.setItem(HIDE_VERSE_TEXT_KEY, String(hide));
     } catch (e) {
       console.error('[STORE] Failed to save hideVerseText:', e);
+    }
+  },
+
+  setLibraryView: async (view: LibraryView) => {
+    set({ libraryView: view });
+    try {
+      await AsyncStorage.setItem(LIBRARY_VIEW_KEY, view);
+    } catch (e) {
+      console.error('[STORE] Failed to save libraryView:', e);
     }
   },
 
@@ -2061,7 +2078,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       displayName: null,
       firstName: null,
       lastName: null,
-      // Device prefs (colorMode, hideVerseText, reviewMaxIntervalDays, masteredSort,
+      // Device prefs (colorMode, hideVerseText, libraryView, reviewMaxIntervalDays, masteredSort,
       // inProgressSort) and the cached account translation (bibleVersion,
       // replaced from the next account's profile on hydrate) are preserved
       // across sign-out by virtue of being absent from this set call —

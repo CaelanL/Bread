@@ -30,13 +30,15 @@ const NEXT: Record<Difficulty, string> = {
  * A pass lands with a success haptic and the finished line's highlight. Runs once, the first time
  * the page is `active`.
  */
-export function SessionFinish({ score, difficulty, reference, active, onDone, onReview }: {
+export function SessionFinish({ score, difficulty, reference, active, onDone, onReview, wide = false }: {
   score: number;
   difficulty: Difficulty;
   reference: string;
   active: boolean;
   onDone: () => void;
   onReview: () => void;
+  /** A wide window (the Finish-C2 board): larger type, Done and Review chunks low right. */
+  wide?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const reduced = useReducedMotion();
@@ -77,19 +79,20 @@ export function SessionFinish({ score, difficulty, reference, active, onDone, on
   const title = passed ? `${name} passed` : score >= 65 ? 'Almost there' : 'Keep practicing';
   const line = passed ? NEXT[difficulty] : `${PASS}% to pass`;
 
-  if (!active && !landed) return <View style={styles.page} />;
+  const page = [styles.page, wide && styles.pageWide];
+  if (!active && !landed) return <View style={page} />;
 
   return (
-    <View style={styles.page}>
-      <View style={styles.body}>
-        <Animated.Text entering={FadeInDown.duration(Motion.expandMs)} style={[styles.eyebrow, { color: colors.icon }]}>
+    <View style={page}>
+      <View style={[styles.body, wide && styles.bodyWide]}>
+        <Animated.Text entering={FadeInDown.duration(Motion.expandMs)} style={[styles.eyebrow, wide && styles.eyebrowWide, { color: colors.icon }]}>
           {reference.toUpperCase()} · {name.toUpperCase()}
         </Animated.Text>
 
         <Animated.View entering={FadeInDown.duration(Motion.expandMs).delay(Motion.staggerMs)}>
-          <Text accessibilityLabel={`Score ${score} percent`} style={[styles.score, { color: tone }]}>
+          <Text accessibilityLabel={`Score ${score} percent`} style={[styles.score, wide && styles.scoreWide, { color: tone }]}>
             {shown}
-            <Text style={styles.percent}>%</Text>
+            <Text style={[styles.percent, wide && styles.percentWide]}>%</Text>
           </Text>
         </Animated.View>
 
@@ -112,12 +115,12 @@ export function SessionFinish({ score, difficulty, reference, active, onDone, on
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(Motion.expandMs).delay(Motion.staggerMs * 3)} style={styles.copy}>
-          <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{title}</Text>
-          <Text style={[styles.subtitle, { color: colors.icon }]}>{line}</Text>
+          <Text accessibilityRole="header" style={[styles.title, wide && styles.titleWide, { color: colors.text }]}>{title}</Text>
+          <Text style={[styles.subtitle, wide && styles.subtitleWide, { color: colors.icon }]}>{line}</Text>
         </Animated.View>
       </View>
 
-      <Animated.View entering={FadeInDown.duration(Motion.expandMs).delay(Motion.staggerMs * 4)} style={styles.actions}>
+      <Animated.View entering={FadeInDown.duration(Motion.expandMs).delay(Motion.staggerMs * 4)} style={[styles.actions, wide && styles.actionsWide]}>
         <Pressable
           accessibilityRole="button"
           onPress={onDone}
@@ -153,4 +156,12 @@ const styles = StyleSheet.create({
   review: { height: 44, alignItems: 'center', justifyContent: 'center' },
   reviewText: { fontSize: 15, fontWeight: '500' },
   pressed: { opacity: 0.7 },
+  pageWide: { paddingHorizontal: 48 },
+  bodyWide: { paddingTop: 40, paddingBottom: 150 },
+  eyebrowWide: { fontSize: 13, letterSpacing: 1.3 },
+  scoreWide: { fontSize: 108, lineHeight: 114, letterSpacing: -2.5 },
+  percentWide: { fontSize: 48 },
+  titleWide: { fontSize: 30, lineHeight: 36 },
+  subtitleWide: { fontSize: 17, lineHeight: 23 },
+  actionsWide: { position: 'absolute', right: 24, bottom: 24, width: 260, paddingBottom: 0 },
 });

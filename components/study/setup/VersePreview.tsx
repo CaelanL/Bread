@@ -1,0 +1,74 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors, Radius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useRef, type ComponentProps } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View, type ViewInstance } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { measureOrigin, type PassageOrigin } from './PassageCard';
+
+/** The preview text's type and its inset in the card (the verse's travel on a wide window starts here). */
+export const PREVIEW_TEXT = { fontSize: 16, lineHeight: 24 } as const;
+export const PREVIEW_INSET = { top: 14, left: 16, right: 54 } as const;
+
+/** The verse's opening lines in a card, with ⤢ at the top right. Tapping the text or ⤢ opens the whole passage from where it was tapped. */
+export function VersePreview({ text, loading, hidden, lines, onOpen, textStyle }: {
+  text: string;
+  loading: boolean;
+  /** Settings → Hide verses: no text, only a placeholder. */
+  hidden: boolean;
+  lines: number;
+  onOpen: (origin: PassageOrigin) => void;
+  /** Hides the text while a copy of it travels (wide windows). */
+  textStyle?: ComponentProps<typeof Animated.Text>['style'];
+}) {
+  const colors = Colors[useColorScheme() ?? 'light'];
+  const textRef = useRef<ViewInstance>(null);
+  const expandRef = useRef<ViewInstance>(null);
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.cardAlt }]}>
+      {loading && !hidden ? (
+        <ActivityIndicator size="small" color={colors.icon} style={styles.loader} />
+      ) : (
+        <Pressable
+          ref={textRef}
+          testID="verse-preview"
+          accessibilityRole="button"
+          accessibilityHint="Shows the whole passage"
+          onPress={() => measureOrigin(textRef, onOpen)}
+        >
+          {hidden ? (
+            <Animated.Text style={[styles.text, { color: colors.icon }, textStyle]}>Verse hidden</Animated.Text>
+          ) : (
+            <Animated.Text style={[styles.text, { color: colors.text }, textStyle]} numberOfLines={lines}>{text}</Animated.Text>
+          )}
+        </Pressable>
+      )}
+      <Pressable
+        ref={expandRef}
+        testID="verse-expand"
+        accessibilityRole="button"
+        accessibilityLabel="Show the whole passage"
+        hitSlop={6}
+        onPress={() => measureOrigin(expandRef, onOpen)}
+        style={({ pressed }) => [styles.expand, { backgroundColor: colors.primaryLight }, pressed && styles.pressed]}
+      >
+        <IconSymbol name="arrow.up.left.and.arrow.down.right" size={15} color={colors.tint} />
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: Radius.xxl,
+    paddingVertical: PREVIEW_INSET.top,
+    paddingLeft: PREVIEW_INSET.left,
+    paddingRight: PREVIEW_INSET.right,
+    minHeight: 52,
+  },
+  text: PREVIEW_TEXT,
+  loader: { alignSelf: 'flex-start', marginTop: 2 },
+  expand: { position: 'absolute', top: 9, right: 9, width: 34, height: 34, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.6 },
+});

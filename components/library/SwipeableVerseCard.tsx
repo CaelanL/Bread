@@ -34,6 +34,8 @@ interface SwipeableVerseCardProps {
   sharedMemberCount?: number;
   /** Set in a shared collection with other members: every member's state, for the count on the right (null until read). */
   group?: { states: MemberState[] | null; unavailable: boolean };
+  /** A wide window's verse list: this row's verse is the one in the setup pane. */
+  selected?: boolean;
 }
 
 export function SwipeableVerseCard({
@@ -45,6 +47,7 @@ export function SwipeableVerseCard({
   collectionCount = 1,
   sharedMemberCount,
   group,
+  selected,
 }: SwipeableVerseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -178,7 +181,14 @@ export function SwipeableVerseCard({
       <GestureDetector gesture={panGesture}>
         <Animated.View style={cardStyle}>
           <Pressable
-            style={({ pressed }) => [styles.row, hideText && styles.rowHidden, pressed && { backgroundColor: colors.fill }]}
+            style={({ pressed }) => [
+              styles.row,
+              hideText && styles.rowHidden,
+              selected && { backgroundColor: colors.primaryLight },
+              pressed && { backgroundColor: colors.fill },
+            ]}
+            accessibilityState={selected === undefined ? undefined : { selected }}
+            testID={`verse-row-${formatVerseReference(verse)}`}
             unstable_pressDelay={PRESS_DELAY_MS}
             onPress={handlePress}
             onLongPress={handleCopy}

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // See the app's screens without Xcode. Expo apps only. Needs "sim" in package.json "kit":
-//   "sim": { "name": "<short app name>", "scheme": "<URL scheme>" }
+//   "sim": { "name": "<short app name>", "scheme": "<URL scheme>", "appId": "<iOS bundle identifier>" }
 //
 //   npm run sim -- shot <route> [<route>...] [--keep] [--as <seed user>]   screenshots to .expo/sim-shots/
 //   npm run sim -- flow <name> [<name>...] [--keep]     runs Maestro flows from .maestro/ after one startup, output to .expo/sim-shots/flows/<name>/
@@ -10,6 +10,16 @@
 //     a failed flow, ends with each flow's pass or fail and time, and exits non-zero if any failed.
 //   npm run sim -- stop                                 stops Metro and the device
 //   npm run sim -- install                              installs the latest simulator build
+//   npm run sim -- install --local                      builds the dev client with this Mac's Xcode and installs it (no EAS build)
+//
+// Options for shot, flow and install (stop takes --device too):
+//   --device duo           the iPhone Duo simulator (iOS 27.2 iPhone19,4 runtime) instead of iPhone 16 Pro. It boots
+//                          closed; fold, open or rotate it with Claude's iOS Simulator tool (set_posture, rotate).
+//   --device ipad          the iPad Pro 13-inch (M5) simulator (iOS 27.2): wide layouts Maestro can tap. A flow turns
+//                          it with `setOrientation`.
+//   --display outer|inner  which Duo display a shot captures (default outer); the file name ends in it.
+//   --dark                 dark appearance for the run, light again afterwards; shot files end in -dark. Every run
+//                          sets the appearance at boot, so the simulator is light without it.
 //
 // The app must add a <scheme>://dev-sign-in?next=<route> route. Still unproven:
 //   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags are right per --help; that it installs on DEVICE is not run.
@@ -23,17 +33,38 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 const MAX_SIMS = 1;
-const DEVICE = 'iPhone 16 Pro';
 const SETTLE_MS = 5000;
 const METRO_TIMEOUT_MS = 120_000;
 const BUNDLE_TIMEOUT_MS = 300_000;
 
+// With this set (the Claude app sets it), Node 24.7 on macOS 27 crashes in about 1 in 10 short runs while reading
+// the keychain (LoadSystemCACertificates), which fails `pod install` at random. Every child here inherits the fix.
+delete process.env.NODE_USE_SYSTEM_CA;
+
+// Options are read here, before the commands see their arguments.
+const argv = process.argv.slice(2);
+function option(name, takesValue) {
+  const i = argv.indexOf(name);
+  if (i < 0) return null;
+  const [, value] = argv.splice(i, takesValue ? 2 : 1);
+  return takesValue ? value : true;
+}
+const DEVICES = { duo: 'iPhone Duo', ipad: 'iPad Pro 13-inch (M5)' };
+const device = option('--device', true);
+if (device !== null && !DEVICES[device]) die(`--device takes duo (the iPhone Duo) or ipad (${DEVICES.ipad}); without it, iPhone 16 Pro. Got "${device}".`);
+const duo = device === 'duo';
+const DEVICE = DEVICES[device] ?? 'iPhone 16 Pro';
+const display = option('--display', true) ?? 'outer';
+if (!['outer', 'inner'].includes(display)) die('--display is outer or inner.');
+const dark = option('--dark', false);
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const kit = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).kit ?? {};
-if (!kit.sim?.name || !kit.sim?.scheme) die('package.json needs kit.sim: { "name": ..., "scheme": ... }.');
+if (!kit.sim?.name || !kit.sim?.scheme || !kit.sim?.appId) die('package.json needs kit.sim: { "name": ..., "scheme": ..., "appId": ... }.');
 const CACHE = join(homedir(), '.cache');
 const LOCK = join(CACHE, `${kit.sim.name}-sim.lock`);
-const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim.json`);
+// Each device has its own build, so its own record of what's installed.
+const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim${device ? `-${device}` : ''}.json`);
 const LOG = join(root, '.expo/sim-metro.log');
 const SHOTS = join(root, '.expo/sim-shots');
 const FLOWS = join(root, '.maestro');
@@ -77,13 +108,20 @@ function bootedDevices() {
   return Object.values(parsed.devices).flat().map((d) => d.name);
 }
 
+const deviceFlag = (name) => {
+  const key = Object.keys(DEVICES).find((k) => DEVICES[k] === name);
+  return key ? ` --device ${key}` : '';
+};
+
 function takeLock() {
   mkdirSync(CACHE, { recursive: true });
   const held = readJson(LOCK);
   if (held && held.folder !== root && isAlive(held.pid)) die(`simulator busy: ${held.folder} since ${held.since}`);
-  if (!held || held.folder !== root) {
-    const others = bootedDevices().filter((name) => name !== DEVICE);
-    if (others.length >= MAX_SIMS) die(`simulator busy: ${others.join(', ')} is booted (limit ${MAX_SIMS}). Shut it down first.`);
+  // Also when this folder holds the lock: a --keep run may have left the other device booted.
+  const others = bootedDevices().filter((name) => name !== DEVICE);
+  if (others.length >= MAX_SIMS) {
+    die(`simulator busy: ${others.join(', ')} is booted (limit ${MAX_SIMS}). Shut it down first`
+      + (held?.folder === root ? ` (npm run sim -- stop${deviceFlag(others[0])}).` : '.'));
   }
   writeFileSync(LOCK, JSON.stringify({ folder: root, pid: process.pid, since: new Date().toISOString() }));
   if (held?.folder === root) stopMetro(held); // a --keep run left one behind
@@ -111,15 +149,41 @@ function checkFingerprint() {
     return;
   }
   if (saved !== now) {
-    die('Native code changed since the simulator build. Run `npx eas-cli build -p ios --profile simulator` (uses 1 of 15 free builds a month), then `npm run sim -- install`.');
+    die('Native code changed since the simulator build. Run `npm run sim -- install --local` (builds on this Mac).');
   }
 }
 
 // ---------- device and Metro
 
+// From iOS 27, every `simctl openurl` (Maestro's openLink too) asks "Open in <app>?" unless the scheme is
+// approved for simctl's bridge. The device reads the approvals at boot, so they're written before it.
+function approveScheme() {
+  const devices = Object.values(JSON.parse(must('xcrun', ['simctl', 'list', 'devices', 'available', '-j'])).devices).flat();
+  const udid = devices.find((d) => d.name === DEVICE)?.udid;
+  if (!udid) {
+    die(duo
+      ? 'No simulator named "iPhone Duo". Create one: xcrun simctl create "iPhone Duo" com.apple.CoreSimulator.SimDeviceType.iPhone-Duo com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4'
+      : device === 'ipad'
+        ? `No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB com.apple.CoreSimulator.SimRuntime.iOS-27-2`
+        : `No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro`);
+  }
+  // Written as a file: the Mac's `defaults write` caches it and may never reach the disk.
+  const prefs = join(homedir(), 'Library/Developer/CoreSimulator/Devices', udid, 'data/Library/Preferences/com.apple.launchservices.schemeapproval.plist');
+  const approvals = existsSync(prefs) ? JSON.parse(must('plutil', ['-convert', 'json', '-o', '-', prefs])) : {};
+  approvals[`com.apple.CoreSimulator.CoreSimulatorBridge-->${kit.sim.scheme}`] = kit.sim.appId;
+  mkdirSync(dirname(prefs), { recursive: true });
+  writeFileSync(prefs, JSON.stringify(approvals));
+  must('plutil', ['-convert', 'binary1', prefs]);
+}
+
+const setAppearance = (mode) => run('xcrun', ['simctl', 'ui', DEVICE, 'appearance', mode]);
+
+// Set on every boot, so a dark run that never got to set it back (install, a Ctrl-C) can't leak into the next one.
 function bootDevice() {
+  approveScheme();
   run('xcrun', ['simctl', 'boot', DEVICE]); // fails harmlessly when already booted
   must('xcrun', ['simctl', 'bootstatus', DEVICE, '-b']);
+  setAppearance(dark ? 'dark' : 'light');
 }
 
 const freePort = () => new Promise((resolve, reject) => {
@@ -163,7 +227,7 @@ async function waitForBundle() {
   die(`The app didn't finish bundling. See ${LOG}`);
 }
 
-const openUrl = (url) => must('xcrun', ['simctl', 'openurl', 'booted', url]);
+const openUrl = (url) => must('xcrun', ['simctl', 'openurl', DEVICE, url]);
 const fileName = (route) => route.replace(/^\/+|\/+$/g, '').replace(/[^A-Za-z0-9_-]+/g, '-') || 'home';
 
 function stopMetro(held) {
@@ -171,7 +235,10 @@ function stopMetro(held) {
   try { process.kill(-held.pid, 'SIGTERM'); } catch { /* already gone */ }
 }
 
+const restoreAppearance = () => dark && setAppearance('light');
+
 function stopAll() {
+  restoreAppearance();
   stopMetro(readJson(LOCK));
   run('xcrun', ['simctl', 'shutdown', DEVICE]);
   rmSync(LOCK, { force: true });
@@ -196,7 +263,9 @@ async function startApp() {
   must(process.execPath, ['scripts/db.mjs', 'guard']);
   bootDevice();
   const port = await startMetro();
-  const devClientUrl = `${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}?disableOnboarding=1`)}`;
+  // From SDK 58 the dev menu opens over the app at every launch, and its floating button covers the
+  // top-right corner, unless the launcher URL turns them off.
+  const devClientUrl = `${kit.sim.scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}?disableOnboarding=1`)}&disableAutoLaunch=1&disableFab=1`;
   openUrl(devClientUrl);
   await waitForBundle();
   await sleep(SETTLE_MS);
@@ -215,10 +284,12 @@ async function shot(args) {
   for (const route of routes) {
     openUrl(`${kit.sim.scheme}://dev-sign-in?next=${encodeURIComponent(route)}${as ? `&as=${encodeURIComponent(as)}` : ''}`); 
     await sleep(SETTLE_MS);
-    const file = join(SHOTS, `${fileName(route)}.png`);
-    must('xcrun', ['simctl', 'io', 'booted', 'screenshot', file]);
+    const file = join(SHOTS, `${fileName(route)}${dark ? '-dark' : ''}${duo ? `-${display}` : ''}.png`);
+    // simctl refuses a Duo screenshot without --display: 1 is the outer display, 3 the inner.
+    must('xcrun', ['simctl', 'io', DEVICE, 'screenshot', ...(duo ? [`--display=${display === 'outer' ? 1 : 3}`] : []), file]);
     console.log(file);
   }
+  restoreAppearance();
   if (!keep) stopAll();
 }
 
@@ -294,6 +365,7 @@ async function flow(args) {
     results.push({ name, ok, ms: Date.now() - flowBegan });
     for (const file of readdirSync(out, { recursive: true }).filter((f) => f.endsWith('.png')).sort()) console.log(join(out, file));
   }
+  restoreAppearance();
   if (!keep) stopAll();
   const width = Math.max(...results.map((r) => r.name.length));
   console.log('');
@@ -310,18 +382,22 @@ function stopCommand() {
   console.log('Simulator and Metro stopped.');
 }
 
-function install() {
+function install(args) {
   takeLock();
   bootDevice();
-  const r = run('npx', ['eas-cli', 'build:run', '-p', 'ios', '--profile', 'simulator', '--latest'], { stdio: 'inherit' }); // unproven (4)
+  // CocoaPods fails on a non-UTF-8 locale, and agent shells often have none set.
+  const r = args.includes('--local')
+    ? run('npx', ['expo', 'run:ios', '--no-bundler', '--device', DEVICE], { stdio: 'inherit', env: { LANG: 'en_US.UTF-8', ...process.env } })
+    : run('npx', ['eas-cli', 'build:run', '-p', 'ios', '--profile', 'simulator', '--latest'], { stdio: 'inherit' }); // unproven (4)
   if (!r.ok) die('Install failed. See the output above.');
   writeFileSync(FINGERPRINT, JSON.stringify({ native: currentFingerprint() }));
   console.log('Simulator build installed.');
 }
 
-const [command, ...args] = process.argv.slice(2);
+const [command, ...args] = argv;
 if (command === 'shot') await shot(args);
 else if (command === 'flow') await flow(args);
 else if (command === 'stop') stopCommand();
-else if (command === 'install') install();
-else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install');
+else if (command === 'install') install(args);
+else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install [--local]'
+  + ' (shot, flow and install take [--device duo|ipad] [--display outer|inner] [--dark])');

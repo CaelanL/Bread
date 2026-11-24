@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, MonthlyCardColors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useWindowClass } from '@/hooks/use-window-class';
 import type { VOTM } from '@/lib/api/votm';
 import { formatReference } from '@/lib/bible';
 
@@ -26,6 +27,9 @@ export function VOTMCard({
   version, onPress, onAddPress, onRetry,
 }: VOTMCardProps) {
   const colors = Colors[useColorScheme() ?? 'light'];
+  // The open Duo (wide, tall) gets the boards' big card; the outer display only a size up in text.
+  const windowClass = useWindowClass();
+  const big = windowClass === 'wide' || windowClass === 'tall';
   const [failedImage, setFailedImage] = useState<string | null>(null);
   const imageKey = `${votm.id}:${votm.imageUrl}`;
   const hasImage = !!votm.imageUrl && failedImage !== imageKey;
@@ -40,7 +44,7 @@ export function VOTMCard({
     <Pressable
       testID="votm-card"
       onPress={onPress}
-      style={[styles.card, { backgroundColor: hasImage ? colors.shadow : colors.cardAlt }]}
+      style={[styles.card, big && styles.fill, { backgroundColor: hasImage ? colors.shadow : colors.cardAlt }]}
     >
       {hasImage && (
         <Image
@@ -53,15 +57,15 @@ export function VOTMCard({
           accessible={false}
         />
       )}
-      <View style={styles.contentWrapper} testID={hasImage ? undefined : 'votm-art-fallback'}>
+      <View style={[styles.contentWrapper, big && styles.fill]} testID={hasImage ? undefined : 'votm-art-fallback'}>
         {hasImage && <View style={styles.overlay} />}
-        <View style={styles.content}>
+        <View style={[styles.content, big && styles.bigContent]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <IconSymbol name="calendar" size={16} color={accentColor} />
               <Text style={[styles.headerText, { color: accentColor }]}>Verse of the Month</Text>
             </View>
-            <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color={subtextColor} />
+            <IconSymbol name="arrow.up.left.and.arrow.down.right" size={big ? 16 : 14} color={subtextColor} />
           </View>
           <View style={styles.badgeRow}>
             <View style={[styles.referenceBadge, { backgroundColor: badgeBg }]}>
@@ -71,9 +75,15 @@ export function VOTMCard({
             <Text style={[styles.versionText, { color: subtextColor }]}>{version}</Text>
           </View>
           {textLoading ? (
-            <ActivityIndicator size="small" color={subtextColor} style={styles.loader} />
+            <ActivityIndicator size="small" color={subtextColor} style={[styles.loader, big && styles.bigLoader]} />
           ) : verseText ? (
-            <Text testID="votm-text" style={[styles.verseText, { color: textColor }]} numberOfLines={3}>{verseText}</Text>
+            <View style={big && styles.bigTextBox}>
+              <Text
+                testID="votm-text"
+                style={[styles.verseText, verseSize[windowClass], { color: textColor }]}
+                numberOfLines={3}
+              >{verseText}</Text>
+            </View>
           ) : (
             <Pressable testID="votm-retry" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onRetry(); }}>
               <Text style={[styles.verseText, { color: subtextColor }]}>Unable to load verse text. Tap to retry.</Text>
@@ -87,9 +97,9 @@ export function VOTMCard({
               </Text>
             </View>}
             {userMastered || userHasVerse ? (
-              <View style={[styles.statusBadge, { backgroundColor: userMastered ? (hasImage ? MonthlyCardColors.masteredImage : MonthlyCardColors.masteredPlain) : badgeBg }]}>
+              <View style={[styles.statusBadge, big && styles.bigBadge, { backgroundColor: userMastered ? (hasImage ? MonthlyCardColors.masteredImage : MonthlyCardColors.masteredPlain) : badgeBg }]}>
                 <IconSymbol name={userMastered ? 'checkmark.circle.fill' : 'book.fill'} size={userMastered ? 14 : 12} color={userMastered ? colors.success : accentColor} />
-                <Text style={[styles.statusText, { color: userMastered ? colors.success : accentColor }]}>
+                <Text style={[styles.statusText, big && styles.bigStatusText, { color: userMastered ? colors.success : accentColor }]}>
                   {userMastered ? 'Mastered' : 'In Library'}
                 </Text>
               </View>
@@ -98,12 +108,12 @@ export function VOTMCard({
                 testID="votm-add"
                 accessibilityRole="button"
                 accessibilityLabel="Add verse of the month to Library"
-                style={[styles.statusBadge, { backgroundColor: badgeBg }]}
+                style={[styles.statusBadge, big && styles.bigBadge, { backgroundColor: badgeBg }]}
                 hitSlop={8}
                 onPress={(event) => { event.stopPropagation(); onAddPress(); }}
               >
-                <IconSymbol name="plus" size={12} color={accentColor} />
-                <Text style={[styles.statusText, { color: accentColor }]}>Add to Library</Text>
+                <IconSymbol name="plus" size={big ? 13 : 12} color={accentColor} />
+                <Text style={[styles.statusText, big && styles.bigStatusText, { color: accentColor }]}>Add to Library</Text>
               </Pressable>
             )}
           </View>
@@ -114,9 +124,15 @@ export function VOTMCard({
 }
 
 const styles = StyleSheet.create({
+  fill: { flexGrow: 1 },
+  bigContent: { flexGrow: 1, paddingVertical: 22, paddingHorizontal: 24, gap: 14 },
+  bigTextBox: { flexGrow: 1, justifyContent: 'center' },
+  bigLoader: { flexGrow: 1 },
+  bigBadge: { paddingHorizontal: 14, paddingVertical: 8 },
+  bigStatusText: { fontSize: 14 },
   card: { borderRadius: Radius.xxl, overflow: 'hidden' },
   contentWrapper: { position: 'relative' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: MonthlyCardColors.overlay },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: MonthlyCardColors.overlay },
   content: { padding: 16, gap: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
@@ -133,4 +149,12 @@ const styles = StyleSheet.create({
   statText: { fontSize: 13, flexShrink: 1 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: Radius.lg },
   statusText: { fontSize: 13, fontWeight: '600' },
+});
+
+// The verse's size per window class (Main, Home-Portrait and Home-Outer boards); phones keep 16/24.
+const verseSize = StyleSheet.create({
+  phone: {},
+  outer: { fontSize: 17, lineHeight: 25 },
+  wide: { fontSize: 27, lineHeight: 38, maxWidth: 420 },
+  tall: { fontSize: 26, lineHeight: 36, maxWidth: 520 },
 });

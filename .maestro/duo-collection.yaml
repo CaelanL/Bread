@@ -1,0 +1,97 @@
+# A collection with study setup on a wide window. Run on the iPad, turned on its side:
+# `npm run sim -- flow duo-collection --device ipad` (Maestro can't tap the open iPhone Duo, see
+# docs/architecture/window-layouts.md; the iPad gets the same wide layout). reader-a opens My Verses:
+# the list sits beside Romans 8:28's setup; the sidebar button hides the list and the verse fills the
+# pane, then brings it back; Medium is picked, John 3:16 opens on its own Hard and Romans 8:28 again
+# is still on Medium; the whole passage opens from the bubble, ⤢ and the verse, and closes; Start opens the session.
+appId: com.caelanliu.biblemem
+name: duo-collection
+tags: [fresh-seed]
+---
+- runFlow: subflows/open-app.yaml
+- setOrientation: LANDSCAPE_LEFT
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2F(tabs)%2F(library)%2Fmy-verses
+- extendedWaitUntil:
+    visible:
+      id: sidebar-toggle
+    timeout: 30000
+- assertVisible: "Romans 8:28.*"
+- assertVisible:
+    id: reference-bubble
+    text: "Romans 8:28"
+- takeScreenshot: duo-collection-1-list
+- tapOn:
+    id: sidebar-toggle
+- waitForAnimationToEnd
+- assertNotVisible: "John 3:16.*"
+- assertVisible:
+    id: verse-expand
+- takeScreenshot: duo-collection-2-list-hidden
+# The whole passage, from the verse, ⤢ and the bubble.
+- tapOn:
+    id: verse-preview
+- extendedWaitUntil:
+    visible:
+      id: passage-close
+    timeout: 5000
+- assertVisible: ".*work together for good.*"
+- takeScreenshot: duo-collection-3-passage
+- tapOn:
+    id: passage-close
+- extendedWaitUntil:
+    notVisible:
+      id: passage-close
+    timeout: 5000
+- tapOn:
+    id: verse-expand
+- extendedWaitUntil:
+    visible:
+      id: passage-close
+    timeout: 5000
+- tapOn:
+    id: passage-close
+- extendedWaitUntil:
+    notVisible:
+      id: passage-close
+    timeout: 5000
+- tapOn:
+    id: reference-bubble
+- extendedWaitUntil:
+    visible:
+      id: passage-close
+    timeout: 5000
+- tapOn:
+    id: passage-close
+- extendedWaitUntil:
+    notVisible:
+      id: passage-close
+    timeout: 5000
+- tapOn:
+    id: difficulty-medium
+- assertVisible:
+    id: difficulty-medium
+    selected: true
+- tapOn:
+    id: sidebar-toggle
+- waitForAnimationToEnd
+- tapOn: "John 3:16.*"
+- assertVisible:
+    id: reference-bubble
+    text: "John 3:16"
+- assertVisible:
+    id: difficulty-hard
+    selected: true
+- takeScreenshot: duo-collection-4-john
+- tapOn: "Romans 8:28.*"
+- assertVisible:
+    id: reference-bubble
+    text: "Romans 8:28"
+- assertVisible:
+    id: difficulty-medium
+    selected: true
+- tapOn: "Start session.*"
+- extendedWaitUntil:
+    visible:
+      id: mic-button
+    timeout: 30000
+- takeScreenshot: duo-collection-5-session

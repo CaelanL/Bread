@@ -1,87 +1,40 @@
-import { groupProgressLabel } from '@/components/library/CollectionHeader';
-import { manageMember } from '@/components/shared/member-actions';
-import { InitialDot } from '@/components/shared/MemberDots';
-import { MemberRow, ROLE_LABEL } from '@/components/shared/MemberRow';
-import { MEMBER_STATE_LABEL, MemberStateSquare } from '@/components/shared/MemberState';
+import { GroupDetails, refreshSharedDetails } from '@/components/shared/GroupDetails';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
-import { Colors, Radius } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useSharedGrid } from '@/hooks/use-shared-grid';
-import { useAuth } from '@/lib/auth';
-import { sharedErrorMessage } from '@/lib/shared/invite-code';
-import {
-  groupProgress,
-  GRID_PITCH,
-  gridScrolls,
-  masteredByEveryoneCount,
-  whoIsWhere,
-  type GridColumn,
-  type MemberState,
-} from '@/lib/shared/progress';
-import { formatVerseReference } from '@/lib/storage';
-import { useAppStore, useCollection, useSharedCollection, useSynced, useVersesByCollection } from '@/lib/store';
-import { showErrorToast } from '@/lib/toast';
+import { useWindowClass } from '@/hooks/use-window-class';
+import { useAppStore, useCollection } from '@/lib/store';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-const LEGEND: MemberState[] = ['open', 'learning', 'mastered', 'engraved'];
-
 /**
- * Who's where: every member across, every verse down, one square per member per verse, then the
- * member list. Reads the grid the collection screen already fetches (`sharedProgress`).
+ * Who's where, pushed on a phone: `GroupDetails` under a large "Details" title. On a wide window the
+ * collection screen shows the same details in its right pane, so this page goes back to it.
  */
 export default function WhoIsWhereScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const colors = Colors[useColorScheme() ?? 'light'];
-  const { user } = useAuth();
   const collection = useCollection(id || '');
-  const shared = useSharedCollection(id || '');
   const sharedId = collection?.sharedId;
-  // "Not shared" and "not in your Library" wait for the server's library: a saved one may be out of date.
-  const synced = useSynced();
-  const isOwner = shared?.role === 'owner';
-  const ownVerses = useVersesByCollection(id || '');
-  const { sharedProgress, grid } = useSharedGrid(sharedId, ownVerses);
   const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [columnsWidth, setColumnsWidth] = useState(0);
   const barHeight = useTopBarHeight();
-
-  const view = useMemo(
-    () => (grid && sharedProgress ? whoIsWhere(grid, sharedProgress.members, user?.id) : null),
-    [grid, sharedProgress, user],
-  );
-  const progress = useMemo(
-    () => (grid ? { ratio: groupProgress(grid), masteredByEveryone: masteredByEveryoneCount(grid) } : null),
-    [grid],
-  );
+  const wide = useWindowClass() === 'wide';
 
   // A fresh read each visit; the collection screen under this one already synced the copy.
   const fetchedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!sharedId || fetchedFor.current === sharedId) return;
+    if (wide || !sharedId || fetchedFor.current === sharedId) return;
     fetchedFor.current = sharedId;
     void useAppStore.getState().fetchSharedProgress(sharedId);
-  }, [sharedId]);
+  }, [sharedId, wide]);
 
-  // The same as pulling on the collection screen: sync the copy, then the library and the grid at once.
   const onRefresh = async () => {
     setRefreshing(true);
-    if (sharedId) {
-      try {
-        await useAppStore.getState().openSharedCollection(sharedId, { pull: true });
-      } catch {
-        showErrorToast("Couldn't update this shared collection. Pull to refresh to try again.");
-      }
-    }
+    await refreshSharedDetails(sharedId, id || '');
     setRefreshing(false);
-  };
-
-  const retry = () => {
-    if (sharedId) void useAppStore.getState().fetchSharedProgress(sharedId);
   };
 
   const back = () => {
@@ -89,47 +42,12 @@ export default function WhoIsWhereScreen() {
     else router.replace(`/(tabs)/(library)/${id}`);
   };
 
-  const run = async (work: () => Promise<void>, fallback: string) => {
-    setBusy(true);
-    try {
-      await work();
-    } catch (e) {
-      showErrorToast(sharedErrorMessage(e, fallback));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const failed = sharedProgress?.failed ?? false;
-  const verseCount = view?.rows.length ?? 0;
-  const scrolls = gridScrolls(view?.columns.length ?? 0, columnsWidth);
-  const percent = progress ? Math.round(progress.ratio * 100) : 0;
-
-  // Fixed-pitch columns, yours first with the solid circle. Tiles don't press: the grid only shows.
-  const renderColumn = (column: GridColumn) => (
-    <View key={column.userId} style={styles.column}>
-      <View
-        accessible
-        accessibilityLabel={`${column.you ? 'You' : column.displayName}, ${ROLE_LABEL[column.role]}, ${column.masteredCount} of ${verseCount} mastered`}
-        style={styles.header}
-      >
-        <InitialDot name={column.displayName} you={column.you} />
-      </View>
-      {view?.rows.map((row, index) => (
-        <View key={row.key} style={styles.cell}>
-          <MemberStateSquare
-            state={column.states[index]}
-            label={`${column.you ? 'You' : column.displayName}, ${formatVerseReference(row.reference)}`}
-          />
-        </View>
-      ))}
-      {verseCount > 0 && (
-        <View style={[styles.cell, styles.footer]}>
-          <Text style={[styles.count, { color: colors.icon }]}>{column.masteredCount}</Text>
-        </View>
-      )}
-    </View>
-  );
+  // On a wide window (an unfold with this page open, or a link) the collection shows Details beside its list.
+  useEffect(() => {
+    if (wide) back();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide]);
+  if (wide) return null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -139,131 +57,14 @@ export default function WhoIsWhereScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={barHeight} />}
       >
         <LargeTitle title="Details" subtitle={collection?.name} />
-        {synced && !sharedId ? (
-          <Text style={[styles.message, { color: colors.icon }]}>
-            {collection ? "This collection isn't shared." : "This collection isn't in your Library."}
-          </Text>
-        ) : !view ? (
-          failed ? (
-            <Pressable testID="grid-retry" accessibilityRole="button" accessibilityLabel="Couldn't load details. Retry"
-              onPress={retry} style={styles.retry}>
-              <Text style={[styles.message, { color: colors.text }]}>Couldn&apos;t load details.</Text>
-              <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
-            </Pressable>
-          ) : (
-            <ActivityIndicator style={styles.loading} color={colors.icon} />
-          )
-        ) : (
-          <>
-            {failed && (
-              <Pressable testID="grid-retry" accessibilityRole="button" accessibilityLabel="Couldn't refresh details. Retry"
-                onPress={retry} style={styles.staleRetry}>
-                <Text style={[styles.secondary, { color: colors.icon }]}>Couldn&apos;t refresh.</Text>
-                <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
-              </Pressable>
-            )}
-
-            <View accessible accessibilityLabel={groupProgressLabel(progress, verseCount)} style={styles.progress}>
-              <Text style={[styles.figure, { color: colors.text }]}>
-                {percent}%
-              </Text>
-              <View style={[styles.track, { backgroundColor: colors.border }]}>
-                <View style={[styles.fill, { width: `${percent}%`, backgroundColor: colors.success }]} />
-              </View>
-              <Text style={[styles.secondary, { color: colors.icon }]}>
-                {progress?.masteredByEveryone ?? 0} of {verseCount} verse{verseCount === 1 ? '' : 's'} mastered by everyone
-              </Text>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={[styles.eyebrow, { color: colors.icon }]}>Verses</Text>
-              <View style={styles.grid}>
-                <View style={styles.references}>
-                  <View style={styles.header} />
-                  {view.rows.map((row) => (
-                    <View key={row.key} style={styles.cell}>
-                      <Text style={[styles.data, { color: colors.text }]} numberOfLines={1}>
-                        {formatVerseReference(row.reference)}
-                      </Text>
-                    </View>
-                  ))}
-                  {verseCount > 0 ? (
-                    <View style={[styles.cell, styles.footer]}>
-                      <Text style={[styles.secondary, { color: colors.icon }]}>Mastered</Text>
-                    </View>
-                  ) : (
-                    <Text style={[styles.secondary, { color: colors.icon }]}>No verses yet</Text>
-                  )}
-                </View>
-                <ScrollView
-                  horizontal
-                  scrollEnabled={scrolls}
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.columns}
-                  contentContainerStyle={styles.columnsContent}
-                  onLayout={(event) => setColumnsWidth(event.nativeEvent.layout.width - SIDE)}
-                >
-                  {view.columns.map(renderColumn)}
-                </ScrollView>
-              </View>
-
-              <View style={styles.legend}>
-                {LEGEND.map((state) => (
-                  <View key={state} style={styles.legendItem}>
-                    <MemberStateSquare state={state} />
-                    <Text style={[styles.secondary, { color: colors.icon }]}>{MEMBER_STATE_LABEL[state]}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={[styles.eyebrow, { color: colors.icon }]}>Members</Text>
-              {sharedProgress?.members.map((member, index) => {
-                const you = member.userId === user?.id;
-                return (
-                  <MemberRow key={member.userId} member={member} you={you} manageable={isOwner && !you}
-                    last={index === sharedProgress.members.length - 1}
-                    disabled={busy} onPress={() => sharedId && manageMember(sharedId, member, run)} />
-                );
-              })}
-            </View>
-          </>
-        )}
+        <GroupDetails id={id || ''} />
       </Animated.ScrollView>
       <TopBar onBack={back} />
     </View>
   );
 }
 
-const SIDE = 20;
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: SIDE, paddingBottom: 48, gap: 28 },
-  loading: { paddingVertical: 48 },
-  message: { fontSize: 15, lineHeight: 20, textAlign: 'center' },
-  retry: { alignItems: 'center', gap: 6, paddingVertical: 48 },
-  retryText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  staleRetry: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  progress: { gap: 10, marginTop: -8 },
-  figure: { fontSize: 28, lineHeight: 34, fontWeight: '600', fontVariant: ['tabular-nums'], letterSpacing: -0.3 },
-  section: { gap: 10 },
-  data: { fontSize: 15, lineHeight: 20 },
-  secondary: { fontSize: 13, lineHeight: 18 },
-  count: { fontSize: 13, lineHeight: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
-  track: { height: 4, borderRadius: Radius.full, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: Radius.full },
-  grid: { flexDirection: 'row' },
-  references: { width: 124, marginRight: 12 },
-  // The columns scroll to the screen's edge, so a column cut by scrolling is cut there.
-  columns: { marginRight: -SIDE },
-  columnsContent: { paddingRight: SIDE },
-  column: { width: GRID_PITCH, alignItems: 'center' },
-  header: { height: GRID_PITCH, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
-  cell: { height: GRID_PITCH, justifyContent: 'center' },
-  footer: { marginTop: 6 },
-  legend: { flexDirection: 'row', gap: 16 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  content: { paddingHorizontal: 20, paddingBottom: 48, gap: 28 },
 });

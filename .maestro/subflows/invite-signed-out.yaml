@@ -11,11 +11,16 @@ appId: com.caelanliu.biblemem
 - inputText: reader-b@example.test
 - tapOn: "Password"
 - inputText: password123 # local seed users only, see supabase/seed.sql
-# Here the simulator sometimes shows no software keyboard (the fields still fill), and Maestro's
-# hideKeyboard then fails; Sign In is reachable either way.
-- hideKeyboard:
-    optional: true
+# Not hideKeyboard: on iOS 27 a failed one empties the password field. A tap on blank space
+# above the form closes the keyboard (the form's first tap only does that).
+- tapOn:
+    point: "50%,15%"
 - tapOn: "Sign In"
+- extendedWaitUntil:
+    notVisible: "Sign In"
+    timeout: 30000
+# Its sheet hides the invite modal from Maestro until it's answered.
+- runFlow: skip-save-password.yaml
 - extendedWaitUntil:
     visible: ".* INVITED YOU"
     timeout: 30000

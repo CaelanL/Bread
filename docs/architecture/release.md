@@ -55,7 +55,10 @@ To pause shipping for a release, remove the three jobs after `get_ios_build` on 
 - `eas.json` has `appVersionSource: "remote"` and `autoIncrement` on the `production` profile, so EAS owns the build number. `ios.buildNumber` in `app.config.js` is ignored.
 - `version` in `app.config.js` is the marketing version, and it changes the fingerprint, so bumping it routes that merge to a build.
 - App Store Connect rejects an upload whose marketing version's train is closed, and the build number is used up anyway. Bump `version` before any native change that follows an approved release.
-- `eas.json` profiles: `development`, `simulator` (`npm run sim -- install`), `preview`, `production` (channel `production`).
+- `fingerprint.config.js` lists Expo's `balanced` preset skips plus `PackageJsonScriptsAll`, so a `package.json` scripts change ships over the air. A config's skips replace the preset's, so the preset's are listed too. `ExpoConfigVersions` is not skipped, which keeps the `version` rule above.
+- EAS builds use the `auto` image, which follows the SDK (`sdk-58`: Xcode 27.1). `eas.json` pins none.
+- The minimum iOS is 16.4 (from SDK 56). Phones below it keep the last build they installed and get no store or OTA update after it, so the server must keep answering that build (invariant 11).
+- `eas.json` profiles: `development`, `simulator` (`npm run sim -- install`), `preview`, `production` (channel `production`). `npm run sim -- install --local` builds the same simulator dev client with the Mac's Xcode (`expo run:ios`), at no EAS build cost.
 
 ## What lives outside the repo
 
@@ -87,3 +90,5 @@ network hash. Setting it in prod needs Caelan's yes; until then it uses a plain 
 - 2026-08-15 · `fingerprint` runtime version policy · Safest against a forgotten version bump, and the same hash drives the build-or-OTA routing.
 - 2026-08-15 · Base the workflow on the Expo deploy-to-production example, not a hand-rolled one · Less to get wrong.
 - 2026-08-15 · iOS only · Android isn't shipped.
+- 2026-11-22 · Skip `package.json` scripts in the fingerprint, keep `version` · A scripts-only merge (#76) forced a store build for nothing, and a forgotten version bump must still route to a store build.
+- 2026-11-22 · No `image` pin in `eas.json` · `auto` follows the SDK, and a pin would need changing at every SDK upgrade.

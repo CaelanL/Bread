@@ -11,7 +11,7 @@ function simShot(xcrunError) {
   try {
     mkdirSync(join(dir, 'bin'))
     cpSync(new URL('../scripts/sim.mjs', import.meta.url), join(dir, 'scripts/sim.mjs'))
-    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'scratch', kit: { sim: { name: 'scratch', scheme: 'scratch' } } }))
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'scratch', kit: { sim: { name: 'scratch', scheme: 'scratch', appId: 'scratch' } } }))
     writeFileSync(join(dir, 'bin/xcrun'), `#!/bin/sh\necho '${xcrunError}' >&2\nexit 1\n`)
     chmodSync(join(dir, 'bin/xcrun'), 0o755)
     const env = { ...process.env, HOME: dir, PATH: `${join(dir, 'bin')}:${process.env.PATH}` }

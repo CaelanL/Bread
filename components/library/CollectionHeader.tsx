@@ -7,7 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Emblem } from '@/lib/shared/progress';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ComponentProps, ReactNode, Ref } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, withRepeat, withSequence, withDelay } from 'react-native-reanimated';
 
 type IconName = ComponentProps<typeof IconSymbol>['name'];
@@ -41,6 +41,7 @@ export function CollectionHeader({
   subtitle,
   invite,
   progress,
+  wash = true,
   children,
 }: {
   symbol: IconName;
@@ -54,7 +55,10 @@ export function CollectionHeader({
   people?: { members: { name: string; you: boolean }[] | null; count: number; line: string; onPress: () => void };
   subtitle?: string;
   invite?: ReactNode;
-  progress?: { ratio: number | null; label: string; failed: boolean; onPress: () => void; onRetry: () => void };
+  /** `selected`: its Details show beside the list on a wide window. */
+  progress?: { ratio: number | null; label: string; failed: boolean; onPress: () => void; onRetry: () => void; selected?: boolean };
+  /** The accent wash from the top edge. Off where the page runs up to the tab rail, whose plain column would cut it off in a hard edge. */
+  wash?: boolean;
   /** The pills row. */
   children?: ReactNode;
 }) {
@@ -75,12 +79,14 @@ export function CollectionHeader({
 
   return (
     <View style={styles.header}>
-      <LinearGradient
-        pointerEvents="none"
-        colors={[withAlpha(accent, AccentAlpha.wash), withAlpha(accent, 0)]}
-        locations={[OVERSCROLL / (washTop + WASH), 1]}
-        style={[styles.wash, { top: -washTop, height: washTop + WASH }]}
-      />
+      {wash && (
+        <LinearGradient
+          pointerEvents="none"
+          colors={[withAlpha(accent, AccentAlpha.wash), withAlpha(accent, 0)]}
+          locations={[OVERSCROLL / (washTop + WASH), 1]}
+          style={[styles.wash, { top: -washTop, height: washTop + WASH }]}
+        />
+      )}
       {onIconPress ? (
         <Pressable accessibilityRole="button" accessibilityLabel={iconLabel} onPress={onIconPress} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
           {icon}
@@ -116,8 +122,13 @@ export function CollectionHeader({
           accessibilityRole="button"
           accessibilityLabel={progress.failed ? "Couldn't load group progress. Retry" : complete ? `Group progress. ${doneText}` : progress.label}
           accessibilityHint={progress.failed ? undefined : 'Shows details'}
+          accessibilityState={progress.selected === undefined ? undefined : { selected: progress.selected }}
           onPress={progress.failed ? progress.onRetry : progress.onPress}
-          style={({ pressed }) => [styles.progress, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.progress,
+            progress.selected && [styles.progressSelected, { backgroundColor: colors.primaryLight }],
+            pressed && styles.pressed,
+          ]}
         >
           <View style={[styles.track, { backgroundColor: colors.border }]}>
             {complete ? (
@@ -193,7 +204,7 @@ export function Sweep({ color }: { color: string }) {
 
 /** A small action under the header. `primary` is the screen's one accent action. */
 export function HeaderPill({ ref, icon, label, onPress, primary, testID, accessibilityLabel, hidden, disabled }: {
-  ref?: Ref<View>;
+  ref?: Ref<ViewInstance>;
   icon: IconName;
   label?: string;
   onPress: () => void;
@@ -238,6 +249,8 @@ const styles = StyleSheet.create({
   metaText: { flexShrink: 1, fontSize: 15, lineHeight: 20 },
   invite: { marginTop: 8 },
   progress: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  // Highlighted like a selected row, in the same place: the extra padding comes out of the margins.
+  progressSelected: { marginTop: 10, marginBottom: -4, paddingVertical: 8, marginHorizontal: -10, paddingHorizontal: 10, borderRadius: Radius.md },
   track: { flex: 1, height: 4, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
   sweep: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SWEEP_WIDTH },

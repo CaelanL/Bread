@@ -1,5 +1,5 @@
 import { EngravedIcon } from '@/components/ui/EngravedIcon';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useReviewNow } from '@/hooks/use-review-now';
 import type { VerseProgress } from '@/lib/storage';
@@ -8,7 +8,7 @@ import { ENGRAVED_THRESHOLD } from '@/lib/store/review-config';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { ProgressInfoButton, ProgressInfoModal } from './ProgressInfoModal';
+import { ProgressInfoButton, ProgressInfoModal } from '@/components/study/ProgressInfoModal';
 
 interface ProgressCardProps {
   progress: VerseProgress;
@@ -69,12 +69,10 @@ export function ProgressCard({ progress }: ProgressCardProps) {
         onClose={() => setInfoModalVisible(false)}
       />
 
-      <View style={[styles.card, { backgroundColor: colors.cardAlt, borderColor: colors.borderLight }]}>
-        {/* Best scores - Horizontal columns with dividers */}
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.scoresRow}>
           {(['easy', 'medium', 'hard'] as Difficulty[]).map((difficulty, index) => {
             const score = getScore(difficulty);
-            const isLast = index === 2;
             const isCompleted = progress[difficulty]?.completed === true;
 
             return (
@@ -82,7 +80,7 @@ export function ProgressCard({ progress }: ProgressCardProps) {
                 key={difficulty}
                 style={[
                   styles.scoreColumn,
-                  !isLast && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border },
+                  index < 2 && { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border },
                 ]}
               >
                 <Text style={[styles.scoreLabel, { color: colors.icon }]}>
@@ -90,13 +88,7 @@ export function ProgressCard({ progress }: ProgressCardProps) {
                 </Text>
                 <Text style={[
                   styles.scoreValue,
-                  {
-                    color: isCompleted
-                      ? colors.success
-                      : score !== null
-                        ? colors.warning
-                        : colors.icon
-                  },
+                  { color: isCompleted ? colors.success : score !== null ? colors.warning : colors.icon },
                   score === null && styles.scoreValueMuted,
                 ]}>
                   {score !== null ? `${score}%` : '—'}
@@ -107,20 +99,12 @@ export function ProgressCard({ progress }: ProgressCardProps) {
           })}
         </View>
 
-        {/* Engraved Progress Section */}
         <View style={[
           styles.engravedSection,
-          { borderTopColor: isEngraved ? 'rgba(245, 158, 11, 0.3)' : colors.borderLight },
+          { borderTopColor: colors.borderLight },
           isEngraved && styles.engravedSectionGlow,
         ]}>
-          {/* Header */}
           <View style={styles.engravedHeader}>
-            <Text style={[
-              styles.engravedLabel,
-              { color: isEngraved ? goldColor : colors.icon },
-            ]}>
-              {isEngraved ? 'Engraved' : state === 'due' ? 'Ready to Review' : 'Engraved Progress'}
-            </Text>
             {isEngraved ? (
               <EngravedIcon size={16} color={goldColor} />
             ) : state === 'locked' ? (
@@ -128,41 +112,37 @@ export function ProgressCard({ progress }: ProgressCardProps) {
             ) : (
               <MaterialCommunityIcons name="cross" size={16} color={colors.icon} />
             )}
+            <Text style={[styles.engravedLabel, { color: isEngraved ? goldColor : colors.text }]}>
+              {isEngraved ? 'Engraved' : state === 'due' ? 'Ready to Review' : 'Engraved Progress'}
+            </Text>
+            <View style={styles.spacer} />
+            <Text style={[styles.countText, { color: isEngraved ? goldColor : colors.text }]}>
+              {Math.min(passCount, ENGRAVED_THRESHOLD)} / {ENGRAVED_THRESHOLD}
+            </Text>
           </View>
 
-          {/* Numeric count */}
-          <Text style={[styles.countText, { color: isEngraved ? goldColor : colors.text }]}>
-            {Math.min(passCount, ENGRAVED_THRESHOLD)} / {ENGRAVED_THRESHOLD}
-          </Text>
-
-          {/* Progress bar */}
           <View style={[styles.barTrack, { backgroundColor: trackColor }]}>
             <View
               style={[
                 styles.barFill,
                 {
                   width: `${progressFraction * 100}%`,
-                  backgroundColor: isEngraved ? goldColor : state === 'due' ? goldColor : colors.icon,
+                  backgroundColor: isEngraved || state === 'due' ? goldColor : colors.icon,
                   opacity: state === 'locked' ? 0.5 : 1,
                 },
               ]}
             />
           </View>
 
-          {/* Status line */}
           {state === 'due' && !isEngraved && (
-            <View style={[styles.callout, { backgroundColor: `${goldColor}20` }]}>
+            <View style={[styles.callout, { backgroundColor: colors.primaryLight }]}>
               <Text style={[styles.calloutText, { color: goldColor }]}>Review now to advance</Text>
             </View>
           )}
           {state === 'locked' && e?.nextDueAt && (() => {
             const label = formatTimeUntilDue(new Date(e.nextDueAt).getTime() - now.getTime());
             const text = label === 'tmr' ? 'Unlocks tomorrow' : `Unlocks in ${label}`;
-            return (
-              <Text style={[styles.statusText, { color: colors.icon }]}>
-                {text}
-              </Text>
-            );
+            return <Text style={[styles.statusText, { color: colors.icon }]}>{text}</Text>;
           })()}
           {isEngraved && (
             <Text style={[styles.tagline, { color: goldColor }]}>
@@ -177,24 +157,25 @@ export function ProgressCard({ progress }: ProgressCardProps) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: 12,
+    gap: 10,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 2,
   },
   title: {
     fontSize: 17,
     fontWeight: '600',
   },
   card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
+    borderRadius: Radius.xxxl,
+    boxShadow: Shadows.card,
   },
   scoresRow: {
     flexDirection: 'row',
+    paddingVertical: 4,
   },
   scoreColumn: {
     flex: 1,
@@ -213,11 +194,12 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   engravedSection: {
-    borderTopWidth: 1,
-    paddingVertical: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    borderBottomLeftRadius: Radius.xxxl,
+    borderBottomRightRadius: Radius.xxxl,
   },
   engravedSectionGlow: {
     backgroundColor: 'rgba(245, 158, 11, 0.08)',
@@ -225,16 +207,17 @@ const styles = StyleSheet.create({
   engravedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   engravedLabel: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  },
+  spacer: {
+    flex: 1,
   },
   countText: {
-    fontSize: 22,
+    fontSize: 15,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
@@ -251,22 +234,20 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   callout: {
-    marginTop: 4,
+    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: Radius.full,
   },
   calloutText: {
     fontSize: 12,
     fontWeight: '600',
   },
   statusText: {
-    marginTop: 2,
     fontSize: 12,
   },
   tagline: {
-    textAlign: 'center',
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.3,
     fontStyle: 'italic',
   },

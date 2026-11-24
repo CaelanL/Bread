@@ -3,11 +3,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { COLLECTION_ICONS, COLLECTION_VECTOR_GLYPHS, isCollectionVectorSymbol } from '@/lib/collections/icons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { SFSymbol, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
-import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
+import { type ColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+type IconMapping = Record<SFSymbol, ComponentProps<typeof MaterialIcons>['name']>;
 type IconSymbolName = keyof typeof MAPPING | keyof typeof COLLECTION_VECTOR_GLYPHS;
 
 /**
@@ -58,11 +58,14 @@ const MAPPING = {
   'person.badge.plus': 'person-add-alt',
   'info.circle': 'info-outline',
   'square.grid.2x2': 'grid-view',
+  'list.bullet': 'format-list-bulleted',
   'person.2.slash': 'group-off',
   'arrow.up.arrow.down': 'swap-vert',
   'hand.thumbsdown': 'thumb-down-off-alt',
   'bubble.left.fill': 'chat-bubble',
   'photo': 'photo',
+  'sidebar.left': 'view-sidebar',
+  'arrow.up.left.and.arrow.down.right': 'open-in-full',
 } as IconMapping;
 
 /**
@@ -78,12 +81,13 @@ export function IconSymbol({
 }: {
   name: IconSymbolName;
   size?: number;
-  color: string | OpaqueColorValue;
+  color: ColorValue;
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
+  // Through style: the vector icons' `color` prop is typed narrower than RN's ColorValue.
   if (isCollectionVectorSymbol(name)) {
-    return <MaterialCommunityIcons color={color} size={size} name={COLLECTION_VECTOR_GLYPHS[name]} style={style} />;
+    return <MaterialCommunityIcons size={size} name={COLLECTION_VECTOR_GLYPHS[name]} style={[{ color }, style]} />;
   }
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+  return <MaterialIcons size={size} name={MAPPING[name]} style={[{ color }, style]} />;
 }

@@ -104,6 +104,18 @@ const localChecks = [
     },
   },
   {
+    // The Claude app sets NODE_USE_SYSTEM_CA=1. Node 24.7 on macOS 27 then crashes (SIGSEGV in LoadSystemCACertificates)
+    // in about 1 in 10 short runs, so `pod install` and other tools fail at random. sim.mjs drops it on its own.
+    name: 'Node skips the macOS keychain',
+    detect: () => (process.platform === 'darwin' && process.env.NODE_USE_SYSTEM_CA
+      ? 'NODE_USE_SYSTEM_CA is set, and Node can crash reading the keychain (node-*.ips in ~/Library/Logs/DiagnosticReports). Run commands with `env -u NODE_USE_SYSTEM_CA`.'
+      : ''),
+    fix: () => {
+      console.log('note: dropped NODE_USE_SYSTEM_CA for this run; your shell still has it, so prefix commands with `env -u NODE_USE_SYSTEM_CA`.');
+      delete process.env.NODE_USE_SYSTEM_CA;
+    },
+  },
+  {
     // Codex's sandbox doesn't let Postgres create shared memory. Nothing in this shell can fix that.
     name: 'This shell may run the database',
     detect: () => (/could not create shared memory segment/.test(process.env.KIT_DB_START_ERROR ?? '')

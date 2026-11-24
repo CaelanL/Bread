@@ -20,7 +20,7 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'bread-snapshot-store-'));
   const file = (name, body) => { writeFileSync(join(fixture, name), body); return join(fixture, name); };
   const native = {
-    'react-native': file('platform.cjs', 'exports.Platform = { OS: "android" }; exports.Alert = { alert() {} }; exports.Linking = {}; exports.InteractionManager = { runAfterInteractions() {} };'),
+    'react-native': file('platform.cjs', 'exports.Platform = { OS: "android" }; exports.Alert = { alert() {} }; exports.Linking = {}; globalThis.requestIdleCallback = () => 0;'),
     '@react-native-async-storage/async-storage': file('storage.cjs', `
       const values = new Map(); globalThis.storedValues = values;
       module.exports = {
@@ -453,7 +453,7 @@ test('the saved library: synced, snapshot read and write', async (t) => {
   await t.test('Home reloads when a session save lands while it is focused', async () => {
     const fixtureHooks = registerHooks({
       resolve(specifier, context, nextResolve) {
-        const stub = { react: 'react-stub.cjs', '@react-navigation/native': 'navigation-stub.cjs', '@/hooks/use-resume': 'resume-stub.cjs' }[specifier];
+        const stub = { react: 'react-stub.cjs', 'expo-router/react-navigation': 'navigation-stub.cjs', '@/hooks/use-resume': 'resume-stub.cjs' }[specifier];
         return stub && context.parentURL?.endsWith('use-home-reload.ts')
           ? { url: pathToFileURL(join(fixture, stub)).href, shortCircuit: true }
           : nextResolve(specifier, context);

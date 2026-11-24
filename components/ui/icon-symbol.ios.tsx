@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolView, SymbolViewProps, SymbolWeight } from 'expo-symbols';
+import { SFSymbol, SymbolView, SymbolWeight } from 'expo-symbols';
 import { Platform, StyleProp, View, ViewStyle } from 'react-native';
 
 import { COLLECTION_VECTOR_GLYPHS, collectionSymbolFallback, isCollectionVectorSymbol } from '@/lib/collections/icons';
@@ -14,7 +14,7 @@ export function IconSymbol({
   style,
   weight = 'regular',
 }: {
-  name: SymbolViewProps['name'] | keyof typeof COLLECTION_VECTOR_GLYPHS;
+  name: SFSymbol | keyof typeof COLLECTION_VECTOR_GLYPHS;
   size?: number;
   color: string;
   style?: StyleProp<ViewStyle>;

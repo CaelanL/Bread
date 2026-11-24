@@ -71,7 +71,7 @@ user's row fail. Tested in `supabase/tests/device-tokens.test.sql`.
 
 - `*_hour BETWEEN 1 AND 23`. 12 AM isn't allowed.
 - Cadence and weekday are coupled: `daily` with null, or `weekly` with a weekday.
-  `buildPatch` in `app/notifications.tsx` always sends the pair.
+  `buildPatch` always sends the pair.
 - `timezone` is `NOT NULL` with no default. A `UTC` default would mistime pushes until
   the first client update.
 
@@ -152,10 +152,11 @@ dismissed, Settings hasn't been visited, permission is `undetermined` or `denied
 user has a verse. Opening Settings clears it for good through `markSettingsVisited`. Keep
 the hook false until every gate resolves, or it flickers on cold start.
 
-## Settings page: `app/notifications.tsx`
+## Settings page
 
-Reached from the row in `app/(tabs)/settings.tsx`, which reads "On" only if `masterEnabled`
-is true and permission is granted or provisional. Edits stay in a local draft until Save,
+`NotificationSettings` on `/notifications` ([wide](../architecture/window-layouts.md#settings)).
+The Settings row reads "On" only if `masterEnabled`
+is true and permission is granted or provisional. Edits stay in a draft until Save,
 so a stray toggle never reaches the server.
 
 - **Seeding.** The draft starts from the loaded row, or `defaultPreferences`. If prefs arrive

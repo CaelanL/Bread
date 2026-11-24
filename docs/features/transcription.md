@@ -143,15 +143,15 @@ After `failed` or `closed`, `feedAudio` is a no-op.
 
 `processRecording` in `lib/api/recording.ts` POSTs multipart form data to
 `process-recording`: `audio` (the m4a), `durationMs`, `actualVerse`, streamed from
-the URI, never loaded into JS.
+the URI, by XHR: expo/fetch rejects `{ uri }` parts.
 
 The function streams heartbeat spaces before its JSON, and failures after its 200
 arrive as `{ error }` (`docs/architecture/edge-functions.md`), so the client checks
 that `transcription` is a string rather than trusting `response.ok`. Cleaning is
 off, so `cleanedTranscription` is the raw text.
 
-The function deletes its Soniox copies after each job. A Soniox 429 past the
-90 s deadline answers a "busy, try again" error.
+The function deletes its Soniox copies after each job. A 429 past the 90 s
+deadline answers "busy, try again".
 
 Silent audio gives an empty transcript and a score of 0. Unlike live failures, batch
 failures are shown: the error throws out of the seam, and `handleSubmit` shows

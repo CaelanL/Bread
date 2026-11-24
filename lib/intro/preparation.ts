@@ -1,8 +1,34 @@
-// lib-ok: Bounds native video preparation because expo-av may leave failed loads pending.
-import type { Video } from 'expo-av';
+// lib-ok: Bounds native video preparation, which may never settle, over the hidden expo-video player.
+import type { VideoPlayer, VideoPlayerStatus } from 'expo-video';
+
+type Source = number | { uri: string };
+
+export interface PreparableVideo {
+  unloadAsync(): Promise<unknown>;
+  loadAsync(source: Source, status: { shouldPlay: false; isMuted: boolean }): Promise<{ isLoaded: boolean }>;
+}
+
+// The hidden expo-video player behind preparation: loads paused, and is loaded once it is ready to play.
+export function preparableVideo(player: Pick<VideoPlayer, 'replaceAsync' | 'status' | 'muted' | 'addListener'>): PreparableVideo {
+  return {
+    unloadAsync: () => player.replaceAsync(null),
+    async loadAsync(source, { isMuted }) {
+      player.muted = isMuted;
+      await player.replaceAsync(source);
+      const status = await new Promise<VideoPlayerStatus>((resolve) => {
+        const settled = (value: VideoPlayerStatus) => value === 'readyToPlay' || value === 'error';
+        const subscription = player.addListener('statusChange', ({ status: value }) => {
+          if (settled(value)) { subscription.remove(); resolve(value); }
+        });
+        if (settled(player.status)) { subscription.remove(); resolve(player.status); }
+      });
+      return { isLoaded: status === 'readyToPlay' };
+    },
+  };
+}
 
 export async function prepareIntroVideo(
-  video: Pick<Video, 'unloadAsync' | 'loadAsync'>,
+  video: PreparableVideo,
   source: string | number,
   signal: AbortSignal,
   isCurrent: () => boolean,

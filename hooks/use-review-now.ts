@@ -19,7 +19,7 @@
  *     screen). This avoids spawning one timer per FlatList row.
  */
 
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router/react-navigation';
 import { createContext, createElement, useCallback, useContext, useState, type ReactNode } from 'react';
 
 const TICK_MS = 60_000;

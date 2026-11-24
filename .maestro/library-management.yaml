@@ -120,8 +120,10 @@ tags: [fresh-seed]
 - tapOn: ".*Verses for patience and encouragement, 1 verse.*"
 - assertVisible: ".*John 3:16 · ESV.*Review now.*"
 - takeScreenshot: library-7-copied-verse
+- waitForAnimationToEnd
 - swipe:
-    from: ".*John 3:16 · ESV.*"
+    from:
+      id: "verse-row-John 3:16"
     direction: LEFT
 - takeScreenshot: library-8-verse-swipe-light
 - tapOn:
@@ -140,8 +142,10 @@ tags: [fresh-seed]
     direction: LEFT
 - takeScreenshot: library-9-collection-swipe-dark
 - tapOn: ".*Verses for patience and encouragement, 1 verse.*"
+- waitForAnimationToEnd
 - swipe:
-    from: ".*John 3:16 · ESV.*"
+    from:
+      id: "verse-row-John 3:16"
     direction: LEFT
 - takeScreenshot: library-10-verse-swipe-dark
 - tapOn:

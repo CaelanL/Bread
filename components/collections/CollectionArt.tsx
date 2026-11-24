@@ -21,7 +21,7 @@ const paletteByIcon: Partial<Record<CollectionIconKey, keyof typeof CollectionAr
 
 export function CollectionArt({ icon, size = 'tile' }: {
   icon: CollectionIconKey;
-  size?: 'tile' | 'thumbnail' | 'hero';
+  size?: 'tile' | 'thumbnail' | 'hero' | 'banner';
 }) {
   const scheme = useColorScheme() ?? 'light';
   const palette = CollectionArtColors[scheme][paletteByIcon[icon] ?? 'gold'];
@@ -54,6 +54,7 @@ const styles = StyleSheet.create({
   },
   tile: { height: 72 },
   thumbnail: { width: 76, height: 76 },
+  banner: { height: 100 },
   hero: { height: 136, borderRadius: Radius.xl },
   outerOrbit: {
     position: 'absolute',

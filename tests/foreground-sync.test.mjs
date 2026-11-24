@@ -11,7 +11,7 @@ test('a quick return registers a permission just granted in iOS Settings, withou
   const fixture = mkdtempSync(join(tmpdir(), 'bread-foreground-'));
   const file = (name, body) => { writeFileSync(join(fixture, name), body); return join(fixture, name); };
   const native = {
-    'react-native': file('platform.cjs', 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.Linking = {}; exports.InteractionManager = { runAfterInteractions() {} };'),
+    'react-native': file('platform.cjs', 'exports.Platform = { OS: "ios" }; exports.Alert = { alert() {} }; exports.Linking = {}; globalThis.requestIdleCallback = () => 0;'),
     '@react-native-async-storage/async-storage': file('storage.cjs', `
       const values = new Map();
       module.exports = {

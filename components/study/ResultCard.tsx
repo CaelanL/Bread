@@ -3,13 +3,10 @@ import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { isPerfect, type AlignmentWord } from '@/lib/study-chunks';
 import React, { useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated';
 import { AlignmentHelpModal } from './AlignmentHelpModal';
 import { GradingReportSheet } from './GradingReportSheet';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CARD_MAX_HEIGHT = SCREEN_HEIGHT * 0.35;
 
 // Inner-scroll budget. RN's `maxHeight` on a parent View doesn't
 // propagate as a height constraint to flex children — using flex
@@ -162,6 +159,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
   const isDark = colorScheme === 'dark';
   const [showHelp, setShowHelp] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const cardMaxHeight = useWindowDimensions().height * 0.35;
 
   const status = getStatus(score);
   const statusConfig = STATUS_CONFIG[status];
@@ -177,7 +175,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
         {
           backgroundColor: statusColors.bg,
           borderColor: statusColors.border,
-          maxHeight: CARD_MAX_HEIGHT,
+          maxHeight: cardMaxHeight,
         },
       ]}
       entering={customEntering}
@@ -243,7 +241,7 @@ export function ResultCard({ score, alignment, transcription, isRetry = false, i
         <ScrollView
           style={[
             styles.scrollContent,
-            { maxHeight: CARD_MAX_HEIGHT - (isRetry || isPeeked ? CHROME_WITH_RETRY : CHROME_NO_RETRY) },
+            { maxHeight: cardMaxHeight - (isRetry || isPeeked ? CHROME_WITH_RETRY : CHROME_NO_RETRY) },
           ]}
           contentContainerStyle={styles.scrollInner}
         >

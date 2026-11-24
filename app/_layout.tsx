@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { SplashScreen, Stack, router, usePathname, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -104,7 +104,9 @@ function RootLayoutNav() {
       // Not authenticated and not on auth screen - redirect to sign in
       router.replace('/(auth)/sign-in');
     } else if (isAuthenticated && inAuthGroup) {
-      // Authenticated but on auth screen - redirect to main app
+      // Authenticated but on auth screen - redirect to main app. The reminders card waits until the
+      // invite effect below has looked for a kept invite: presented first, it blocks the invite sheet.
+      useUxFlagsStore.getState().setInviteOpen(true);
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isLoading, segments, pathname, navigationState?.key]);

@@ -1,6 +1,6 @@
 # Navigation and Routing
 
-The app uses [Expo Router 6](https://docs.expo.dev/router/) with
+The app uses [Expo Router 58](https://docs.expo.dev/router/) with
 file-based navigation. Each file in `app/` becomes a route; folders
 become nested navigators (Stack or Tabs). Auth-related routes,
 authenticated tabs, and modals are organized into route groups.
@@ -18,7 +18,7 @@ app/
 ├── (tabs)/                    ← Bottom tab navigator
 │   ├── _layout.tsx
 │   ├── (home)/                        ← Nested Stack inside the Home tab
-│   │   ├── _layout.tsx                ← `initialRouteName: 'home'`
+│   │   ├── _layout.tsx                ← `anchor: 'home'`
 │   │   ├── home.tsx                   ← Home
 │   │   ├── explore.tsx                ← Curated catalog, pushed from Explore collections on Home
 │   │   └── insights.tsx               ← Pushed from Home InsightsCard
@@ -58,7 +58,7 @@ Home and Library each use a nested Stack, so pushing a screen keeps the
 tab bar visible, animates in, and supports the back swipe. Explore
 (`/explore`) and Insights (`/insights`) are Home stack screens. Their
 "Back to Home" header button calls `router.back()`. The Home stack's
-`initialRouteName` is `home`, so a deep link to `/explore` still has
+`anchor` is `home`, so a deep link to `/explore` still has
 Home under it. A tab keeps its stack when you switch away and back.
 `npm run sim -- flow home-stack` checks this and that a double tap on a
 curated card opens one introduction. Maestro cannot start the iOS edge
@@ -112,7 +112,7 @@ dropping its blur, Reanimated view or autoFocus, and keeping it mounted changed 
 closes the share modal and Join with code with the X and reopens Join with code.
 
 `app/notifications.tsx`, `app/feedback.tsx` and `app/reset-password.tsx` are plain root
-Stack screens.
+Stack screens; on a wide window the first two go to their [Settings pane](window-layouts.md#settings).
 
 Home also presents the [intro player](../features/home.md#encouragement-video) through a React Native modal; it adds no route or tab.
 
@@ -165,6 +165,9 @@ authenticated with a navigator key, an effect after the gate replaces to the Lib
 `dev-sign-in?next=/join/<code>` does the same. `Q1ExplainerCard` waits until `Motion.exitMs`
 after `JoinInvite` unmounts (`useUxFlagsStore.inviteOpen`): an RN `Modal` presented over the
 modal route, or as it closes, never shows and leaves an invisible layer that takes every tap.
+The gate's sign-in redirect sets the hold too, so the card can't present between sign-in and that
+effect's read: a card already up (or closing) blocks the join modal's presentation, and the route
+sits on `/join/<code>` with nothing on screen.
 
 `reset-password` is whitelisted because the user reaches it from an
 email link before they have a session. `dev-sign-in` is whitelisted
@@ -206,6 +209,12 @@ on Vercel): its `/.well-known/apple-app-site-association` claims only `/bread/jo
 sees when the app didn't open: Open in Bread (`com.biblemem://join/<code>`), Get Bread, then the code. iOS verifies the claim
 through Apple's CDN when Bread installs, so it works only in a store or EAS build, never before
 sendlabs.dev serves the file.
+
+On iOS, Bread runs under the UIKit scene lifecycle, which the iOS 27 SDK requires (Expo's
+default from SDK 58: prebuild writes a `SceneDelegate` and the scene manifest). UIKit then hands
+links to the scene delegate, not the app delegate. Expo's `ExpoAppSceneDelegate`
+(`expo/ios/Expo/`) forwards them to `RCTLinkingManager`, and rebuilds a cold start's launch
+options so `Linking.getInitialURL()` still returns its link. JS didn't change.
 
 The handler extracts tokens from the URL and calls
 `supabase.auth.setSession(...)`. Auth state change then drives the
@@ -253,6 +262,7 @@ Verses): exactly one opens its `/share/<id>` over the Library, several open the 
   feedback on iOS only. The Settings tab shows a badge from
   `useSettingsBadge`.
 - Active tint: `Colors[scheme].tint` (bronze gold).
+- Wider windows (iPhone Duo, iPad) swap the bar for a rail or a glass pill: [window layouts](window-layouts.md#navigation).
 - Navigator headers are off (`headerShown: false`). Screens draw their own top
   ([theming](theming-and-ui.md#screen-tops)): `TopBar` over a scroll view, or `AppHeader`
   (`components/app-header.tsx`) where it stays put.
@@ -270,6 +280,12 @@ Verses): exactly one opens its `/share/<id>` over the Library, several open the 
   dark-mode-only and unauthenticated.
 - **Dynamic route**: file name with `[param].tsx`. Read with
   `useLocalSearchParams()`.
+- **Navigation imports** come from `expo-router/react-navigation`
+  (`useFocusEffect`, `useIsFocused`, themes, `PlatformPressable`) and
+  `expo-router/js-tabs` (`Tabs`, `BottomTabBarButtonProps`,
+  `useBottomTabBarHeight`). Expo Router bundles React Navigation, so the
+  app has no direct `@react-navigation/*` dependency; expo-doctor warns
+  if one comes back.
 
 ## Invariants
 

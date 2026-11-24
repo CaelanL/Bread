@@ -37,10 +37,12 @@ interface RecordingBarProps {
   onStart: (source: PressSource) => void;
   onCancel: () => void;
   onSubmit: () => void;
+  /** A wide window: the mic sits low right and the pill grows to its left. */
+  lowRight?: boolean;
 }
 
 export function RecordingBar({
-  phase, showMic, waveformLevels, onStart, onCancel, onSubmit,
+  phase, showMic, waveformLevels, onStart, onCancel, onSubmit, lowRight = false,
 }: RecordingBarProps) {
   const { width } = useWindowDimensions();
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -98,8 +100,10 @@ export function RecordingBar({
       { scaleY: interpolate(progress.value, [0, 1], [1, PILL_HEIGHT / SIZE]) },
     ],
   }));
+  // Low right, the bar shifts so its right end stays where the mic is while the pill opens leftwards.
   const visibility = useAnimatedStyle(() => ({
     opacity: showMic || starting ? 1 : progress.value,
+    transform: [{ translateX: lowRight ? travel * (1 - progress.value) : 0 }],
   }));
   const activeFade = useAnimatedStyle(() => ({ opacity: progress.value }));
   const micFade = useAnimatedStyle(() => ({ opacity: 1 - progress.value }));
@@ -117,7 +121,7 @@ export function RecordingBar({
   const fill = { backgroundColor: colors.recordingControl };
 
   return (
-    <Animated.View pointerEvents="box-none" style={[styles.bar, { width: barWidth }, visibility]}>
+    <Animated.View pointerEvents="box-none" style={[styles.bar, lowRight && styles.lowRight, { width: barWidth }, visibility]}>
       <Animated.View pointerEvents="none" style={[styles.round, styles.micSurface, fill, shadowFade]} />
       {reducedMotion ? (
         <Animated.View pointerEvents="none" style={[styles.pill, fill, activeFade]} />
@@ -190,7 +194,21 @@ export function RecordingBar({
           importantForAccessibility={canStart || starting ? 'auto' : 'no-hide-descendants'}
           style={[styles.round, micFade]}
         >
-          {starting ? (
+          {/* The Pressable and its icon stay mounted under the ring: unmounting the touched view mid-touch loses the next tap (RN 0.88). */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start recording"
+            accessibilityElementsHidden={starting}
+            importantForAccessibility={starting ? 'no-hide-descendants' : 'auto'}
+            testID="mic-button"
+            onPressIn={() => onStart('pressIn')}
+            onPress={() => onStart('press')}
+            disabled={!canStart}
+            style={({ pressed }) => [styles.mic, pressed && canStart && styles.pressed]}
+          >
+            <IconSymbol name="mic.fill" size={28} color={colors.white} />
+          </Pressable>
+          {starting && (
             <View
               accessible
               accessibilityRole="progressbar"
@@ -210,20 +228,7 @@ export function RecordingBar({
                   ringStyle,
                 ]}
               />
-              <IconSymbol name="mic.fill" size={28} color={colors.white} />
             </View>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Start recording"
-              testID="mic-button"
-              onPressIn={() => onStart('pressIn')}
-              onPress={() => onStart('press')}
-              disabled={!canStart}
-              style={({ pressed }) => [styles.mic, pressed && styles.pressed]}
-            >
-              <IconSymbol name="mic.fill" size={28} color={colors.white} />
-            </Pressable>
           )}
         </Animated.View>
       )}
@@ -240,6 +245,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  lowRight: { bottom: 40, right: 24, alignSelf: 'auto' },
   square: { position: 'absolute', width: SIZE, height: SIZE },
   round: {
     position: 'absolute',
@@ -265,7 +271,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   actions: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

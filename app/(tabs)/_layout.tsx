@@ -1,12 +1,14 @@
-import { Tabs } from 'expo-router';
+import { Tabs } from 'expo-router/js-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { RailContext, TabPill, TabRail } from '@/components/ui/TabRail';
 import { Colors, withAlpha } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { useSettingsBadge } from '@/lib/notifications';
 
 export default function TabLayout() {
@@ -15,10 +17,19 @@ export default function TabLayout() {
   // card but haven't yet enabled notifications.
   const settingsBadge = useSettingsBadge();
   const background = Colors[colorScheme ?? 'light'].background;
+  // Phones keep today's fade tab bar. Wider windows get the right-edge rail, or the bottom glass pill upright.
+  const windowClass = useWindowClass();
+  const rail = windowClass === 'wide' || windowClass === 'outer';
+  const iconSize = (size: number) => (windowClass === 'phone' ? 28 : size);
 
   return (
+    <RailContext.Provider value={rail}>
     <Tabs
+      tabBar={windowClass === 'phone'
+        ? undefined
+        : (props) => rail ? <TabRail {...props} compact={windowClass === 'outer'} /> : <TabPill {...props} />}
       screenOptions={{
+        tabBarPosition: rail ? 'right' : 'bottom',
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
@@ -39,7 +50,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarButtonTestID: 'tab-home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => <IconSymbol size={iconSize(size)} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -47,7 +58,7 @@ export default function TabLayout() {
         options={{
           title: 'Library',
           tabBarButtonTestID: 'tab-library',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="books.vertical.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => <IconSymbol size={iconSize(size)} name="books.vertical.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -55,11 +66,12 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarButtonTestID: 'tab-settings',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => <IconSymbol size={iconSize(size)} name="gearshape.fill" color={color} />,
           tabBarBadge: settingsBadge ? '1' : undefined,
         }}
       />
     </Tabs>
+    </RailContext.Provider>
   );
 }
 

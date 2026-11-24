@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Bread",
     slug: "biblemem",
-    version: "2.1.0",
+    version: "2.2.0",
     // OTA updates (EAS Update). fingerprint policy: a hash of the native
     // project decides update compatibility, so JS-only merges ship OTA
     // and native changes force a store build. See
@@ -17,7 +17,6 @@ export default {
     icon: "./assets/images/icon.png",
     scheme: "com.biblemem",
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.caelanliu.biblemem",
@@ -38,7 +37,6 @@ export default {
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
-      edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
     },
     web: {
@@ -84,8 +82,12 @@ export default {
           // UIBackgroundModes key — an App Store review flag we don't
           // need (no background recording).
           enableBackgroundAudio: false,
-          microphonePermission:
-            "Bread needs microphone access to record your verse recitations for accuracy scoring.",
+          // The plugin writes NSMicrophoneUsageDescription from here, over ios.infoPlist; it
+          // ignores `microphonePermission`, which left builds before 2.2.0 with its generic default.
+          iosConfig: {
+            microphoneUsageDescription:
+              "Bread needs microphone access to record your verse recitations for accuracy scoring.",
+          },
         },
       ],
     ],
