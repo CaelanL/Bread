@@ -14,7 +14,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { RailContext, useRailActions } from '@/components/ui/TabRail';
 import { TopBarButton, useMenuAnchor } from '@/components/ui/TopBar';
-import { Colors, Motion, Radius } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStudySetup, type StudySetup } from '@/hooks/use-study-setup';
 import { hiddenLineWidths, verseFontSize } from '@/lib/layout';
@@ -23,21 +23,8 @@ import { formatVerseReference } from '@/lib/storage';
 import { useIsFocused } from 'expo-router/react-navigation';
 import { useContext, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewInstance } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
-
-const paneEase = Easing.bezierFn(...Motion.easing);
-
-/**
- * How far a sidebar has moved at progress `t` (linear in time: 0 it shows, 1 it's hidden), on Bread's
- * curve. Under Reduce Motion it jumps halfway, while both layouts are faded out. The study session's
- * chunk sidebar; a collection's list follows the `Collapse` knobs instead.
- */
-export function paneShift(t: number, reduced: boolean) {
-  'worklet';
-  if (reduced) return t < 0.5 ? 0 : 1;
-  return paneEase(t);
-}
 
 /** The tinted verse pane's share of the width with the list hidden (444 of 875 on the boards). */
 const VERSE_PANE_SHARE = 0.51;

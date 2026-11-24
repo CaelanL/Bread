@@ -3,7 +3,8 @@ import { Easing } from 'react-native-reanimated';
 
 /**
  * Every knob of a collection's collapse on a wide window (the verse list sliding out, the setup
- * widening and the verse travelling into its pane), in one place for tuning. One timeline runs
+ * widening and the verse travelling into its pane), in one place for tuning. The session's chunk
+ * sidebar rides the same slide and fade windows. One timeline runs
  * linearly from the tap (0) to the end (1) over `durationMs`; windows are [start, end] shares of it,
  * so changing the duration keeps their proportions. Reopening plays the same timeline backwards.
  */

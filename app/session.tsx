@@ -6,10 +6,10 @@ import { ResultCard, getScoreColor } from '@/components/study/ResultCard';
 import { RecordingBar } from '@/components/study/RecordingBar';
 import { SessionFinish } from '@/components/study/SessionFinish';
 import { CHUNK_SIDEBAR_WIDTH, ChunkSidebar } from '@/components/study/ChunkSidebar';
-import { paneShift } from '@/components/study/setup/StudySetupPane';
+import { Collapse, listShift } from '@/components/study/setup/collapse-motion';
 import { GlassButton } from '@/components/ui/Glass';
 import { railFrame } from '@/components/ui/TabRail';
-import { Colors, Motion } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSessionDemo } from '@/hooks/use-session-demo';
 import { useStudySession } from '@/hooks/use-study-session';
@@ -79,10 +79,10 @@ import { scheduleOnRN } from 'react-native-worklets';
 const MAX_RECORDING_MS = 300_000;
 
 // A wide window (the Recite and Result boards): the cards' band between the title and the controls,
-// their widest, and the chunk pages' fade while the chunk sidebar slides (out by 120 ms, back from 200 ms,
-// so the pages change width unseen).
+// their widest, and the chunk pages' fade while the chunk sidebar slides (the `Collapse` windows, so the
+// pages change width unseen).
 const WIDE_CARDS = { top: 80, bottom: 130, side: 32, max: 620 };
-const PAGE_FADE = [0, 120 / Motion.paneMs, 200 / Motion.paneMs, 1];
+const PAGE_FADE = [...Collapse.setupFadeOut, ...Collapse.paneFadeIn];
 /** The chunk sidebar's button: inset from the top and left, and the gap under it. */
 const SIDEBAR_EDGE = 20;
 const SIDEBAR_BUTTON = 44;
@@ -203,22 +203,22 @@ function StudySession() {
   const toggleChunks = () => {
     const next = !chunksHidden;
     setChunksHidden(next);
-    collapse.set(withTiming(next ? 1 : 0, { duration: Motion.paneMs, easing: Easing.linear }));
+    collapse.set(withTiming(next ? 1 : 0, { duration: Collapse.durationMs, easing: Easing.linear }));
   };
   useAnimatedReaction(() => collapse.value > 0.5, (past, before) => {
     if (before !== null && past !== before) scheduleOnRN(setPagesWide, past);
   });
   const sidebarStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -(CHUNK_SIDEBAR_WIDTH + 1) * paneShift(collapse.value, reduced) }],
+    transform: [{ translateX: -(CHUNK_SIDEBAR_WIDTH + 1) * listShift(collapse.value, reduced) }],
   }));
   const paneStyle = useAnimatedStyle(() => ({
-    left: hasSidebar ? CHUNK_SIDEBAR_WIDTH * (1 - paneShift(collapse.value, reduced)) : 0,
+    left: hasSidebar ? CHUNK_SIDEBAR_WIDTH * (1 - listShift(collapse.value, reduced)) : 0,
   }));
   const pagesFade = useAnimatedStyle(() => ({
     opacity: interpolate(chunksHidden ? collapse.value : 1 - collapse.value, PAGE_FADE, [1, 0, 0, 1], 'clamp'),
   }));
   const headerFade = useAnimatedStyle(() => ({
-    opacity: hasSidebar ? paneShift(collapse.value, reduced) : 1,
+    opacity: hasSidebar ? listShift(collapse.value, reduced) : 1,
   }));
   // Meter ballistics state: fast attack, slow release (kills ripple)
   const smoothedLevelRef = useRef(0);
