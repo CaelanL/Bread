@@ -24,7 +24,7 @@ nothing persists until the session saves.
 
 ## Setup screen
 
-`StudySetupScreen` reads the verse from the store with `useVerse`, so it opens
+`useStudySetup` reads the verse from the store with `useVerse`, so it opens
 without a fetch. Verse text loads through `getVerseText`, keyed on
 `verse?.id`: saving prefs swaps the verse object and would flash the loader.
 

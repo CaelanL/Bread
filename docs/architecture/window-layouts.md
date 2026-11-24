@@ -71,6 +71,36 @@ The bubble, ⤢ and the preview text open `PassageCard`, the whole passage with 
 grows out of whatever was tapped (measured with `measureInWindow`) over `Motion.paneMs` on
 `Motion.easing` while the page blurs, and shrinks back into it on close; Reduce Motion fades it.
 
+## Collection and study setup
+
+On `wide`, `app/(tabs)/(library)/[id].tsx` puts the verse list (340 pt) on the left and the selected
+verse's setup on the right; other classes get the phone screen. `CollectionList`
+(`components/library/`) is the list for both: on a phone it's the whole screen with its `TopBar`; on
+wide it has no bar, its share and ⋯ are glass buttons at the list's top right, a row tap selects
+(highlighted in `primaryLight`) instead of opening setup, and a row stays selected while there are
+rows (the first in the current sort, again if the selected one leaves). Loading and an empty
+collection show the list full width. Search fills the list only (`SearchTakeover` `area`).
+
+- Glass back and sidebar buttons (`sidebar-toggle`) sit 16 pt from the top left and never move.
+- `StudySetupPane` (`components/study/setup/`) holds one verse's setup (`useStudySetup`, keyed by
+  verse, so each verse restores its own saved difficulty and chunk size). Reset Progress is the ⋯ in
+  the rail.
+- List showing: `SetupColumn`, the phone's column (3 preview lines, 32 pt sides, Start docked), with
+  the reference bubble centred over it.
+- List hidden: the verse in a `pane`-tinted pane (51% of the width, `paneBorder` hairline) in the study
+  `VerseCard` font at `verseFontSize`, cut to the lines that fit, tapping it opens the passage; ⤢ as a
+  glass button at the pane's top right; on the right, Your Progress, Difficulty, Verses per chunk and
+  Start at the bottom. The bubble sits centred over the verse pane, narrowed to clear the buttons.
+- Hide verses: `hiddenLineWidths` bronze lines (`primaryLight`) and a Show verse button instead of
+  the text; rows drop their text line as on a phone.
+- The collapse is one shared value running linearly over `Motion.paneMs`; `paneShift` puts it on
+  `Motion.easing` for the moving parts (the list slides out as one piece, the pane's left edge and
+  the bubble follow). The list-open layout fades out over the first 120 ms and the hidden one fades
+  in from 200 ms, rising 8 pt; only the resting layout stays mounted. Reduce Motion: everything fades
+  and the panes jump halfway. Selection and the collapse last while the screen is open, folds included.
+- Setup opened straight on wide (a link, Review now) is the list-hidden layout with back only.
+- The passage card is at most 560 wide (22/34 text) and the chunk sheet at most 280 wide on wide.
+
 ## Navigation
 
 `app/(tabs)/_layout.tsx` picks the tab bar by class; phones keep today's fade bar untouched.
@@ -125,6 +155,14 @@ the class themselves.
   `seed-32-2` (locked) and `seed-32-4` (five verses) as reader-c. Taps: `flow setup-iphone`; Hide
   verses: `flow hide-verses`.
 
+- Collection on wide, on the open Duo (shots; no taps there): `shot "/(tabs)/(library)/my-verses"
+  --device duo --display inner` after `set_posture open` (list showing), and with `?collapsed=1` or
+  `?collapsed=<verse id>` (dev builds only: list hidden, that verse selected): `seed-psalms?collapsed=1`
+  (long), `my-verses?collapsed=seed-john-3-16` (due), and as reader-c `seed-psalm-23?collapsed=seed-35-1`
+  (short, locked) and `seed-35-2` (engraved), each also `--dark`; Hide verses on for the lines. Setup
+  straight: `/(tabs)/(library)/setup/seed-john-3-16`. Taps: `flow duo-collection --device ipad`
+  (iPad Pro 13-inch (M5), turned on its side by the flow).
+
 ## Decisions
 
 - 2026-11-23 · Classes use width and height, not width alone · the outer display gets the rail and the upright inner display doesn't, at nearly the same width.
@@ -139,3 +177,9 @@ the class themselves.
 - 2026-11-23 · No Due for review card on Home · Caelan (O3); Insights takes its space.
 - 2026-11-23 · Home's Insights card on the Duo shows streak, mastered and in progress, not Time studied · time studied is a server read only Insights makes; Home keeps today's data.
 - 2026-11-23 · Explore tiles use a 100 pt banner upright too (board: 110) · one banner size for both.
+- 2026-11-23 · On wide, the collection's share and ⋯ sit as glass at the list's top right, and the rail's ⋯ is the verse's Reset Progress · the boards' rail ⋯ is setup's; collection actions belong to the list and hide with it.
+- 2026-11-23 · The verse pane takes 51% of the width, not a fixed 444 pt · the boards' share, so an iPad's wider window keeps the proportions.
+- 2026-11-23 · Beside the list, setup is the phone's column (preview, Difficulty, Your Progress, chunks, docked Start) · the boards' list-open column predates the restyle; one column for both.
+- 2026-11-23 · The verse is cut to the lines that fit its pane, not the boards' 420 pt · the same rule on the Duo and a taller iPad.
+- 2026-11-23 · Hide verses lines and Show verse use `primaryLight` and `tint` (boards: 0.16 bronze and #7d5c2e) · existing tokens with a dark mode.
+- 2026-11-23 · Dev builds take `collapsed=1|<verse id>` on a collection · shots of each board state without taps; one param, since the dev sign-in link loses a second.
