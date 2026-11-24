@@ -1,14 +1,16 @@
 import { CollectionList, useBackToLibrary } from '@/components/library/CollectionList';
 import { GroupDetailsPane } from '@/components/shared/GroupDetailsPane';
-import { GLASS_EDGE, paneShift, StudySetupPane } from '@/components/study/setup/StudySetupPane';
+import { Collapse, listShift } from '@/components/study/setup/collapse-motion';
+import { GLASS_EDGE, StudySetupPane } from '@/components/study/setup/StudySetupPane';
 import { GlassButton } from '@/components/ui/Glass';
-import { Colors, Motion } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useWindowClass } from '@/hooks/use-window-class';
+import { canDevSignIn } from '@/lib/auth/dev-sign-in';
 import { hasOtherMembers } from '@/lib/shared/progress';
 import { useCollection, useSharedCollection } from '@/lib/store';
 import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +18,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 /** The verse list beside study setup on a wide window (the Final boards). */
 const LIST_WIDTH = 340;
+/** The dev loop's rest between collapses. */
+const LOOP_REST_MS = 1600;
 
 /**
  * One collection. On a phone (and the Duo's narrower windows), the verse list; a row opens study
@@ -25,18 +29,24 @@ const LIST_WIDTH = 340;
  * is tapped; the group progress line, the people line and the menu's Details bring it back. The
  * selection and whether the list is hidden last while the screen is open, through folds and rotations.
  * Dev builds also take `collapsed=1` (list hidden) or `collapsed=<verse id>` (that verse, list hidden), so
- * screenshots can show a board's state without taps. One param: the dev sign-in link loses a second one.
+ * screenshots can show a board's state without taps, and `loop=1|<verse id>[,<slow-down>]`, which
+ * collapses and reopens the list every couple of seconds (slowed down by that factor) for recording the
+ * collapse. One param: the dev sign-in link loses a second one.
  */
 export default function CollectionScreen() {
-  const { id, collapsed: startCollapsed } = useLocalSearchParams<{ id: string; collapsed?: string }>();
+  const { id, collapsed: startCollapsed, loop } = useLocalSearchParams<{ id: string; collapsed?: string; loop?: string }>();
   const devCollapsed = __DEV__ ? startCollapsed : undefined;
+  const devLoop = loop && canDevSignIn(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL) ? loop.split(',') : undefined;
+  const startVerse = devCollapsed ?? devLoop?.[0];
+  const looping = devLoop !== undefined;
+  const duration = Collapse.durationMs * (Number(devLoop?.[1]) || 1);
   const wide = useWindowClass() === 'wide';
   const colors = Colors[useColorScheme() ?? 'light'];
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const backToLibrary = useBackToLibrary();
   const [width, setWidth] = useState(0);
-  const [selectedId, setSelectedId] = useState(devCollapsed && devCollapsed !== '1' ? devCollapsed : undefined);
+  const [selectedId, setSelectedId] = useState(startVerse && startVerse !== '1' ? startVerse : undefined);
   const [collapsed, setCollapsed] = useState(devCollapsed !== undefined);
   const [details, setDetails] = useState(selectedId === undefined);
   const collection = useCollection(id);
@@ -45,17 +55,16 @@ export default function CollectionScreen() {
   const [settling, setSettling] = useState(false);
   const collapse = useSharedValue(collapsed ? 1 : 0);
 
-  const toggleList = () => {
-    const next = !collapsed;
-    setCollapsed(next);
+  const showList = useCallback((show: boolean) => {
+    setCollapsed(!show);
     setSettling(true);
-    collapse.set(withTiming(next ? 1 : 0, { duration: Motion.paneMs, easing: Easing.linear }, (done) => {
+    collapse.set(withTiming(show ? 0 : 1, { duration, easing: Easing.linear }, (done) => {
       if (done) scheduleOnRN(setSettling, false);
     }));
-  };
+  }, [collapse, duration]);
 
   const sidebar = useAnimatedStyle(() => ({
-    transform: [{ translateX: -(LIST_WIDTH + 1) * paneShift(collapse.value, reduced) }],
+    transform: [{ translateX: -(LIST_WIDTH + 1) * listShift(collapse.value, reduced) }],
     opacity: reduced ? interpolate(collapse.value, [0, 0.5], [1, 0], 'clamp') : 1,
   }));
 
@@ -63,6 +72,13 @@ export default function CollectionScreen() {
   const sized = wide && width > 0;
   const split = sized && (showDetails || selectedId !== undefined);
   const listHidden = split && collapsed && !settling;
+
+  useEffect(() => {
+    if (!looping || !split) return;
+    const timer = setInterval(() => showList(collapse.get() > 0.5), duration + LOOP_REST_MS);
+    return () => clearInterval(timer);
+  }, [looping, split, showList, collapse, duration]);
+
   return (
     <View
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -119,7 +135,7 @@ export default function CollectionScreen() {
               icon="sidebar.left"
               label={collapsed ? 'Show verse list' : 'Hide verse list'}
               expanded={!collapsed}
-              onPress={toggleList}
+              onPress={() => showList(collapsed)}
             />
           )}
         </View>

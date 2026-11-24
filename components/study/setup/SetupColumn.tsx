@@ -9,7 +9,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { StudySetup } from '@/hooks/use-study-setup';
 import { useAppStore } from '@/lib/store';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import type { ComponentProps } from 'react';
+import { ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import type Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Docked Start height. Used to reserve scroll padding so content can
@@ -21,7 +23,7 @@ const START_BUTTON_HEIGHT = 56;
  * chunk, and Start docked at the bottom over a fade. The phone screen, and the setup pane beside a
  * collection's verse list on a wide window.
  */
-export function SetupColumn({ setup, previewLines, paddingTop, side = 20, onOpenPassage, onOpenChunks }: {
+export function SetupColumn({ setup, previewLines, paddingTop, side = 20, onOpenPassage, onOpenChunks, previewTextStyle, onScroll }: {
   setup: StudySetup;
   previewLines: number;
   paddingTop: number;
@@ -29,6 +31,9 @@ export function SetupColumn({ setup, previewLines, paddingTop, side = 20, onOpen
   side?: number;
   onOpenPassage: (origin: PassageOrigin) => void;
   onOpenChunks: () => void;
+  /** Wide windows: hides the preview text while it travels, and follows the scroll that moves it. */
+  previewTextStyle?: ComponentProps<typeof Animated.Text>['style'];
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const insets = useSafeAreaInsets();
@@ -46,6 +51,8 @@ export function SetupColumn({ setup, previewLines, paddingTop, side = 20, onOpen
           { paddingTop, paddingHorizontal: side, paddingBottom: insets.bottom + START_BUTTON_HEIGHT + 32 },
         ]}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={onScroll ? 16 : undefined}
       >
         <VersePreview
           text={verseText}
@@ -53,6 +60,7 @@ export function SetupColumn({ setup, previewLines, paddingTop, side = 20, onOpen
           hidden={hideVerseText}
           lines={previewLines}
           onOpen={onOpenPassage}
+          textStyle={previewTextStyle}
         />
         <DifficultySwitcher value={difficulty} onChange={setup.pickDifficulty} />
         <ProgressCard progress={verse.progress} />
