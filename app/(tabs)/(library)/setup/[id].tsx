@@ -12,8 +12,8 @@ import { useStudySetup } from '@/hooks/use-study-setup';
 import { useWindowClass } from '@/hooks/use-window-class';
 import { formatVerseReference } from '@/lib/storage';
 import { useVerse } from '@/lib/store';
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useIsFocused } from 'expo-router/react-navigation';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useIsFocused, useNavigationState } from 'expo-router/react-navigation';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
@@ -32,8 +32,7 @@ export default function StudySetupScreen() {
   // Pushed from a collection (a phone row tap), an unfold goes back to it: the collection already has
   // this verse selected and shows its setup beside the list. Not while a session is open over setup.
   const focused = useIsFocused();
-  const state = useNavigation().getState();
-  const fromCollection = state?.routes[state.index - 1]?.name === '[id]';
+  const fromCollection = useNavigationState((state) => state.routes[state.index - 1]?.name) === '[id]';
   const toCollection = wide && focused && fromCollection;
   useEffect(() => {
     if (toCollection) router.back();
