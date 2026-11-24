@@ -104,6 +104,25 @@ collection show the list full width. Search fills the list only (`SearchTakeover
 - Setup opened straight on wide (a link, Review now) is the list-hidden layout with back only.
 - The passage card is at most 560 wide (22/34 text) and the chunk sheet at most 280 wide on wide.
 
+## Shared collection
+
+On `wide`, a shared collection with others in it opens with the group's Details in the right pane
+(the Shared-Collection board) instead of a verse's setup, until a row is tapped. The header's progress
+line, its people line and the list's ⋯ → Details bring it back; the progress line is highlighted
+(`primaryLight`) while Details shows, and no row is. Phones keep the pushed Details route and the
+member sheet.
+
+- `GroupDetailsPane` (`components/shared/`) holds `GroupDetails`, the phone route's body, as the
+  setup's white cards: the group's progress (figure, bar, "N of M verses mastered by everyone"), then
+  Verses (the grid and legend) and Members (`MemberRow`, the owner's actions) under 17 pt titles, 24 pt
+  apart. The collection's name sits in a glass bubble (VoiceOver: "Details, <name>"), with no title.
+- List showing: the cards stack in the pane (32 pt sides). List hidden: Verses and Members side by side
+  (Members 320 wide), the bubble centred over the window. The pane moves like setup's
+  (`usePaneMotion` in `StudySetupPane.tsx`: same slide, fades and bubble glide). No rail action.
+- It reads the grid the collection screen's sync fetched (no read of its own, unlike the phone
+  route's visit); pull to refresh is the collection's pull. Loading, Couldn't load and Couldn't
+  refresh are the phone's.
+
 ## Navigation
 
 `app/(tabs)/_layout.tsx` picks the tab bar by class; phones keep today's fade bar untouched.
@@ -165,6 +184,9 @@ the class themselves.
   (short, locked) and `seed-35-2` (engraved), each also `--dark`; Hide verses on for the lines. Setup
   straight: `/(tabs)/(library)/setup/seed-john-3-16`. Taps: `flow duo-collection --device ipad`
   (iPad Pro 13-inch (M5), turned on its side by the flow).
+- Shared collection on wide, opened Duo (shots), as reader-c: `seed-romans-8`, `seed-sermon-mount`
+  (ten columns, which fit here without scrolling) and `seed-philippians-4` (the header's 100% sweep),
+  each also with `?collapsed=1` and `--dark`. Phone taps: `flow shared-progress shared-grid shared-emblems`.
 
 ## Decisions
 
@@ -185,4 +207,6 @@ the class themselves.
 - 2026-11-23 · Beside the list, setup is the phone's column (preview, Difficulty, Your Progress, chunks, docked Start) · the boards' list-open column predates the restyle; one column for both.
 - 2026-11-23 · The verse is cut to the lines that fit its pane, not the boards' 420 pt · the same rule on the Duo and a taller iPad.
 - 2026-11-23 · Hide verses lines and Show verse use `primaryLight` and `tint` (boards: 0.16 bronze and #7d5c2e) · existing tokens with a dark mode.
+- 2026-11-23 · A shared collection with others opens on Details on wide, and the people line opens Details too · the Shared-Collection board lands on the group, and its members are in that pane.
+- 2026-11-23 · Details on wide drops the board's "Details" heading for the name in a bubble, and its parts are white cards (stacked beside the list, two columns without it) · Q9: restyled to match the final setup; side-by-side cards are too narrow beside the list.
 - 2026-11-23 · Dev builds take `collapsed=1|<verse id>` on a collection · shots of each board state without taps; one param, since the dev sign-in link loses a second.

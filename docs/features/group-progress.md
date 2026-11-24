@@ -65,7 +65,8 @@ shared collection looks like a personal one, and a personal collection looks as 
 
 `app/(tabs)/(library)/shared/[id].tsx`, pushed from the progress line or Details; `id` is the local
 collection, as on the collection screen. It reads the same grid (`useSharedGrid`, your squares from
-your verses), nothing new.
+your verses), nothing new. Its body is `GroupDetails` (`components/shared/`), which a wide window
+shows beside the list instead ([window-layouts.md](../architecture/window-layouts.md#shared-collection)).
 
 - **Layout**: flat on the page, no cards: `TopBar` (back) over a large "Details" with the
   collection's name under it, then "47%" (28 pt figure, the header's 4 pt line, "N of M
