@@ -33,7 +33,8 @@ export function ChunkSizeModal({ visible, totalVerses, initialChunkSize, onSave,
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+      {/* Not an accessibility element, so VoiceOver and Maestro reach each option. */}
+      <Pressable accessible={false} style={styles.overlay} onPress={onClose}>
         <View
           style={[styles.container, { backgroundColor: colors.card }]}
           onStartShouldSetResponder={() => true}
