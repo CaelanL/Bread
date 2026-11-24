@@ -15,6 +15,8 @@
 // Options for shot, flow and install (stop takes --device too):
 //   --device duo           the iPhone Duo simulator (iOS 27.2 iPhone19,4 runtime) instead of iPhone 16 Pro. It boots
 //                          closed; fold, open or rotate it with Claude's iOS Simulator tool (set_posture, rotate).
+//   --device ipad          the iPad Pro 13-inch (M5) simulator (iOS 27.2): wide layouts Maestro can tap. A flow turns
+//                          it with `setOrientation`.
 //   --display outer|inner  which Duo display a shot captures (default outer); the file name ends in it.
 //   --dark                 dark appearance for the run, light again afterwards; shot files end in -dark. Every run
 //                          sets the appearance at boot, so the simulator is light without it.
@@ -47,10 +49,11 @@ function option(name, takesValue) {
   const [, value] = argv.splice(i, takesValue ? 2 : 1);
   return takesValue ? value : true;
 }
+const DEVICES = { duo: 'iPhone Duo', ipad: 'iPad Pro 13-inch (M5)' };
 const device = option('--device', true);
-if (device !== null && device !== 'duo') die(`--device takes duo (the iPhone Duo); without it, iPhone 16 Pro. Got "${device}".`);
+if (device !== null && !DEVICES[device]) die(`--device takes duo (the iPhone Duo) or ipad (${DEVICES.ipad}); without it, iPhone 16 Pro. Got "${device}".`);
 const duo = device === 'duo';
-const DEVICE = duo ? 'iPhone Duo' : 'iPhone 16 Pro';
+const DEVICE = DEVICES[device] ?? 'iPhone 16 Pro';
 const display = option('--display', true) ?? 'outer';
 if (!['outer', 'inner'].includes(display)) die('--display is outer or inner.');
 const dark = option('--dark', false);
@@ -61,7 +64,7 @@ if (!kit.sim?.name || !kit.sim?.scheme || !kit.sim?.appId) die('package.json nee
 const CACHE = join(homedir(), '.cache');
 const LOCK = join(CACHE, `${kit.sim.name}-sim.lock`);
 // Each device has its own build, so its own record of what's installed.
-const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim${duo ? '-duo' : ''}.json`);
+const FINGERPRINT = join(CACHE, `${kit.sim.name}-sim${device ? `-${device}` : ''}.json`);
 const LOG = join(root, '.expo/sim-metro.log');
 const SHOTS = join(root, '.expo/sim-shots');
 const FLOWS = join(root, '.maestro');
@@ -105,6 +108,11 @@ function bootedDevices() {
   return Object.values(parsed.devices).flat().map((d) => d.name);
 }
 
+const deviceFlag = (name) => {
+  const key = Object.keys(DEVICES).find((k) => DEVICES[k] === name);
+  return key ? ` --device ${key}` : '';
+};
+
 function takeLock() {
   mkdirSync(CACHE, { recursive: true });
   const held = readJson(LOCK);
@@ -113,7 +121,7 @@ function takeLock() {
   const others = bootedDevices().filter((name) => name !== DEVICE);
   if (others.length >= MAX_SIMS) {
     die(`simulator busy: ${others.join(', ')} is booted (limit ${MAX_SIMS}). Shut it down first`
-      + (held?.folder === root ? ` (npm run sim -- stop${DEVICE === 'iPhone Duo' ? '' : ' --device duo'}).` : '.'));
+      + (held?.folder === root ? ` (npm run sim -- stop${deviceFlag(others[0])}).` : '.'));
   }
   writeFileSync(LOCK, JSON.stringify({ folder: root, pid: process.pid, since: new Date().toISOString() }));
   if (held?.folder === root) stopMetro(held); // a --keep run left one behind
@@ -155,7 +163,9 @@ function approveScheme() {
   if (!udid) {
     die(duo
       ? 'No simulator named "iPhone Duo". Create one: xcrun simctl create "iPhone Duo" com.apple.CoreSimulator.SimDeviceType.iPhone-Duo com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4'
-      : `No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro`);
+      : device === 'ipad'
+        ? `No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB com.apple.CoreSimulator.SimRuntime.iOS-27-2`
+        : `No simulator named "${DEVICE}". Create one: xcrun simctl create "${DEVICE}" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro`);
   }
   // Written as a file: the Mac's `defaults write` caches it and may never reach the disk.
   const prefs = join(homedir(), 'Library/Developer/CoreSimulator/Devices', udid, 'data/Library/Preferences/com.apple.launchservices.schemeapproval.plist');
@@ -390,4 +400,4 @@ else if (command === 'flow') await flow(args);
 else if (command === 'stop') stopCommand();
 else if (command === 'install') install(args);
 else die('Usage: npm run sim -- shot <route> [<route>...] [--keep] | flow <name> [<name>...] [--keep] | flow all --first-review [--keep] | stop | install [--local]'
-  + ' (shot, flow and install take [--device duo] [--display outer|inner] [--dark])');
+  + ' (shot, flow and install take [--device duo|ipad] [--display outer|inner] [--dark])');

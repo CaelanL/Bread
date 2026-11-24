@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Motion, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useWindowClass } from '@/hooks/use-window-class';
 import type { SavedVerse } from '@/lib/storage';
 import { getVerseText as extractVerseText, toSuperscript } from '@/lib/study-chunks';
 import { BlurView } from 'expo-blur';
@@ -59,6 +60,7 @@ export function PassageCard({ origin, reference, parts, onClose }: {
   const colors = Colors[scheme];
   const { width, height } = useWindowDimensions();
   const reduced = useReducedMotion();
+  const wide = useWindowClass() === 'wide';
   const progress = useSharedValue(0);
   const blurMax = scheme === 'dark' ? 40 : 80;
   const dx = origin.x + origin.width / 2 - width / 2;
@@ -108,7 +110,7 @@ export function PassageCard({ origin, reference, parts, onClose }: {
             </Pressable>
           </View>
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-            <Text style={[styles.text, { color: colors.text }]}>
+            <Text style={[styles.text, wide && styles.textWide, { color: colors.text }]}>
               {parts.map((part, i) => (
                 <Text key={part.n}>
                   <Text style={[styles.number, { color: colors.tint }]}>{toSuperscript(part.n)}</Text>
@@ -125,7 +127,11 @@ export function PassageCard({ origin, reference, parts, onClose }: {
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', padding: 20 },
+  // The Final boards' card on a wide window; a phone is narrower than this anyway.
   card: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
     maxHeight: '80%',
     borderRadius: Radius.huge,
     paddingTop: 20,
@@ -139,5 +145,6 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 14, fontWeight: '600' },
   scroll: { flexGrow: 0 },
   text: { fontSize: 19, lineHeight: 30 },
+  textWide: { fontSize: 22, lineHeight: 34 },
   number: { fontWeight: '600' },
 });

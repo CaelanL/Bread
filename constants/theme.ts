@@ -92,6 +92,8 @@ export const Colors = {
     controlFill: 'rgba(118,118,128,0.12)', // Switcher track, capsule value buttons
     controlThumb: '#ffffff',      // A switcher's selected segment
     actionFill: '#b08d57',        // Start session: today's bronze in both modes (Q17)
+    pane: '#f2eee7',              // A wide window's tinted verse pane (study setup with the list hidden)
+    paneBorder: '#e4ddd2',
 
     // Borders
     border: '#e0dcd6',            // Warm gray border
@@ -139,6 +141,8 @@ export const Colors = {
     controlFill: 'rgba(118,118,128,0.24)',
     controlThumb: '#636366',
     actionFill: '#b08d57',
+    pane: '#211f1c',
+    paneBorder: '#34302a',
 
     // Borders
     border: '#3a3a3a',            // Charcoal border

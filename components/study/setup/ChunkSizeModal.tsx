@@ -90,6 +90,8 @@ const styles = StyleSheet.create({
   },
   container: {
     width: '60%',
+    // A phone's 60%; no wider on a wide window.
+    maxWidth: 280,
     maxHeight: '60%',
     borderRadius: Radius.xxxl,
     paddingVertical: 6,

@@ -63,6 +63,8 @@ const MAPPING = {
   'hand.thumbsdown': 'thumb-down-off-alt',
   'bubble.left.fill': 'chat-bubble',
   'photo': 'photo',
+  'sidebar.left': 'view-sidebar',
+  'arrow.up.left.and.arrow.down.right': 'open-in-full',
 } as IconMapping;
 
 /**

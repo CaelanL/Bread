@@ -28,22 +28,25 @@ export type SearchOrigin = { x: number; y: number; width: number; height: number
  * `children` are the results, laid out under the field. Reduced motion: the field appears at the
  * top and everything fades.
  */
-export function SearchTakeover({ origin, query, onChangeQuery, onClose, placeholder, children }: {
+export function SearchTakeover({ origin, query, onChangeQuery, onClose, placeholder, area, children }: {
   origin: SearchOrigin;
   query: string;
   onChangeQuery: (text: string) => void;
   /** Called once the exit has finished. */
   onClose: () => void;
   placeholder: string;
+  /** Where it lives when it isn't the whole window (a wide window's verse list): its width, and the field's top. */
+  area?: { width: number; top: number };
   children: ReactNode;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const width = area?.width ?? windowWidth;
   const reduced = useReducedMotion();
   const progress = useSharedValue(0);
   const [closing, setClosing] = useState(false);
-  const top = insets.top + 4;
+  const top = area?.top ?? insets.top + 4;
   const fieldWidth = width - SIDE * 2 - CANCEL_WIDTH;
 
   useEffect(() => {
