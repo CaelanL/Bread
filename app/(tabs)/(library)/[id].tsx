@@ -3,6 +3,7 @@ import { GroupDetailsPane } from '@/components/shared/GroupDetailsPane';
 import { Collapse, listShift } from '@/components/study/setup/collapse-motion';
 import { GLASS_EDGE, StudySetupPane } from '@/components/study/setup/StudySetupPane';
 import { GlassButton } from '@/components/ui/Glass';
+import { RailContext } from '@/components/ui/TabRail';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useWindowClass } from '@/hooks/use-window-class';
@@ -10,7 +11,7 @@ import { canDevSignIn } from '@/lib/auth/dev-sign-in';
 import { hasOtherMembers } from '@/lib/shared/progress';
 import { useCollection, useSharedCollection } from '@/lib/store';
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +42,7 @@ export default function CollectionScreen() {
   const looping = devLoop !== undefined;
   const duration = Collapse.durationMs * (Number(devLoop?.[1]) || 1);
   const wide = useWindowClass() === 'wide';
+  const railed = useContext(RailContext);
   const colors = Colors[useColorScheme() ?? 'light'];
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -123,6 +125,7 @@ export default function CollectionScreen() {
         <CollectionList
           id={id}
           wide={sized ? { width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId, details: showDetails } : undefined}
+          atRail={railed && !split}
           onDetails={setDetails}
           onVerse={(verseId) => {
             setSelectedId(verseId);

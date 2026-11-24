@@ -50,7 +50,10 @@ export default function AddVerseScreen() {
 
   const [expandedBook, setExpandedBook] = useState<string | null>(book ?? null);
   // On a wide window a chapter opens beside the books instead of on its own page.
-  const wide = useWindowClass() === 'wide';
+  const windowClass = useWindowClass();
+  const wide = windowClass === 'wide';
+  // On the outer display the list runs up to the tab rail: its lines stop short of it, the chevrons stay put.
+  const outer = windowClass === 'outer';
   const [shownChapter, setShownChapter] = useState<{ book: string; chapter: number } | null>(
     book && chapter ? { book, chapter: Number(chapter) } : null,
   );
@@ -137,17 +140,17 @@ export default function AddVerseScreen() {
         booksRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: false });
       } : undefined}>
         {isNewTestament && (
-          <View style={[styles.testamentDivider, { borderBottomColor: colors.icon }]}>
+          <View style={[styles.testamentDivider, outer && styles.atRail, { borderBottomColor: colors.icon }]}>
             <Text style={[styles.testamentLabel, { color: colors.primary }]}>New Testament</Text>
           </View>
         )}
         {index === 0 && (
-          <View style={[styles.testamentDivider, { borderBottomColor: colors.icon }]}>
+          <View style={[styles.testamentDivider, outer && styles.atRail, { borderBottomColor: colors.icon }]}>
             <Text style={[styles.testamentLabel, { color: colors.primary }]}>Old Testament</Text>
           </View>
         )}
         <Pressable
-          style={[styles.bookRow, wide && styles.wideBookRow, { borderBottomColor: colors.icon + '30' }]}
+          style={[styles.bookRow, wide && styles.wideBookRow, outer && styles.atRail, { borderBottomColor: colors.icon + '30' }]}
           onPress={() => handleBookPress(book)}
         >
           <Text style={[styles.bookName, { color: colors.text }, wide && isExpanded && styles.openBook]}>{book}</Text>
@@ -330,6 +333,10 @@ const styles = StyleSheet.create({
   },
   wideRow: {
     flexDirection: 'row',
+  },
+  atRail: {
+    marginRight: 16,
+    paddingRight: 0,
   },
   booksColumn: {
     flex: 0,

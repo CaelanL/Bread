@@ -41,6 +41,7 @@ export function CollectionHeader({
   subtitle,
   invite,
   progress,
+  wash = true,
   children,
 }: {
   symbol: IconName;
@@ -56,6 +57,8 @@ export function CollectionHeader({
   invite?: ReactNode;
   /** `selected`: its Details show beside the list on a wide window. */
   progress?: { ratio: number | null; label: string; failed: boolean; onPress: () => void; onRetry: () => void; selected?: boolean };
+  /** The accent wash from the top edge. Off where the page runs up to the tab rail, whose plain column would cut it off in a hard edge. */
+  wash?: boolean;
   /** The pills row. */
   children?: ReactNode;
 }) {
@@ -76,12 +79,14 @@ export function CollectionHeader({
 
   return (
     <View style={styles.header}>
-      <LinearGradient
-        pointerEvents="none"
-        colors={[withAlpha(accent, AccentAlpha.wash), withAlpha(accent, 0)]}
-        locations={[OVERSCROLL / (washTop + WASH), 1]}
-        style={[styles.wash, { top: -washTop, height: washTop + WASH }]}
-      />
+      {wash && (
+        <LinearGradient
+          pointerEvents="none"
+          colors={[withAlpha(accent, AccentAlpha.wash), withAlpha(accent, 0)]}
+          locations={[OVERSCROLL / (washTop + WASH), 1]}
+          style={[styles.wash, { top: -washTop, height: washTop + WASH }]}
+        />
+      )}
       {onIconPress ? (
         <Pressable accessibilityRole="button" accessibilityLabel={iconLabel} onPress={onIconPress} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
           {icon}

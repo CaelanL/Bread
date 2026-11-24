@@ -69,8 +69,10 @@ export function useBackToLibrary() {
  * opening setup, keeping a row selected while there is one, and Details (the progress line, the people
  * line, the menu) opens in the right pane instead of being pushed.
  */
-export function CollectionList({ id, wide, onDetails, onVerse }: {
+export function CollectionList({ id, wide, atRail, onDetails, onVerse }: {
   id: string;
+  /** The list runs up to the tab rail (the outer display, or wide with nothing beside it): no wash, and separators inset on the right too. */
+  atRail?: boolean;
   /** Details opened (also on a phone, so an unfold lands on them) or left for a verse on a wide window. */
   onDetails?: (shown: boolean) => void;
   /** A row tapped: selected on a wide window, and on a phone too, so an unfold from its setup lands on it. */
@@ -422,10 +424,11 @@ export function CollectionList({ id, wide, onDetails, onVerse }: {
       } : undefined}
     />
     );
-  const divider = () => <View style={[styles.divider, { backgroundColor: colors.separator }]} />;
+  const divider = () => <View style={[styles.divider, atRail && styles.dividerAtRail, { backgroundColor: colors.separator }]} />;
 
   const header = (
     <CollectionHeader
+      wash={!atRail}
       symbol={symbol}
       accent={collection?.iconColor ?? colors.primary}
       emblem={emblem}
@@ -589,6 +592,9 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     marginLeft: 20,
+  },
+  dividerAtRail: {
+    marginRight: 20,
   },
   noMatches: {
     fontSize: 15,

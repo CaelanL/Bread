@@ -64,6 +64,10 @@ Study setup, the collection, the shared collection and the study session on each
   160 on the outer display, measured). Bottom, 20 pt up: a vertical `GlassPill` of 50 pt tab circles,
   the selected one on `primaryLight` in `tint`. Beside the rail, titles start `RAIL_TITLE_TOP` (26 pt)
   under the safe top and pages pad their sides by `RAILED_PAD`, both exported from `TabRail.tsx`.
+  The rail is a plain `background` column, so nothing on a page stops hard against it: where a list runs
+  up to the rail (a collection on the outer display, or on wide with nothing beside it; Add verse outside),
+  its hairlines stop as far short of it as of the left edge, and the collection header draws no accent wash
+  (`CollectionList` `atRail`). Phones keep both.
 - `tall`: `TabPill`, a floating glass pill of 96 × 54 tabs with labels, 24 pt from the bottom, the page
   fading out above it. It reports its height, so `useBottomTabBarHeight()` stays right.
 - Both keep the `tab-*` testIDs, the selected state, the Settings badge (an `error` dot with the count)
@@ -181,3 +185,4 @@ beside it. The rail holds Add, then Edit as a glass word (`GlassButton text`).
 - 2026-11-24 · Settings on wide opens on Translation · nothing specifies it; Send feedback would open on an empty form.
 - 2026-11-24 · A fold drops an unsaved notifications draft or feedback note in the pane · the collection's rule (a fold shows today's list); keeping it would mean holding the draft outside the pane.
 - 2026-11-24 · Settings-Outer's bottom fade isn't drawn · like Home-Outer.
+- 2026-11-24 · Where the collection list runs up to the rail, its header has no accent wash, rather than the rail drawn over the page · Caelan saw the wash's cut-off edge as a line on his Duo; a rail over the scene would mean re-padding every railed screen, and Home and Library on the Duo are plain already.
