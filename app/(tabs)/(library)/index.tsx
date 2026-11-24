@@ -4,7 +4,7 @@ import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkele
 import { CollectionTile } from '@/components/library/CollectionTile';
 import { GlassButton } from '@/components/ui/Glass';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { RailContext, railFrame } from '@/components/ui/TabRail';
+import { RAIL_TITLE_TOP, RAILED_PAD, RailContext, railFrame } from '@/components/ui/TabRail';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { LargeTitle, TopBar, TopBarButton, useMenuAnchor, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, Radius } from '@/constants/theme';
@@ -32,11 +32,9 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeInDown, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// The Duo's Library (Library-Toggle, Library-Outer boards): title 26 pt under the safe top beside the rail.
-const RAIL_TOP = 26;
+// The Duo's Library (Library-Toggle, Library-Outer boards).
 const GRID_COLUMNS = { wide: 4, outer: 2 } as const;
 const GRID_COLUMN_GAP = 18;
-const RAILED_PAD = { wide: { left: 28, right: 24 }, outer: { left: 20, right: 10 } } as const;
 
 // Component to get verse count for a collection
 function CollectionCard({
@@ -264,7 +262,7 @@ export default function LibraryScreen() {
           contentContainerStyle={[
             styles.collectionsContainer,
             railed ? (windowClass === 'outer' ? styles.outerContent : styles.wideContent) : { paddingTop: barHeight },
-            railed && { paddingTop: insets.top + RAIL_TOP },
+            railed && { paddingTop: insets.top + RAIL_TITLE_TOP },
           ]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} progressViewOffset={railed ? insets.top : barHeight} />

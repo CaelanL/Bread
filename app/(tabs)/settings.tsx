@@ -17,7 +17,7 @@ import {
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
-import { RailContext } from '@/components/ui/TabRail';
+import { RAIL_TITLE_TOP, RAILED_PAD, RailContext } from '@/components/ui/TabRail';
 import { DisplayNameModal } from '@/components/settings/DisplayNameModal';
 import { FeedbackForm } from '@/components/settings/FeedbackForm';
 import { NotificationSettings, confirmDiscard } from '@/components/settings/NotificationSettings';
@@ -47,10 +47,6 @@ import {
 } from '@/lib/notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
-
-// The Settings-Outer board: the title 26 pt under the safe top beside the rail, 18/10 side padding.
-const RAIL_TOP = 26;
-const RAILED_PAD = { left: 18, right: 10 };
 
 interface SettingsSectionProps {
   title?: string;
@@ -734,7 +730,7 @@ export default function SettingsScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          railed ? { paddingTop: insets.top + RAIL_TOP, paddingLeft: RAILED_PAD.left, paddingRight: RAILED_PAD.right } : { paddingTop: barHeight },
+          railed ? { paddingTop: insets.top + RAIL_TITLE_TOP, paddingLeft: RAILED_PAD.settingsOuter.left, paddingRight: RAILED_PAD.settingsOuter.right } : { paddingTop: barHeight },
         ]}
       >
         <View style={styles.titleGap}><LargeTitle root title="Settings" /></View>

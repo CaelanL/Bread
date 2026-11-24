@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { RAIL_TITLE_TOP } from '@/components/ui/TabRail';
 import { LargeTitle } from '@/components/ui/TopBar';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -27,7 +28,6 @@ export type TopicRow = {
 
 // The Settings board: a 340 pt list beside the chosen section, both starting under the safe top.
 const LIST_WIDTH = 340;
-const LIST_TOP = 26;
 const PANE_TOP = 30;
 const PANE_SIDE = 32;
 const PANE_BOTTOM = 24;
@@ -43,7 +43,7 @@ export function SettingsList({ groups, selected, onSelect }: {
   return (
     <ScrollView
       style={[styles.list, { backgroundColor: colors.cardAlt, borderRightColor: colors.border }]}
-      contentContainerStyle={[styles.listContent, { paddingTop: insets.top + LIST_TOP, paddingBottom: insets.bottom + PANE_BOTTOM }]}
+      contentContainerStyle={[styles.listContent, { paddingTop: insets.top + RAIL_TITLE_TOP, paddingBottom: insets.bottom + PANE_BOTTOM }]}
     >
       <View style={styles.listTitle}><LargeTitle root title="Settings" /></View>
       {groups.map((rows) => (

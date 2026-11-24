@@ -1,6 +1,7 @@
 import { useIsFocused } from 'expo-router/react-navigation';
 import { useAuth } from '@/lib/auth';
 import type { VOTM } from '@/lib/api/votm';
+import { RAIL_TITLE_TOP } from '@/components/ui/TabRail';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
 import { ExploreCollections } from '@/components/home/ExploreCollections';
 import { InsightsCard, type InsightsCardRef } from '@/components/home/InsightsCard';
@@ -87,7 +88,7 @@ export default function HomeScreen() {
   const windowClass = useWindowClass();
   const big = windowClass === 'wide' || windowClass === 'tall';
   // Upright, the status bar only fills the top right corner, so the title sits under the inset.
-  const top = windowClass === 'phone' ? barHeight : windowClass === 'tall' ? TALL_TOP : insets.top + RAIL_TOP;
+  const top = windowClass === 'phone' ? barHeight : windowClass === 'tall' ? TALL_TOP : insets.top + RAIL_TITLE_TOP;
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -257,8 +258,7 @@ export default function HomeScreen() {
   );
 }
 
-// Board numbers: the title's distance from the top beside the rail, and upright.
-const RAIL_TOP = 26;
+// Board number: the title's distance from the top upright.
 const TALL_TOP = 54;
 
 const contentLayout = StyleSheet.create({

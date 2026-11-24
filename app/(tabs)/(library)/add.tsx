@@ -4,6 +4,7 @@ import { QuickAddField } from '@/components/library/QuickAddField';
 import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
 import { GlassButton } from '@/components/ui/Glass';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { RAIL_TITLE_TOP } from '@/components/ui/TabRail';
 import { TopBar, TopBarButton } from '@/components/ui/TopBar';
 import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -31,9 +32,8 @@ const easing = Easing.bezier(...Motion.easing);
 // The field's top padding inside QuickAddField, and its gap under the status bar while searching.
 const FIELD_INSET = 8;
 const SEARCH_TOP = 6;
-// Bible-Picker board: the books column beside the chapter, title 26 pt under the top.
+// Bible-Picker board: the books column beside the chapter.
 const BOOKS_WIDTH = 320;
-const WIDE_TOP = 26;
 
 export default function AddVerseScreen() {
   // `book` and `chapter` come from a chapter page that found itself on a wide window.
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
   },
   wideTop: {
-    height: WIDE_TOP - 4,
+    height: RAIL_TITLE_TOP - 4,
   },
   wideBookRow: {
     paddingVertical: 13,

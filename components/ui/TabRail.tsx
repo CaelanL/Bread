@@ -83,6 +83,15 @@ function TabButtons({ state, descriptors, emitter, navigateToTab, size, iconSize
   });
 }
 
+/** Beside the rail, a screen's title starts this far under the safe top (the boards). */
+export const RAIL_TITLE_TOP = 26;
+/** Beside the rail, a page's side padding (the boards; Settings-Outer draws 18 on the left). */
+export const RAILED_PAD = {
+  wide: { left: 28, right: 24 },
+  outer: { left: 20, right: 10 },
+  settingsOuter: { left: 18, right: 10 },
+} as const;
+
 /** The rail's width and where its actions start, from the window's safe area. */
 export function railFrame(compact: boolean, insets: EdgeInsets) {
   return {
