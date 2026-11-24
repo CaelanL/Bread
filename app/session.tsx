@@ -783,9 +783,11 @@ export default function StudySessionScreen() {
         )}
 
         {/* Swipeable Chunks. A new page width remounts the list on its current chunk: a paging list keeps
-            its old offset, and the stale offset would read as a swipe to another chunk (cancelling a take). */}
+            its old offset, and the stale offset would read as a swipe to another chunk (cancelling a take).
+            The list is always exactly one page wide, even while its pane slides, so iOS never clamps that offset. */}
         <Animated.View style={[styles.container, pagesFade]}>
           <FlatList
+            style={[styles.list, { width: pageWidth }]}
             key={pageWidth}
             ref={session.flatListRef}
             data={session.listData}
@@ -927,6 +929,7 @@ const styles = StyleSheet.create({
   },
   sidebarButton: { position: 'absolute', left: SIDEBAR_EDGE, zIndex: 2 },
   pane: { position: 'absolute', top: 0, bottom: 0 },
+  list: { alignSelf: 'flex-end' },
   rail: { position: 'absolute', top: 0, bottom: 0, right: 0, alignItems: 'center' },
   wideHeader: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 14, zIndex: 1 },
   wideTitle: { fontSize: 17, lineHeight: 22, fontWeight: '600', paddingHorizontal: 72 },

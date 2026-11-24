@@ -8,7 +8,8 @@ import type { LiveTranscriptionSession } from '@/lib/transcription/live-session'
  * Dev only: puts a session in a board's state without taps, for `npm run sim -- shot` on the open
  * Duo (which Maestro can't tap). `demo` holds words joined by `+`: `rec` draws the recording pill
  * (looks only, nothing records), `done<n>` recites the first n chunks through the real
- * `processRecording` (the first word for word, later ones missing a word) and shows chunk n's result,
+ * `processRecording` (the first word for word, later ones missing a word) and shows chunk n's result
+ * (with `rec`, the chunk after it),
  * `finish` then shows the results page, `closed` starts with the chunk sidebar hidden. Reached through
  * `/dev-session`. Finishing every chunk saves the score to the local database, like a real session.
  */
@@ -17,7 +18,7 @@ export function useSessionDemo(
   demo: string | undefined,
   waveformLevels: SharedValue<number[]>,
 ) {
-  const words = __DEV__ && demo ? demo.split('+') : [];
+  const words = __DEV__ && demo ? demo.split(/[+ ]/) : [];
   const done = Number(words.find((w) => w.startsWith('done'))?.slice(4) ?? 0);
   const finish = words.includes('finish');
   const recording = words.includes('rec');
@@ -37,7 +38,7 @@ export function useSessionDemo(
     if (index >= target) {
       if (shown.current) return;
       shown.current = true;
-      const page = finish && target === chunks.length ? chunks.length : target - 1;
+      const page = finish && target === chunks.length ? chunks.length : recording ? target : target - 1;
       setCurrentIndex(page);
       flatListRef.current?.scrollToIndex({ index: page, animated: false });
       return;
@@ -60,7 +61,7 @@ export function useSessionDemo(
       liveSession,
       isCurrent: () => true,
     }, false);
-  }, [chunks, completedChunks, finish, flatListRef, loading, processRecording, setCurrentIndex, target]);
+  }, [chunks, completedChunks, finish, flatListRef, loading, processRecording, recording, setCurrentIndex, target]);
 
   return { recording, closed: words.includes('closed') };
 }

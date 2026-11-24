@@ -126,6 +126,31 @@ member sheet.
 - The phone's Details page on a wide window (an unfold with it open, a link) goes back to the
   collection under it, or replaces itself with the collection, which opens on Details.
 
+## Study session
+
+On `wide`, `app/session.tsx` lays out the Recite and Result boards; other classes get the phone screen.
+Phone and wide render one tree, so a fold never remounts the mic. Layout only: chunks, masks, scoring
+and recording are the phone's.
+
+- Close is a `GlassButton` in a rail at the right edge (`railFrame` from `TabRail.tsx`: the session sits
+  outside the tabs). The mic (`RecordingBar` `lowRight`) sits low right and its pill opens leftwards; Retry,
+  Next and, once every chunk is done, Exit sit there too. `VerseCard` `large` draws 25/40 text and may
+  take 60% of the height while reciting (30% beside a result). The cards stay at most 620 wide.
+- One chunk: the reference and progress bar centred at the top, no sidebar.
+- Two or more: `ChunkSidebar` (320, `cardAlt`): the reference, "Medium · 3 chunks", a row per chunk
+  (done with its text and score, current, or not yet; "Revealed — this chunk won't count" on a peeked one)
+  and Results once every chunk is done. A row tap scrolls the pages there, like a swipe, so it's off while
+  a take runs. The glass sidebar button (`chunk-sidebar-toggle`) never moves; hidden, the reference and
+  progress bar show. The slide runs on `Motion.paneMs` (`paneShift`), the pages fade out by 120 ms and
+  back from 200 ms and change width at 190 ms, unseen.
+- The finish (`SessionFinish` `wide`): 108 pt score, Done and Review chunks low right, 260 wide.
+- A new page width (fold, rotation, sidebar) remounts the paging list on the current chunk
+  (`key`, `initialScrollIndex`), and the list is always exactly one page wide.
+- Dev builds: `/dev-session?s=<verse id>,<difficulty>,<chunk size>,<demo>` (`app/dev-session.tsx`,
+  `hooks/use-session-demo.ts`). Demo words joined by `+`: `rec` draws the recording pill (looks only),
+  `done<n>` recites n chunks through the real `processRecording` (finishing saves to the local database),
+  `finish` shows the results page, `closed` hides the sidebar.
+
 ## Navigation
 
 `app/(tabs)/_layout.tsx` picks the tab bar by class; phones keep today's fade bar untouched.
@@ -191,6 +216,11 @@ the class themselves.
   (ten columns, which fit here without scrolling) and `seed-philippians-4` (the header's 100% sweep),
   each also with `?collapsed=1` and `--dark`. Phone taps: `flow shared-progress shared-grid shared-emblems`.
 
+- Study session on wide, opened Duo, as reader-a, each also `--dark`: `/dev-session?s=` with
+  `seed-john-3-16,hard,1,rec` (Recite-One), `seed-psalm-23-1-3,medium,2,done1+rec` and `+closed`
+  (Recite-C2), `seed-psalm-23-1-3,medium,1,done2` and `+closed` (Result-C3), `…,medium,2,done2`
+  (Result-C2), `…,medium,2,done2+finish` (Finish-C2). Phone taps: `flow practice-session recording-controls`.
+
 ## Decisions
 
 - 2026-11-23 · Classes use width and height, not width alone · the outer display gets the rail and the upright inner display doesn't, at nearly the same width.
@@ -214,3 +244,6 @@ the class themselves.
 - 2026-11-23 · Opening Details on wide reads the grid once, as a phone visit does · the collection screen stays mounted across sessions, so without it other members' squares would be as old as the visit (F26).
 - 2026-11-23 · Details on wide drops the board's "Details" heading for the name in a bubble, and its parts are white cards (stacked beside the list, two columns without it) · Q9: restyled to match the final setup; side-by-side cards are too narrow beside the list.
 - 2026-11-23 · Dev builds take `collapsed=1|<verse id>` on a collection · shots of each board state without taps; one param, since the dev sign-in link loses a second.
+- 2026-11-24 · The session's chunk sidebar is the tinted 320 pt one with card rows (Recite-C2, Result-C2, Finish-C2), not Result-C3's 340 pt list · three boards of four; one sidebar look.
+- 2026-11-24 · A new page width remounts the session's list on its chunk, not `scrollToIndex` (F7) · the paging list's stale offset reached `onViewableItemsChanged` first, which would cancel a take and change the chunk; seen on the Duo, where an unfold landed between pages.
+- 2026-11-24 · The result card keeps the phone's text size on wide; only the verse card grows to the boards' 25/40 · the chunk result stays close to today's (Q10).
