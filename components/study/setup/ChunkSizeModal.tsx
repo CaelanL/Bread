@@ -1,11 +1,11 @@
 /**
- * Verses-per-chunk picker for the Study Setup screen. Lightweight
+ * Verses-per-chunk picker for the Study Setup screen: a white card of capsule options. Lightweight
  * compared to the notification modals — no header, no Cancel/Save.
  * Tap an option, it commits and dismisses. Tap outside to dismiss
  * without changing anything.
  */
 
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadows } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -35,7 +35,7 @@ export function ChunkSizeModal({ visible, totalVerses, initialChunkSize, onSave,
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <View
-          style={[styles.container, { backgroundColor: colors.cardAlt }]}
+          style={[styles.container, { backgroundColor: colors.card }]}
           onStartShouldSetResponder={() => true}
         >
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -44,6 +44,7 @@ export function ChunkSizeModal({ visible, totalVerses, initialChunkSize, onSave,
               return (
                 <Pressable
                   key={n}
+                  testID={`chunk-option-${n}`}
                   style={[
                     styles.option,
                     isSelected && { backgroundColor: colors.primary },
@@ -57,6 +58,7 @@ export function ChunkSizeModal({ visible, totalVerses, initialChunkSize, onSave,
               );
             })}
             <Pressable
+              testID="chunk-option-all"
               style={[
                 styles.option,
                 isAllSelected && { backgroundColor: colors.primary },
@@ -84,8 +86,9 @@ const styles = StyleSheet.create({
   container: {
     width: '60%',
     maxHeight: '60%',
-    borderRadius: 14,
+    borderRadius: Radius.xxxl,
     paddingVertical: 6,
+    boxShadow: Shadows.sheet,
   },
   scroll: {
     flexGrow: 0,
@@ -93,7 +96,7 @@ const styles = StyleSheet.create({
   option: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: Radius.full,
     marginHorizontal: 6,
     marginVertical: 2,
     alignItems: 'center',

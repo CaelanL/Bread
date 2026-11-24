@@ -12,10 +12,11 @@ export function useTopBarHeight() {
   return useSafeAreaInsets().top + BAR_HEIGHT;
 }
 
-/** A screen's bar, floating over its scroll view with no surface: back on the left, icon actions on the right. The screen's title lives only in its content. */
-export function TopBar({ onBack, backLabel = 'Back', children }: {
+/** A screen's bar, floating over its scroll view with no surface: back on the left, icon actions on the right. The screen's title lives only in its content, except study setup's reference bubble in `center`. */
+export function TopBar({ onBack, backLabel = 'Back', center, children }: {
   onBack?: () => void;
   backLabel?: string;
+  center?: ReactNode;
   children?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -23,6 +24,7 @@ export function TopBar({ onBack, backLabel = 'Back', children }: {
   return (
     <View pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top }]}>
       <View pointerEvents="box-none" style={styles.row}>
+        {center && <View pointerEvents="box-none" style={styles.center}>{center}</View>}
         {onBack && <TopBarButton icon="chevron.left" label={backLabel} onPress={onBack} />}
         <View style={styles.spacer} />
         <View style={styles.actions}>{children}</View>
@@ -73,6 +75,8 @@ const styles = StyleSheet.create({
   bar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   row: { height: BAR_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
   spacer: { flex: 1 },
+  // Clear of a 44 pt button and the row's padding on each side.
+  center: { ...StyleSheet.absoluteFill, left: 56, right: 56, alignItems: 'center', justifyContent: 'center' },
   actions: { flexDirection: 'row', alignItems: 'center' },
   button: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },

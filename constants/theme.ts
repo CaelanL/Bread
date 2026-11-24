@@ -40,6 +40,14 @@ export const Shadows = {
   borderHover: '0px 0px 0px 1px rgba(0,0,0,0.08), 0px 1px 2px -1px rgba(0,0,0,0.08), 0px 2px 4px 0px rgba(0,0,0,0.06)',
   // A glass button or pill where Liquid Glass isn't available.
   glass: '0px 4px 14px rgba(70,50,20,0.10), 0px 0px 0px 0.5px rgba(0,0,0,0.08)',
+  // A white grouped card on the page (study setup's Your Progress).
+  card: '0px 1px 2px rgba(60,40,10,0.05), 0px 6px 18px rgba(60,40,10,0.06)',
+  // The raised thumb of a switcher.
+  thumb: '0px 1px 3px rgba(0,0,0,0.12), 0px 4px 10px rgba(0,0,0,0.06)',
+  // A docked bronze action (Start session).
+  action: '0px 6px 16px rgba(120,90,40,0.25)',
+  // A card over a blurred page (the whole passage).
+  sheet: '0px 1px 2px rgba(60,40,10,0.06), 0px 18px 48px rgba(60,40,10,0.16)',
 } as const;
 
 /** How much of a collection's accent shows behind its icon and across the top of its screen. */
@@ -81,6 +89,8 @@ export const Colors = {
     overlay: 'rgba(0,0,0,0.5)',
     glass: 'rgba(255,255,255,0.72)', // Glass buttons and pills before Liquid Glass (iOS 26)
     glassBorder: 'rgba(255,255,255,0.9)',
+    controlFill: 'rgba(118,118,128,0.12)', // Switcher track, capsule value buttons
+    controlThumb: '#ffffff',      // A switcher's selected segment
 
     // Borders
     border: '#e0dcd6',            // Warm gray border
@@ -125,6 +135,8 @@ export const Colors = {
     overlay: 'rgba(0,0,0,0.6)',
     glass: 'rgba(46,46,46,0.72)',
     glassBorder: 'rgba(255,255,255,0.12)',
+    controlFill: 'rgba(118,118,128,0.24)',
+    controlThumb: '#636366',
 
     // Borders
     border: '#3a3a3a',            // Charcoal border
