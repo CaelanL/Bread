@@ -124,6 +124,10 @@ export default function CollectionScreen() {
           id={id}
           wide={sized ? { width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId, details: showDetails } : undefined}
           onDetails={setDetails}
+          onVerse={(verseId) => {
+            setSelectedId(verseId);
+            setDetails(false);
+          }}
         />
       </Animated.View>
       {wide && (

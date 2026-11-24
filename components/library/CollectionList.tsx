@@ -69,10 +69,12 @@ export function useBackToLibrary() {
  * opening setup, keeping a row selected while there is one, and Details (the progress line, the people
  * line, the menu) opens in the right pane instead of being pushed.
  */
-export function CollectionList({ id, wide, onDetails }: {
+export function CollectionList({ id, wide, onDetails, onVerse }: {
   id: string;
   /** Details opened (also on a phone, so an unfold lands on them) or left for a verse on a wide window. */
   onDetails?: (shown: boolean) => void;
+  /** A row tapped: selected on a wide window, and on a phone too, so an unfold from its setup lands on it. */
+  onVerse?: (verseId: string) => void;
   wide?: {
     width: number;
     selectedId: string | undefined;
@@ -254,10 +256,8 @@ export function CollectionList({ id, wide, onDetails }: {
   };
 
   const handleVersePress = (verse: SavedVerse) => {
-    if (wide) {
-      wide.onSelect(verse.id);
-      onDetails?.(false);
-    } else router.push(`/(tabs)/(library)/setup/${verse.id}`);
+    onVerse?.(verse.id);
+    if (!wide) router.push(`/(tabs)/(library)/setup/${verse.id}`);
   };
 
   const handleDeleteVerse = async (verseId: string) => {

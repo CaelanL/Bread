@@ -12,8 +12,9 @@ import { useStudySetup } from '@/hooks/use-study-setup';
 import { useWindowClass } from '@/hooks/use-window-class';
 import { formatVerseReference } from '@/lib/storage';
 import { useVerse } from '@/lib/store';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useIsFocused } from 'expo-router/react-navigation';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +29,17 @@ export default function StudySetupScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const verse = useVerse(id || '');
   const wide = useWindowClass() === 'wide';
+  // Pushed from a collection (a phone row tap), an unfold goes back to it: the collection already has
+  // this verse selected and shows its setup beside the list. Not while a session is open over setup.
+  const focused = useIsFocused();
+  const state = useNavigation().getState();
+  const fromCollection = state?.routes[state.index - 1]?.name === '[id]';
+  const toCollection = wide && focused && fromCollection;
+  useEffect(() => {
+    if (toCollection) router.back();
+  }, [toCollection]);
 
+  if (toCollection) return null;
   if (!verse) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -112,7 +123,7 @@ function PhoneSetup({ id }: { id: string }) {
   );
 }
 
-/** Opened straight to setup on a wide window (a link, Review now): the list-hidden layout, with no list to show. */
+/** Opened straight to setup on a wide window (a link): the list-hidden layout, with no list to show. */
 function WideSetup({ id }: { id: string }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const insets = useSafeAreaInsets();
