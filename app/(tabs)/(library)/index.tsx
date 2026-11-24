@@ -4,7 +4,7 @@ import { CollectionCardSkeleton } from '@/components/library/CollectionCardSkele
 import { CollectionTile } from '@/components/library/CollectionTile';
 import { GlassButton } from '@/components/ui/Glass';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { RailContext } from '@/components/ui/TabRail';
+import { RailContext, railFrame } from '@/components/ui/TabRail';
 import { PopoverMenu } from '@/components/ui/PopoverMenu';
 import { LargeTitle, TopBar, TopBarButton, useMenuAnchor, useTopBarHeight } from '@/components/ui/TopBar';
 import { Colors, Radius } from '@/constants/theme';
@@ -26,6 +26,7 @@ import {
   Text,
   View,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeInDown, useSharedValue } from 'react-native-reanimated';
@@ -35,6 +36,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const RAIL_TOP = 26;
 const GRID_COLUMNS = { wide: 4, outer: 2 } as const;
 const GRID_COLUMN_GAP = 18;
+const RAILED_PAD = { wide: { left: 28, right: 24 }, outer: { left: 20, right: 10 } } as const;
 
 // Component to get verse count for a collection
 function CollectionCard({
@@ -160,7 +162,11 @@ export default function LibraryScreen() {
   // Reordering always happens in the list.
   const view = editing ? 'list' : libraryView(chosenView, windowClass);
   const columns = windowClass === 'wide' || windowClass === 'outer' ? GRID_COLUMNS[windowClass] : 0;
-  const [gridWidth, setGridWidth] = useState(0);
+  // Sized from the window so the first frame draws tiles; the grid's own layout corrects it.
+  const { width: windowWidth } = useWindowDimensions();
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  const pad = RAILED_PAD[windowClass === 'outer' ? 'outer' : 'wide'];
+  const gridWidth = measuredWidth || (columns ? windowWidth - railFrame(windowClass === 'outer', insets).width - pad.left - pad.right : 0);
   const tileSize = view === 'grid' && gridWidth > 0 ? Math.floor((gridWidth - GRID_COLUMN_GAP * (columns - 1)) / columns) : undefined;
   const sharedCount = useAppStore((s) => Object.keys(s.sharedCollections).length);
   const renamingCollection = nameDialog?.collection;
@@ -283,7 +289,7 @@ export default function LibraryScreen() {
           ) : (
             <View
               style={view === 'grid' && styles.grid}
-              onLayout={columns ? (event) => setGridWidth(event.nativeEvent.layout.width) : undefined}
+              onLayout={columns ? (event) => setMeasuredWidth(event.nativeEvent.layout.width) : undefined}
             >
               {collections.map((collection, index) => {
                 const customIndex = customCollections.indexOf(collection);
@@ -388,12 +394,12 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   wideContent: {
-    paddingLeft: 28,
-    paddingRight: 24,
+    paddingLeft: RAILED_PAD.wide.left,
+    paddingRight: RAILED_PAD.wide.right,
   },
   outerContent: {
-    paddingLeft: 20,
-    paddingRight: 10,
+    paddingLeft: RAILED_PAD.outer.left,
+    paddingRight: RAILED_PAD.outer.right,
   },
   grid: {
     flexDirection: 'row',

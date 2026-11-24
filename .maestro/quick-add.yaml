@@ -21,8 +21,10 @@ tags: [fresh-seed]
     when:
       visible: ".*Romans 8:1-4 · .*"
     commands:
+      - waitForAnimationToEnd
       - swipe:
-          from: ".*Romans 8:1-4 · .*"
+          from:
+            id: "verse-row-Romans 8:1-4"
           direction: LEFT
       - tapOn:
           id: swipe-delete
@@ -34,8 +36,10 @@ tags: [fresh-seed]
     when:
       visible: ".*Romans 8:1 · .*"
     commands:
+      - waitForAnimationToEnd
       - swipe:
-          from: ".*Romans 8:1 · .*"
+          from:
+            id: "verse-row-Romans 8:1"
           direction: LEFT
       - tapOn:
           id: swipe-delete
@@ -99,7 +103,8 @@ tags: [fresh-seed]
 - assertNotVisible: ".*Romans 8:1-4 · .*"
 - waitForAnimationToEnd
 - swipe:
-    from: ".*Romans 8:1 · .*"
+    from:
+      id: "verse-row-Romans 8:1"
     direction: LEFT
 - tapOn:
     id: swipe-delete

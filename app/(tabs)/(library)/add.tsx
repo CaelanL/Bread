@@ -37,7 +37,12 @@ const WIDE_TOP = 26;
 
 export default function AddVerseScreen() {
   // `book` and `chapter` come from a chapter page that found itself on a wide window.
-  const { collectionId, book, chapter } = useLocalSearchParams<{ collectionId?: string; book?: string; chapter?: string }>();
+  const { collectionId, book, chapter, opened } = useLocalSearchParams<{
+    collectionId?: string;
+    book?: string;
+    chapter?: string;
+    opened?: string;
+  }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -53,13 +58,15 @@ export default function AddVerseScreen() {
   const booksRef = useRef<ScrollViewInstance>(null);
   const [revealBook, setRevealBook] = useState(book ?? null);
   // A later redirect brings new params to this screen, already open.
-  const [paramChapter, setParamChapter] = useState(`${book}/${chapter}`);
-  if (book && chapter && paramChapter !== `${book}/${chapter}`) {
-    setParamChapter(`${book}/${chapter}`);
+  const [openedParam, setOpenedParam] = useState(opened);
+  if (book && chapter && opened && openedParam !== opened) {
+    setOpenedParam(opened);
     setRevealBook(book);
     setExpandedBook(book);
     setShownChapter({ book, chapter: Number(chapter) });
   }
+  // A fold drops the open chapter, so an unfold opens on the books alone.
+  if (!wide && shownChapter) setShownChapter(null);
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
   const [searching, setSearching] = useState(false);
   const collection = useCollection(collectionId ?? DEFAULT_COLLECTION_ID);

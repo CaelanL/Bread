@@ -1,8 +1,12 @@
 # In My Verses: swipes Ruth 1:1 away and confirms, back to the empty list.
 appId: com.caelanliu.biblemem
 ---
+# From the row's id: a text match can land on the reference Text near the left edge, and
+# the swipe from there is too short to open the row.
+- waitForAnimationToEnd
 - swipe:
-    from: ".*Ruth 1:1 · (ESV|KJV).*"
+    from:
+      id: "verse-row-Ruth 1:1"
     direction: LEFT
 - tapOn:
     id: swipe-delete

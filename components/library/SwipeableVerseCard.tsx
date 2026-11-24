@@ -188,6 +188,7 @@ export function SwipeableVerseCard({
               pressed && { backgroundColor: colors.fill },
             ]}
             accessibilityState={selected === undefined ? undefined : { selected }}
+            testID={`verse-row-${formatVerseReference(verse)}`}
             unstable_pressDelay={PRESS_DELAY_MS}
             onPress={handlePress}
             onLongPress={handleCopy}

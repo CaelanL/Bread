@@ -117,8 +117,9 @@ beside it. The rail holds Add, then Edit as a glass word (`GlassButton text`).
   the range gesture, Add), with the title in the content, text at most 498 wide, and the reference,
   translation and Add docked low over a fade. Back and the translation (a glass word) are in the rail.
   The chapter route on a wide window (an unfold, a link) goes back to the add screen with that
-  chapter open (`book`, `chapter` params). A fold from wide shows today's add screen; the open
-  chapter and any selection are dropped.
+  chapter open (`book`, `chapter`, and an `opened` time so a second redirect to the same chapter
+  still opens it). A fold from wide shows today's add screen; the open chapter and any selection
+  are dropped, so an unfold after it shows the books alone.
 - `tall` (Bible-Picker-Portrait2) and `outer`: today's drill-down, stretched.
 
 ## Browser checks

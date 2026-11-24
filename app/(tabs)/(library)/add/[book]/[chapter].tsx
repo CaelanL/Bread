@@ -35,7 +35,8 @@ export default function VerseSelectScreen() {
     if (!wide) return;
     router.dismissTo({
       pathname: '/(tabs)/(library)/add',
-      params: { ...(collectionId ? { collectionId } : {}), book: bookName, chapter: String(chapterNum) },
+      // `opened` makes each redirect new, so a second one to the same chapter still opens it.
+      params: { ...(collectionId ? { collectionId } : {}), book: bookName, chapter: String(chapterNum), opened: String(Date.now()) },
     });
   }, [wide, collectionId, bookName, chapterNum]);
 
