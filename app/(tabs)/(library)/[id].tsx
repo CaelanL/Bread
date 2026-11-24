@@ -19,18 +19,20 @@ const LIST_WIDTH = 340;
  * setup. On a wide window, the list on the left and the selected verse's setup on the right; the
  * sidebar button slides the list out and the setup takes the width. The selection and whether the
  * list is hidden last while the screen is open, through folds and rotations.
- * Dev builds also take `select=<verse id>` and `collapsed=1`, so screenshots can show a board's state without taps.
+ * Dev builds also take `collapsed=1` (list hidden) or `collapsed=<verse id>` (that verse, list hidden), so
+ * screenshots can show a board's state without taps. One param: the dev sign-in link loses a second one.
  */
 export default function CollectionScreen() {
-  const { id, select, collapsed: startCollapsed } = useLocalSearchParams<{ id: string; select?: string; collapsed?: string }>();
+  const { id, collapsed: startCollapsed } = useLocalSearchParams<{ id: string; collapsed?: string }>();
+  const devCollapsed = __DEV__ ? startCollapsed : undefined;
   const wide = useWindowClass() === 'wide';
   const colors = Colors[useColorScheme() ?? 'light'];
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const backToLibrary = useBackToLibrary();
   const [width, setWidth] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | undefined>(__DEV__ ? select : undefined);
-  const [collapsed, setCollapsed] = useState(__DEV__ && startCollapsed === '1');
+  const [selectedId, setSelectedId] = useState(devCollapsed && devCollapsed !== '1' ? devCollapsed : undefined);
+  const [collapsed, setCollapsed] = useState(devCollapsed !== undefined);
   const [settling, setSettling] = useState(false);
   const collapse = useSharedValue(collapsed ? 1 : 0);
 
