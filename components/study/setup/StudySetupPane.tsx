@@ -48,14 +48,56 @@ export const GLASS_EDGE = 16;
 const BUTTON = 44;
 const BUTTON_GAP = 8;
 /** Where content starts under the buttons, the side padding and the bottom margin (the boards). */
-const CONTENT_TOP = 84;
-const SIDE_TOP = 76;
-const SIDE = 32;
-const PANE_PAD = 40;
+export const CONTENT_TOP = 84;
+export const SIDE_TOP = 76;
+export const SIDE = 32;
+export const PANE_PAD = 40;
 const BOTTOM = 32;
 const BUBBLE_MAX = 300;
 const SHOW_BUTTON_ROOM = 28 + 44;
 const LIST_OPEN_PREVIEW_LINES = 3;
+
+/**
+ * The right pane's motion on a wide window, shared by study setup and a shared collection's Details:
+ * the pane's left edge follows the list out on Bread's curve, the list-open layout fades out early
+ * (`sideFade`), the list-hidden one fades in once the width settles (`wideFade`), and the title bubble
+ * glides from the centre of the pane beside the list to `shutCentre`, narrowed to clear the buttons.
+ */
+export function usePaneMotion({ collapse, width, listWidth, buttons, shutCentre }: {
+  collapse: SharedValue<number>;
+  width: number;
+  listWidth: number;
+  /** Glass buttons at the top left. */
+  buttons: number;
+  /** The bubble's centre with the list hidden. */
+  shutCentre: number;
+}) {
+  const reduced = useReducedMotion();
+  const setupWidth = width - listWidth;
+  const buttonsEnd = GLASS_EDGE + buttons * (BUTTON + BUTTON_GAP);
+  const openCentre = listWidth + setupWidth / 2;
+  const openBox = Math.min(BUBBLE_MAX, setupWidth - 2 * GLASS_EDGE);
+  const shutBox = Math.min(BUBBLE_MAX, 2 * (shutCentre - buttonsEnd));
+
+  const pane = useAnimatedStyle(() => {
+    const left = listWidth * (1 - paneShift(collapse.value, reduced));
+    return { left, width: width - left };
+  });
+  const sideFade = useAnimatedStyle(() => ({
+    opacity: interpolate(collapse.value, [0, SIDE_FADE_END], [1, 0], 'clamp'),
+  }));
+  const wideFade = useAnimatedStyle(() => {
+    const opacity = interpolate(collapse.value, [WIDE_FADE_START, 1], [0, 1], 'clamp');
+    return { opacity, transform: [{ translateY: reduced ? 0 : WIDE_RISE * (1 - opacity) }] };
+  });
+  const bubble = useAnimatedStyle(() => {
+    const shift = paneShift(collapse.value, reduced);
+    const centre = openCentre + (shutCentre - openCentre) * shift;
+    const box = openBox + (shutBox - openBox) * shift;
+    return { left: centre - box / 2, width: box, opacity: reduced ? Math.abs(collapse.value - 0.5) * 2 : 1 };
+  });
+  return { pane, sideFade, wideFade, bubble };
+}
 
 /**
  * Study setup on a wide window, for one verse. With the verse list showing (`listWidth`), the setup
@@ -82,7 +124,6 @@ export function StudySetupPane({ verseId, width, listWidth, collapse, collapsed,
   buttons: number;
 }) {
   const insets = useSafeAreaInsets();
-  const reduced = useReducedMotion();
   const setup = useStudySetup(verseId);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chunksOpen, setChunksOpen] = useState(false);
@@ -94,29 +135,7 @@ export function StudySetupPane({ verseId, width, listWidth, collapse, collapsed,
 
   const verseWidth = Math.round(width * VERSE_PANE_SHARE);
   const setupWidth = width - listWidth;
-  const buttonsEnd = GLASS_EDGE + buttons * (BUTTON + BUTTON_GAP);
-  const openCentre = listWidth + setupWidth / 2;
-  const shutCentre = verseWidth / 2;
-  const openBox = Math.min(BUBBLE_MAX, setupWidth - 2 * GLASS_EDGE);
-  const shutBox = Math.min(BUBBLE_MAX, 2 * (shutCentre - buttonsEnd));
-
-  const pane = useAnimatedStyle(() => {
-    const left = listWidth * (1 - paneShift(collapse.value, reduced));
-    return { left, width: width - left };
-  });
-  const sideFade = useAnimatedStyle(() => ({
-    opacity: interpolate(collapse.value, [0, SIDE_FADE_END], [1, 0], 'clamp'),
-  }));
-  const wideFade = useAnimatedStyle(() => {
-    const opacity = interpolate(collapse.value, [WIDE_FADE_START, 1], [0, 1], 'clamp');
-    return { opacity, transform: [{ translateY: reduced ? 0 : WIDE_RISE * (1 - opacity) }] };
-  });
-  const bubble = useAnimatedStyle(() => {
-    const shift = paneShift(collapse.value, reduced);
-    const centre = openCentre + (shutCentre - openCentre) * shift;
-    const box = openBox + (shutBox - openBox) * shift;
-    return { left: centre - box / 2, width: box, opacity: reduced ? Math.abs(collapse.value - 0.5) * 2 : 1 };
-  });
+  const { pane, sideFade, wideFade, bubble } = usePaneMotion({ collapse, width, listWidth, buttons, shutCentre: verseWidth / 2 });
 
   const { verse } = setup;
   if (!verse) return null;

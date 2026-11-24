@@ -65,12 +65,20 @@ export function useBackToLibrary() {
  * A collection's screen body: header, pills, search, sort, verse rows, swipe and copy, empty states,
  * toasts and the collection's menus. On a phone it's the whole screen, with its `TopBar`. On a wide
  * window (`wide`) it's the left pane: no bar (the screen draws back and the sidebar button, and its
- * own actions sit at the pane's top right as glass), and a row tap selects the verse instead of
- * opening setup, keeping a row selected while there is one.
+ * own actions sit at the pane's top right as glass), a row tap selects the verse instead of
+ * opening setup, keeping a row selected while there is one, and Details (the progress line, the people
+ * line, the menu) opens in the right pane instead of being pushed.
  */
 export function CollectionList({ id, wide }: {
   id: string;
-  wide?: { width: number; selectedId: string | undefined; onSelect: (verseId: string | undefined) => void };
+  wide?: {
+    width: number;
+    selectedId: string | undefined;
+    onSelect: (verseId: string | undefined) => void;
+    /** The right pane shows the group's Details, not the selected verse. */
+    details: boolean;
+    onDetails: (shown: boolean) => void;
+  };
 }) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -211,7 +219,8 @@ export function CollectionList({ id, wide }: {
   });
 
   const showGrid = useDebouncedPress(() => {
-    router.push(`/(tabs)/(library)/shared/${id}`);
+    if (wide) wide.onDetails(true);
+    else router.push(`/(tabs)/(library)/shared/${id}`);
   });
 
   // The share card is a route, never an RN Modal held here: see ModalCard. Sharing a personal
@@ -224,8 +233,10 @@ export function CollectionList({ id, wide }: {
     router.push(`/share/${id}`);
   });
 
+  // On a wide window the members are in Details, beside the list.
   const showMembers = useDebouncedPress(() => {
-    router.push(`/share/${id}?view=members`);
+    if (wide) wide.onDetails(true);
+    else router.push(`/share/${id}?view=members`);
   });
 
   const removeCollection = () => confirmRemoveCollection(id, { onConfirm: backToLibrary });
@@ -236,8 +247,10 @@ export function CollectionList({ id, wide }: {
   };
 
   const handleVersePress = (verse: SavedVerse) => {
-    if (wide) wide.onSelect(verse.id);
-    else router.push(`/(tabs)/(library)/setup/${verse.id}`);
+    if (wide) {
+      wide.onSelect(verse.id);
+      wide.onDetails(false);
+    } else router.push(`/(tabs)/(library)/setup/${verse.id}`);
   };
 
   const handleDeleteVerse = async (verseId: string) => {
@@ -395,7 +408,7 @@ export function CollectionList({ id, wide }: {
       disableSwipe={isMasteredCollection || isInProgressCollection || !canEdit}
       collectionCount={getVerseCollectionCount(item)}
       sharedMemberCount={withOthers ? shared?.memberCount : undefined}
-      selected={wide ? item.id === wide.selectedId : undefined}
+      selected={wide ? !wide.details && item.id === wide.selectedId : undefined}
       group={withOthers ? {
         states: groupRows.get(referenceKey(item))?.states ?? null,
         unavailable: sharedProgress?.failed ?? false,
@@ -422,6 +435,7 @@ export function CollectionList({ id, wide }: {
         label: groupProgressLabel(progress, verseCount),
         failed: sharedProgress?.failed ?? false,
         onPress: showGrid,
+        selected: wide?.details,
         onRetry: () => void useAppStore.getState().fetchSharedProgress(sharedId),
       } : undefined}
     >

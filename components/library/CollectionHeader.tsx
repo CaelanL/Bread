@@ -54,7 +54,8 @@ export function CollectionHeader({
   people?: { members: { name: string; you: boolean }[] | null; count: number; line: string; onPress: () => void };
   subtitle?: string;
   invite?: ReactNode;
-  progress?: { ratio: number | null; label: string; failed: boolean; onPress: () => void; onRetry: () => void };
+  /** `selected`: its Details show beside the list on a wide window. */
+  progress?: { ratio: number | null; label: string; failed: boolean; onPress: () => void; onRetry: () => void; selected?: boolean };
   /** The pills row. */
   children?: ReactNode;
 }) {
@@ -116,8 +117,13 @@ export function CollectionHeader({
           accessibilityRole="button"
           accessibilityLabel={progress.failed ? "Couldn't load group progress. Retry" : complete ? `Group progress. ${doneText}` : progress.label}
           accessibilityHint={progress.failed ? undefined : 'Shows details'}
+          accessibilityState={progress.selected === undefined ? undefined : { selected: progress.selected }}
           onPress={progress.failed ? progress.onRetry : progress.onPress}
-          style={({ pressed }) => [styles.progress, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.progress,
+            progress.selected && [styles.progressSelected, { backgroundColor: colors.primaryLight }],
+            pressed && styles.pressed,
+          ]}
         >
           <View style={[styles.track, { backgroundColor: colors.border }]}>
             {complete ? (
@@ -238,6 +244,8 @@ const styles = StyleSheet.create({
   metaText: { flexShrink: 1, fontSize: 15, lineHeight: 20 },
   invite: { marginTop: 8 },
   progress: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  // Highlighted like a selected row, in the same place: the extra padding comes out of the margins.
+  progressSelected: { marginTop: 10, marginBottom: -4, paddingVertical: 8, marginHorizontal: -10, paddingHorizontal: 10, borderRadius: Radius.md },
   track: { flex: 1, height: 4, borderRadius: Radius.full, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: Radius.full },
   sweep: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SWEEP_WIDTH },

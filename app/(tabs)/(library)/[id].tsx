@@ -1,9 +1,12 @@
 import { CollectionList, useBackToLibrary } from '@/components/library/CollectionList';
+import { GroupDetailsPane } from '@/components/shared/GroupDetailsPane';
 import { GLASS_EDGE, paneShift, StudySetupPane } from '@/components/study/setup/StudySetupPane';
 import { GlassButton } from '@/components/ui/Glass';
 import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useWindowClass } from '@/hooks/use-window-class';
+import { hasOtherMembers } from '@/lib/shared/progress';
+import { useCollection, useSharedCollection } from '@/lib/store';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -17,8 +20,10 @@ const LIST_WIDTH = 340;
 /**
  * One collection. On a phone (and the Duo's narrower windows), the verse list; a row opens study
  * setup. On a wide window, the list on the left and the selected verse's setup on the right; the
- * sidebar button slides the list out and the setup takes the width. The selection and whether the
- * list is hidden last while the screen is open, through folds and rotations.
+ * sidebar button slides the list out and the setup takes the width. A shared collection with others
+ * in it opens on the group's Details in that pane instead (the Shared-Collection board), until a verse
+ * is tapped; the group progress line, the people line and the menu's Details bring it back. The
+ * selection and whether the list is hidden last while the screen is open, through folds and rotations.
  * Dev builds also take `collapsed=1` (list hidden) or `collapsed=<verse id>` (that verse, list hidden), so
  * screenshots can show a board's state without taps. One param: the dev sign-in link loses a second one.
  */
@@ -33,6 +38,10 @@ export default function CollectionScreen() {
   const [width, setWidth] = useState(0);
   const [selectedId, setSelectedId] = useState(devCollapsed && devCollapsed !== '1' ? devCollapsed : undefined);
   const [collapsed, setCollapsed] = useState(devCollapsed !== undefined);
+  const [details, setDetails] = useState(selectedId === undefined);
+  const collection = useCollection(id);
+  const shared = useSharedCollection(id);
+  const showDetails = details && Boolean(collection?.sharedId) && hasOtherMembers(shared);
   const [settling, setSettling] = useState(false);
   const collapse = useSharedValue(collapsed ? 1 : 0);
 
@@ -52,14 +61,25 @@ export default function CollectionScreen() {
 
   // One tree for phone and wide, so a fold or unfold keeps the list (scroll, search) mounted.
   const sized = wide && width > 0;
-  const split = sized && selectedId !== undefined;
+  const split = sized && (showDetails || selectedId !== undefined);
   const listHidden = split && collapsed && !settling;
   return (
     <View
       style={[styles.container, { backgroundColor: colors.background }]}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
     >
-      {split && (
+      {split && showDetails && (
+        <GroupDetailsPane
+          id={id}
+          width={width}
+          listWidth={LIST_WIDTH}
+          collapse={collapse}
+          collapsed={collapsed}
+          settling={settling}
+          buttons={2}
+        />
+      )}
+      {split && !showDetails && selectedId !== undefined && (
         <StudySetupPane
           key={selectedId}
           verseId={selectedId}
@@ -84,7 +104,10 @@ export default function CollectionScreen() {
           split && sidebar,
         ]}
       >
-        <CollectionList id={id} wide={sized ? { width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId } : undefined} />
+        <CollectionList
+          id={id}
+          wide={sized ? { width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId, details: showDetails, onDetails: setDetails } : undefined}
+        />
       </Animated.View>
       {wide && (
         <View style={[styles.buttons, { top: insets.top + GLASS_EDGE }]}>
