@@ -51,6 +51,7 @@ export function DifficultySwitcher({ value, onChange }: {
         {LEVELS.map(({ level, label, sub }) => (
           <Pressable
             key={level}
+            testID={`difficulty-${level}`}
             accessibilityRole="button"
             accessibilityState={{ selected: value === level }}
             style={styles.segment}

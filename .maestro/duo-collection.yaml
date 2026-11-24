@@ -66,9 +66,10 @@ tags: [fresh-seed]
     notVisible:
       id: passage-close
     timeout: 5000
-- tapOn: "Medium.*"
+- tapOn:
+    id: difficulty-medium
 - assertVisible:
-    text: "Medium.*"
+    id: difficulty-medium
     selected: true
 - tapOn:
     id: sidebar-toggle
@@ -83,7 +84,7 @@ tags: [fresh-seed]
     id: reference-bubble
     text: "Romans 8:28"
 - assertVisible:
-    text: "Medium.*"
+    id: difficulty-medium
     selected: true
 - tapOn: "Start session.*"
 - extendedWaitUntil:
