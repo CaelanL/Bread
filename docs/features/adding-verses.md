@@ -7,7 +7,8 @@ rest of the Library are in `docs/features/library.md`.
 ## Browsing a chapter
 
 `add.tsx` is the quick-add field over a book and chapter list (Browse, below), with the account
-translation picker as a pill in the bar. Tapping a chapter opens `add/[book]/[chapter].tsx`,
+translation picker as a pill in the bar. Tapping a chapter opens `add/[book]/[chapter].tsx`
+(`ChapterVerses`, also the wide picker's pane: [window layouts](../architecture/window-layouts.md#add-verse)),
 which loads with `fetchChapter`, and the user selects one continuous range:
 
 1. **Long press, 250 ms.** Starts a selection, with a haptic.

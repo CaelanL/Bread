@@ -92,6 +92,35 @@ the class themselves.
 - Insights on the open Duo is a white card with a cell per number (streak, mastered, in progress),
   stacked on its side so it fills the row, in one row upright.
 
+## Library
+
+On its side and on the outer display (Library-Toggle, Library-Outer boards) the title sits 26 pt
+under the safe top (28/24 side padding on its side, 20/10 outside) with a 40 pt grid ⇄ list button
+beside it. The rail holds Add, then Edit as a glass word (`GlassButton text`).
+
+- **Grid**: `CollectionTile`, four columns on its side and two outside, 18 pt apart, 22 between
+  rows. A square in the row's own colours (`collectionSquare`, shared with the list row) with two
+  faint orbits, a 64 pt icon, the mastered or engraved badge in its corner (30 pt); under it the
+  name with the due pill, and the row's subtitle. Long press opens the row's menu
+  (`collectionMenuItems`); there's no swipe, Delete is in the menu.
+- **List**: today's rows. Edit, and Reorder from a menu, always show the list (drag handles).
+- **The choice** is a device setting, `libraryView` in the store (AsyncStorage `library_view`),
+  shared by both displays. `libraryView()` in `lib/layout.ts`: until one is chosen, a grid on its
+  side and a list outside; phones and the open Duo upright always get today's list, with no button.
+
+## Add verse
+
+- `wide` (Bible-Picker board): the add screen is a 320 pt books column (title, quick add, books,
+  a book's chapters five across, the open chapter outlined in `tint`) beside the chapter. A chapter
+  tap shows it in the pane instead of pushing, with no 500 ms window (it doesn't leave the screen);
+  book rows keep their same-book guard. The pane is `ChapterVerses` (the chapter route's body: fetch,
+  the range gesture, Add), with the title in the content, text at most 498 wide, and the reference,
+  translation and Add docked low over a fade. Back and the translation (a glass word) are in the rail.
+  The chapter route on a wide window (an unfold, a link) goes back to the add screen with that
+  chapter open (`book`, `chapter` params). A fold from wide shows today's add screen; the open
+  chapter and any selection are dropped.
+- `tall` (Bible-Picker-Portrait2) and `outer`: today's drill-down, stretched.
+
 ## Browser checks
 
 - `npm run sim -- shot /dev-window --device duo`: "466 × 678", "outer", and the glass buttons and
@@ -100,6 +129,11 @@ the class themselves.
 - Home on the Duo: `npm run sim -- shot "/(tabs)/(home)/home" --device duo` closed (outer), then
   opened `--display inner` on its side and turned upright, each also `--dark`: the rail or pill, and
   the board's layout. On iPhone 16 Pro, Home matches today's.
+- Library: `npm run sim -- flow duo-library --device duo` on the closed Duo: list, grid, a tile's
+  menu, Reorder shows the list, a tile opens its collection; it ends on the grid. Then
+  `shot "/(tabs)/(library)" --as reader-c --device duo --display inner` opened: the four-column grid.
+- Picker: `shot "/(tabs)/(library)/add/Romans/8" --device duo --display inner` opened on its side:
+  books with Romans 8 outlined beside the chapter; turned upright: today's chapter screen.
 - Rail: `npm run sim -- flow duo-rail --device duo` on the closed Duo: tabs switch from the rail, and
   setup's More opens its menu beside the rail (Reset Progress, then Cancel). The open Duo can't be tapped.
 
@@ -112,3 +146,7 @@ the class themselves.
 - 2026-11-23 · No Due for review card on Home · Caelan (O3); Insights takes its space.
 - 2026-11-23 · Home's Insights card on the Duo shows streak, mastered and in progress, not Time studied · time studied is a server read only Insights makes; Home keeps today's data.
 - 2026-11-23 · Explore tiles use a 100 pt banner upright too (board: 110) · one banner size for both.
+- 2026-11-24 · The Library grid ⇄ list is one device setting, not saved to the account, a grid on its side and a list outside until chosen · the two boards draw those defaults; no data changes allowed.
+- 2026-11-24 · Grid squares use the list row's colours, not the boards' curated gradients · the Library rows have no gradients today; same data as the phone.
+- 2026-11-24 · Reordering always shows the list · a drag in a wrapping grid is a different gesture; the list's drag and move actions already work.
+- 2026-11-24 · The open Duo upright keeps today's Library (no grid) · Q20: undrawn upright screens use the phone layout.

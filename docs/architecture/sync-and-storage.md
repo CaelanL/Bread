@@ -26,6 +26,7 @@ library (below).
 | Install handoff asked once | — | — | ✓ (`shared_handoff_checked`) |
 | Translation notices | — | — | ✓ (`translation_account_note_seen`, `translation_kept_notices`) |
 | `reviewMaxIntervalDays` | — | ✓ | ✓ (`review_max_interval_days`) |
+| `libraryView` | — | ✓ | ✓ (`library_view`) |
 | Virtual collection sorts | — | ✓ | ✓ (`library_sort_mastered`, `library_sort_in_progress`) |
 | Other collections' sort | ✓ (`sort_preference`) | ✓ | — |
 | Notification prefs | ✓ | ✓ (`usePrefsStore`) | ✓ cache (`notifications_prefs_cache:<userId>`) |
