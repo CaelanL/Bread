@@ -16,7 +16,8 @@
 //   --device duo           the iPhone Duo simulator (iOS 27.2 iPhone19,4 runtime) instead of iPhone 16 Pro. It boots
 //                          closed; fold, open or rotate it with Claude's iOS Simulator tool (set_posture, rotate).
 //   --display outer|inner  which Duo display a shot captures (default outer); the file name ends in it.
-//   --dark                 dark appearance for the run, set back afterwards (--keep too); shot files end in -dark.
+//   --dark                 dark appearance for the run, light again afterwards; shot files end in -dark. Every run
+//                          sets the appearance at boot, so the simulator is light without it.
 //
 // The app must add a <scheme>://dev-sign-in?next=<route> route. Still unproven:
 //   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags are right per --help; that it installs on DEVICE is not run.
@@ -46,7 +47,9 @@ function option(name, takesValue) {
   const [, value] = argv.splice(i, takesValue ? 2 : 1);
   return takesValue ? value : true;
 }
-const duo = option('--device', true) === 'duo';
+const device = option('--device', true);
+if (device !== null && device !== 'duo') die(`--device takes duo (the iPhone Duo); without it, iPhone 16 Pro. Got "${device}".`);
+const duo = device === 'duo';
 const DEVICE = duo ? 'iPhone Duo' : 'iPhone 16 Pro';
 const display = option('--display', true) ?? 'outer';
 if (!['outer', 'inner'].includes(display)) die('--display is outer or inner.');
@@ -106,9 +109,11 @@ function takeLock() {
   mkdirSync(CACHE, { recursive: true });
   const held = readJson(LOCK);
   if (held && held.folder !== root && isAlive(held.pid)) die(`simulator busy: ${held.folder} since ${held.since}`);
-  if (!held || held.folder !== root) {
-    const others = bootedDevices().filter((name) => name !== DEVICE);
-    if (others.length >= MAX_SIMS) die(`simulator busy: ${others.join(', ')} is booted (limit ${MAX_SIMS}). Shut it down first.`);
+  // Also when this folder holds the lock: a --keep run may have left the other device booted.
+  const others = bootedDevices().filter((name) => name !== DEVICE);
+  if (others.length >= MAX_SIMS) {
+    die(`simulator busy: ${others.join(', ')} is booted (limit ${MAX_SIMS}). Shut it down first`
+      + (held?.folder === root ? ` (npm run sim -- stop${DEVICE === 'iPhone Duo' ? '' : ' --device duo'}).` : '.'));
   }
   writeFileSync(LOCK, JSON.stringify({ folder: root, pid: process.pid, since: new Date().toISOString() }));
   if (held?.folder === root) stopMetro(held); // a --keep run left one behind
@@ -161,16 +166,14 @@ function approveScheme() {
   must('plutil', ['-convert', 'binary1', prefs]);
 }
 
-let lightBefore; // the appearance a --dark run puts back
+const setAppearance = (mode) => run('xcrun', ['simctl', 'ui', DEVICE, 'appearance', mode]);
 
+// Set on every boot, so a dark run that never got to set it back (install, a Ctrl-C) can't leak into the next one.
 function bootDevice() {
   approveScheme();
   run('xcrun', ['simctl', 'boot', DEVICE]); // fails harmlessly when already booted
   must('xcrun', ['simctl', 'bootstatus', DEVICE, '-b']);
-  if (dark) {
-    lightBefore = must('xcrun', ['simctl', 'ui', DEVICE, 'appearance']).trim();
-    must('xcrun', ['simctl', 'ui', DEVICE, 'appearance', 'dark']);
-  }
+  setAppearance(dark ? 'dark' : 'light');
 }
 
 const freePort = () => new Promise((resolve, reject) => {
@@ -214,7 +217,7 @@ async function waitForBundle() {
   die(`The app didn't finish bundling. See ${LOG}`);
 }
 
-const openUrl = (url) => must('xcrun', ['simctl', 'openurl', 'booted', url]);
+const openUrl = (url) => must('xcrun', ['simctl', 'openurl', DEVICE, url]);
 const fileName = (route) => route.replace(/^\/+|\/+$/g, '').replace(/[^A-Za-z0-9_-]+/g, '-') || 'home';
 
 function stopMetro(held) {
@@ -222,10 +225,7 @@ function stopMetro(held) {
   try { process.kill(-held.pid, 'SIGTERM'); } catch { /* already gone */ }
 }
 
-function restoreAppearance() {
-  if (lightBefore) run('xcrun', ['simctl', 'ui', DEVICE, 'appearance', lightBefore]);
-  lightBefore = undefined;
-}
+const restoreAppearance = () => dark && setAppearance('light');
 
 function stopAll() {
   restoreAppearance();
@@ -276,7 +276,7 @@ async function shot(args) {
     await sleep(SETTLE_MS);
     const file = join(SHOTS, `${fileName(route)}${dark ? '-dark' : ''}${duo ? `-${display}` : ''}.png`);
     // simctl refuses a Duo screenshot without --display: 1 is the outer display, 3 the inner.
-    must('xcrun', ['simctl', 'io', 'booted', 'screenshot', ...(duo ? [`--display=${display === 'outer' ? 1 : 3}`] : []), file]);
+    must('xcrun', ['simctl', 'io', DEVICE, 'screenshot', ...(duo ? [`--display=${display === 'outer' ? 1 : 3}`] : []), file]);
     console.log(file);
   }
   restoreAppearance();

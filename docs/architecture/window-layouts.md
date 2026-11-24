@@ -45,7 +45,8 @@ when the phone turns. No `expo-screen-orientation`, no native change.
   neither `simctl` nor Maestro can. Leave it running between commands with `--keep`.
 - `shot --device duo --display outer|inner` picks the display to capture (default outer); the file
   name ends in it. Outer shots are 1398 × 2034 px, inner ones 2853 × 2007 on its side.
-- `--dark` (any device) shoots in dark appearance and sets the simulator back afterwards.
+- `--dark` (any device) shoots in dark appearance. Every run sets the appearance when it boots, so
+  without `--dark` the simulator is light.
 - Maestro works on the closed Duo only. With it open, Maestro reads the screen in the outer
   display's coordinates (offset by −203, −273 and clipped to 466 × 678), so taps and scrolls miss.
 

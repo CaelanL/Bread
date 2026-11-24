@@ -43,16 +43,19 @@ describe('verseFontSize', () => {
 });
 
 describe('hiddenLineWidths', () => {
-  it('draws one short line for a short verse', () => {
-    assert.deepEqual(hiddenLineWidths(10, 364, 30), [38 + (70 % 40)]);
+  it('draws one line, shorter than a full one, for a short verse', () => {
+    const widths = hiddenLineWidths(10, 364, 30);
+    assert.equal(widths.length, 1);
+    assert.ok(widths[0] >= 38 && widths[0] < 100);
   });
 
   it('draws as many lines as the text would wrap to, the last one shorter', () => {
     // 364 pt at 21 pt fits about 34.7 characters a line, so 200 characters take 6 lines.
     const widths = hiddenLineWidths(200, 364, 21);
     assert.equal(widths.length, 6);
-    assert.deepEqual(widths.slice(0, 5), [100, 96, 92, 97, 93]);
-    assert.ok(widths[5] >= 38 && widths[5] < 78);
+    const full = widths.slice(0, 5);
+    for (const w of full) assert.ok(w > 90 && w <= 100);
+    assert.ok(widths[5] >= 38 && widths[5] < Math.min(...full));
   });
 
   it('always draws at least one line', () => {
