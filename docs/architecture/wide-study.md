@@ -61,7 +61,9 @@ collection show the list full width. Search fills the list only (`SearchTakeover
   ends; the real texts hide then. Hide verses: "Verse hidden" becomes the bars. Not under Reduce Motion
   or while the text loads. Selection and the collapse last while the screen is open, folds included. Phone and wide render
   the same tree, so a fold keeps the list's scroll and an open search.
-- Setup opened straight on wide (a link, Review now) is the list-hidden layout with back only.
+- Setup opened straight on wide (a link) is the list-hidden layout with back only. Setup pushed from a
+  collection on a phone goes back to it on an unfold (not while a session is open over it): a phone row
+  tap selects too, so the collection shows that verse beside the list. A fold then shows the list.
 - The passage card is at most 560 wide (22/34 text) and the chunk sheet at most 280 wide on wide.
 
 ## Shared collection
@@ -101,8 +103,9 @@ and recording are the phone's.
   (done with its text and score, current, or not yet; "Revealed — this chunk won't count" on a peeked one)
   and Results once every chunk is done. A row tap scrolls the pages there, like a swipe, so it's off while
   a take runs. The glass sidebar button (`chunk-sidebar-toggle`) never moves; hidden, the reference and
-  progress bar show. The slide runs on `Motion.paneMs` (`paneShift`), the pages fade out by 120 ms and
-  back from 200 ms and change width at 190 ms, unseen.
+  progress bar show. The slide and the pages' fades ride the collection's `Collapse` (`listShift`,
+  `setupFadeOut`, `paneFadeIn`): the pages fade out by 120 ms and back from 200 ms and change width at
+  190 ms, unseen.
 - The finish (`SessionFinish` `wide`): 108 pt score, Done and Review chunks low right, 260 wide.
 - A new page width (fold, rotation, sidebar) remounts the paging list on the current chunk
   (`key`, `initialScrollIndex`), and the list is always exactly one page wide.

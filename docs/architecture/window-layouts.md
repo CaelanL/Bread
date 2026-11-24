@@ -62,7 +62,8 @@ Study setup, the collection, the shared collection and the study session on each
   when that's wider: on the Duo the status bar (time, Wi-Fi) runs down the right edge and the inset is 84.
   Top: the focused screen's actions, starting under the status bar (`STATUS_ROOM`: 106 pt on its side,
   160 on the outer display, measured). Bottom, 20 pt up: a vertical `GlassPill` of 50 pt tab circles,
-  the selected one on `primaryLight` in `tint`.
+  the selected one on `primaryLight` in `tint`. Beside the rail, titles start `RAIL_TITLE_TOP` (26 pt)
+  under the safe top and pages pad their sides by `RAILED_PAD`, both exported from `TabRail.tsx`.
 - `tall`: `TabPill`, a floating glass pill of 96 × 54 tabs with labels, 24 pt from the bottom, the page
   fading out above it. It reports its height, so `useBottomTabBarHeight()` stays right.
 - Both keep the `tab-*` testIDs, the selected state, the Settings badge (an `error` dot with the count)
