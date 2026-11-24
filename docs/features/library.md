@@ -58,8 +58,8 @@ mastered or engraved (engraved also fills the square and washes the row gold; se
 
 **Hide verses.** Settings → Appearance → Hide verses (`hideVerseText`, a device pref in the store,
 kept across sign-out like Theme, default off) drops the text line from a collection's verse rows
-(`SwipeableVerseCard`, skipping the fetch) and from Study setup's preview card, where
-the expand button still shows the full text. Off, a collection warms its text on open
+(`SwipeableVerseCard`, skipping the fetch) and from Study setup's preview
+([setup](../architecture/window-layouts.md#study-setup)). Off, a collection warms its text on open
 ([preload](../architecture/bible-api-and-caching.md#preloading-verse-text)).
 
 **My Verses** is the default. Its `client_id` is `my-verses`, with `is_default` true.

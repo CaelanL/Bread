@@ -39,6 +39,7 @@ surfaces.
 | `engravedFill` | `rgba(245,158,11,0.12)` | engraved collection icon |
 | `glass` / `glassBorder` | `rgba(255,255,255,0.72)` / `rgba(255,255,255,0.9)` | glass buttons and pills before Liquid Glass |
 | `controlFill` / `controlThumb` | `rgba(118,118,128,0.12)` / `#ffffff` | a switcher's track and raised thumb, capsule value buttons |
+| `actionFill` | `#b08d57` | Start session, today's bronze in both modes (white text on the dark `primary` is too faint) |
 | `overlay` | `rgba(0,0,0,0.5)` | modal scrim |
 | `shadow` / `white` | `#000` / `#ffffff` | utility, same in both modes |
 

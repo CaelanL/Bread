@@ -46,6 +46,8 @@ export function ChunkSizeModal({ visible, totalVerses, initialChunkSize, onSave,
                 <Pressable
                   key={n}
                   testID={`chunk-option-${n}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
                   style={[
                     styles.option,
                     isSelected && { backgroundColor: colors.primary },
@@ -60,6 +62,8 @@ export function ChunkSizeModal({ visible, totalVerses, initialChunkSize, onSave,
             })}
             <Pressable
               testID="chunk-option-all"
+              accessibilityRole="button"
+              accessibilityState={{ selected: isAllSelected }}
               style={[
                 styles.option,
                 isAllSelected && { backgroundColor: colors.primary },

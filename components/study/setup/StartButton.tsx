@@ -10,7 +10,7 @@ export function StartButton({ onPress }: { onPress: () => void }) {
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.button, { backgroundColor: colors.primary }, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.button, { backgroundColor: colors.actionFill }, pressed && styles.pressed]}
     >
       <Text style={[styles.text, { color: colors.white }]}>Start session</Text>
       <IconSymbol name="arrow.right" size={18} color={colors.white} />

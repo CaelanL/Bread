@@ -64,7 +64,7 @@ parts live in `components/study/setup/` so the wide layouts reuse them. On a pho
 - `ProgressCard`: three best scores, then the engraved row (icon, state, "N / 10" on one line, bar,
   then the callout, unlock time or tagline), on a white `card` with `Shadows.card`.
 - `ChunkRow` (passages only): the size in a capsule that opens `ChunkSizeModal`, and All.
-- `StartButton`: a 56 pt full-width bronze capsule docked over the page fade.
+- `StartButton`: a 56 pt full-width `actionFill` capsule docked over the page fade.
 
 Spacing: 24 pt between sections, section titles 17 pt semibold, 10 pt from a title to its control.
 The bubble, ⤢ and the preview text open `PassageCard`, the whole passage with numbered verses. It
