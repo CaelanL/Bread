@@ -19,7 +19,7 @@ import { useAppStore } from '@/lib/store';
 import { formatVerseReference } from '@/lib/storage';
 import { useIsFocused } from 'expo-router/react-navigation';
 import { useContext, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View, type ViewInstance } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewInstance } from 'react-native';
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -90,7 +90,7 @@ export function StudySetupPane({ verseId, width, listWidth, collapse, collapsed,
   const menuAnchor = useMenuAnchor();
   const railed = useContext(RailContext);
   const focused = useIsFocused();
-  useRailActions(<TopBarButton icon="ellipsis" label="More" onPress={() => setMenuOpen(true)} />, railed && focused);
+  useRailActions(<TopBarButton icon="ellipsis" label="Verse options" onPress={() => setMenuOpen(true)} />, railed && focused);
 
   const verseWidth = Math.round(width * VERSE_PANE_SHARE);
   const setupWidth = width - listWidth;
@@ -262,7 +262,13 @@ function SplitSetup({ setup, verseWidth, onOpenPassage, onOpenChunks }: {
         )}
       </View>
 
-      <View style={[styles.column, { top, bottom: Math.max(insets.bottom, 24), left: verseWidth + PANE_PAD, right: PANE_PAD }]}>
+      {/* The sections scroll (larger text), Start stays docked under them. */}
+      <View style={[styles.column, { left: verseWidth, paddingBottom: Math.max(insets.bottom, 24) }]}>
+        <ScrollView
+          style={styles.sections}
+          contentContainerStyle={[styles.sectionsContent, { paddingTop: top }]}
+          showsVerticalScrollIndicator={false}
+        >
         <ProgressCard progress={verse.progress} />
         <View style={styles.difficulty}>
           <DifficultySwitcher value={difficulty} onChange={setup.pickDifficulty} />
@@ -277,8 +283,10 @@ function SplitSetup({ setup, verseWidth, onOpenPassage, onOpenChunks }: {
             />
           </View>
         )}
-        <View style={styles.spacer} />
-        <StartButton onPress={setup.handleStartSession} />
+        </ScrollView>
+        <View style={styles.start}>
+          <StartButton onPress={setup.handleStartSession} />
+        </View>
       </View>
     </>
   );
@@ -305,8 +313,10 @@ const styles = StyleSheet.create({
   },
   showText: { fontSize: 15, fontWeight: '600' },
   pressed: { opacity: 0.6 },
-  column: { position: 'absolute' },
+  column: { position: 'absolute', top: 0, bottom: 0, right: 0 },
+  sections: { flex: 1 },
+  sectionsContent: { paddingHorizontal: PANE_PAD, paddingBottom: 16 },
+  start: { paddingHorizontal: PANE_PAD, paddingTop: 8 },
   difficulty: { marginTop: 24 },
   chunks: { marginTop: 20 },
-  spacer: { flex: 1 },
 });

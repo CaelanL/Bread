@@ -459,7 +459,7 @@ export function CollectionList({ id, wide }: {
             <GlassButton testID="collection-share" icon="person.badge.plus" label={sharedId ? 'Invite and members' : 'Share'} onPress={share} />
           )}
           {menuItems.length > 0 && (
-            <GlassButton testID="collection-menu" icon="ellipsis" label="More" onPress={() => setMenuOpen(true)} />
+            <GlassButton testID="collection-menu" icon="ellipsis" label="Collection options" onPress={() => setMenuOpen(true)} />
           )}
         </View>
       ) : (

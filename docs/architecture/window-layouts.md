@@ -81,7 +81,9 @@ wide it has no bar, its share and ⋯ are glass buttons at the list's top right,
 rows (the first in the current sort, again if the selected one leaves). Loading and an empty
 collection show the list full width. Search fills the list only (`SearchTakeover` `area`).
 
-- Glass back and sidebar buttons (`sidebar-toggle`) sit 16 pt from the top left and never move.
+- Glass back and sidebar buttons (`sidebar-toggle`, "Hide verse list" / "Show verse list", with an
+  `expanded` state) sit 16 pt from the top left and never move. The list's ⋯ is "Collection options",
+  the rail's ⋯ "Verse options".
 - `StudySetupPane` (`components/study/setup/`) holds one verse's setup (`useStudySetup`, keyed by
   verse, so each verse restores its own saved difficulty and chunk size). Reset Progress is the ⋯ in
   the rail.
@@ -89,15 +91,16 @@ collection show the list full width. Search fills the list only (`SearchTakeover
   the reference bubble centred over it.
 - List hidden: the verse in a `pane`-tinted pane (51% of the width, `paneBorder` hairline) in the study
   `VerseCard` font at `verseFontSize`, cut to the lines that fit, tapping it opens the passage; ⤢ as a
-  glass button at the pane's top right; on the right, Your Progress, Difficulty, Verses per chunk and
-  Start at the bottom. The bubble sits centred over the verse pane, narrowed to clear the buttons.
+  glass button at the pane's top right; on the right, Your Progress, Difficulty and Verses per chunk
+  scroll above a docked Start (larger text). The bubble sits centred over the verse pane, narrowed to clear the buttons.
 - Hide verses: `hiddenLineWidths` bronze lines (`primaryLight`) and a Show verse button instead of
   the text; rows drop their text line as on a phone.
 - The collapse is one shared value running linearly over `Motion.paneMs`; `paneShift` puts it on
   `Motion.easing` for the moving parts (the list slides out as one piece, the pane's left edge and
   the bubble follow). The list-open layout fades out over the first 120 ms and the hidden one fades
   in from 200 ms, rising 8 pt; only the resting layout stays mounted. Reduce Motion: everything fades
-  and the panes jump halfway. Selection and the collapse last while the screen is open, folds included.
+  and the panes jump halfway. Selection and the collapse last while the screen is open, folds included. Phone and wide render
+  the same tree, so a fold keeps the list's scroll and an open search.
 - Setup opened straight on wide (a link, Review now) is the list-hidden layout with back only.
 - The passage card is at most 560 wide (22/34 text) and the chunk sheet at most 280 wide on wide.
 

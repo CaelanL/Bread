@@ -50,16 +50,16 @@ export default function CollectionScreen() {
     opacity: reduced ? interpolate(collapse.value, [0, 0.5], [1, 0], 'clamp') : 1,
   }));
 
-  if (!wide) return <CollectionList id={id} />;
-
-  const split = selectedId !== undefined;
+  // One tree for phone and wide, so a fold or unfold keeps the list (scroll, search) mounted.
+  const sized = wide && width > 0;
+  const split = sized && selectedId !== undefined;
   const listHidden = split && collapsed && !settling;
   return (
     <View
       style={[styles.container, { backgroundColor: colors.background }]}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
     >
-      {split && width > 0 && (
+      {split && (
         <StudySetupPane
           key={selectedId}
           verseId={selectedId}
@@ -71,32 +71,35 @@ export default function CollectionScreen() {
           buttons={2}
         />
       )}
-      {width > 0 && (
-        <Animated.View
-          pointerEvents={listHidden ? 'none' : 'auto'}
-          accessibilityElementsHidden={listHidden}
-          importantForAccessibility={listHidden ? 'no-hide-descendants' : 'auto'}
-          style={[
-            styles.list,
-            split && { borderRightColor: colors.border, borderRightWidth: StyleSheet.hairlineWidth },
-            { width: split ? LIST_WIDTH : width, backgroundColor: colors.background },
-            split && sidebar,
-          ]}
-        >
-          <CollectionList id={id} wide={{ width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId }} />
-        </Animated.View>
+      <Animated.View
+        pointerEvents={listHidden ? 'none' : 'auto'}
+        accessibilityElementsHidden={listHidden}
+        importantForAccessibility={listHidden ? 'no-hide-descendants' : 'auto'}
+        style={[
+          styles.list,
+          split ? { width: LIST_WIDTH } : styles.fill,
+          split && { borderRightColor: colors.border, borderRightWidth: StyleSheet.hairlineWidth },
+          { backgroundColor: colors.background },
+          wide && !sized && styles.unsized,
+          split && sidebar,
+        ]}
+      >
+        <CollectionList id={id} wide={sized ? { width: split ? LIST_WIDTH : width, selectedId, onSelect: setSelectedId } : undefined} />
+      </Animated.View>
+      {wide && (
+        <View style={[styles.buttons, { top: insets.top + GLASS_EDGE }]}>
+          <GlassButton icon="chevron.left" label="Back" onPress={backToLibrary} />
+          {split && (
+            <GlassButton
+              testID="sidebar-toggle"
+              icon="sidebar.left"
+              label={collapsed ? 'Show verse list' : 'Hide verse list'}
+              expanded={!collapsed}
+              onPress={toggleList}
+            />
+          )}
+        </View>
       )}
-      <View style={[styles.buttons, { top: insets.top + GLASS_EDGE }]}>
-        <GlassButton icon="chevron.left" label="Back" onPress={backToLibrary} />
-        {split && (
-          <GlassButton
-            testID="sidebar-toggle"
-            icon="sidebar.left"
-            label={collapsed ? 'Show verses' : 'Hide verses'}
-            onPress={toggleList}
-          />
-        )}
-      </View>
     </View>
   );
 }
@@ -104,5 +107,7 @@ export default function CollectionScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { position: 'absolute', top: 0, bottom: 0, left: 0, overflow: 'hidden' },
+  fill: { right: 0 },
+  unsized: { opacity: 0 },
   buttons: { position: 'absolute', left: GLASS_EDGE, flexDirection: 'row', gap: 8, zIndex: 3 },
 });

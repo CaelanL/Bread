@@ -2,8 +2,8 @@
 # `npm run sim -- flow duo-collection --device ipad` (Maestro can't tap the open iPhone Duo, see
 # docs/architecture/window-layouts.md; the iPad gets the same wide layout). reader-a opens My Verses:
 # the list sits beside Romans 8:28's setup; the sidebar button hides the list and the verse fills the
-# pane, then brings it back; Medium is picked, John 3:16 selected and Romans 8:28 again still on
-# Medium; the whole passage opens from the bubble, ⤢ and the verse, and closes; Start opens the session.
+# pane, then brings it back; Medium is picked, John 3:16 opens on its own Hard and Romans 8:28 again
+# is still on Medium; the whole passage opens from the bubble, ⤢ and the verse, and closes; Start opens the session.
 appId: com.caelanliu.biblemem
 name: duo-collection
 tags: [fresh-seed]
@@ -78,6 +78,9 @@ tags: [fresh-seed]
 - assertVisible:
     id: reference-bubble
     text: "John 3:16"
+- assertVisible:
+    id: difficulty-hard
+    selected: true
 - takeScreenshot: duo-collection-4-john
 - tapOn: "Romans 8:28.*"
 - assertVisible:

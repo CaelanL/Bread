@@ -23,12 +23,13 @@ function GlassSurface({ style, children }: { style: StyleProp<ViewStyle>; childr
 }
 
 /** A 44 pt glass circle holding one icon: a wide window's back, sidebar and ⋯ buttons. */
-export function GlassButton({ icon, label, onPress, testID, disabled }: {
+export function GlassButton({ icon, label, onPress, testID, disabled, expanded }: {
   icon: ComponentProps<typeof IconSymbol>['name'];
   label: string;
   onPress: () => void;
   testID?: string;
   disabled?: boolean;
+  expanded?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   return (
@@ -36,6 +37,7 @@ export function GlassButton({ icon, label, onPress, testID, disabled }: {
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => pressed && styles.pressed}
