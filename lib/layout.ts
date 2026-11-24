@@ -36,3 +36,14 @@ export function hiddenLineWidths(length: number, lineWidth: number, fontSize: nu
   const count = Math.max(1, Math.ceil(length / perLine));
   return Array.from({ length: count }, (_, i) => (i === count - 1 ? 38 + ((length * 7) % 40) : 100 - ((i * 13) % 9)));
 }
+
+export type LibraryView = 'grid' | 'list';
+
+/**
+ * The Library's look. Phones and the open Duo upright keep today's list; on its side and on the
+ * outer display it's the user's choice, or until one is made, a grid on its side and a list outside.
+ */
+export function libraryView(chosen: LibraryView | null, cls: WindowClass): LibraryView {
+  if (cls === 'phone' || cls === 'tall') return 'list';
+  return chosen ?? (cls === 'wide' ? 'grid' : 'list');
+}

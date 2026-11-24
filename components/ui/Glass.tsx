@@ -1,6 +1,6 @@
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import type { ComponentProps, ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radius, Shadows } from '@/constants/theme';
@@ -22,9 +22,10 @@ function GlassSurface({ style, children }: { style: StyleProp<ViewStyle>; childr
   );
 }
 
-/** A 44 pt glass circle holding one icon: a wide window's back, sidebar and ⋯ buttons. */
-export function GlassButton({ icon, label, onPress, testID, disabled, expanded }: {
-  icon: ComponentProps<typeof IconSymbol>['name'];
+/** A 44 pt glass circle holding one icon, or a short word (`text`): a wide window's back, sidebar, ⋯, Edit and translation buttons. */
+export function GlassButton({ icon, text, label, onPress, testID, disabled, expanded }: {
+  icon?: ComponentProps<typeof IconSymbol>['name'];
+  text?: string;
   label: string;
   onPress: () => void;
   testID?: string;
@@ -43,7 +44,8 @@ export function GlassButton({ icon, label, onPress, testID, disabled, expanded }
       style={({ pressed }) => pressed && styles.pressed}
     >
       <GlassSurface style={styles.button}>
-        <IconSymbol name={icon} size={icon === 'chevron.left' ? 22 : 20} color={colors.text} />
+        {icon && <IconSymbol name={icon} size={icon === 'chevron.left' ? 22 : 20} color={colors.text} />}
+        {text && <Text style={[styles.text, { color: colors.text }]} numberOfLines={1}>{text}</Text>}
       </GlassSurface>
     </Pressable>
   );
@@ -58,5 +60,6 @@ const styles = StyleSheet.create({
   fallback: { borderWidth: 1, boxShadow: Shadows.glass },
   button: { width: 44, height: 44, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
   pill: { minHeight: 44, borderRadius: Radius.full, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14 },
+  text: { fontSize: 14, fontWeight: '700' },
   pressed: { opacity: 0.5 },
 });

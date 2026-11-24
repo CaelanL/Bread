@@ -1,0 +1,54 @@
+# The Library's grid ⇄ list toggle. Run on the closed iPhone Duo: `npm run sim -- flow duo-library --device duo`
+# (Maestro can't tap the open Duo, see docs/architecture/window-layouts.md). reader-c starts from the list
+# (the choice is a device setting, so a list is set first if the last run left a grid), switches to the grid,
+# long-presses Romans 8 for its menu, Reorder shows the list with handles, Done brings the grid back, and a
+# tile opens its collection. It ends on the grid. On an iPhone the Library has no toggle.
+appId: com.caelanliu.biblemem
+name: duo-library
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-c&next=%2F(tabs)%2F(library)
+- extendedWaitUntil:
+    visible:
+      id: library-view-toggle
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Show as list"
+    commands:
+      - tapOn: "Show as list"
+- extendedWaitUntil:
+    visible: "Show as grid"
+    timeout: 5000
+- assertVisible: ".*Romans 8.*"
+- takeScreenshot: duo-library-list
+- tapOn: "Show as grid"
+- extendedWaitUntil:
+    visible: "Show as list"
+    timeout: 5000
+- assertVisible: "Romans 8, Cara · 2 members"
+- takeScreenshot: duo-library-grid
+- longPressOn: "Romans 8, Cara · 2 members"
+- extendedWaitUntil:
+    visible: "Rename"
+    timeout: 5000
+- assertVisible: "Share…"
+- assertVisible: "Delete"
+- waitForAnimationToEnd
+- takeScreenshot: duo-library-grid-menu
+- tapOn: "Reorder"
+- extendedWaitUntil:
+    visible: "Reorder Romans 8"
+    timeout: 5000
+- assertNotVisible:
+    id: library-view-toggle
+- takeScreenshot: duo-library-reorder
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: "Show as list"
+    timeout: 5000
+- tapOn: "Romans 8, Cara · 2 members"
+- extendedWaitUntil:
+    visible:
+      id: shared-row
+    timeout: 10000

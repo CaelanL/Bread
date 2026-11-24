@@ -1,11 +1,14 @@
+import { ChapterVerses } from '@/components/library/ChapterVerses';
 import { HeaderPill } from '@/components/library/CollectionHeader';
 import { QuickAddField } from '@/components/library/QuickAddField';
 import { BibleTranslationPicker } from '@/components/ui/BibleTranslationPicker';
+import { GlassButton } from '@/components/ui/Glass';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { TopBarButton } from '@/components/ui/TopBar';
+import { TopBar, TopBarButton } from '@/components/ui/TopBar';
 import { Colors, Motion } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { BIBLE_BOOKS, OLD_TESTAMENT_END } from '@/lib/bible/books';
 import { getChapterCount } from '@/lib/bible';
 import { DEFAULT_COLLECTION_ID, type BibleVersion } from '@/lib/storage';
@@ -15,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   View,
@@ -27,15 +31,35 @@ const easing = Easing.bezier(...Motion.easing);
 // The field's top padding inside QuickAddField, and its gap under the status bar while searching.
 const FIELD_INSET = 8;
 const SEARCH_TOP = 6;
+// Bible-Picker board: the books column beside the chapter, title 26 pt under the top.
+const BOOKS_WIDTH = 320;
+const WIDE_TOP = 26;
 
 export default function AddVerseScreen() {
-  const { collectionId } = useLocalSearchParams<{ collectionId?: string }>();
+  // `book` and `chapter` come from a chapter page that found itself on a wide window.
+  const { collectionId, book, chapter } = useLocalSearchParams<{ collectionId?: string; book?: string; chapter?: string }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
   const bibleVersion = useAppStore((state) => state.bibleVersion);
 
-  const [expandedBook, setExpandedBook] = useState<string | null>(null);
+  const [expandedBook, setExpandedBook] = useState<string | null>(book ?? null);
+  // On a wide window a chapter opens beside the books instead of on its own page.
+  const wide = useWindowClass() === 'wide';
+  const [shownChapter, setShownChapter] = useState<{ book: string; chapter: number } | null>(
+    book && chapter ? { book, chapter: Number(chapter) } : null,
+  );
+  // The book list scrolls to a book that arrived in the params, once its row is laid out.
+  const booksRef = useRef<ScrollViewInstance>(null);
+  const [revealBook, setRevealBook] = useState(book ?? null);
+  // A later redirect brings new params to this screen, already open.
+  const [paramChapter, setParamChapter] = useState(`${book}/${chapter}`);
+  if (book && chapter && paramChapter !== `${book}/${chapter}`) {
+    setParamChapter(`${book}/${chapter}`);
+    setRevealBook(book);
+    setExpandedBook(book);
+    setShownChapter({ book, chapter: Number(chapter) });
+  }
   const [versionPickerVisible, setVersionPickerVisible] = useState(false);
   const [searching, setSearching] = useState(false);
   const collection = useCollection(collectionId ?? DEFAULT_COLLECTION_ID);
@@ -70,19 +94,26 @@ export default function AddVerseScreen() {
     router.push(`/(tabs)/(library)/add/${encodeURIComponent(book)}/${chapter}?${queryString}`);
   });
 
+  const isShown = (book: string, chapter: number) => wide && shownChapter?.book === book && shownChapter.chapter === chapter;
+
   const renderChapterGrid = (book: string) => {
     const chapterCount = getChapterCount(book);
     const chapters = Array.from({ length: chapterCount }, (_, i) => i + 1);
 
     return (
-      <View style={styles.chapterGrid}>
+      <View style={[styles.chapterGrid, wide && styles.wideChapterGrid]}>
         {chapters.map((chapter) => (
           <Pressable
             key={chapter}
-            style={[styles.chapterButton, { backgroundColor: colors.background }]}
-            onPress={() => handleChapterPress(book, chapter)}
+            style={[
+              styles.chapterButton,
+              { backgroundColor: colors.background },
+              isShown(book, chapter) && [styles.shownChapter, { backgroundColor: colors.primaryLight, borderColor: colors.tint }],
+            ]}
+            onPress={() => (wide ? setShownChapter({ book, chapter }) : handleChapterPress(book, chapter))}
+            accessibilityState={wide ? { selected: isShown(book, chapter) } : undefined}
           >
-            <Text style={[styles.chapterText, { color: colors.text }]}>{chapter}</Text>
+            <Text style={[styles.chapterText, { color: colors.text }, isShown(book, chapter) && styles.shownChapterText]}>{chapter}</Text>
           </Pressable>
         ))}
       </View>
@@ -94,7 +125,10 @@ export default function AddVerseScreen() {
     const isNewTestament = index === OLD_TESTAMENT_END + 1;
 
     return (
-      <View key={book}>
+      <View key={book} onLayout={book === revealBook ? (event) => {
+        setRevealBook(null);
+        booksRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: false });
+      } : undefined}>
         {isNewTestament && (
           <View style={[styles.testamentDivider, { borderBottomColor: colors.icon }]}>
             <Text style={[styles.testamentLabel, { color: colors.primary }]}>New Testament</Text>
@@ -106,10 +140,10 @@ export default function AddVerseScreen() {
           </View>
         )}
         <Pressable
-          style={[styles.bookRow, { borderBottomColor: colors.icon + '30' }]}
+          style={[styles.bookRow, wide && styles.wideBookRow, { borderBottomColor: colors.icon + '30' }]}
           onPress={() => handleBookPress(book)}
         >
-          <Text style={[styles.bookName, { color: colors.text }]}>{book}</Text>
+          <Text style={[styles.bookName, { color: colors.text }, wide && isExpanded && styles.openBook]}>{book}</Text>
           <IconSymbol
             name={isExpanded ? 'chevron.down' : 'chevron.right'}
             size={18}
@@ -129,19 +163,21 @@ export default function AddVerseScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Animated.View style={[styles.container, column]}>
+    <View style={[styles.container, wide && styles.wideRow, { backgroundColor: colors.background }]}>
+      <Animated.View style={[styles.container, column, wide && [styles.booksColumn, { borderRightColor: colors.border }]]}>
         <Animated.View style={[{ paddingTop: insets.top }, chrome]} pointerEvents={searching ? 'none' : 'auto'}>
-          <View style={styles.bar}>
-            <TopBarButton icon="chevron.left" label="Back" onPress={() => router.back()} />
-            <HeaderPill
-              testID="add-translation-picker"
-              icon="book.closed"
-              label={bibleVersion}
-              accessibilityLabel={`Translation, ${bibleVersion}`}
-              onPress={() => setVersionPickerVisible(true)}
-            />
-          </View>
+          {wide ? <View style={styles.wideTop} /> : (
+            <View style={styles.bar}>
+              <TopBarButton icon="chevron.left" label="Back" onPress={() => router.back()} />
+              <HeaderPill
+                testID="add-translation-picker"
+                icon="book.closed"
+                label={bibleVersion}
+                accessibilityLabel={`Translation, ${bibleVersion}`}
+                onPress={() => setVersionPickerVisible(true)}
+              />
+            </View>
+          )}
           <View style={styles.titleBlock}>
             <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>Add verses</Text>
             {collection && (
@@ -159,13 +195,42 @@ export default function AddVerseScreen() {
 
         {!searching && (
           <Animated.View entering={FadeIn.duration(Motion.expandMs)} exiting={FadeOut.duration(Motion.exitMs)} style={styles.scrollView}>
-            <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+            <ScrollView ref={booksRef} style={styles.scrollView} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
               {BIBLE_BOOKS.map((book, index) => renderBook(book, index))}
               <View style={styles.bottomPadding} />
             </ScrollView>
           </Animated.View>
         )}
       </Animated.View>
+
+      {wide && (
+        <View style={styles.container}>
+          {shownChapter ? (
+            <ChapterVerses
+              key={`${shownChapter.book} ${shownChapter.chapter}`}
+              bookName={shownChapter.book}
+              chapterNum={shownChapter.chapter}
+              collectionId={collectionId}
+              wide
+            />
+          ) : (
+            <View style={styles.emptyPane}>
+              <Text style={[styles.emptyText, { color: colors.icon }]}>Pick a book and a chapter</Text>
+            </View>
+          )}
+        </View>
+      )}
+      {wide && (
+        <TopBar>
+          <TopBarButton icon="chevron.left" label="Back" onPress={() => router.back()} />
+          <GlassButton
+            testID="add-translation-picker"
+            text={bibleVersion}
+            label={`Translation, ${bibleVersion}`}
+            onPress={() => setVersionPickerVisible(true)}
+          />
+        </TopBar>
+      )}
 
       <BibleTranslationPicker
         version={bibleVersion}
@@ -255,5 +320,43 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  wideRow: {
+    flexDirection: 'row',
+  },
+  booksColumn: {
+    flex: 0,
+    width: BOOKS_WIDTH,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  wideTop: {
+    height: WIDE_TOP - 4,
+  },
+  wideBookRow: {
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+  },
+  openBook: {
+    fontWeight: '600',
+  },
+  wideChapterGrid: {
+    gap: 9,
+    paddingTop: 4,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  shownChapter: {
+    borderWidth: 2,
+  },
+  shownChapterText: {
+    fontWeight: '700',
+  },
+  emptyPane: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 15,
   },
 });

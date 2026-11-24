@@ -42,6 +42,53 @@ const INNER_RIGHT_STEPS = [0.352, 0.648, 0.896, 1];
 const OUTER_STEPS = [0, 0.043, 0.156];
 const INNER_STEPS = [0.156, 0.5, 0.844, 1];
 
+type Palette = (typeof Colors)['light'];
+
+/** A collection's icon square: its fill, symbol and ink. The Library's list rows and the Duo's grid tiles share it. */
+export function collectionSquare(collection: Collection, engraved: boolean, colors: Palette, isDark: boolean) {
+  return {
+    // Engraved fills the square like the engraved pill on a verse; the icon stays the collection's own.
+    fill: engraved
+      ? colors.engravedFill
+      : collection.iconColor
+        ? `${collection.iconColor}20`
+        : collection.isDefault
+          ? colors.primaryLight
+          : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+    symbol: (collection.icon as SFSymbol) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol),
+    ink: engraved ? colors.tint : collection.iconColor || (collection.isDefault ? colors.primary : colors.icon),
+  };
+}
+
+/** The line under a collection's name, and its emblem's spoken label (read after the subtitle, though not written). */
+export function collectionLabels(verseCount: number, engraved: boolean, memberCount?: number, ownerName?: string | null) {
+  return {
+    subtitle: memberCount !== undefined
+      ? [ownerName && firstName(ownerName), `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
+      : `${verseCount} verse${verseCount !== 1 ? 's' : ''}`,
+    emblemLabel: `${engraved ? 'Engraved' : 'Mastered'}${memberCount !== undefined ? ' by everyone' : ''}`,
+  };
+}
+
+/** A custom collection's long-press menu, for its list row or grid tile. */
+export function collectionMenuItems(removal: ReturnType<typeof collectionRemoval>, actions: {
+  onRename: () => void;
+  onShare?: () => void;
+  onReorder: () => void;
+  onDelete: () => void;
+}) {
+  return [
+    // A member's copy takes its name from the group, so only the owner renames it.
+    ...(removal === 'delete' ? [{ label: 'Rename', icon: 'pencil', onPress: actions.onRename }] : []),
+    // The owner's Share… opens the code again (or Stop sharing) on a collection already shared.
+    ...(actions.onShare && removal === 'delete' ? [{ label: 'Share…', icon: 'person.2.fill', onPress: actions.onShare }] : []),
+    { label: 'Reorder', icon: 'line.3.horizontal', onPress: actions.onReorder },
+    ...(removal ? [removal === 'leave'
+      ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: actions.onDelete, destructive: true }
+      : { label: 'Delete', icon: 'trash', onPress: actions.onDelete, destructive: true }] : []),
+  ];
+}
+
 export interface CollectionReorder {
   index: number;
   count: number;
@@ -110,15 +157,11 @@ export function SwipeableCollectionCard({
   const removal = collectionRemoval(collection.sharedId, sharedRole);
   const isLeave = removal === 'leave';
   const canSwipe = isCustom && !editing && !actionsDisabled && removal !== null;
-  const verseCount = `${collection.verseCount} verse${collection.verseCount !== 1 ? 's' : ''}`;
   const engraved = emblem === 'engraved';
   const glow = withAlpha(colors.engravedBarStart, GLOW_ALPHA);
   const glowAt = (steps: number[]) => steps.map((t) => withAlpha(colors.engravedBarStart, GLOW_ALPHA * t)) as [string, string, ...string[]];
-  const subtitle = memberCount !== undefined
-    ? [ownerName && firstName(ownerName), `${memberCount} member${memberCount !== 1 ? 's' : ''}`].filter(Boolean).join(' · ')
-    : verseCount;
-  // Read into the card's label after the subtitle, so it's spoken though not written.
-  const emblemLabel = `${engraved ? 'Engraved' : 'Mastered'}${memberCount !== undefined ? ' by everyone' : ''}`;
+  const { subtitle, emblemLabel } = collectionLabels(collection.verseCount, engraved, memberCount, ownerName);
+  const square = collectionSquare(collection, engraved, colors, isDark);
 
   useEffect(() => {
     if (!canSwipe) translateX.value = 0;
@@ -257,24 +300,8 @@ export function SwipeableCollectionCard({
             }}
           >
             <View style={styles.cardLeft}>
-              {/* Engraved fills the square like the engraved pill on a verse; the icon stays the collection's own. */}
-              <View style={[
-                styles.iconContainer,
-                {
-                  backgroundColor: engraved
-                    ? colors.engravedFill
-                    : collection.iconColor
-                      ? `${collection.iconColor}20`
-                      : collection.isDefault
-                        ? colors.primaryLight
-                        : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                },
-              ]}>
-                <IconSymbol
-                  name={(collection.icon as SFSymbol) || (collection.isDefault ? 'heart.fill' : resolveCollectionIcon(collection.iconKey).symbol)}
-                  size={24}
-                  color={engraved ? colors.tint : collection.iconColor || (collection.isDefault ? colors.primary : colors.icon)}
-                />
+              <View style={[styles.iconContainer, { backgroundColor: square.fill }]}>
+                <IconSymbol name={square.symbol} size={24} color={square.ink} />
                 {emblem && (
                   <View
                     accessibilityLabel={emblemLabel}
@@ -333,16 +360,7 @@ export function SwipeableCollectionCard({
           visible={menuTop !== null}
           onClose={() => setMenuTop(null)}
           anchorPosition={menuTop === null ? undefined : { top: menuTop, right: 16 }}
-          items={[
-            // A member's copy takes its name from the group, so only the owner renames it.
-            ...(removal === 'delete' ? [{ label: 'Rename', icon: 'pencil', onPress: onRename }] : []),
-            // The owner's Share… opens the code again (or Stop sharing) on a collection already shared.
-            ...(onShare && removal === 'delete' ? [{ label: 'Share…', icon: 'person.2.fill', onPress: onShare }] : []),
-            { label: 'Reorder', icon: 'line.3.horizontal', onPress: onReorder },
-            ...(removal ? [isLeave
-              ? { label: 'Leave', icon: 'rectangle.portrait.and.arrow.right', onPress: handleDelete, destructive: true }
-              : { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true }] : []),
-          ]}
+          items={collectionMenuItems(removal, { onRename, onShare, onReorder, onDelete: handleDelete })}
         />
       )}
     </Animated.View>

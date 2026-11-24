@@ -58,6 +58,7 @@ const MAPPING = {
   'person.badge.plus': 'person-add-alt',
   'info.circle': 'info-outline',
   'square.grid.2x2': 'grid-view',
+  'list.bullet': 'format-list-bulleted',
   'person.2.slash': 'group-off',
   'arrow.up.arrow.down': 'swap-vert',
   'hand.thumbsdown': 'thumb-down-off-alt',

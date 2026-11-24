@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { hiddenLineWidths, verseFontSize, windowClass } from '../layout';
+import { hiddenLineWidths, libraryView, verseFontSize, windowClass } from '../layout';
 
 describe('windowClass', () => {
   const cases: [string, number, number, ReturnType<typeof windowClass>][] = [
@@ -60,5 +60,20 @@ describe('hiddenLineWidths', () => {
 
   it('always draws at least one line', () => {
     assert.equal(hiddenLineWidths(0, 364, 30).length, 1);
+  });
+});
+
+describe('libraryView', () => {
+  it('keeps the list on phones and upright, whatever was chosen', () => {
+    assert.equal(libraryView('grid', 'phone'), 'list');
+    assert.equal(libraryView('grid', 'tall'), 'list');
+  });
+  it('starts as a grid on its side and a list on the outer display', () => {
+    assert.equal(libraryView(null, 'wide'), 'grid');
+    assert.equal(libraryView(null, 'outer'), 'list');
+  });
+  it('follows the choice once made', () => {
+    assert.equal(libraryView('list', 'wide'), 'list');
+    assert.equal(libraryView('grid', 'outer'), 'grid');
   });
 });
