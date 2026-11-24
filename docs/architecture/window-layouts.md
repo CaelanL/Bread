@@ -22,7 +22,7 @@ display with Display Zoom falls back to `phone`.
 
 Windows measured on the iPhone Duo simulator (iOS 27.2, `iPhone19,4`): outer 466 × 678 pt, inner
 951 × 669 on its side and 669 × 951 upright. `npm run sim -- shot /dev-window` prints the window
-size and class (`app/dev-window.tsx`, dev builds against a local database only).
+size, class and safe-area insets (`app/dev-window.tsx`, dev builds against a local database only).
 
 ## Live sizes
 
