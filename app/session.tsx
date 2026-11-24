@@ -753,7 +753,7 @@ export default function StudySessionScreen() {
                 label: chunk.verseNumEnd ? `Verses ${chunk.verseNum}-${chunk.verseNumEnd}` : `Verse ${chunk.verseNum}`,
                 text: review.originalDisplay && chunk.text,
                 score: review.originalDisplay?.score,
-                peeked: !review.isCompleted && session.getPeekedChunks().has(index),
+                peeked: review.isCompleted ? review.isPeeked : session.getPeekedChunks().has(index),
               };
             })}
             results={session.allChunksCompleted ? session.finalScore : undefined}

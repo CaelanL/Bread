@@ -12,7 +12,7 @@ export interface ChunkRowInfo {
   text?: string;
   /** The recited score, once it has a result. */
   score?: number;
-  /** Revealed before it had a result: this chunk won't count. */
+  /** Revealed (before its result, or its result was a peeked one): this chunk won't count. */
   peeked: boolean;
 }
 
@@ -50,6 +50,7 @@ export function ChunkSidebar({ top, reference, subtitle, rows, results, current,
           const label = [
             row.label,
             row.score !== undefined && `score ${row.score}%`,
+            row.peeked && 'revealed, won’t count',
             selected && 'current',
             !done && !isResults && !selected && 'not recited yet',
           ].filter(Boolean).join(', ');

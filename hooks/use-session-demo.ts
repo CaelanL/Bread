@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { SharedValue } from 'react-native-reanimated';
 
 import type { useStudySession } from '@/hooks/use-study-session';
+import { canDevSignIn } from '@/lib/auth/dev-sign-in';
 import type { LiveTranscriptionSession } from '@/lib/transcription/live-session';
 
 /**
@@ -18,7 +19,9 @@ export function useSessionDemo(
   demo: string | undefined,
   waveformLevels: SharedValue<number[]>,
 ) {
-  const words = __DEV__ && demo ? demo.split(/[+ ]/) : [];
+  // Same guard as the route: dev builds against a local database only, since `done` saves scores.
+  const allowed = canDevSignIn(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL);
+  const words = allowed && demo ? demo.split(/[+ ]/) : [];
   const done = Number(words.find((w) => w.startsWith('done'))?.slice(4) ?? 0);
   const finish = words.includes('finish');
   const recording = words.includes('rec');
