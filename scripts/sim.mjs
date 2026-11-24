@@ -16,7 +16,7 @@
 //   --device duo           the iPhone Duo simulator (iOS 27.2 iPhone19,4 runtime) instead of iPhone 16 Pro. It boots
 //                          closed; fold, open or rotate it with Claude's iOS Simulator tool (set_posture, rotate).
 //   --display outer|inner  which Duo display a shot captures (default outer); the file name ends in it.
-//   --dark                 dark appearance for the run, set back afterwards (left on with --keep); shot files end in -dark.
+//   --dark                 dark appearance for the run, set back afterwards (--keep too); shot files end in -dark.
 //
 // The app must add a <scheme>://dev-sign-in?next=<route> route. Still unproven:
 //   4. `npx eas-cli build:run -p ios --profile simulator --latest`: flags are right per --help; that it installs on DEVICE is not run.
@@ -222,8 +222,13 @@ function stopMetro(held) {
   try { process.kill(-held.pid, 'SIGTERM'); } catch { /* already gone */ }
 }
 
-function stopAll() {
+function restoreAppearance() {
   if (lightBefore) run('xcrun', ['simctl', 'ui', DEVICE, 'appearance', lightBefore]);
+  lightBefore = undefined;
+}
+
+function stopAll() {
+  restoreAppearance();
   stopMetro(readJson(LOCK));
   run('xcrun', ['simctl', 'shutdown', DEVICE]);
   rmSync(LOCK, { force: true });
@@ -274,6 +279,7 @@ async function shot(args) {
     must('xcrun', ['simctl', 'io', 'booted', 'screenshot', ...(duo ? [`--display=${display === 'outer' ? 1 : 3}`] : []), file]);
     console.log(file);
   }
+  restoreAppearance();
   if (!keep) stopAll();
 }
 
@@ -349,6 +355,7 @@ async function flow(args) {
     results.push({ name, ok, ms: Date.now() - flowBegan });
     for (const file of readdirSync(out, { recursive: true }).filter((f) => f.endsWith('.png')).sort()) console.log(join(out, file));
   }
+  restoreAppearance();
   if (!keep) stopAll();
   const width = Math.max(...results.map((r) => r.name.length));
   console.log('');
