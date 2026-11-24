@@ -37,10 +37,12 @@ interface RecordingBarProps {
   onStart: (source: PressSource) => void;
   onCancel: () => void;
   onSubmit: () => void;
+  /** A wide window: the mic sits low right and the pill grows to its left. */
+  lowRight?: boolean;
 }
 
 export function RecordingBar({
-  phase, showMic, waveformLevels, onStart, onCancel, onSubmit,
+  phase, showMic, waveformLevels, onStart, onCancel, onSubmit, lowRight = false,
 }: RecordingBarProps) {
   const { width } = useWindowDimensions();
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -98,8 +100,10 @@ export function RecordingBar({
       { scaleY: interpolate(progress.value, [0, 1], [1, PILL_HEIGHT / SIZE]) },
     ],
   }));
+  // Low right, the bar shifts so its right end stays where the mic is while the pill opens leftwards.
   const visibility = useAnimatedStyle(() => ({
     opacity: showMic || starting ? 1 : progress.value,
+    transform: [{ translateX: lowRight ? travel * (1 - progress.value) : 0 }],
   }));
   const activeFade = useAnimatedStyle(() => ({ opacity: progress.value }));
   const micFade = useAnimatedStyle(() => ({ opacity: 1 - progress.value }));
@@ -117,7 +121,7 @@ export function RecordingBar({
   const fill = { backgroundColor: colors.recordingControl };
 
   return (
-    <Animated.View pointerEvents="box-none" style={[styles.bar, { width: barWidth }, visibility]}>
+    <Animated.View pointerEvents="box-none" style={[styles.bar, lowRight && styles.lowRight, { width: barWidth }, visibility]}>
       <Animated.View pointerEvents="none" style={[styles.round, styles.micSurface, fill, shadowFade]} />
       {reducedMotion ? (
         <Animated.View pointerEvents="none" style={[styles.pill, fill, activeFade]} />
@@ -241,6 +245,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  lowRight: { bottom: 40, right: 24, alignSelf: 'auto' },
   square: { position: 'absolute', width: SIZE, height: SIZE },
   round: {
     position: 'absolute',

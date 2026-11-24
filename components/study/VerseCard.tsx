@@ -31,12 +31,13 @@ interface InlineWordProps {
   fast: boolean;
   textColor: string;
   underlineColor: string;
+  large: boolean;
 }
 
 // Draw the blank independently of the glyph and animate only the glyph.
 // Native text underlines skip around hyphens and descenders, making one hidden
 // word look like multiple blanks.
-function InlineWord({ word, index, revealed, fast, textColor, underlineColor }: InlineWordProps) {
+function InlineWord({ word, index, revealed, fast, textColor, underlineColor, large }: InlineWordProps) {
   const opacity = useSharedValue(revealed || !word.isBlank ? 1 : 0);
 
   useLayoutEffect(() => {
@@ -63,6 +64,7 @@ function InlineWord({ word, index, revealed, fast, textColor, underlineColor }: 
       <Animated.Text
         style={[
           styles.wordText,
+          large && styles.wordTextLarge,
           word.isBlank && styles.blankWord,
           { color: textColor },
           animatedStyle,
@@ -95,6 +97,10 @@ interface VerseCardProps {
   // Reveal/hide toggle in the card's top-right. Omit to hide the button.
   visibilityIcon?: 'eye' | 'eye.slash';
   onToggleVisibility?: () => void;
+  /** A wide window: the boards' 25/40 text. */
+  large?: boolean;
+  /** The card's most height, as a share of the window's. */
+  heightShare?: number;
 }
 
 export function VerseCard({
@@ -106,10 +112,12 @@ export function VerseCard({
   memoryPlaceholder = false,
   visibilityIcon = 'eye',
   onToggleVisibility,
+  large = false,
+  heightShare = 0.30,
 }: VerseCardProps) {
   const colorScheme = useColorScheme();
   const { fontScale, height: screenHeight } = useWindowDimensions();
-  const cardMaxHeight = screenHeight * 0.30;
+  const cardMaxHeight = screenHeight * heightShare;
   const scrollMaxHeight = cardMaxHeight - 28 - 16 - 20 - 20;
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
@@ -191,7 +199,7 @@ export function VerseCard({
               </Text>
             </View>
           ) : (
-            <View style={[styles.chunkText, { columnGap: 5 * fontScale }]}>
+            <View style={[styles.chunkText, { columnGap: (large ? 7 : 5) * fontScale }]}>
               {chunk.displayWords.map((word, i) => (
                 <InlineWord
                   key={i}
@@ -201,6 +209,7 @@ export function VerseCard({
                   fast={revealFast}
                   textColor={colors.text}
                   underlineColor={underlineColor}
+                  large={large}
                 />
               ))}
             </View>
@@ -268,6 +277,10 @@ const styles = StyleSheet.create({
   wordText: {
     fontSize: 19,
     lineHeight: 30,
+  },
+  wordTextLarge: {
+    fontSize: 25,
+    lineHeight: 40,
   },
   blankWord: {
     fontWeight: '600',

@@ -84,7 +84,7 @@ function TabButtons({ state, descriptors, emitter, navigateToTab, size, iconSize
 }
 
 /** The rail's width and where its actions start, from the window's safe area. */
-function railFrame(compact: boolean, insets: EdgeInsets) {
+export function railFrame(compact: boolean, insets: EdgeInsets) {
   return {
     width: Math.max(RAIL[compact ? 'outer' : 'wide'].width, insets.right),
     actionsTop: Math.max(STATUS_ROOM[compact ? 'outer' : 'wide'], insets.top),
