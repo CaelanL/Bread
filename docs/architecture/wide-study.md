@@ -100,6 +100,8 @@ and recording are the phone's.
 - The finish (`SessionFinish` `wide`): 108 pt score, Done and Review chunks low right, 260 wide.
 - A new page width (fold, rotation, sidebar) remounts the paging list on the current chunk
   (`key`, `initialScrollIndex`), and the list is always exactly one page wide.
+- The session has its own `SafeAreaProvider`: as a full-screen modal it takes the app's root out of
+  the window, and the root's insets stop following a turn or fold (the clock sat on the progress bar).
 - Dev builds: `/dev-session?s=<verse id>,<difficulty>,<chunk size>,<demo>` (`app/dev-session.tsx`,
   `hooks/use-session-demo.ts`). Demo words joined by `+`: `rec` draws the recording pill (looks only),
   `done<n>` recites n chunks through the real `processRecording` (finishing saves to the local database),

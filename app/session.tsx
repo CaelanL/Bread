@@ -71,7 +71,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 // Recording cap: at 5 minutes the recording auto-submits exactly as if
@@ -134,7 +134,17 @@ const RECORDING_OPTIONS: RecordingConfig = {
   },
 };
 
+// A full-screen modal takes the screen under it out of the window, so the app's root safe-area
+// provider stops hearing about rotations and folds. This one measures the session itself.
 export default function StudySessionScreen() {
+  return (
+    <SafeAreaProvider>
+      <StudySession />
+    </SafeAreaProvider>
+  );
+}
+
+function StudySession() {
   const { id, difficulty, chunkSize: chunkSizeParam, demo } = useLocalSearchParams<{
     id: string;
     difficulty: Difficulty;
