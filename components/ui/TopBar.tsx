@@ -36,7 +36,8 @@ export function TopBar({ onBack, backLabel = 'Back', center, children }: {
   useRailActions(children, railed && focused);
 
   return (
-    <View pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top }]}>
+    // Off the rail, the right inset keeps actions clear of a status bar running down the right edge (the Duo's outer display); 0 on an iPhone.
+    <View pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top, paddingRight: railed ? 0 : insets.right }]}>
       <View pointerEvents="box-none" style={styles.row}>
         {center && <View pointerEvents="box-none" style={styles.center}>{center}</View>}
         {onBack && <TopBarButton icon="chevron.left" label={backLabel} onPress={onBack} />}

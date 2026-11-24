@@ -1,0 +1,61 @@
+# Settings on the closed iPhone Duo's outer display (Settings-Outer board). Run with
+# `npm run sim -- flow duo-settings --device duo` (Maestro can't tap the open Duo, see
+# docs/architecture/window-layouts.md). reader-a opens Settings from the rail, then Send feedback and
+# Notifications, whose pages keep their content and Save clear of the status bar running down the right
+# edge. Turning the switch on (Allow if iOS asks) leaves the simulator with notifications allowed, which
+# the open Duo's Notifications pane shot needs.
+appId: com.caelanliu.biblemem
+name: duo-settings
+---
+- runFlow: subflows/open-app.yaml
+- openLink: com.biblemem://dev-sign-in?as=reader-a&next=%2Fhome
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 30000
+- tapOn:
+    id: tab-settings
+- extendedWaitUntil:
+    visible:
+      id: settings-send-feedback
+    timeout: 20000
+- takeScreenshot: duo-settings-1-outer
+- tapOn:
+    id: settings-send-feedback
+- extendedWaitUntil:
+    visible:
+      id: feedback-note
+    timeout: 10000
+- takeScreenshot: duo-settings-2-feedback
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element: "notifications, Notifications.*"
+    direction: DOWN
+    centerElement: true
+- tapOn: "notifications, Notifications.*"
+- extendedWaitUntil:
+    visible:
+      id: notifications-switch
+    timeout: 20000
+- runFlow:
+    when:
+      visible:
+        id: notifications-switch
+        text: "0"
+    commands:
+      - tapOn:
+          id: notifications-switch
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- extendedWaitUntil:
+    visible: "Pause without losing your setup"
+    timeout: 20000
+- assertVisible: "REVIEW REMINDERS"
+- takeScreenshot: duo-settings-3-notifications
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "notifications, Notifications.*"
+    timeout: 10000

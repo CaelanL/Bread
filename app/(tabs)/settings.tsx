@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   View,
   Text,
@@ -15,13 +15,26 @@ import {
   Switch,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LargeTitle, TopBar, useTopBarHeight } from '@/components/ui/TopBar';
+import { RailContext } from '@/components/ui/TabRail';
 import { DisplayNameModal } from '@/components/settings/DisplayNameModal';
+import { FeedbackForm } from '@/components/settings/FeedbackForm';
+import { NotificationSettings, confirmDiscard } from '@/components/settings/NotificationSettings';
+import {
+  SettingsList,
+  SettingsPane,
+  isSettingsTopic,
+  usePaneContentStyle,
+  type SettingsTopic,
+  type TopicRow,
+} from '@/components/settings/SettingsSplit';
 import { ReviewIntervalModal } from '@/components/settings/ReviewIntervalModal';
 import { ProgressInfoModal } from '@/components/study/ProgressInfoModal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, InputText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { BIBLE_VERSIONS, COLOR_MODES, type BibleVersion, type ColorMode } from '@/lib/settings';
 import { useAuth } from '@/lib/auth';
 import { useAppStore } from '@/lib/store';
@@ -32,11 +45,15 @@ import {
   useNotificationPreferences,
   type IosPermissionStatus,
 } from '@/lib/notifications';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
 
+// The Settings-Outer board: the title 26 pt under the safe top beside the rail, 18/10 side padding.
+const RAIL_TOP = 26;
+const RAILED_PAD = { left: 18, right: 10 };
+
 interface SettingsSectionProps {
-  title: string;
+  title?: string;
   children: React.ReactNode;
 }
 
@@ -46,7 +63,7 @@ function SettingsSection({ title, children }: SettingsSectionProps) {
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.icon }]}>{title}</Text>
+      {title && <Text style={[styles.sectionTitle, { color: colors.icon }]}>{title}</Text>}
       <View
         style={[
           styles.sectionContent,
@@ -265,6 +282,37 @@ export default function SettingsScreen() {
   const selectedVersion = BIBLE_VERSIONS.find(
     (v) => v.value === bibleVersion
   );
+  const notificationsOn =
+    !!notificationPrefs?.masterEnabled &&
+    (notificationPermission === 'granted' || notificationPermission === 'provisional');
+  const reviewInterval = `${reviewMaxIntervalDays} ${reviewMaxIntervalDays === 1 ? 'day' : 'days'}`;
+  const appVersion = Constants.expoConfig?.version ?? '?.?.?';
+
+  // On a wide window: the list beside the chosen topic. `topic` comes from the Notifications or
+  // Feedback page when it finds itself on a wide window (`opened` makes each such redirect new).
+  const wide = useWindowClass() === 'wide';
+  const railed = useContext(RailContext);
+  const insets = useSafeAreaInsets();
+  const paneContentStyle = usePaneContentStyle();
+  const params = useLocalSearchParams<{ topic?: string; opened?: string }>();
+  const [topic, setTopic] = React.useState<SettingsTopic>(isSettingsTopic(params.topic) ? params.topic : 'translation');
+  const [openedParam, setOpenedParam] = React.useState(params.opened);
+  if (params.opened && openedParam !== params.opened && isSettingsTopic(params.topic)) {
+    setOpenedParam(params.opened);
+    setTopic(params.topic);
+  }
+  const [notificationsDirty, setNotificationsDirty] = React.useState(false);
+  // Done after a sent message starts a fresh form.
+  const [feedbackRound, setFeedbackRound] = React.useState(0);
+  const selectTopic = (next: SettingsTopic) => {
+    if (next === topic) return;
+    const go = () => {
+      setNotificationsDirty(false);
+      setTopic(next);
+    };
+    if (topic === 'notifications' && notificationsDirty) confirmDiscard(go);
+    else go();
+  };
 
   if (!hydrated) {
     return (
@@ -274,184 +322,197 @@ export default function SettingsScreen() {
     );
   }
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Animated.ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: barHeight }]}>
-        <View style={styles.titleGap}><LargeTitle root title="Settings" /></View>
-        <SettingsSection title="FEEDBACK">
-          <Pressable testID="settings-send-feedback" onPress={() => router.push('/feedback')}>
-            <SettingsRow icon="bubble.left.fill" label="Send feedback" description="Ideas, bugs, or anything else">
-              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-            </SettingsRow>
-          </Pressable>
-        </SettingsSection>
+  const appearanceRows = (
+    <>
+      <SettingsRow
+        icon="moon.fill"
+        label="Theme"
+      >
+        <ColorModePicker
+          value={colorMode}
+          onChange={setColorMode}
+        />
+      </SettingsRow>
+      <SettingsRow
+        icon="eye.slash"
+        label="Hide verses"
+        description="Show only references in collections and Study setup"
+      >
+        <Switch
+          testID="hide-verses-switch"
+          accessibilityLabel="Hide verses"
+          value={hideVerseText}
+          onValueChange={(next) => { void setHideVerseText(next); }}
+          trackColor={{ false: colors.borderLight, true: colors.primary }}
+        />
+      </SettingsRow>
+    </>
+  );
 
-        {/* Bible Settings */}
-        <SettingsSection title="BIBLE">
-          <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
-            <SettingsRow
-              icon="book.fill"
-              label="Translation"
-              description="Every saved verse uses it"
-            >
-              <View style={styles.dropdownTrigger}>
-                <Text style={[styles.dropdownValue, { color: colors.text }]}>
-                  {selectedVersion?.label}
-                </Text>
-                <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-              </View>
-            </SettingsRow>
-          </Pressable>
-        </SettingsSection>
+  const reviewRows = (
+    <>
+      <Pressable onPress={() => setReviewIntervalModalVisible(true)}>
+        <SettingsRow
+          icon="hourglass"
+          label="Maximum review interval"
+        >
+          <Text style={[styles.rowValue, { color: colors.icon }]}>
+            {reviewInterval}
+          </Text>
+          <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+        </SettingsRow>
+      </Pressable>
+      <Pressable onPress={() => setReviewInfoVisible(true)}>
+        <SettingsRow
+          icon="info.circle.fill"
+          label="How does this work?"
+        >
+          <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+        </SettingsRow>
+      </Pressable>
+    </>
+  );
 
-        {/* Appearance */}
-        <SettingsSection title="APPEARANCE">
-          <SettingsRow
-            icon="moon.fill"
-            label="Theme"
-          >
-            <ColorModePicker
-              value={colorMode}
-              onChange={setColorMode}
-            />
-          </SettingsRow>
-          <SettingsRow
-            icon="eye.slash"
-            label="Hide verses"
-            description="Show only references in collections and Study setup"
-          >
-            <Switch
-              testID="hide-verses-switch"
-              accessibilityLabel="Hide verses"
-              value={hideVerseText}
-              onValueChange={(next) => { void setHideVerseText(next); }}
-              trackColor={{ false: colors.borderLight, true: colors.primary }}
-            />
-          </SettingsRow>
-        </SettingsSection>
-
-        {/* Review System */}
-        <SettingsSection title="REVIEW">
-          <Pressable onPress={() => setReviewIntervalModalVisible(true)}>
-            <SettingsRow
-              icon="hourglass"
-              label="Maximum review interval"
+  const accountRows = (
+    <>
+      <Pressable testID="settings-display-name" onPress={() => setNameModalVisible(true)}>
+        <SettingsRow
+          icon="person.crop.circle.fill"
+          label="Name"
+        >
+          <View style={styles.dropdownTrigger}>
+            <Text
+              style={[styles.dropdownValue, { color: firstName ? colors.text : colors.icon }]}
+              numberOfLines={1}
             >
-              <Text style={[styles.rowValue, { color: colors.icon }]}>
-                {reviewMaxIntervalDays} {reviewMaxIntervalDays === 1 ? 'day' : 'days'}
-              </Text>
-              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-            </SettingsRow>
-          </Pressable>
-          <Pressable onPress={() => setReviewInfoVisible(true)}>
-            <SettingsRow
-              icon="info.circle.fill"
-              label="How does this work?"
-            >
-              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-            </SettingsRow>
-          </Pressable>
-        </SettingsSection>
-
-        {/* Notifications — opens a dedicated page so changes are
-            commit-on-Save. The summary reflects whether the user is
-            actively receiving anything (master ON + permission
-            granted). Permission-denied always summarizes as Off, even
-            if the server row has master_enabled=true. */}
-        <SettingsSection title="NOTIFICATIONS">
-          <Pressable onPress={() => router.push('/notifications')}>
-            <SettingsRow icon="bell.fill" label="Notifications">
-              <Text style={[styles.rowValue, { color: colors.icon }]}>
-                {notificationPrefs?.masterEnabled &&
-                (notificationPermission === 'granted' ||
-                  notificationPermission === 'provisional')
-                  ? 'On'
-                  : 'Off'}
-              </Text>
-              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-            </SettingsRow>
-          </Pressable>
-        </SettingsSection>
-
-        {/* Account */}
-        <SettingsSection title="ACCOUNT">
-          <Pressable testID="settings-display-name" onPress={() => setNameModalVisible(true)}>
-            <SettingsRow
-              icon="person.crop.circle.fill"
-              label="Name"
-            >
-              <View style={styles.dropdownTrigger}>
-                <Text
-                  style={[styles.dropdownValue, { color: firstName ? colors.text : colors.icon }]}
-                  numberOfLines={1}
-                >
-                  {firstName ? [firstName, lastName].filter(Boolean).join(' ') : 'Add'}
-                </Text>
-                <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-              </View>
-            </SettingsRow>
-          </Pressable>
-          <SettingsRow
-            icon="person.fill"
-            label="Email"
-            description={user?.email ?? 'Not signed in'}
-          />
-          <Pressable onPress={() => setPasswordModalVisible(true)}>
-            <SettingsRow
-              icon="lock.fill"
-              label="Change Password"
-            >
-              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-            </SettingsRow>
-          </Pressable>
-          <Pressable onPress={handleSignOut} disabled={signingOut} testID="sign-out">
+              {firstName ? [firstName, lastName].filter(Boolean).join(' ') : 'Add'}
+            </Text>
+            <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+          </View>
+        </SettingsRow>
+      </Pressable>
+      <SettingsRow
+        icon="person.fill"
+        label="Email"
+        description={user?.email ?? 'Not signed in'}
+      />
+      <Pressable onPress={() => setPasswordModalVisible(true)}>
+        <SettingsRow
+          icon="lock.fill"
+          label="Change Password"
+        >
+          <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+        </SettingsRow>
+      </Pressable>
+      <Pressable onPress={handleSignOut} disabled={signingOut} testID="sign-out">
+        <View
+          style={[
+            styles.row,
+            { borderBottomWidth: 0 },
+          ]}
+        >
+          <View style={styles.rowLeft}>
             <View
               style={[
-                styles.row,
-                { borderBottomWidth: 0 },
+                styles.iconContainer,
+                { backgroundColor: colors.cardAlt },
               ]}
             >
-              <View style={styles.rowLeft}>
-                <View
-                  style={[
-                    styles.iconContainer,
-                    { backgroundColor: colors.cardAlt },
-                  ]}
-                >
-                  <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={colors.error} />
-                </View>
-                <View style={styles.labelContainer}>
-                  <Text style={[styles.label, { color: colors.error }]}>Sign Out</Text>
-                </View>
-              </View>
-              {signingOut && <ActivityIndicator size="small" color={colors.error} />}
+              <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color={colors.error} />
             </View>
-          </Pressable>
+            <View style={styles.labelContainer}>
+              <Text style={[styles.label, { color: colors.error }]}>Sign Out</Text>
+            </View>
+          </View>
+          {signingOut && <ActivityIndicator size="small" color={colors.error} />}
+        </View>
+      </Pressable>
+    </>
+  );
+
+  const aboutRows = (
+    <>
+      <SettingsRow icon="info.circle.fill" label="Version" description={appVersion} />
+      <Pressable onPress={() => setCopyrightVisible(true)}>
+        <SettingsRow
+          icon="doc.text.fill"
+          label="Copyrights"
+          description="Bible translation notices"
+        >
+          <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+        </SettingsRow>
+      </Pressable>
+    </>
+  );
+
+  // Delete Account - subtle, at the bottom
+  const deleteAccountRow = (
+    <Pressable onPress={handleDeleteAccount} style={styles.deleteAccountRow}>
+      <Text style={[styles.deleteAccountText, { color: colors.error }]}>
+        Delete Account
+      </Text>
+    </Pressable>
+  );
+
+  const topicGroups: TopicRow[][] = [
+    [{ topic: 'feedback', icon: 'bubble.left.fill', label: 'Send feedback' }],
+    [
+      { topic: 'translation', icon: 'book.fill', label: 'Translation', value: selectedVersion?.label, strong: true },
+      { topic: 'appearance', icon: 'moon.fill', label: 'Appearance', value: COLOR_MODES.find((mode) => mode.value === colorMode)?.label },
+      { topic: 'review', icon: 'hourglass', label: 'Review', value: reviewInterval },
+      { topic: 'notifications', icon: 'bell.fill', label: 'Notifications', value: notificationsOn ? 'On' : 'Off' },
+    ],
+    [
+      { topic: 'account', icon: 'person.crop.circle.fill', label: 'Account', detail: user?.email ?? 'Not signed in' },
+      { topic: 'about', icon: 'info.circle.fill', label: 'About', value: appVersion },
+    ],
+  ];
+
+  const pane = {
+    feedback: (
+      <FeedbackForm key={feedbackRound} contentStyle={paneContentStyle} onDone={() => setFeedbackRound((round) => round + 1)} />
+    ),
+    translation: (
+      <SettingsPane title="Translation" subtitle="Every saved verse uses it">
+        <SettingsSection>
+          {BIBLE_VERSIONS.map((version) => {
+            const isSelected = bibleVersion === version.value;
+            return (
+              <Pressable
+                key={version.value}
+                testID={`settings-translation-${version.value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                onPress={() => setBibleVersion(version.value)}
+                style={[styles.row, { borderBottomColor: colors.borderLight }]}
+              >
+                <View style={styles.labelContainer}>
+                  <Text style={[styles.label, { color: colors.text }]}>{version.label}</Text>
+                  <Text style={[styles.description, { color: colors.icon }]}>{version.full}</Text>
+                </View>
+                {isSelected && <IconSymbol name="checkmark" size={18} color={colors.tint} />}
+              </Pressable>
+            );
+          })}
         </SettingsSection>
+      </SettingsPane>
+    ),
+    appearance: <SettingsPane title="Appearance"><SettingsSection>{appearanceRows}</SettingsSection></SettingsPane>,
+    review: <SettingsPane title="Review"><SettingsSection>{reviewRows}</SettingsSection></SettingsPane>,
+    notifications: (
+      <NotificationSettings contentStyle={paneContentStyle} onSaved={() => {}} onDirtyChange={setNotificationsDirty} />
+    ),
+    account: (
+      <SettingsPane title="Account">
+        <SettingsSection>{accountRows}</SettingsSection>
+        {deleteAccountRow}
+      </SettingsPane>
+    ),
+    about: <SettingsPane title="About"><SettingsSection>{aboutRows}</SettingsSection></SettingsPane>,
+  }[topic];
 
-        {/* About */}
-        <SettingsSection title="ABOUT">
-          <SettingsRow icon="info.circle.fill" label="Version" description={Constants.expoConfig?.version ?? '?.?.?'} />
-          <Pressable onPress={() => setCopyrightVisible(true)}>
-            <SettingsRow
-              icon="doc.text.fill"
-              label="Copyrights"
-              description="Bible translation notices"
-            >
-              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-            </SettingsRow>
-          </Pressable>
-        </SettingsSection>
-
-        {/* Delete Account - subtle, at bottom */}
-        <Pressable onPress={handleDeleteAccount} style={styles.deleteAccountRow}>
-          <Text style={[styles.deleteAccountText, { color: colors.error }]}>
-            Delete Account
-          </Text>
-        </Pressable>
-      </Animated.ScrollView>
-      <TopBar />
-
+  const modals = (
+    <>
       {/* Review Info Modal (shared with study screen) */}
       <ProgressInfoModal
         visible={reviewInfoVisible}
@@ -654,6 +715,87 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
       </Modal>
+    </>
+  );
+
+  if (wide) {
+    return (
+      <View style={[styles.container, styles.split, { backgroundColor: colors.background }]}>
+        <SettingsList groups={topicGroups} selected={topic} onSelect={selectTopic} />
+        <View key={topic} style={styles.container}>{pane}</View>
+        {modals}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Animated.ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          railed ? { paddingTop: insets.top + RAIL_TOP, paddingLeft: RAILED_PAD.left, paddingRight: RAILED_PAD.right } : { paddingTop: barHeight },
+        ]}
+      >
+        <View style={styles.titleGap}><LargeTitle root title="Settings" /></View>
+        <SettingsSection title="FEEDBACK">
+          <Pressable testID="settings-send-feedback" onPress={() => router.push('/feedback')}>
+            <SettingsRow icon="bubble.left.fill" label="Send feedback" description="Ideas, bugs, or anything else">
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
+        </SettingsSection>
+
+        {/* Bible Settings */}
+        <SettingsSection title="BIBLE">
+          <Pressable testID="settings-translation-picker" onPress={() => setVersionPickerVisible(true)}>
+            <SettingsRow
+              icon="book.fill"
+              label="Translation"
+              description="Every saved verse uses it"
+            >
+              <View style={styles.dropdownTrigger}>
+                <Text style={[styles.dropdownValue, { color: colors.text }]}>
+                  {selectedVersion?.label}
+                </Text>
+                <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+              </View>
+            </SettingsRow>
+          </Pressable>
+        </SettingsSection>
+
+        {/* Appearance */}
+        <SettingsSection title="APPEARANCE">{appearanceRows}</SettingsSection>
+
+        {/* Review System */}
+        <SettingsSection title="REVIEW">{reviewRows}</SettingsSection>
+
+        {/* Notifications — opens a dedicated page so changes are
+            commit-on-Save. The summary reflects whether the user is
+            actively receiving anything (master ON + permission
+            granted). Permission-denied always summarizes as Off, even
+            if the server row has master_enabled=true. */}
+        <SettingsSection title="NOTIFICATIONS">
+          <Pressable onPress={() => router.push('/notifications')}>
+            <SettingsRow icon="bell.fill" label="Notifications">
+              <Text style={[styles.rowValue, { color: colors.icon }]}>
+                {notificationsOn ? 'On' : 'Off'}
+              </Text>
+              <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+            </SettingsRow>
+          </Pressable>
+        </SettingsSection>
+
+        {/* Account */}
+        <SettingsSection title="ACCOUNT">{accountRows}</SettingsSection>
+
+        {/* About */}
+        <SettingsSection title="ABOUT">{aboutRows}</SettingsSection>
+
+        {deleteAccountRow}
+      </Animated.ScrollView>
+      <TopBar />
+      {modals}
     </View>
   );
 }
@@ -661,6 +803,9 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  split: {
+    flexDirection: 'row',
   },
   centered: {
     justifyContent: 'center',
