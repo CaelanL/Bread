@@ -786,10 +786,11 @@ function StudySession() {
             <View style={{ width: Math.min(WIDE_CARDS.max, pageWidth - 2 * WIDE_CARDS.side) }}>{progress}</View>
           </Animated.View>
         ) : (
-          <>
+          // The outer display's status bar runs down its right edge (insets.right); 0 on every iPhone.
+          <View style={{ paddingRight: insets.right }}>
             <AppHeader title={reference} leftButton={{ icon: 'xmark', label: 'Close', onPress: close }} />
             {progress}
-          </>
+          </View>
         )}
 
         {/* Swipeable Chunks. A new page width remounts the list on its current chunk: a paging list keeps
