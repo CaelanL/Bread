@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassButton, GlassPill } from '@/components/ui/Glass';
 import { Colors } from '@/constants/theme';
@@ -12,13 +12,14 @@ import { windowClass } from '@/lib/layout';
 /**
  * Dev only: the window size and its layout class, live, so a shot of
  * `npm run sim -- shot /dev-window --device duo` shows what the app gets in each posture. Below them,
- * the glass primitives over a strip of text, to see them in light and dark.
+ * the safe-area insets (top right bottom left) and the glass primitives over a strip of text, to see them in light and dark.
  * Goes home in a production build or against a non-local Supabase.
  */
 export default function DevWindow() {
   const allowed = canDevSignIn(__DEV__, process.env.EXPO_PUBLIC_SUPABASE_URL);
   const { width, height } = useWindowDimensions();
   const colors = Colors[useColorScheme() ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!allowed) router.replace('/');
@@ -29,6 +30,7 @@ export default function DevWindow() {
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
       <Text style={[styles.size, { color: colors.text }]}>{`${Math.round(width)} × ${Math.round(height)}`}</Text>
       <Text style={[styles.class, { color: colors.icon }]}>{windowClass(width, height)}</Text>
+      <Text style={[styles.class, { color: colors.icon }]}>{`insets ${insets.top} ${insets.right} ${insets.bottom} ${insets.left}`}</Text>
       <View style={styles.glass}>
         <Text style={[styles.behind, { color: colors.primary }]}>Glass over text, glass over text</Text>
         <View style={styles.row}>

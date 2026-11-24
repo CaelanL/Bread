@@ -262,6 +262,7 @@ Verses): exactly one opens its `/share/<id>` over the Library, several open the 
   feedback on iOS only. The Settings tab shows a badge from
   `useSettingsBadge`.
 - Active tint: `Colors[scheme].tint` (bronze gold).
+- Wider windows (iPhone Duo, iPad) swap the bar for a rail or a glass pill: [window layouts](window-layouts.md#navigation).
 - Navigator headers are off (`headerShown: false`). Screens draw their own top
   ([theming](theming-and-ui.md#screen-tops)): `TopBar` over a scroll view, or `AppHeader`
   (`components/app-header.tsx`) where it stays put.

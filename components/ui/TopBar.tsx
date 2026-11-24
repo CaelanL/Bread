@@ -1,7 +1,10 @@
+import { GlassButton } from '@/components/ui/Glass';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { RailContext, RailSlotContext, useRailActions } from '@/components/ui/TabRail';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import type { ComponentProps, ReactNode } from 'react';
+import { useIsFocused } from 'expo-router/react-navigation';
+import { useContext, type ComponentProps, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,7 +15,7 @@ export function useTopBarHeight() {
   return useSafeAreaInsets().top + BAR_HEIGHT;
 }
 
-/** A screen's bar, floating over its scroll view with no surface: back on the left, icon actions on the right. The screen's title lives only in its content, except study setup's reference bubble in `center`. */
+/** A screen's bar, floating over its scroll view with no surface: back on the left, icon actions on the right. The screen's title lives only in its content, except study setup's reference bubble in `center`. Where the tabs show the right-edge rail, the actions move to the rail's top slot while the screen is focused. */
 export function TopBar({ onBack, backLabel = 'Back', center, children }: {
   onBack?: () => void;
   backLabel?: string;
@@ -20,6 +23,9 @@ export function TopBar({ onBack, backLabel = 'Back', center, children }: {
   children?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const railed = useContext(RailContext);
+  const focused = useIsFocused();
+  useRailActions(children, railed && focused);
 
   return (
     <View pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top }]}>
@@ -27,7 +33,7 @@ export function TopBar({ onBack, backLabel = 'Back', center, children }: {
         {center && <View pointerEvents="box-none" style={styles.center}>{center}</View>}
         {onBack && <TopBarButton icon="chevron.left" label={backLabel} onPress={onBack} />}
         <View style={styles.spacer} />
-        <View style={styles.actions}>{children}</View>
+        <View style={styles.actions}>{!railed && children}</View>
       </View>
     </View>
   );
@@ -48,7 +54,7 @@ export function LargeTitle({ title, subtitle, root }: {
   );
 }
 
-/** An icon button in the bar, in the text colour. */
+/** An icon button in the bar, in the text colour; a glass circle in the rail's top slot. */
 export function TopBarButton({ icon, label, onPress, testID, disabled }: {
   icon: ComponentProps<typeof IconSymbol>['name'];
   label: string;
@@ -57,6 +63,9 @@ export function TopBarButton({ icon, label, onPress, testID, disabled }: {
   disabled?: boolean;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
+  if (useContext(RailSlotContext)) {
+    return <GlassButton icon={icon} label={label} onPress={onPress} testID={testID} disabled={disabled} />;
+  }
   return (
     <Pressable
       testID={testID}

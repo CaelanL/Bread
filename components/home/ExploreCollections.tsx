@@ -7,15 +7,19 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDebouncedPress } from '@/hooks/use-debounced-press';
 import { useCollectionSaversRefresh } from '@/hooks/use-collection-savers';
+import { useWindowClass } from '@/hooks/use-window-class';
 import { CURATED_COLLECTIONS } from '@/lib/collections/catalog';
 
 export function ExploreCollections() {
   useCollectionSaversRefresh();
   const colors = Colors[useColorScheme() ?? 'light'];
   const openExplore = useDebouncedPress(() => router.push('/explore'));
+  // The open Duo shows a row of tiles: four on its side, three upright. Elsewhere, two rows.
+  const windowClass = useWindowClass();
+  const tiles = windowClass === 'wide' ? 4 : windowClass === 'tall' ? 3 : 0;
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, tiles > 0 && styles.tileSection]}>
       <View style={styles.header}>
         <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>
           Explore collections
@@ -31,19 +35,27 @@ export function ExploreCollections() {
           <IconSymbol name="chevron.right" size={14} color={colors.icon} />
         </Pressable>
       </View>
-      <View>
+      {tiles > 0 ? (
+        <View style={styles.tiles}>
+          {CURATED_COLLECTIONS.slice(0, tiles).map((collection) => (
+            <CuratedCollectionCard key={collection.id} collection={collection} tile />
+          ))}
+        </View>
+      ) : <View>
         {CURATED_COLLECTIONS.slice(0, 2).map((collection, index) => (
           <View key={collection.id} style={index > 0 && [styles.divided, { borderTopColor: colors.separator }]}>
             <CuratedCollectionCard collection={collection} grouped />
           </View>
         ))}
-      </View>
+      </View>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   section: { paddingHorizontal: 4, gap: 4 },
+  tileSection: { paddingHorizontal: 0, gap: 8, marginTop: 4 },
+  tiles: { flexDirection: 'row', gap: 14 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

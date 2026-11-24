@@ -71,11 +71,54 @@ The bubble, ⤢ and the preview text open `PassageCard`, the whole passage with 
 grows out of whatever was tapped (measured with `measureInWindow`) over `Motion.paneMs` on
 `Motion.easing` while the page blurs, and shrinks back into it on close; Reduce Motion fades it.
 
+## Navigation
+
+`app/(tabs)/_layout.tsx` picks the tab bar by class; phones keep today's fade bar untouched.
+
+- `wide` and `outer`: `TabRail` (`components/ui/TabRail.tsx`) on the right (`tabBarPosition: 'right'`,
+  so screens lay out beside it). 76 pt wide (72 on outer, 46 pt buttons), or the safe area's right inset
+  when that's wider: on the Duo the status bar (time, Wi-Fi) runs down the right edge and the inset is 84.
+  Top: the focused screen's actions, starting under the status bar (`STATUS_ROOM`: 106 pt on its side,
+  160 on the outer display, measured). Bottom, 20 pt up: a vertical `GlassPill` of 50 pt tab circles,
+  the selected one on `primaryLight` in `tint`.
+- `tall`: `TabPill`, a floating glass pill of 96 × 54 tabs with labels, 24 pt from the bottom, the page
+  fading out above it. It reports its height, so `useBottomTabBarHeight()` stays right.
+- Both keep the `tab-*` testIDs, the selected state, the Settings badge (an `error` dot with the count)
+  and the light haptic on press in.
+
+**Rail actions.** Inside the tabs, `RailContext` says the rail shows. A `TopBar` there renders no
+actions; while its screen is focused, `useRailActions` puts its `children` in the rail's top slot,
+and `TopBarButton` draws itself as a `GlassButton` there (`RailSlotContext`). Closures keep working
+(setup's ⋯ opens Reset as before). Screens outside the tabs (session, notifications) keep their
+actions in the bar. The slot's store is named `useRailSlot`: the React Compiler treats only `use*`
+names as hooks and skipped re-reading a store named otherwise ("Rendered fewer hooks").
+
+## Home
+
+Same components and data as on a phone; `VOTMCard`, `InsightsCard` and `ExploreCollections` read
+the class themselves.
+
+- `wide` (Main board): title 26 pt under the safe top, 28/24 side padding. The monthly card (text
+  27/38, at most 420 wide) and a 330 pt Insights card share a row at least 316 tall; then Explore as
+  four tiles (`CuratedCollectionCard tile`: 100 pt banner, serif title, one-line subtitle,
+  "12 passages · N saves").
+- `tall` (Home-Portrait): title 54 pt from the top (the status bar only fills the top right corner),
+  24 pt sides, the monthly card at least 262 tall (text 26/36), Insights as one row of three cells,
+  Explore as three tiles.
+- `outer` (Home-Outer): today's Home with 18/10 side padding, 16 pt gaps and 17/25 monthly text.
+- Insights on the open Duo is a white card with a cell per number (streak, mastered, in progress),
+  stacked on its side so it fills the row, in one row upright.
+
 ## Browser checks
 
 - `npm run sim -- shot /dev-window --device duo`: "466 × 678", "outer", and the glass buttons and
   bubble over bronze text. Opened (`set_posture open`), `--display inner`: "951 × 669", "wide";
   turned (`rotate left`): "669 × 951", "tall". Add `--dark` for the dark glass.
+- Home on the Duo: `npm run sim -- shot "/(tabs)/(home)/home" --device duo` closed (outer), then
+  opened `--display inner` on its side and turned upright, each also `--dark`: the rail or pill, and
+  the board's layout. On iPhone 16 Pro, Home matches today's.
+- Rail actions: closed Duo, Maestro taps `tab-settings` and `tab-library` in the rail, then More on
+  setup's rail and Reset Progress (no committed flow; the open Duo can't be tapped).
 - Study setup on iPhone 16 Pro, light and `--dark`: `shot` the setup routes for `seed-psalm-23-1-3`,
   `seed-john-3-16` (review due) and `seed-romans-8-28` as reader-a, `seed-c-romans-8-1` (engraved),
   `seed-32-2` (locked) and `seed-32-4` (five verses) as reader-c. Taps: `flow setup-iphone`; Hide
@@ -90,3 +133,8 @@ grows out of whatever was tapped (measured with `measureInWindow`) over `Motion.
 - 2026-11-23 · On the phone, back and ⋯ stay plain bar icons; only the reference is glass · the bar has no surface on every other screen, and the boards' glass buttons belong to the wide layouts.
 - 2026-11-23 · The boards' deep bronze (#8f6a3a: Review now callout, tagline, selected All) is `tint`/`primary`, and the selected difficulty is the raised thumb, not solid bronze · tokens with a dark mode, and Q17 keeps today's bronze.
 - 2026-11-23 · The preview card drops its reference pill · the bubble already names the verse.
+- 2026-11-23 · The rail is at least as wide as the right safe inset (84 on the Duo, not the boards' 76/72) · the status bar runs down that edge and would sit on content otherwise.
+- 2026-11-23 · No clock drawn in the rail; actions start under the system status bar · the boards drew the status bar; iOS draws its own there.
+- 2026-11-23 · No Due for review card on Home · Caelan (O3); Insights takes its space.
+- 2026-11-23 · Home's Insights card on the Duo shows streak, mastered and in progress, not Time studied · time studied is a server read only Insights makes; Home keeps today's data.
+- 2026-11-23 · Explore tiles use a 100 pt banner upright too (board: 110) · one banner size for both.
